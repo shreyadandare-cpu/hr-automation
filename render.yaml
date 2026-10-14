@@ -5,8 +5,8 @@ services:
     name: hr-automation-test
     runtime: docker
     region: singapore
-    rootDir: server
-    dockerfilePath: ./Dockerfile
+    rootDir: hr-automation/server
+    dockerfilePath: ./hr-automation/server/Dockerfile
     healthCheckPath: /health
     plan: starter
     envVars:
@@ -20,8 +20,8 @@ services:
     name: hr-offboarding-daily-test
     runtime: docker
     region: singapore
-    rootDir: server
-    dockerfilePath: ./Dockerfile
+    rootDir: hr-automation/server
+    dockerfilePath: ./hr-automation/server/Dockerfile
     schedule: "30 1 * * *"
     dockerCommand: node src/run-scheduled.js
     plan: starter

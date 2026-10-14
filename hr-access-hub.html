@@ -173,6 +173,8 @@ tr.click:hover td{background:rgba(66,84,212,.04)}
 .field{display:flex;flex-direction:column;gap:7px;min-width:0}
 .field label,.field .lab{font:600 13px/1.2 var(--body)}
 .field .hint{font-size:12px;color:var(--ink-faint)}
+.field .ferr{font-size:12px;font-weight:600;color:var(--bad)}
+.input[aria-invalid="true"]{box-shadow:inset 0 0 0 2px var(--bad)}
 .input{border:0;box-shadow:inset 0 0 0 1px var(--line-2);background:rgba(255,255,255,.85);border-radius:14px;padding:12px 14px;font-size:14.5px;width:100%;min-width:0}
 .input:focus{outline:0;box-shadow:inset 0 0 0 2px var(--purple)}
 .tiles{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:12px}
@@ -362,7 +364,15 @@ const seed = [
 ];
 function longDate(s){const [y,m,d]=s.split("-").map(Number);return `${d} ${"Jan Feb Mar Apr May Jun Jul Aug Sep Oct Nov Dec".split(" ")[m-1]} ${y}`}
 S.audit = seed.map(([d,h,m,action,emp,app,result])=>({ts:at(d,h,m),actor:ACTOR,action,emp,app,result})).sort((a,b)=>b.ts-a.ts);
-function log(action,emp,app,result){S.audit.unshift({ts:new Date(TODAY.getTime()+(Date.now()-BOOT)),actor:ACTOR,action,emp:emp.name,app:app||null,result:result||"ok"})}
+function log(action,emp,app,result){S.audit.unshift({ts:new Date(TODAY.getTime()+(Date.now()-BOOT)),actor:ACTOR,action,emp:emp.name,empId:emp.id,app:app||null,result:result||"ok"})}
+/* Work email must be unique across everyone with a record, including people who have left. */
+function emailTaken(email,exceptId){const v=email.trim().toLowerCase();return S.emps.find(x=>x.id!==exceptId&&(x.email||"").toLowerCase()===v)||null}
+function emailProblem(email,exceptId){
+  if(!email.trim()) return "Enter a work email.";
+  if(!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email.trim())) return "Enter a valid work email, like name@"+DOMAIN+".";
+  const dup=emailTaken(email,exceptId); return dup?`${email.trim().toLowerCase()} already belongs to ${dup.name}. Use a different work email.`:"";
+}
+function showEmailError(inputId,msg){const i=$("#"+inputId),m=$("#"+inputId+"-err");if(!i||!m)return;i.setAttribute("aria-invalid",msg?"true":"false");m.textContent=msg;m.hidden=!msg}
 
 /* ---------- helpers ---------- */
 const $ = (s,r=document)=>r.querySelector(s);
@@ -495,11 +505,11 @@ function vEmployee(){
   const c=checklist(e); const pct=Math.round(c.done/c.total*100);
   const canOff = e.status==="active"||e.status==="onboarding";
   const pending = Object.keys(e.grants).filter(k=>e.grants[k]==="none");
-  const acts = S.audit.filter(a=>a.emp===e.name);
+  const acts = S.audit.filter(a=>a.empId!==undefined?a.empId===e.id:a.emp===e.name);
   return `<section class="section" style="gap:22px"><button class="back" data-go="employees">← All employees</button>
   <div class="card">
     <div class="profile">${avatar(e)}<div style="flex:1;min-width:0"><div class="eyebrow">${esc(e.dept)}</div><h2 style="margin-top:6px">${esc(e.name)}</h2><div style="color:var(--ink-dim);margin-top:2px">${esc(e.title)}</div></div>
-      <div class="row">${epill(e)}${pending.length?`<button class="btn primary sm" data-provision="${e.id}">Give access (${pending.length} tools)</button>`:""}${canOff?`<button class="btn glass sm" data-offboard="${e.id}">${svg("offboard")}Offboard</button>`:""}</div></div>
+      <div class="row">${epill(e)}${e.status!=="offboarded"?`<button class="btn glass sm" data-edit="${e.id}">Edit details</button>`:""}${pending.length?`<button class="btn primary sm" data-provision="${e.id}">Give access (${pending.length} tools)</button>`:""}${canOff?`<button class="btn glass sm" data-offboard="${e.id}">${svg("offboard")}Offboard</button>`:""}</div></div>
     <dl class="facts">
       <div><dt>Employee no.</dt><dd class="mono">${esc(e.no||"Not assigned")}</dd></div>
       <div><dt>Work email</dt><dd class="mono">${esc(e.email)}</dd></div>
@@ -534,7 +544,7 @@ function vOnboard(){
       <div class="field"><label for="f-title">Job title</label><input class="input" id="f-title" value="Software Development Engineer"></div>
       <div class="field"><label for="f-mgr">Reporting manager</label><select class="input" id="f-mgr">${mgrs.map(m=>`<option>${esc(m.name)}</option>`).join("")}</select></div>
       <div class="field"><label for="f-start">Start date</label><input class="input" id="f-start" type="date" value="2026-10-26"></div>
-      <div class="field"><span class="lab">Work email</span><div class="input mono" id="f-email" style="background:var(--paper-2)">meera.pillai@${DOMAIN}</div><span class="hint">Created automatically in Google Workspace.</span></div>
+      <div class="field"><label for="f-email">Work email</label><input class="input mono" id="f-email" type="email" required value="meera.pillai@${DOMAIN}" aria-describedby="f-email-err" aria-invalid="false"><span class="ferr" id="f-email-err" role="alert" hidden></span><span class="hint">Filled in from the name. Must not already belong to anyone.</span></div>
     </div></div>
     <div class="card"><div class="card-h"><h3>Tools to give</h3><span class="pill p-info" id="tpl-name">Bundle: Engineering</span></div><div class="card-b" style="display:flex;flex-direction:column;gap:18px">
       <div class="tiles" id="f-apps">${APPS.map(a=>`<label class="tile"><input type="checkbox" id="app-${a.id}" value="${a.id}" ${T("eng").includes(a.id)?"checked":""}>${appIc(a.id)}<span class="t"><b>${esc(a.name)}</b><span>${esc(a.sub)}</span></span></label>`).join("")}</div>
@@ -632,8 +642,32 @@ async function revoke(e,to){
 
 function modal(html){const l=$("#layer");const d=document.createElement("div");d.className="scrim";d.innerHTML=`<div class="modal" role="dialog" aria-modal="true">${html}</div>`;l.appendChild(d);d.addEventListener("click",ev=>{if(ev.target===d||ev.target.closest("[data-close]"))d.remove()});const b=d.querySelector("[data-ok]");b&&b.focus();return d}
 
+/* Edit details: one audit row per save that changes something, listing each field old → new. */
+function editEmployee(e){
+  const F=[["name","Full name","text"],["email","Work email","email"],["title","Job title","text"],["start","Date of joining","date"]];
+  const m=modal(`<form id="edf" novalidate><div class="card-h" style="padding-top:24px"><h3>Edit ${esc(e.name)}</h3></div><div class="card-b">
+    ${F.map(([k,l,ty])=>`<div class="field"><label for="e-${k}">${l}</label><input class="input${k==="email"?" mono":""}" id="e-${k}" type="${ty}" value="${esc(e[k]==="—"?"":e[k]||"")}" ${k==="email"?`data-id="${e.id}" aria-describedby="e-email-err" aria-invalid="false"`:""}>${k==="email"?`<span class="ferr" id="e-email-err" role="alert" hidden></span>`:""}</div>`).join("")}
+    <div class="field"><label for="e-dept">Department</label><select class="input" id="e-dept">${Object.keys(DEPT_TPL).map(d=>`<option ${d===e.dept?"selected":""}>${d}</option>`).join("")}</select></div>
+    <div class="muted" style="font-size:13px">Saving adds one row to the audit log with what changed.</div></div>
+    <div class="modal-f"><button type="button" class="btn glass" data-close>Cancel</button><button type="submit" class="btn primary" data-ok>Save changes</button></div></form>`);
+  m.querySelector("#edf").addEventListener("submit",ev=>{
+    ev.preventDefault();
+    const v={name:$("#e-name").value.trim(),email:$("#e-email").value.trim().toLowerCase(),title:$("#e-title").value.trim()||"—",start:$("#e-start").value,dept:$("#e-dept").value};
+    if(!v.name){$("#e-name").focus();toast("Add the employee's full name.");return}
+    const bad=emailProblem(v.email,e.id); if(bad){showEmailError("e-email",bad);$("#e-email").focus();return}
+    const label={name:"Name",email:"Work email",title:"Job title",start:"Date of joining",dept:"Department"};
+    const diff=Object.keys(v).filter(k=>(e[k]||"")!==v[k]);
+    if(!diff.length){m.remove();toast("No changes to save.");return}
+    const what=diff.map(k=>`${label[k]}: ${k==="start"?fdate(e[k]):e[k]||"—"} → ${k==="start"?fdate(v[k]):v[k]}`).join("; ");
+    diff.forEach(k=>e[k]=v[k]);
+    log(`Details edited. ${what}`,e,null,"ok");
+    m.remove(); toast(`Saved changes for ${e.name}.`); render();
+  });
+}
+
 document.addEventListener("click",ev=>{
-  const t=ev.target.closest("[data-go],[data-emp],[data-retry],[data-provision],[data-offboard],[data-confirmoff],[data-proto]"); if(!t) return;
+  const t=ev.target.closest("[data-go],[data-emp],[data-retry],[data-provision],[data-offboard],[data-confirmoff],[data-proto],[data-edit]"); if(!t) return;
+  if(t.dataset.edit){editEmployee(S.emps.find(x=>x.id==t.dataset.edit));return}
   if(t.dataset.go){ev.preventDefault();go(t.dataset.go);return}
   if(t.dataset.emp){go("employee",Number(t.dataset.emp));return}
   if(t.dataset.retry){const [eid,app]=t.dataset.retry.split(":");const e=S.emps.find(x=>x.id==eid);log("Retry requested",e,app,"info");provision(e,[app]);return}
@@ -667,7 +701,9 @@ document.addEventListener("change",ev=>{
 function keepFocus(id){const n=$("#"+id);const pos=n.selectionStart;return()=>{const m=$("#"+id);if(m){m.focus();m.setSelectionRange(pos,pos)}}}
 document.addEventListener("input",ev=>{
   const t=ev.target;
-  if(t.id==="f-name"){$("#f-email").textContent=(t.value.trim()?mail(t.value):"—")}
+  if(t.id==="f-name"){const m=$("#f-email");if(!m.dataset.touched){m.value=t.value.trim()?mail(t.value):"";showEmailError("f-email",m.value&&emailTaken(m.value)?emailProblem(m.value):"")}}
+  if(t.id==="f-email"){t.dataset.touched="1";showEmailError("f-email",emailTaken(t.value)?emailProblem(t.value):"")}
+  if(t.id==="e-email"){showEmailError("e-email",emailTaken(t.value,Number(t.dataset.id))?emailProblem(t.value,Number(t.dataset.id)):"")}
   if(t.id==="af-q"){S.af={q:t.value,app:$("#af-app").value,res:$("#af-res").value};const r=keepFocus("af-q");render();r()}
   if(t.id==="q"){S.q=t.value;const r=keepFocus("q");render();r()}
 });
@@ -675,11 +711,13 @@ document.addEventListener("submit",ev=>{
   if(ev.target.id!=="onf") return; ev.preventDefault();
   const name=$("#f-name").value.trim(); if(!name){$("#f-name").focus();toast("Add the employee's full name first.");return}
   const apps=[...document.querySelectorAll("#f-apps input:checked")].map(i=>i.value);
+  const email=$("#f-email").value.trim().toLowerCase(), bad=emailProblem(email);
+  if(bad){showEmailError("f-email",bad);$("#f-email").focus();toast(bad);return}
   if(!apps.length){toast("Pick at least one tool to give.");return}
   const e=mk({name,dept:$("#f-dept").value,title:$("#f-title").value.trim()||"—",manager:$("#f-mgr").value,start:$("#f-start").value,status:"onboarding",
     grants:all(apps,"none"),onTasks:ON_TASKS.map(t=>({t,done:false}))});
-  e.color=AV[S.emps.length%AV.length]; e.email=mail(name);
-  S.emps.push(e); log("Employee record created",e,null,"ok");
+  e.color=AV[S.emps.length%AV.length]; e.email=email;
+  S.emps.push(e); log(`Employee record created (${email})`,e,null,"ok");
   go("employee",e.id); provision(e,apps);
 });
 

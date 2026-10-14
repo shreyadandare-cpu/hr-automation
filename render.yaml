@@ -7,7 +7,7 @@ services:
     runtime: docker
     region: singapore
     rootDir: hr-automation/server
-    dockerfilePath: ./hr-automation/server/Dockerfile
+    dockerfilePath: ./Dockerfile
     healthCheckPath: /health
     plan: free
     envVars:

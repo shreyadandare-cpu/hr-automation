@@ -1,0 +1,37 @@
+# Render setup for the TEST environment (Singapore region). Created once from the repository.
+# Test data only: do not load the real employee roster here until IT has approved the region.
+services:
+  - type: web
+    name: hr-automation-test
+    runtime: docker
+    region: singapore
+    rootDir: server
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /health
+    plan: starter
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: hr-automation-db-test
+          property: connectionString
+
+  # Daily offboarding job: 07:00 India time (01:30 UTC).
+  - type: cron
+    name: hr-offboarding-daily-test
+    runtime: docker
+    region: singapore
+    rootDir: server
+    dockerfilePath: ./Dockerfile
+    schedule: "30 1 * * *"
+    dockerCommand: node src/run-scheduled.js
+    plan: starter
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: hr-automation-db-test
+          property: connectionString
+
+databases:
+  - name: hr-automation-db-test
+    region: singapore
+    plan: basic-256mb

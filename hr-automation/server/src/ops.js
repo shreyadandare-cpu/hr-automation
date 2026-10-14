@@ -327,3 +327,19 @@ export async function whoami(actor) {
   const { rows } = await pool.query("SELECT role FROM hr_users WHERE email = $1", [actor]);
   return { email: actor, role: rows[0] && ["admin", "it"].includes(rows[0].role) ? rows[0].role : null };
 }
+
+// Keeps someone employed with no tool access, for example a Director who needs no tools.
+// Their record and title stay as they are. Only HR and IT admins can do this, and it is audited.
+export async function setNoToolAccess({ actor, employeeId, reason }) {
+  return withTx(async (c) => {
+    await requireRole(c, actor, EDITORS);
+    const emp = await loadEmployee(c, employeeId);
+    if (emp.status !== "active") throw new Error(`${emp.full_name} is ${emp.status}; only active people can be set to no tools`);
+    // Only assumed access (from the import, external_id = seed) may be cleared here. Real grants need offboarding.
+    const { rows: real } = await c.query("SELECT app_code FROM access_grants WHERE employee_id=$1 AND status NOT IN ('none','revoked') AND (external_id IS NULL OR external_id <> 'seed')", [employeeId]);
+    if (real.length) throw new Error(`${emp.full_name} has ${real.length} real tool grant(s); offboard them first`);
+    await c.query("UPDATE access_grants SET status='none', updated_at=now() WHERE employee_id=$1", [employeeId]);
+    await writeAudit(c, { actor, action: `No tool access needed: ${reason || "set by HR/IT"}`, employeeId, result: "info" });
+    return { employee_id: employeeId, name: emp.full_name, access: "none" };
+  });
+}

@@ -1,0 +1,689 @@
+<title>HR Access Hub</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,400;0,9..144,600;1,9..144,400&family=Geist:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: wohlig.com language. Floating glass pill nav, centred serif hero with glass stat cards,
+   then left-aligned sections (eyebrow + serif heading + smile underline) on lavender "smoke" paper.
+   Deliberately single light theme, matching the website. */
+:root{
+  color-scheme:light;
+  --paper:#fdfcff; --paper-2:#f5f5fe; --ink:#0e0a38; --ink-dim:#555177; --ink-faint:#7c7aa0;
+  --purple:#4254d4; --purple-deep:#3242b2; --purple-soft:#7d8cee; --lilac:#c6cdff; --periwinkle:#a9bbff; --mint:#bdeee2;
+  --line:rgba(77,73,221,.12); --line-2:rgba(77,73,221,.22);
+  --ok:#14794a; --ok-soft:#e1f5ec; --warn:#9a5a07; --warn-soft:#fdf1dc; --bad:#c0352b; --bad-soft:#fdeceb;
+  --grad-accent:linear-gradient(110deg,var(--purple) 10%,var(--purple-soft) 55%,var(--periwinkle));
+  --grad-btn:linear-gradient(135deg,#7d8cee -20%,#4254d4 45%,#3242b2);
+  --glass:linear-gradient(135deg,rgba(255,255,255,.86),rgba(255,255,255,.58) 45%,rgba(255,255,255,.74));
+  --glass-shadow:inset 0 1px 0 rgba(255,255,255,.95),0 2px 6px rgba(27,22,80,.04),0 24px 60px rgba(77,73,221,.11);
+  --display:"Fraunces",Georgia,serif;
+  --body:"Geist","Helvetica Neue","Segoe UI",sans-serif;
+  --mono:"JetBrains Mono",ui-monospace,Menlo,monospace;
+  --radius:24px; --radius-sm:16px;
+  --ease:cubic-bezier(.22,.8,.26,.99);
+}
+*{box-sizing:border-box}
+body{background:var(--paper);color:var(--ink);font:400 15px/1.55 var(--body);letter-spacing:-.01em;-webkit-font-smoothing:antialiased;min-height:100%}
+body::before{content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;background:
+  radial-gradient(42% 38% at 12% 8%,rgba(169,187,255,.45),transparent 70%),
+  radial-gradient(36% 34% at 88% 14%,rgba(198,205,255,.55),transparent 70%),
+  radial-gradient(40% 40% at 70% 92%,rgba(189,238,226,.38),transparent 70%),
+  radial-gradient(30% 30% at 20% 80%,rgba(220,200,255,.35),transparent 70%),var(--paper)}
+button,input,select{font:inherit;color:inherit;letter-spacing:inherit}
+h1,h2,h3{margin:0;font-family:var(--display);color:var(--ink);text-wrap:balance}
+.wrap{width:100%;max-width:1180px;margin:0 auto;padding-inline:24px}
+
+/* ---------- Glass pill nav ---------- */
+.navbar{position:sticky;top:calc(env(safe-area-inset-top,0px) + 14px);z-index:20;margin-top:14px}
+.pill-nav{display:flex;align-items:center;gap:8px;padding:10px 10px 10px 26px;border-radius:999px;background:var(--glass);box-shadow:inset 0 1px 0 rgba(255,255,255,.95),0 2px 8px rgba(27,22,80,.06),0 22px 50px rgba(77,73,221,.18);backdrop-filter:blur(24px);-webkit-backdrop-filter:blur(24px)}
+.logo{display:inline-flex;align-items:baseline;font:600 27px/1 var(--display);letter-spacing:-.03em;color:var(--ink);text-decoration:none;white-space:nowrap}
+.logo .o{display:inline-block;width:.56em;height:.56em;border-radius:50%;background:var(--purple);position:relative;margin:0 .02em;transform:translateY(.02em)}
+.logo .o::after{content:"";position:absolute;left:22%;right:22%;top:38%;height:30%;border:2px solid #fff;border-top:0;border-radius:0 0 999px 999px}
+.logo small{font:500 12px/1 var(--body);color:var(--ink-faint);letter-spacing:0;margin-left:10px;padding-left:10px;border-left:1px solid var(--line-2)}
+.links{display:flex;gap:2px;margin-inline:auto;min-width:0}
+.links a{padding:9px 14px;border-radius:999px;color:var(--ink-dim);text-decoration:none;font:500 15px/1 var(--display);white-space:nowrap;position:relative}
+.links a:hover{color:var(--ink)}
+.links a.on{color:var(--ink);background:rgba(66,84,212,.08)}
+.links .count{display:inline-grid;place-items:center;min-width:18px;height:18px;margin-left:6px;border-radius:999px;background:var(--bad);color:#fff;font:600 11px/1 var(--body);padding:0 5px;vertical-align:2px}
+
+/* ---------- Buttons ---------- */
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;border:0;border-radius:999px;padding:12px 24px;font:600 15.5px/1 var(--display);cursor:pointer;white-space:nowrap;text-decoration:none;transition:transform .25s var(--ease),box-shadow .25s var(--ease)}
+.btn.primary{background:var(--grad-btn);color:#fff;box-shadow:inset 0 1px 0 rgba(255,255,255,.35),0 10px 26px rgba(77,73,221,.35)}
+.btn.primary:hover{transform:translateY(-1px);box-shadow:inset 0 1px 0 rgba(255,255,255,.35),0 14px 32px rgba(77,73,221,.42)}
+.btn.glass{background:#fff;color:var(--ink);box-shadow:inset 0 0 0 1px var(--line),0 6px 18px rgba(77,73,221,.10)}
+.btn.glass:hover{transform:translateY(-1px)}
+.btn.danger{background:linear-gradient(135deg,#e0665b,#c0352b);color:#fff;box-shadow:0 10px 26px rgba(192,53,43,.28)}
+.btn.sm{padding:8px 15px;font-size:13.5px}
+.btn.link{background:none;padding:6px 4px;color:var(--purple);font:600 13.5px/1 var(--body)}
+.btn.link::after{content:"→";transition:transform .25s var(--ease)}
+.btn.link:hover::after{transform:translateX(3px)}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+.btn svg{width:16px;height:16px}
+:focus-visible{outline:2px solid var(--purple);outline-offset:3px}
+
+/* ---------- Hero & section heads ---------- */
+.view{display:flex;flex-direction:column;gap:64px;padding-block:56px 72px}
+.eyebrow{font:600 11.8px/1.2 var(--body);letter-spacing:.2em;text-transform:uppercase;color:var(--purple)}
+.hero{display:flex;flex-direction:column;align-items:center;text-align:center;gap:20px;padding-top:18px}
+.hero h1{font-weight:300;font-size:clamp(44px,6.4vw,84px);line-height:1.02;letter-spacing:-.03em}
+.grad{font-style:italic;font-weight:400;background:var(--grad-accent);-webkit-background-clip:text;background-clip:text;color:transparent;padding-right:.06em}
+.hero p{color:var(--ink-dim);font-size:17.5px;max-width:58ch;margin:0}
+.hero .row{justify-content:center;margin-top:8px}
+.sec-head{display:flex;align-items:flex-end;justify-content:space-between;gap:20px;flex-wrap:wrap}
+.sec-head h2{font-weight:600;font-size:clamp(28px,3.4vw,44px);line-height:1.08;letter-spacing:-.02em;margin-top:12px}
+.sec-head h2.big{font-weight:300;font-size:clamp(36px,4.6vw,60px)}
+.smile{display:block;width:34px;height:10px;margin-top:10px;color:var(--purple)}
+.sec-head p{color:var(--ink-dim);max-width:60ch;margin:10px 0 0}
+.section{display:flex;flex-direction:column;gap:24px}
+
+/* ---------- Glass cards ---------- */
+.card{background:var(--glass);border-radius:var(--radius);box-shadow:var(--glass-shadow);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);min-width:0;border:1px solid rgba(255,255,255,.9)}
+.card-h{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:20px 24px 14px}
+.card-h h3{font-size:20px;font-weight:600;letter-spacing:-.01em}
+.card-b{padding:4px 24px 22px}
+.icon-tile{width:38px;height:38px;border-radius:12px;background:linear-gradient(135deg,#eef0ff,#e3e6ff);display:grid;place-items:center;color:var(--purple);flex:none;box-shadow:inset 0 0 0 1px rgba(66,84,212,.12)}
+.icon-tile svg{width:18px;height:18px}
+.grid{display:grid;gap:22px}
+.g4{grid-template-columns:repeat(4,minmax(0,1fr))}
+.g3{grid-template-columns:repeat(3,minmax(0,1fr))}
+.g2{grid-template-columns:repeat(2,minmax(0,1fr))}
+.g-main{grid-template-columns:minmax(0,1.55fr) minmax(0,1fr)}
+
+/* Stats, like the website's hero cards */
+.stats{width:100%;max-width:1000px;margin-top:22px}
+.stat{padding:22px 18px 20px;text-align:center;display:flex;flex-direction:column;gap:6px;align-items:center}
+.stat .num{font:600 44px/1 var(--display);letter-spacing:-.03em;font-variant-numeric:tabular-nums}
+.stat .num sup{font-size:.42em;color:var(--purple);margin-left:2px}
+.stat .lbl{font-size:13.5px;color:var(--ink-dim)}
+.stat.alert .num{background:linear-gradient(110deg,#c0352b,#e0665b);-webkit-background-clip:text;background-clip:text;color:transparent}
+
+/* Pills */
+.pill{display:inline-flex;align-items:center;gap:6px;border-radius:999px;padding:3px 10px;font:600 12px/1.5 var(--body);white-space:nowrap;letter-spacing:0}
+.pill::before{content:"";width:6px;height:6px;border-radius:50%;background:currentColor}
+.p-ok{color:var(--ok);background:var(--ok-soft)}
+.p-warn{color:var(--warn);background:var(--warn-soft)}
+.p-bad{color:var(--bad);background:var(--bad-soft)}
+.p-info{color:var(--purple);background:#eceeff}
+.p-mute{color:var(--ink-faint);background:var(--paper-2)}
+.p-busy::before{animation:blink 1s infinite}
+@keyframes blink{50%{opacity:.25}}
+.tag-proto{display:inline-flex;align-items:center;gap:8px;font:600 11.5px/1 var(--body);letter-spacing:.12em;text-transform:uppercase;color:var(--warn);background:rgba(253,241,220,.85);border-radius:999px;padding:7px 12px}
+
+/* Tables */
+.tbl-wrap{overflow-x:auto}
+table{width:100%;border-collapse:collapse;font-size:14px}
+th{text-align:left;font:600 11px/1.2 var(--body);letter-spacing:.16em;text-transform:uppercase;color:var(--ink-faint);padding:12px 24px;border-bottom:1px solid var(--line);white-space:nowrap}
+td{padding:14px 24px;border-bottom:1px solid var(--line);vertical-align:middle}
+tr:last-child td{border-bottom:0}
+tr.click{cursor:pointer;transition:background .2s}
+tr.click:hover td{background:rgba(66,84,212,.04)}
+.num-cell{font-variant-numeric:tabular-nums;white-space:nowrap}
+.mono{font-family:var(--mono);font-size:12.5px;letter-spacing:0}
+.muted{color:var(--ink-faint);font-size:12.5px}
+
+/* Person + app chips */
+.person{display:flex;align-items:center;gap:12px;min-width:0}
+.avatar{width:36px;height:36px;border-radius:50%;display:grid;place-items:center;font:600 13px/1 var(--body);flex:none;color:#fff;box-shadow:0 4px 12px rgba(77,73,221,.2)}
+.person b{display:block;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.person span{display:block;font-size:12.5px;color:var(--ink-faint);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.app-ic{width:28px;height:28px;border-radius:9px;display:grid;place-items:center;font:700 10.5px/1 var(--body);color:#fff;flex:none;letter-spacing:-.02em}
+.apps-row{display:flex;gap:5px;flex-wrap:wrap}
+.apps-row .app-ic{width:24px;height:24px;font-size:9.5px;border-radius:7px}
+.app-ic.off{opacity:.25;filter:grayscale(1)}
+.app-ic.fail{box-shadow:0 0 0 2px #fff,0 0 0 4px var(--bad)}
+.chips{display:flex;flex-wrap:wrap;gap:8px}
+.chip{display:inline-flex;align-items:center;gap:7px;border-radius:999px;padding:4px 12px 4px 4px;font-size:13px;font-weight:500;background:#fff;box-shadow:inset 0 0 0 1px var(--line)}
+.chip .app-ic{width:22px;height:22px;font-size:8.5px;border-radius:50%}
+.chip.plain{padding-left:12px}
+
+/* Lists */
+.li{display:flex;align-items:flex-start;gap:14px;padding:14px 24px;border-top:1px solid var(--line)}
+.li .grow{flex:1;min-width:0}
+.li .meta{font-size:13px;color:var(--ink-faint)}
+.dot{width:8px;height:8px;border-radius:50%;margin-top:8px;flex:none}
+.empty{padding:30px 24px;color:var(--ink-faint);text-align:center;font-size:14px}
+.tl{display:grid;grid-template-columns:12px minmax(0,1fr);gap:12px;padding:10px 24px}
+.tl .dot{margin-top:8px}
+.tl .meta{font-size:12px;color:var(--ink-faint)}
+.progress{height:6px;border-radius:999px;background:rgba(66,84,212,.08);overflow:hidden}
+.progress i{display:block;height:100%;background:var(--grad-accent);border-radius:999px;transition:width .5s var(--ease)}
+
+/* Detail */
+.profile{display:flex;align-items:center;gap:20px;flex-wrap:wrap;padding:26px 28px}
+.profile .avatar{width:64px;height:64px;font-size:20px}
+.profile h2{font-weight:400;font-size:clamp(28px,3.4vw,40px);letter-spacing:-.02em;line-height:1.1}
+.facts{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:16px 24px;padding:18px 28px 24px;border-top:1px solid var(--line);margin:0}
+.facts dt{font:600 11px/1.2 var(--body);color:var(--ink-faint);text-transform:uppercase;letter-spacing:.16em}
+.facts dd{margin:6px 0 0;font-weight:500;overflow-wrap:anywhere}
+.access-row{display:flex;align-items:center;gap:14px;padding:14px 24px;border-top:1px solid var(--line)}
+.access-row .grow{flex:1;min-width:0}
+.access-row .grow b{display:block;font-weight:600}
+.access-row .grow span{display:block;font-size:12.5px;color:var(--ink-faint)}
+.access-row .err{color:var(--bad)!important}
+.check{display:flex;align-items:flex-start;gap:12px;padding:12px 24px;border-top:1px solid var(--line);cursor:pointer}
+.check input{width:18px;height:18px;margin-top:2px;accent-color:var(--purple);flex:none}
+.check .grow{flex:1;min-width:0}
+.check .tag{font:600 10.5px/1.4 var(--body);letter-spacing:.14em;text-transform:uppercase;color:var(--ink-faint)}
+.check.done .lbl{color:var(--ink-faint);text-decoration:line-through}
+.back{display:inline-flex;align-items:center;gap:6px;color:var(--ink-dim);font:500 14px/1 var(--display);cursor:pointer;background:none;border:0;padding:0;align-self:flex-start}
+.back:hover{color:var(--purple)}
+
+/* Forms */
+.form{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px 22px}
+.field{display:flex;flex-direction:column;gap:7px;min-width:0}
+.field label,.field .lab{font:600 13px/1.2 var(--body)}
+.field .hint{font-size:12px;color:var(--ink-faint)}
+.input{border:0;box-shadow:inset 0 0 0 1px var(--line-2);background:rgba(255,255,255,.85);border-radius:14px;padding:12px 14px;font-size:14.5px;width:100%;min-width:0}
+.input:focus{outline:0;box-shadow:inset 0 0 0 2px var(--purple)}
+.tiles{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:12px}
+.tile{display:flex;align-items:center;gap:12px;border-radius:16px;padding:12px 14px;cursor:pointer;background:rgba(255,255,255,.75);box-shadow:inset 0 0 0 1px var(--line);transition:box-shadow .2s,background .2s}
+.tile input{accent-color:var(--purple);width:17px;height:17px;flex:none}
+.tile:has(input:checked){background:#f1f2ff;box-shadow:inset 0 0 0 1.5px var(--purple)}
+.tile .t b{display:block;font-size:14px;font-weight:600}
+.tile .t span{display:block;font-size:12px;color:var(--ink-faint)}
+.seg{display:inline-flex;background:var(--paper-2);border-radius:999px;padding:4px;gap:4px;flex-wrap:wrap}
+.seg label{padding:8px 16px;border-radius:999px;font:600 13px/1 var(--body);cursor:pointer}
+.seg input{position:absolute;opacity:0;pointer-events:none}
+.seg label:has(input:checked){background:#fff;color:var(--purple);box-shadow:0 2px 8px rgba(77,73,221,.15)}
+.seg label:has(input:focus-visible){outline:2px solid var(--purple)}
+.revoke-item{display:flex;align-items:center;gap:12px;padding:10px 14px;border-radius:14px;background:rgba(255,255,255,.75);box-shadow:inset 0 0 0 1px var(--line)}
+.revoke-item .grow{flex:1;min-width:0}
+.revoke-item b{display:block;font-size:14px}
+.revoke-item span{display:block;font-size:12px;color:var(--ink-faint)}
+.callout{display:flex;gap:12px;padding:14px 18px;border-radius:16px;background:rgba(236,238,255,.85);font-size:14px;align-items:flex-start}
+.callout.bad{background:var(--bad-soft)}
+.callout svg{width:18px;height:18px;flex:none;color:var(--purple);margin-top:2px}
+.callout.bad svg{color:var(--bad)}
+.radio-li{display:flex;align-items:center;gap:14px;padding:13px 24px;border-top:1px solid var(--line);cursor:pointer}
+.radio-li input{accent-color:var(--purple);width:17px;height:17px;flex:none}
+.radio-li:has(input:checked){background:rgba(66,84,212,.05)}
+
+/* Bundle cards (like "Six ways" service cards) */
+.svc{padding:24px;display:flex;flex-direction:column;gap:14px}
+.svc h3{font-size:21px;font-weight:600}
+.svc p{margin:0;color:var(--ink-dim);font-size:14px}
+
+/* Filters */
+.filters{display:flex;gap:12px;flex-wrap:wrap;align-items:center;padding:18px 24px;border-bottom:1px solid var(--line)}
+.filters .input{width:auto;padding:10px 14px;font-size:14px}
+.filters .grow{flex:1;min-width:180px}
+
+/* Footer */
+.foot{display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap;padding-block:28px 40px;border-top:1px solid var(--line);color:var(--ink-faint);font-size:13px}
+.foot .logo{font-size:22px}
+
+/* Modal + toast */
+.scrim{position:fixed;inset:0;background:rgba(14,10,56,.35);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);display:grid;place-items:center;padding:16px;z-index:50}
+.modal{background:#fff;border-radius:var(--radius);box-shadow:0 30px 80px rgba(14,10,56,.3);width:min(540px,100%);max-height:90vh;overflow:auto}
+.modal .card-b{display:flex;flex-direction:column;gap:16px}
+.modal-f{display:flex;justify-content:flex-end;gap:10px;padding:16px 24px 22px;flex-wrap:wrap}
+.toast{position:fixed;bottom:calc(22px + env(safe-area-inset-bottom,0px));left:50%;transform:translateX(-50%);background:var(--ink);color:#fff;padding:12px 20px;border-radius:999px;font-size:14px;font-weight:500;z-index:60;box-shadow:0 18px 40px rgba(14,10,56,.3);max-width:calc(100% - 32px);text-align:center}
+.row{display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+
+@media (max-width:1080px){.g4{grid-template-columns:repeat(2,minmax(0,1fr))}.g-main,.g3{grid-template-columns:minmax(0,1fr)}.facts{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .pill-nav{flex-wrap:wrap;border-radius:28px;padding:12px 12px 10px 22px}.links{order:3;width:100%;overflow-x:auto;margin:4px -12px 0 -22px;padding:0 12px 0 16px}.cta{margin-left:auto}}
+@media (max-width:720px){
+  .wrap{padding-inline:16px}
+  .view{gap:44px;padding-block:36px 56px}
+  .g2,.form{grid-template-columns:minmax(0,1fr)}
+  .hide-sm{display:none}
+  .logo small{display:none}
+  .cta .lbl-long{display:none}
+  th,td{padding-inline:16px}.card-h,.card-b,.li,.tl,.access-row,.check,.radio-li,.filters{padding-inline:16px}
+  .profile,.facts{padding-inline:18px}
+}
+@media (max-width:460px){.stat .num{font-size:34px}.facts{grid-template-columns:minmax(0,1fr)}.btn{padding:11px 18px}}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+
+<div class="wrap navbar">
+  <nav class="pill-nav" aria-label="Main">
+    <a class="logo" href="#dashboard" aria-label="wohlig HR Access Hub, dashboard">w<span class="o" aria-hidden="true"></span>hlig<small>HR Access Hub</small></a>
+    <div class="links" id="links"></div>
+    <button class="btn primary sm cta" data-go="onboard">+ <span class="lbl-long">New onboarding</span><span class="lbl-short" hidden>New</span></button>
+  </nav>
+</div>
+<main class="wrap view" id="view"></main>
+<footer class="wrap"><div class="foot"><a class="logo" href="#dashboard" style="text-decoration:none">w<span class="o" aria-hidden="true"></span>hlig</a><span>HR Access Hub · People Ops · Prototype · roster from HR sheet, 8 Oct 2026</span><span>Signed in as <b style="color:var(--ink)">Shreya Dandare</b>, HR Admin</span></div></footer>
+<div id="layer"></div>
+
+<script>
+(function(){
+const ACTOR = "Shreya Dandare";
+const DOMAIN = "wohlig.com";
+const TODAY = new Date(2026,9,13,10,30);
+const BOOT = Date.now();
+
+const APPS = [
+  {id:"gws",   name:"Google Workspace", sub:"Gmail · Drive · Calendar", mono:"GW", color:"#1a73e8", how:"Admin SDK"},
+  {id:"gemini",name:"Gemini",           sub:"Gemini for Workspace licence", mono:"Ge", color:"#6f5bd8", how:"Licensing API"},
+  {id:"claude",name:"Claude",           sub:"Claude Team seat", mono:"Cl", color:"#c96442", how:"Anthropic Admin API"},
+  {id:"github",name:"GitHub",           sub:"wohlig org + team", mono:"GH", color:"#24292f", how:"REST API"},
+  {id:"gcp",   name:"Google Cloud",     sub:"IAM roles on wohlig projects", mono:"GC", color:"#188038", how:"Cloud IAM API"},
+];
+const APP = Object.fromEntries(APPS.map(a=>[a.id,a]));
+const TEMPLATES = [
+  {id:"eng",   name:"Engineering", roles:"Software, QA and DevOps engineers", apps:["gws","gemini","claude","github","gcp"]},
+  {id:"sales", name:"Sales",       roles:"Sales executives and managers",    apps:["gws","gemini"]},
+  {id:"hr",    name:"HR & Operations", roles:"HR, accounts and admin",       apps:["gws","gemini","claude"]},
+  {id:"lead",  name:"Leadership",  roles:"Directors and vice presidents",    apps:["gws","gemini","claude"]},
+];
+const DEPT_TPL = {Engineering:"eng", Data:"eng", "DevOps & Cloud":"eng", "Gen AI":"eng", Sales:"sales", HR:"hr", "Finance & Admin":"hr", Leadership:"lead"};
+function deptOf(title){
+  const t=title.toLowerCase();
+  if(/director|vice president/.test(t)) return "Leadership";
+  if(/^hr\b/.test(t)) return "HR";
+  if(/account|admin/.test(t)&&!/network/.test(t)) return "Finance & Admin";
+  if(/sales/.test(t)) return "Sales";
+  if(/gen ai/.test(t)) return "Gen AI";
+  if(/data/.test(t)) return "Data";
+  if(/devops|network/.test(t)) return "DevOps & Cloud";
+  return "Engineering";
+}
+const ON_TASKS = ["Laptop issued","ID card issued","Policy documents signed","Welcome call with manager"];
+const OFF_TASKS = ["Laptop returned","ID card returned","Exit interview done","Final settlement cleared"];
+const AV = ["#4254d4","#7d6ee8","#0e7c86","#b4472a","#2f6f3e","#9a3b72","#555177","#3242b2"];
+
+let nid = 100;
+const mk = (o)=>Object.assign({id:++nid, grants:{}, errors:{}, onTasks:ON_TASKS.map(t=>({t,done:true})), offTasks:null}, o);
+const all = (ids,s)=>Object.fromEntries(ids.map(i=>[i,s]));
+const T = (id)=>TEMPLATES.find(t=>t.id===id).apps;
+
+const ROSTER = [
+  ["WT/01", "Chirag Shah", "chirag@wohlig.com", "2013-07-01", "Director", ""],
+  ["WT/02", "Chintan Shah", "chintan@wohlig.com", "2013-07-01", "Director", ""],
+  ["WT/03", "Jagruti Shah", "jagruti@wohlig.com", "2025-06-01", "Vice President", ""],
+  ["WT/09", "Prabhat Bhalekar", "prabhat.bhalekar@wohlig.com", "2018-08-16", "Tech Lead", ""],
+  ["WT/17", "Kailash Lakampelli", "kailash@wohlig.com", "2021-01-02", "HR Manager", ""],
+  ["WT/35", "Obaid Ghojaria", "obaid.g@wohlig.com", "2025-06-01", "Sr. Software Development Engineer", ""],
+  ["WT/51", "Rajvee Gala", "rajvee.gala@wohlig.com", "2022-07-11", "Sr. Data Engineer", ""],
+  ["WT/54", "Akash Pawar", "akash.pawar@wohlig.com", "2022-08-01", "Devops Engineer", ""],
+  ["WT/61", "Abdul Majid", "abdul.majid@wohlig.com", "2022-08-23", "Sr. Network Admin", ""],
+  ["WT/67", "Pratik Sawant", "pratik.sawant@wohlig.com", "2022-09-05", "Frontend Developer", ""],
+  ["WT/79", "Raj Gawand", "raj.gawand@wohlig.com", "2022-10-17", "Account cum Admin", ""],
+  ["WT/82", "Siddhant Malap", "siddhant.malap@wohlig.com", "2022-11-02", "Application Support Engineer", ""],
+  ["WT/92", "Samay Gada", "samay.gada@wohlig.com", "2022-12-01", "Tech Lead", ""],
+  ["WT/97", "Bilal Sani", "bilal.sani@wohlig.com", "2023-07-01", "Tech Lead", ""],
+  ["WT/115", "Osama Patel", "osama.patel@wohlig.com", "2023-04-26", "Devops Engineer", ""],
+  ["WT/135", "Akash More", "akash.more@wohlig.com", "2023-08-01", "Devops Engineer", ""],
+  ["WT/146", "Ramesh Lodh", "ramesh.lodh@wohlig.com", "2024-01-17", "Devops Engineer", ""],
+  ["WT/148", "Apoorva Lakshkar", "apoorva.lakshkar@wohlig.com", "2024-05-01", "HR Executive", ""],
+  ["WT/150", "Raj Nakar", "raj.nakar@wohlig.com", "2024-06-03", "Data Engineer", ""],
+  ["WT/157", "Jainam Nisar", "jainam.nisar@wohlig.com", "2024-09-01", "Software Development Engineer", ""],
+  ["WT/158", "Dhruv Gansinghani", "dhruv.gansinghani@wohlig.com", "2024-09-01", "Software Development Engineer", ""],
+  ["WT/165", "Naveed Shaikh", "naveed.shaikh@wohlig.com", "2024-09-02", "Devops Engineer", ""],
+  ["WT/176", "Arham Sangoi", "arham.sangoi@wohlig.com", "2025-05-01", "Software Development Engineer", ""],
+  ["WT/180", "Ankit Shrivastav", "ankit.shrivastav@wohlig.com", "2025-08-20", "Sr. Software Development Engineer", ""],
+  ["WT/182", "Agam Shah", "agam.shah@wohlig.com", "2025-11-13", "Software Development Engineer", ""],
+  ["WT/184", "Siddesh Kale", "siddesh.kale@wohlig.com", "2026-02-01", "Software Development Engineer", ""],
+  ["WT/185", "Nishant Patil", "nishant.patil@wohlig.com", "2026-02-01", "Software Development Engineer", ""],
+  ["WT/186", "Chintan Limbad", "chintan.limbad@wohlig.com", "2026-04-20", "Data Engineer", "2026-10-31"],
+  ["WT/187", "Praveen Kumar", "praveen.kumar@wohlig.com", "2026-04-21", "Gen AI - Fresher", ""],
+  ["WT/188", "Parth Gala", "parth.gala@wohlig.com", "2026-06-01", "Sr. Software Development Engineer", ""],
+  ["WT/189", "Padmaraju Vamsi", "vamsi.padmaraju@wohlig.com", "2026-06-10", "Gen AI - Fresher", ""],
+  ["WT/190", "Rahul Matai", "rahul.matai@wohlig.com", "2026-06-22", "Tech Lead", ""],
+  ["WT/191", "Shubham Jain", "shubham.jain@wohlig.com", "2026-07-01", "Software Development Engineer", ""],
+  ["WT/192", "Aryan Gupta", "aryan.gupta@wohlig.com", "2026-09-01", "Software Development Engineer", ""],
+  ["WT/193", "Dhruv Solanki", "dhruv.solanki@wohlig.com", "2026-09-01", "Software Development Engineer", ""],
+  ["WT/194", "Shubham Satpute", "shubham.satpute@wohlig.com", "2026-09-01", "Software Development Engineer", ""],
+  ["WT/195", "Nishita Patel", "nishita.patel@wohlig.com", "2026-09-01", "Software Development Engineer", ""],
+  ["WT/196", "Sakshi Patil", "sakshi.patil@wohlig.com", "2026-09-01", "Software Development Engineer", ""],
+  ["WT/197", "Akshay Ahuja", "akshay.ahuja@wohlig.com", "2026-09-01", "Software Development Engineer", ""],
+  ["WT/198", "Dhruv Bharwada", "dhruv.bharwada@wohlig.com", "2026-09-01", "Software Development Engineer", ""],
+  ["WT/199", "Shreyas Nair", "shreyas.nair@wohlig.com", "2026-09-07", "IT Sales Executive", ""],
+  ["WT/2001 dummy", "Arjun Silwal", "arjun.silwal@wohlig.com", "2026-09-21", "Intern - Gen AI", ""],
+  ["WT/2001 dummy", "Priyal Makwana", "priyal.makwana@wohlig.com", "2026-09-21", "Intern - Gen AI", ""],
+  ["WT/2001 dummy", "Shreya Dandare", "shreya.dandare@wohlig.com", "2026-09-23", "Intern - Gen AI", ""],
+  ["WT/2001 dummy", "Sahil Rane", "sahil.rane@wohlig.com", "2026-10-05", "Intern - Gen AI", ""],
+  ["WT/2001 dummy", "Soham Satpute", "soham.satpute@wohlig.com", "2026-10-05", "Intern - Gen AI", ""]
+];
+
+/* Roster: "Wohlig Active Employee Details - 8 October" HR sheet. Tool access is assumed from each
+   person's department bundle until the real integrations report actual status. */
+const NEW_FROM = "2026-09-15";   // joined on or after this date: onboarding checklist still open
+const S = {
+  route:"dashboard", sel:null, q:"", offSel:null, af:{q:"",app:"",res:""},
+  emps: ROSTER.map(([no,name,email,start,title,lastDay])=>{
+    const dept=deptOf(title), isNew=start>=NEW_FROM;
+    return mk({no:/dummy/i.test(no)?"Not assigned":no, name, email, start, title, dept, manager:"", lastDay:lastDay||undefined,
+      status:isNew?"onboarding":"active", grants:all(T(DEPT_TPL[dept]),"active"),
+      onTasks:ON_TASKS.map(t=>({t,done:!isNew}))});
+  }),
+  audit:[]
+};
+S.emps.forEach((e,i)=>{e.color=AV[i%AV.length]; if(!e.email) e.email=mail(e.name);});
+
+function mail(n){const p=n.toLowerCase().replace(/[^a-z\s]/g,"").trim().split(/\s+/);return (p[0]+(p[1]?"."+p[p.length-1]:""))+"@"+DOMAIN}
+
+function at(daysAgo,h,m){const d=new Date(TODAY);d.setDate(d.getDate()-daysAgo);d.setHours(h,m,0,0);return d}
+const seed = [
+  [0,10,20,`Employee list imported from HR sheet (8 Oct 2026): ${ROSTER.length} active employees`,"All employees",null,"ok"],
+  ...S.emps.filter(e=>e.lastDay).map(e=>[0,10,21,`Last working day ${longDate(e.lastDay)} recorded from HR sheet`,e.name,null,"info"]),
+];
+function longDate(s){const [y,m,d]=s.split("-").map(Number);return `${d} ${"Jan Feb Mar Apr May Jun Jul Aug Sep Oct Nov Dec".split(" ")[m-1]} ${y}`}
+S.audit = seed.map(([d,h,m,action,emp,app,result])=>({ts:at(d,h,m),actor:ACTOR,action,emp,app,result})).sort((a,b)=>b.ts-a.ts);
+function log(action,emp,app,result){S.audit.unshift({ts:new Date(TODAY.getTime()+(Date.now()-BOOT)),actor:ACTOR,action,emp:emp.name,app:app||null,result:result||"ok"})}
+
+/* ---------- helpers ---------- */
+const $ = (s,r=document)=>r.querySelector(s);
+const esc = s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const initials = n=>n.split(/\s+/).map(p=>p[0]).slice(0,2).join("").toUpperCase();
+const MON=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+const fdate = s=>{if(!s)return"—";const [y,m,d]=s.split("-").map(Number);return `${d} ${MON[m-1]} ${y}`};
+const fts = d=>`${d.getDate()} ${MON[d.getMonth()]}, ${String(d.getHours()).padStart(2,"0")}:${String(d.getMinutes()).padStart(2,"0")}`;
+const sleep = ms=>new Promise(r=>setTimeout(r,ms));
+const appIc = (id,cls="")=>{const a=APP[id];return `<span class="app-ic ${cls}" style="background:${a.color}" title="${esc(a.name)}">${a.mono}</span>`};
+const avatar = e=>`<span class="avatar" style="background:${e.color}">${esc(initials(e.name))}</span>`;
+const person = (e,sub)=>`<div class="person">${avatar(e)}<div style="min-width:0"><b>${esc(e.name)}</b><span>${esc(sub??e.email)}</span></div></div>`;
+const SMILE = `<svg class="smile" viewBox="0 0 34 10" fill="none" aria-hidden="true"><path d="M2 2c4 5 9 6.5 15 6.5S28 7 32 2" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg>`;
+const head = (eyebrow,title,sub,actions="",big=false)=>`<div class="sec-head"><div><div class="eyebrow">${eyebrow}</div><h2 class="${big?"big":""}">${title}</h2>${SMILE}${sub?`<p>${sub}</p>`:""}</div>${actions?`<div class="row">${actions}</div>`:""}</div>`;
+
+const GRANT = {
+  none:["Not started","p-mute"], provisioning:["Giving access","p-info p-busy"], active:["Active","p-ok"],
+  failed:["Failed","p-bad"], revoking:["Removing","p-warn p-busy"], revoked:["Removed","p-mute"]
+};
+const EMP = {onboarding:["Onboarding","p-info"], active:["Active","p-ok"], offboarding:["Offboarding","p-warn"], offboarded:["Offboarded","p-mute"]};
+const gpill = s=>`<span class="pill ${GRANT[s][1]}">${GRANT[s][0]}</span>`;
+function epill(e){
+  if(e.status==="active" && e.lastDay) return `<span class="pill p-warn">Leaving ${esc(fdate(e.lastDay))}</span>`;
+  return `<span class="pill ${EMP[e.status][1]}">${EMP[e.status][0]}</span>`;
+}
+const failedOf = e=>Object.keys(e.grants).filter(k=>e.grants[k]==="failed");
+
+function checklist(e){
+  const phase = (e.status==="offboarding"||e.status==="offboarded")?"off":"on";
+  const auto = Object.keys(e.grants).map(id=>{
+    const s=e.grants[id];
+    const done = phase==="on" ? s==="active" : s==="revoked";
+    return {t:(phase==="on"?"Give access: ":"Remove access: ")+APP[id].name, done};
+  });
+  const manual = (phase==="on"?e.onTasks:e.offTasks||[]).map((x,i)=>({...x,i}));
+  return {phase,auto,manual,total:auto.length+manual.length,done:auto.filter(x=>x.done).length+manual.filter(x=>x.done).length};
+}
+function settle(e){
+  const c=checklist(e);
+  if(e.status==="onboarding" && c.done===c.total){e.status="active";log("Onboarding completed",e);toast(`${e.name} is fully onboarded`)}
+  if(e.status==="offboarding" && c.done===c.total){e.status="offboarded";e.end=e.end||e.lastDay||"2026-10-13";log("Offboarding completed",e);toast(`${e.name} is fully offboarded`)}
+}
+function toast(msg){const l=$("#layer");const t=document.createElement("div");t.className="toast";t.setAttribute("role","status");t.textContent=msg;l.appendChild(t);setTimeout(()=>t.remove(),3400)}
+
+/* ---------- navigation ---------- */
+const ICONS = {
+  onboard:'<circle cx="10" cy="8" r="3.5"/><path d="M3.5 20c.8-3.6 3.4-5.5 6.5-5.5 1.5 0 2.9.4 4 1.3"/><path d="M18 14v6M15 17h6"/>',
+  offboard:'<circle cx="10" cy="8" r="3.5"/><path d="M3.5 20c.8-3.6 3.4-5.5 6.5-5.5 1.5 0 2.9.4 4 1.3"/><path d="M15 17h6"/>',
+  alert:'<path d="M12 3 2 20h20z"/><path d="M12 10v4M12 17h.01"/>',
+  info:'<circle cx="12" cy="12" r="9"/><path d="M12 8v5M12 16h.01"/>',
+  bundle:'<rect x="4" y="4" width="7" height="7" rx="2"/><rect x="13" y="4" width="7" height="7" rx="2"/><rect x="4" y="13" width="7" height="7" rx="2"/><rect x="13" y="13" width="7" height="7" rx="2"/>',
+};
+const NAV = [["dashboard","Dashboard"],["employees","Employees"],["onboard","Onboarding"],["offboard","Offboarding"],["templates","Access bundles"],["audit","Audit log"]];
+const svg = k=>`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${ICONS[k]}</svg>`;
+function renderNav(){
+  const attn = S.emps.filter(e=>failedOf(e).length).length;
+  const active = S.route==="employee"?"employees":S.route;
+  $("#links").innerHTML = NAV.map(([k,l])=>`<a href="#${k}" class="${active===k?"on":""}">${l}${k==="dashboard"&&attn?`<span class="count">${attn}</span>`:""}</a>`).join("");
+}
+function go(r,sel){S.route=r; if(sel!==undefined)S.sel=sel; const h="#"+(r==="employee"?"employees":r); if(location.hash!==h){try{history.replaceState(null,"",h)}catch(e){}} render(); window.scrollTo(0,0)}
+window.addEventListener("hashchange",()=>{const h=location.hash.slice(1);if(NAV.some(n=>n[0]===h)){S.route=h;render();window.scrollTo(0,0)}});
+
+/* ---------- views ---------- */
+function vDashboard(){
+  const act=S.emps.filter(e=>e.status==="active").length;
+  const onb=S.emps.filter(e=>e.status==="onboarding");
+  const leaving=S.emps.filter(e=>e.status==="offboarding"||e.lastDay&&e.status==="active");
+  const attn=S.emps.filter(e=>failedOf(e).length);
+  const seats = APPS.map(a=>({a,n:S.emps.filter(e=>e.grants[a.id]==="active").length}));
+  const max = Math.max(...seats.map(s=>s.n),1);
+  return `
+  <section class="hero">
+    <div class="eyebrow">HR Access Hub · Tuesday, 13 October</div>
+    <h1>People ops that<br>feels <span class="grad">wohlig.</span></h1>
+    <p>Give every joiner the right tools on day one, take every tool back in one click when they leave, and keep a record of all of it.</p>
+    <div class="row"><button class="btn primary" data-go="onboard">New onboarding</button><button class="btn glass" data-go="offboard">${svg("offboard")}Offboard someone</button></div>
+    <div class="grid g4 stats">
+      <div class="card stat"><span class="num">${act}</span><span class="lbl">Active employees</span></div>
+      <div class="card stat"><span class="num">${onb.length}</span><span class="lbl">Onboarding in progress</span></div>
+      <div class="card stat"><span class="num">${leaving.length}</span><span class="lbl">Leaving soon</span></div>
+      <div class="card stat ${attn.length?"alert":""}"><span class="num">${attn.length}</span><span class="lbl">Need your attention</span></div>
+    </div>
+    <span class="tag-proto">Prototype · roster from HR sheet, 8 Oct 2026 · tool access assumed from bundles</span>
+  </section>
+
+  <section class="section">
+    ${head("Today","What needs you, <span class=\"grad\">first.</span>","",`<button class="btn link" data-go="employees">All employees</button>`)}
+    <div class="grid g-main">
+      <div class="card"><div class="card-h"><h3>Needs attention</h3></div>
+        ${attn.length?attn.map(e=>failedOf(e).map(id=>`
+          <div class="li"><span class="dot" style="background:var(--bad)"></span><div class="grow"><b>${esc(APP[id].name)} access failed for ${esc(e.name)}</b><div class="meta">${esc(e.errors[id]||"The service rejected the request")}</div></div>
+          <button class="btn glass sm" data-retry="${e.id}:${id}">Retry</button></div>`).join("")).join(""):`<div class="empty">Nothing needs you right now. Failed access changes show up here.</div>`}
+      </div>
+      <div class="card"><div class="card-h"><h3>Seats in use</h3></div><div class="card-b" style="display:flex;flex-direction:column;gap:14px">
+        ${seats.map(s=>`<div style="display:grid;grid-template-columns:28px minmax(0,1fr) 28px;gap:12px;align-items:center">${appIc(s.a.id)}<div><div style="font-size:13.5px;font-weight:600">${esc(s.a.name)}</div><div class="progress" style="margin-top:5px"><i style="width:${s.n/max*100}%"></i></div></div><span class="num-cell" style="text-align:right;font:600 18px/1 var(--display)">${s.n}</span></div>`).join("")}
+      </div></div>
+    </div>
+  </section>
+
+  <section class="section">
+    ${head("Joining &amp; leaving","Every move, <span class=\"grad\">on track.</span>")}
+    <div class="grid g-main">
+      <div class="card"><div class="tbl-wrap"><table><thead><tr><th>Employee</th><th>Status</th><th class="hide-sm">Date</th><th>Checklist</th></tr></thead><tbody>
+        ${[...onb,...leaving].map(e=>{const c=checklist(e);const pct=Math.round(c.done/c.total*100);return `<tr class="click" data-emp="${e.id}"><td>${person(e,e.title)}</td><td>${epill(e)}</td><td class="num-cell hide-sm">${esc(fdate(e.status==="onboarding"?e.start:e.lastDay))}</td><td style="min-width:130px"><div class="progress"><i style="width:${pct}%"></i></div><div class="muted" style="margin-top:5px">${c.done} of ${c.total} done</div></td></tr>`}).join("")}
+      </tbody></table></div></div>
+      <div class="card"><div class="card-h"><h3>Recent activity</h3><button class="btn link" data-go="audit">Audit log</button></div>
+        <div style="padding-bottom:12px">${S.audit.slice(0,6).map(tl).join("")}</div></div>
+    </div>
+  </section>`;
+}
+function tl(a){
+  const c=a.result==="fail"?"var(--bad)":a.result==="info"?"var(--warn)":"var(--ok)";
+  return `<div class="tl"><span class="dot" style="background:${c}"></span><div style="min-width:0"><div style="font-size:14px"><b style="font-weight:600">${esc(a.emp)}</b> · ${a.app?esc(APP[a.app].name)+": ":""}${esc(a.action)}</div><div class="meta">${fts(a.ts)} · by ${esc(a.actor)}</div></div></div>`;
+}
+
+function vEmployees(){
+  const q=S.q.toLowerCase();
+  const rows=S.emps.filter(e=>!q||(e.name+e.email+e.dept+e.title).toLowerCase().includes(q));
+  return `<section class="section">
+  ${head("People","Everyone, <span class=\"grad\">at a glance.</span>","Everyone with a record here, and which tools they can use right now.",`<input class="input" id="q" placeholder="Search by name, team or email" aria-label="Search employees" value="${esc(S.q)}" style="width:280px;border-radius:999px">`,true)}
+  <div class="card"><div class="tbl-wrap"><table><thead><tr><th>Employee</th><th class="hide-sm">Department</th><th>Status</th><th>Tool access</th><th class="hide-sm">Start date</th></tr></thead><tbody>
+  ${rows.length?rows.map(e=>`<tr class="click" data-emp="${e.id}"><td>${person(e)}</td><td class="hide-sm">${esc(e.dept)}<div class="muted">${esc(e.title)}</div></td><td>${epill(e)}</td>
+    <td><div class="apps-row">${Object.keys(e.grants).map(id=>appIc(id,e.grants[id]==="active"?"":e.grants[id]==="failed"?"fail":"off")).join("")}</div></td><td class="num-cell hide-sm">${esc(fdate(e.start))}</td></tr>`).join("")
+  :`<tr><td colspan="5"><div class="empty">No one matches “${esc(S.q)}”.</div></td></tr>`}
+  </tbody></table></div></div></section>`;
+}
+
+function vEmployee(){
+  const e=S.emps.find(x=>x.id===S.sel); if(!e) return vEmployees();
+  const c=checklist(e); const pct=Math.round(c.done/c.total*100);
+  const canOff = e.status==="active"||e.status==="onboarding";
+  const pending = Object.keys(e.grants).filter(k=>e.grants[k]==="none");
+  const acts = S.audit.filter(a=>a.emp===e.name);
+  return `<section class="section" style="gap:22px"><button class="back" data-go="employees">← All employees</button>
+  <div class="card">
+    <div class="profile">${avatar(e)}<div style="flex:1;min-width:0"><div class="eyebrow">${esc(e.dept)}</div><h2 style="margin-top:6px">${esc(e.name)}</h2><div style="color:var(--ink-dim);margin-top:2px">${esc(e.title)}</div></div>
+      <div class="row">${epill(e)}${pending.length?`<button class="btn primary sm" data-provision="${e.id}">Give access (${pending.length} tools)</button>`:""}${canOff?`<button class="btn glass sm" data-offboard="${e.id}">${svg("offboard")}Offboard</button>`:""}</div></div>
+    <dl class="facts">
+      <div><dt>Employee no.</dt><dd class="mono">${esc(e.no||"Not assigned")}</dd></div>
+      <div><dt>Work email</dt><dd class="mono">${esc(e.email)}</dd></div>
+      <div><dt>Date of joining</dt><dd>${esc(fdate(e.start))}</dd></div>
+      <div><dt>${e.status==="offboarded"?"Left on":"Last working day"}</dt><dd>${esc(e.status==="offboarded"?fdate(e.end):e.lastDay?fdate(e.lastDay):"Not set")}</dd></div>
+    </dl>
+  </div>
+  <div class="grid g-main">
+    <div class="card"><div class="card-h"><h3>Tool access</h3><span class="muted">${Object.values(e.grants).filter(s=>s==="active").length} of ${Object.keys(e.grants).length} active</span></div>
+      ${Object.keys(e.grants).map(id=>`<div class="access-row">${appIc(id)}<div class="grow"><b>${esc(APP[id].name)}</b><span class="${e.grants[id]==="failed"?"err":""}">${esc(e.grants[id]==="failed"?(e.errors[id]||"Request failed"):APP[id].sub)}</span></div>${gpill(e.grants[id])}${e.grants[id]==="failed"?`<button class="btn glass sm" data-retry="${e.id}:${id}">Retry</button>`:""}</div>`).join("")}
+    </div>
+    <div class="card"><div class="card-h"><h3>${c.phase==="on"?"Onboarding":"Offboarding"} checklist</h3><span class="muted">${c.done} of ${c.total}</span></div>
+      <div style="padding:0 24px 14px"><div class="progress"><i style="width:${pct}%"></i></div></div>
+      ${c.auto.map(x=>`<div class="check ${x.done?"done":""}" style="cursor:default"><input type="checkbox" disabled ${x.done?"checked":""} aria-label="${esc(x.t)}"><div class="grow"><div class="lbl">${esc(x.t)}</div><div class="tag">Automatic</div></div></div>`).join("")}
+      ${c.manual.map(x=>`<label class="check ${x.done?"done":""}"><input type="checkbox" id="chk-${e.id}-${c.phase}-${x.i}" data-task="${e.id}:${c.phase}:${x.i}" ${x.done?"checked":""} ${e.status==="offboarded"?"disabled":""}><div class="grow"><div class="lbl">${esc(x.t)}</div><div class="tag">Manual · ${c.phase==="on"?"IT / Admin":"HR / Admin"}</div></div></label>`).join("")}
+    </div>
+  </div>
+  <div class="card"><div class="card-h"><h3>History</h3><button class="btn link" data-go="audit">Full audit log</button></div>
+    <div style="padding-bottom:12px">${acts.length?acts.map(tl).join(""):`<div class="empty">No recorded actions yet.</div>`}</div></div>
+  </section>`;
+}
+
+function vOnboard(){
+  const mgrs=S.emps.filter(e=>e.status!=="offboarded");
+  return `<section class="section">
+  ${head("Onboarding","Add a new <span class=\"grad\">joiner.</span>","Enter their details once. The department picks a starting bundle of tools, which you can change before giving access.","",true)}
+  <form id="onf" class="grid" style="gap:22px" novalidate>
+    <div class="card"><div class="card-h"><h3>Employee details</h3></div><div class="card-b form">
+      <div class="field"><label for="f-name">Full name</label><input class="input" id="f-name" required value="Meera Pillai"></div>
+      <div class="field"><label for="f-pemail">Personal email</label><input class="input" id="f-pemail" type="email" value="meera.pillai@example.com"><span class="hint">Login details are sent here before day one.</span></div>
+      <div class="field"><label for="f-dept">Department</label><select class="input" id="f-dept">${Object.keys(DEPT_TPL).map(d=>`<option ${d==="Engineering"?"selected":""}>${d}</option>`).join("")}</select></div>
+      <div class="field"><label for="f-title">Job title</label><input class="input" id="f-title" value="Software Development Engineer"></div>
+      <div class="field"><label for="f-mgr">Reporting manager</label><select class="input" id="f-mgr">${mgrs.map(m=>`<option>${esc(m.name)}</option>`).join("")}</select></div>
+      <div class="field"><label for="f-start">Start date</label><input class="input" id="f-start" type="date" value="2026-10-26"></div>
+      <div class="field"><span class="lab">Work email</span><div class="input mono" id="f-email" style="background:var(--paper-2)">meera.pillai@${DOMAIN}</div><span class="hint">Created automatically in Google Workspace.</span></div>
+    </div></div>
+    <div class="card"><div class="card-h"><h3>Tools to give</h3><span class="pill p-info" id="tpl-name">Bundle: Engineering</span></div><div class="card-b" style="display:flex;flex-direction:column;gap:18px">
+      <div class="tiles" id="f-apps">${APPS.map(a=>`<label class="tile"><input type="checkbox" id="app-${a.id}" value="${a.id}" ${T("eng").includes(a.id)?"checked":""}>${appIc(a.id)}<span class="t"><b>${esc(a.name)}</b><span>${esc(a.sub)}</span></span></label>`).join("")}</div>
+      <div class="field"><span class="lab">Also added to the checklist</span><div class="chips">${ON_TASKS.map(t=>`<span class="chip plain">${esc(t)}</span>`).join("")}</div></div>
+    </div></div>
+    <div class="row" style="justify-content:flex-end"><button type="button" class="btn glass" data-go="employees">Cancel</button><button type="submit" class="btn primary">Create employee &amp; give access</button></div>
+  </form></section>`;
+}
+
+function vOffboard(){
+  const cands=S.emps.filter(e=>e.status==="active"||e.status==="onboarding");
+  const busy=S.emps.filter(e=>e.status==="offboarding");
+  const e=S.emps.find(x=>x.id===S.offSel)||null;
+  const live = e?Object.keys(e.grants).filter(k=>e.grants[k]==="active"||e.grants[k]==="failed"):[];
+  const mgrs=S.emps.filter(m=>m.status==="active"&&(!e||m.id!==e.id));
+  return `<section class="section">
+  ${head("Offboarding","Remove access in <span class=\"grad\">one click.</span>","Pick who is leaving. Their Google account is suspended first, which also blocks sign-in to every tool that uses Google login. Then each tool is removed and recorded.","",true)}
+  ${busy.length?`<div class="callout">${svg("info")}<div>${busy.map(b=>`<b>${esc(b.name)}</b>`).join(", ")} ${busy.length>1?"are":"is"} still being offboarded. <button class="btn link" data-emp="${busy[0].id}">Open checklist</button></div></div>`:""}
+  <div class="grid g-main">
+    <div class="card"><div class="card-h"><h3>1. Who is leaving?</h3></div>
+      ${cands.map(c=>`<label class="radio-li"><input type="radio" name="offsel" id="off-${c.id}" value="${c.id}" ${e&&e.id===c.id?"checked":""}>${person(c,c.title+" · "+c.dept)}<span style="margin-left:auto">${epill(c)}</span></label>`).join("")}</div>
+    <div class="card" style="align-self:start"><div class="card-h"><h3>2. Review &amp; run</h3></div>
+      ${e?`<div class="card-b" style="display:flex;flex-direction:column;gap:18px">
+        <div class="field"><span class="lab">Access that will be removed (${live.length})</span><div style="display:flex;flex-direction:column;gap:8px">${live.map(id=>`<div class="revoke-item">${appIc(id)}<div class="grow"><b>${esc(APP[id].name)}</b><span>${esc(id==="gws"?"Suspend, sign out everywhere, reset password":id==="gemini"?"Remove licence":id==="gcp"?"Remove IAM roles from all projects":"Remove from workspace")}</span></div></div>`).join("")}</div></div>
+        <div class="field"><label for="o-to">Move Drive files and email to</label><select class="input" id="o-to">${mgrs.map(m=>`<option ${m.name===e.manager?"selected":""}>${esc(m.name)}</option>`).join("")}</select></div>
+        <div class="field"><label for="o-day">Last working day</label><input class="input" type="date" id="o-day" value="${e.lastDay||"2026-10-13"}"></div>
+        <div class="field"><span class="lab">When</span><div class="seg"><label><input type="radio" name="when" id="o-now" value="now" checked>Now</label><label><input type="radio" name="when" id="o-later" value="later">On last working day</label></div></div>
+        <button class="btn danger" data-confirmoff="${e.id}">Offboard ${esc(e.name.split(" ")[0])}</button>
+      </div>`:`<div class="empty">Choose an employee on the left to see exactly what will be removed.</div>`}
+    </div>
+  </div></section>`;
+}
+
+function vTemplates(){
+  return `<section class="section">
+  ${head("Settings","Access <span class=\"grad\">bundles.</span>","Each department starts with a bundle of tools. HR can still add or remove tools for one person during onboarding.",`<button class="btn glass" data-proto="Creating bundles">New bundle</button>`,true)}
+  <div class="grid g2">${TEMPLATES.map(t=>`<div class="card svc"><div class="icon-tile">${svg("bundle")}</div><h3>${esc(t.name)}</h3><p>${esc(t.roles)} · used by ${S.emps.filter(e=>DEPT_TPL[e.dept]===t.id&&e.status!=="offboarded").length} people</p><div class="chips">${t.apps.map(id=>`<span class="chip">${appIc(id)}${esc(APP[id].name)}</span>`).join("")}</div><div><button class="btn link" data-proto="Editing bundles">Edit bundle</button></div></div>`).join("")}</div>
+  </section>
+  <section class="section">
+  ${head("Integrations","Connected <span class=\"grad\">tools.</span>","",`<button class="btn glass sm" data-proto="Connecting a new tool">Connect a tool</button>`)}
+  <div class="card"><div class="tbl-wrap"><table><thead><tr><th>Tool</th><th>How access is given</th><th>Status</th></tr></thead><tbody>
+    ${APPS.map(a=>`<tr><td>${`<div class="person">${appIc(a.id)}<div><b>${esc(a.name)}</b><span>${esc(a.sub)}</span></div></div>`}</td><td>Automatic · ${esc(a.how)}</td><td><span class="pill p-ok">Connected</span></td></tr>`).join("")}
+    <tr><td><div class="person"><span class="app-ic" style="background:var(--ink-faint)">IT</span><div><b>Laptop, ID card, building access</b><span>No API</span></div></div></td><td>Manual checklist task</td><td><span class="pill p-mute">Manual</span></td></tr>
+  </tbody></table></div></div></section>`;
+}
+
+function vAudit(){
+  const f=S.af;
+  const rows=S.audit.filter(a=>(!f.q||(a.emp+a.action+a.actor).toLowerCase().includes(f.q.toLowerCase()))&&(!f.app||a.app===f.app)&&(!f.res||a.result===f.res));
+  return `<section class="section">
+  ${head("Compliance","Audit <span class=\"grad\">log.</span>","Every access change, who made it and whether it worked. Entries can't be edited or deleted.",`<button class="btn glass" data-proto="CSV export">Export CSV</button>`,true)}
+  <div class="card"><div class="filters">
+    <input class="input grow" id="af-q" placeholder="Filter by person or action" value="${esc(f.q)}" aria-label="Filter by person or action">
+    <select class="input" id="af-app" aria-label="Tool"><option value="">All tools</option>${APPS.map(a=>`<option value="${a.id}" ${f.app===a.id?"selected":""}>${esc(a.name)}</option>`).join("")}</select>
+    <select class="input" id="af-res" aria-label="Result"><option value="">All results</option><option value="ok" ${f.res==="ok"?"selected":""}>Succeeded</option><option value="fail" ${f.res==="fail"?"selected":""}>Failed</option><option value="info" ${f.res==="info"?"selected":""}>Scheduled</option></select>
+  </div>
+  <div class="tbl-wrap"><table><thead><tr><th>When</th><th>Employee</th><th>Tool</th><th>Action</th><th class="hide-sm">By</th><th>Result</th></tr></thead><tbody>
+  ${rows.length?rows.map(a=>`<tr><td class="num-cell mono">${fts(a.ts)}</td><td style="white-space:nowrap">${esc(a.emp)}</td><td>${a.app?`<div class="person">${appIc(a.app)}<span class="hide-sm" style="font-size:14px;color:var(--ink)">${esc(APP[a.app].name)}</span></div>`:`<span class="muted">—</span>`}</td><td style="min-width:200px">${esc(a.action)}</td><td class="hide-sm" style="white-space:nowrap">${esc(a.actor)}</td><td>${a.result==="fail"?'<span class="pill p-bad">Failed</span>':a.result==="info"?'<span class="pill p-warn">Scheduled</span>':'<span class="pill p-ok">Done</span>'}</td></tr>`).join("")
+  :`<tr><td colspan="6"><div class="empty">No entries match these filters.</div></td></tr>`}
+  </tbody></table></div></div></section>`;
+}
+
+/* ---------- render ---------- */
+function render(){
+  renderNav();
+  const v={dashboard:vDashboard,employees:vEmployees,employee:vEmployee,onboard:vOnboard,offboard:vOffboard,templates:vTemplates,audit:vAudit}[S.route]||vDashboard;
+  $("#view").innerHTML=v();
+}
+function soft(){ if(S.route!=="onboard") render(); else renderNav(); }
+
+/* ---------- actions ---------- */
+async function provision(e,ids){
+  for(const id of ids){
+    e.grants[id]="provisioning"; soft(); await sleep(650);
+    e.grants[id]="active"; delete e.errors[id];
+    log({gws:"Account created",gemini:"Licence assigned",claude:"Invite sent",github:"Added to org and team",gcp:"IAM role granted on wohlig-dev"}[id],e,id,"ok");
+    soft(); await sleep(150);
+  }
+  settle(e); soft();
+}
+async function revoke(e,to){
+  e.status="offboarding"; e.offTasks=OFF_TASKS.map(t=>({t,done:false}));
+  log("Offboarding started",e,null,"ok");
+  const order=Object.keys(e.grants).filter(k=>e.grants[k]!=="none"&&e.grants[k]!=="revoked").sort((a,b)=>(a==="gws"?-1:b==="gws"?1:0));
+  soft();
+  for(const id of order){
+    e.grants[id]="revoking"; soft(); await sleep(650);
+    e.grants[id]="revoked"; delete e.errors[id];
+    log(id==="gws"?`Account suspended, Drive and email moved to ${to}`:id==="gemini"?"Licence removed":id==="gcp"?"IAM roles removed":"Access removed",e,id,"ok");
+    soft(); await sleep(150);
+  }
+  toast(`All tool access removed for ${e.name}. Finish the manual tasks to close it out.`);
+  soft();
+}
+
+function modal(html){const l=$("#layer");const d=document.createElement("div");d.className="scrim";d.innerHTML=`<div class="modal" role="dialog" aria-modal="true">${html}</div>`;l.appendChild(d);d.addEventListener("click",ev=>{if(ev.target===d||ev.target.closest("[data-close]"))d.remove()});const b=d.querySelector("[data-ok]");b&&b.focus();return d}
+
+document.addEventListener("click",ev=>{
+  const t=ev.target.closest("[data-go],[data-emp],[data-retry],[data-provision],[data-offboard],[data-confirmoff],[data-proto]"); if(!t) return;
+  if(t.dataset.go){ev.preventDefault();go(t.dataset.go);return}
+  if(t.dataset.emp){go("employee",Number(t.dataset.emp));return}
+  if(t.dataset.retry){const [eid,app]=t.dataset.retry.split(":");const e=S.emps.find(x=>x.id==eid);log("Retry requested",e,app,"info");provision(e,[app]);return}
+  if(t.dataset.provision){const e=S.emps.find(x=>x.id==t.dataset.provision);provision(e,Object.keys(e.grants).filter(k=>e.grants[k]==="none"));return}
+  if(t.dataset.offboard){S.offSel=Number(t.dataset.offboard);go("offboard");return}
+  if(t.dataset.proto){toast(`${t.dataset.proto} is part of the full build. This prototype shows the flow only.`);return}
+  if(t.dataset.confirmoff){
+    const e=S.emps.find(x=>x.id==t.dataset.confirmoff);
+    const to=$("#o-to")?.value||e.manager; const day=$("#o-day")?.value; const later=$("#o-later")?.checked;
+    const live=Object.keys(e.grants).filter(k=>e.grants[k]==="active"||e.grants[k]==="failed");
+    const m=modal(`<div class="card-h" style="padding-top:24px"><h3>${later?"Schedule":"Offboard"} ${esc(e.name)}?</h3></div><div class="card-b">
+      <div class="callout bad">${svg("alert")}<div>${later?`On <b>${esc(fdate(day))}</b> at 6:00 pm, `:""}${esc(e.name.split(" ")[0])} will lose access to <b>${live.length} tools</b>${later?"":" right away"}. Their Drive files and email go to <b>${esc(to)}</b>.</div></div>
+      <div class="chips">${live.map(id=>`<span class="chip">${appIc(id)}${esc(APP[id].name)}</span>`).join("")}</div>
+      <div class="muted" style="font-size:13px">Every step is written to the audit log. A suspended Google account can be restored for 20 days.</div></div>
+      <div class="modal-f"><button class="btn glass" data-close>Cancel</button><button class="btn danger" data-ok>${later?"Schedule offboarding":"Yes, remove all access"}</button></div>`);
+    m.querySelector("[data-ok]").addEventListener("click",()=>{
+      m.remove();
+      if(later){e.lastDay=day;log(`Offboarding scheduled for ${fdate(day)}`,e,null,"info");toast(`Offboarding for ${e.name} scheduled for ${fdate(day)}`);go("employee",e.id)}
+      else{e.lastDay=day;S.offSel=null;go("employee",e.id);revoke(e,to)}
+    });
+  }
+});
+
+document.addEventListener("change",ev=>{
+  const t=ev.target;
+  if(t.dataset.task){const [eid,ph,i]=t.dataset.task.split(":");const e=S.emps.find(x=>x.id==eid);const list=ph==="on"?e.onTasks:e.offTasks;list[i].done=t.checked;log(`Checklist: ${list[i].t}${t.checked?"":" (unticked)"}`,e,null,"ok");settle(e);render();return}
+  if(t.name==="offsel"){S.offSel=Number(t.value);render();return}
+  if(t.id==="f-dept"){const tid=DEPT_TPL[t.value];$("#tpl-name").textContent="Bundle: "+TEMPLATES.find(x=>x.id===tid).name;APPS.forEach(a=>{$("#app-"+a.id).checked=T(tid).includes(a.id)});return}
+  if(t.id==="af-app"||t.id==="af-res"){S.af={q:$("#af-q").value,app:$("#af-app").value,res:$("#af-res").value};render();return}
+});
+function keepFocus(id){const n=$("#"+id);const pos=n.selectionStart;return()=>{const m=$("#"+id);if(m){m.focus();m.setSelectionRange(pos,pos)}}}
+document.addEventListener("input",ev=>{
+  const t=ev.target;
+  if(t.id==="f-name"){$("#f-email").textContent=(t.value.trim()?mail(t.value):"—")}
+  if(t.id==="af-q"){S.af={q:t.value,app:$("#af-app").value,res:$("#af-res").value};const r=keepFocus("af-q");render();r()}
+  if(t.id==="q"){S.q=t.value;const r=keepFocus("q");render();r()}
+});
+document.addEventListener("submit",ev=>{
+  if(ev.target.id!=="onf") return; ev.preventDefault();
+  const name=$("#f-name").value.trim(); if(!name){$("#f-name").focus();toast("Add the employee's full name first.");return}
+  const apps=[...document.querySelectorAll("#f-apps input:checked")].map(i=>i.value);
+  if(!apps.length){toast("Pick at least one tool to give.");return}
+  const e=mk({name,dept:$("#f-dept").value,title:$("#f-title").value.trim()||"—",manager:$("#f-mgr").value,start:$("#f-start").value,status:"onboarding",
+    grants:all(apps,"none"),onTasks:ON_TASKS.map(t=>({t,done:false}))});
+  e.color=AV[S.emps.length%AV.length]; e.email=mail(name);
+  S.emps.push(e); log("Employee record created",e,null,"ok");
+  go("employee",e.id); provision(e,apps);
+});
+
+const h=location.hash.slice(1); if(NAV.some(n=>n[0]===h)) S.route=h;
+render();
+})();
+</script>

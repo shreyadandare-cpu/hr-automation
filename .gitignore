@@ -1,0 +1,17 @@
+# Dependencies and local machine files
+node_modules/
+.env
+*.log
+logs/
+
+# Personal data and secrets: never shared through Git
+hr-automation/server/data/
+hr-automation/backups/
+*.dump
+*.bak
+*-before-*
+*.key.json
+*service-account*.json
+
+# macOS
+.DS_Store

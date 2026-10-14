@@ -1,4 +1,5 @@
-# Render setup for the TEST environment (Singapore region). Created once from the repository.
+# Render setup for the TEST environment (Singapore region, free plans). Created once from the repository.
+# Free plans: the web service sleeps when idle (first load can be slow) and the free database expires after 30 days. Test data only.
 # Test data only: do not load the real employee roster here until IT has approved the region.
 services:
   - type: web
@@ -8,30 +9,16 @@ services:
     rootDir: hr-automation/server
     dockerfilePath: ./hr-automation/server/Dockerfile
     healthCheckPath: /health
-    plan: starter
+    plan: free
     envVars:
       - key: DATABASE_URL
         fromDatabase:
           name: hr-automation-db-test
           property: connectionString
 
-  # Daily offboarding job: 07:00 India time (01:30 UTC).
-  - type: cron
-    name: hr-offboarding-daily-test
-    runtime: docker
-    region: singapore
-    rootDir: hr-automation/server
-    dockerfilePath: ./hr-automation/server/Dockerfile
-    schedule: "30 1 * * *"
-    dockerCommand: node src/run-scheduled.js
-    plan: starter
-    envVars:
-      - key: DATABASE_URL
-        fromDatabase:
-          name: hr-automation-db-test
-          property: connectionString
+  # The daily offboarding job is not on Render's free plan. It will run from a free scheduler (GitHub Actions) in a later step.
 
 databases:
   - name: hr-automation-db-test
     region: singapore
-    plan: basic-256mb
+    plan: free

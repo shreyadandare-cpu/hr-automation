@@ -301,15 +301,15 @@ test("an employee can view but cannot edit", async () => {
 test("sign-in: right password works, wrong password is refused, five wrong tries lock the account", async () => {
   const { setPassword, signIn, emailForSession, signOut } = await import("../src/auth.js");
   const who = "test-signin@wohlig.com";
-  await setPassword({ actor: ADMIN, email: who, password: "correct-horse-1" });
+  await setPassword({ actor: ADMIN, email: who, password: "Correct-Horse-1" });
   await assert.rejects(() => signIn(who, "wrong-password-x"), /not correct/);
-  const ok = await signIn(who, "correct-horse-1");
+  const ok = await signIn(who, "Correct-Horse-1");
   assert.equal(await emailForSession(ok.session), who);
   await signOut(ok.session);
   await assert.rejects(() => emailForSession(ok.session), /sign in again/);
   for (let i = 0; i < 4; i++) await assert.rejects(() => signIn(who, "nope-nope-nope"), /not correct/);
   await assert.rejects(() => signIn(who, "nope-nope-nope"), /not correct/);
-  await assert.rejects(() => signIn(who, "correct-horse-1"), /Too many wrong attempts/);
+  await assert.rejects(() => signIn(who, "Correct-Horse-1"), /Too many wrong attempts/);
   await pool.query("DELETE FROM accounts WHERE email=$1", [who]);
 });
 
@@ -318,8 +318,53 @@ test("sign-in: outsiders are refused and passwords are never stored in plain tex
   await assert.rejects(() => signIn("someone@gmail.com", "anything-long"), /not correct/);
   await assert.rejects(() => setPassword({ actor: ADMIN, email: "x@wohlig.com", password: "short" }), /at least 10/);
   const who = "test-hash@wohlig.com";
-  await setPassword({ actor: ADMIN, email: who, password: "plain-text-check-1" });
+  await setPassword({ actor: ADMIN, email: who, password: "Plain-Text-Check-1" });
   const { rows: [a] } = await pool.query("SELECT password_hash FROM accounts WHERE email=$1", [who]);
-  assert.ok(a.password_hash.startsWith("scrypt$") && !a.password_hash.includes("plain-text-check-1"));
+  assert.ok(a.password_hash.startsWith("scrypt$") && !a.password_hash.includes("Plain-Text-Check-1"));
   await pool.query("DELETE FROM accounts WHERE email=$1", [who]);
+});
+
+test("sign-in role: an HR admin may sign in as Employee, but an employee cannot sign in as HR admin", async () => {
+  const { setPassword, signIn, sessionFor, signOut } = await import("../src/auth.js");
+  const emp = "test-role-employee@wohlig.com";
+  await setPassword({ actor: ADMIN, email: emp, password: "Role-Check-Password-1" });
+  const asEmp = await signIn(emp, "Role-Check-Password-1", "admin").catch((e) => e);
+  assert.match(asEmp.message, /not an HR admin/, "employee cannot claim HR admin");
+  const ok = await signIn(emp, "Role-Check-Password-1", "employee");
+  assert.equal((await sessionFor(ok.session)).role, "employee");
+  await signOut(ok.session);
+  const admin = await signIn(ADMIN, "Admin-Check-Pass-1", "admin").catch(async () => null);
+  if (admin) {
+    assert.equal((await sessionFor(admin.session)).role, "admin");
+    const view = await signIn(ADMIN, "Admin-Check-Pass-1", "employee");
+    assert.equal((await sessionFor(view.session)).role, "employee", "HR admin may choose view-only");
+    await signOut(view.session); await signOut(admin.session);
+  }
+  await pool.query("DELETE FROM accounts WHERE email=$1", [emp]);
+});
+
+test("sign-up: only an employee on the list can create an account, and only once", async () => {
+  const { signUp, signIn } = await import("../src/auth.js");
+  await assert.rejects(() => signUp({ email: "stranger@wohlig.com", password: "Long-Enough-Pass-1" }), /not in the employee list/);
+  await assert.rejects(() => signUp({ email: "someone@gmail.com", password: "Long-Enough-Pass-1" }), /Only @wohlig.com/);
+  const mail = `test.signup.${Date.now()}@wohlig.com`;
+  await pool.query("INSERT INTO employees (full_name, work_email, department, start_date, status) VALUES ('TEST Sign Up', $1, 'Engineering', '2026-10-01', 'active')", [mail]);
+  const e = { work_email: mail };
+  await pool.query("DELETE FROM accounts WHERE email=$1", [e.work_email.toLowerCase()]);
+  await signUp({ email: e.work_email, password: "Long-Enough-Pass-1" });
+  await assert.rejects(() => signUp({ email: e.work_email, password: "Another-Pass-123" }), /already exists/);
+  const ok = await signIn(e.work_email, "Long-Enough-Pass-1", "employee");
+  assert.ok(ok.session);
+  await pool.query("DELETE FROM accounts WHERE email=$1", [e.work_email.toLowerCase()]);
+  await pool.query("DELETE FROM employees WHERE work_email=$1", [mail]);
+});
+
+test("password rule: needs upper, lower, number and special character", async () => {
+  const { passwordProblem } = await import("../src/auth.js");
+  assert.equal(passwordProblem("Good-Pass-123"), null);
+  assert.match(passwordProblem("alllowercase1!"), /uppercase/);
+  assert.match(passwordProblem("ALLUPPERCASE1!"), /lowercase/);
+  assert.match(passwordProblem("NoNumbersHere!"), /number/);
+  assert.match(passwordProblem("NoSpecial12345"), /special/);
+  assert.match(passwordProblem("Short1!A"), /at least 10/);
 });

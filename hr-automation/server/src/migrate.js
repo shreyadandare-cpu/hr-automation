@@ -90,6 +90,8 @@ CREATE TABLE IF NOT EXISTS sessions (
   expires_at TIMESTAMPTZ NOT NULL
 );
 
+ALTER TABLE sessions ADD COLUMN IF NOT EXISTS session_role TEXT NOT NULL DEFAULT 'employee';
+
 INSERT INTO applications (code, name, phase) VALUES
   ('gws',    'Google Workspace', 1),
   ('gemini', 'Gemini',           1),

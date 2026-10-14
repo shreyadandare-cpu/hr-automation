@@ -18,10 +18,17 @@ const annotationsFor = (name) =>
 // Every tool except sign-in needs a valid session. The caller is taken from the session, never from the input.
 const SESSION = { session: z.string().describe("Session token from sign_in") };
 
+// Tools that change something. A view-only session (Employee) is refused these, whatever the account holds.
+const CHANGES = new Set(["confirm_onboarding", "tick_checklist", "offboard_employee", "create_employee", "schedule_leaving", "set_password", "set_automation_paused", "check_offboarded_access", "run_scheduled_offboarding"]);
+
 function tool(name, description, schema, fn, { needsSession = true } = {}) {
   server.registerTool(name, { description, inputSchema: needsSession ? { ...SESSION, ...schema } : schema, annotations: annotationsFor(name) }, async (args) => {
     try {
-      const actor = needsSession ? await auth.emailForSession(args?.session) : null;
+      const sess = needsSession ? await auth.sessionFor(args?.session) : null;
+      const actor = sess ? sess.email : null;
+      if (sess && CHANGES.has(name) && sess.role === "employee") {
+        throw new Error("This sign-in is view only. Sign in as HR admin or IT admin to change anything.");
+      }
       const result = await fn(args ?? {}, actor);
       return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
     } catch (err) {
@@ -30,16 +37,21 @@ function tool(name, description, schema, fn, { needsSession = true } = {}) {
   });
 }
 
-tool("sign_in", "Sign in with a Wohlig email and password. Returns a session token.",
+tool("sign_in", "Sign in with a Wohlig email, password and the role to use. Returns a session token.",
+  { email: z.string(), password: z.string(), role: z.enum(["admin", "it", "employee"]).optional() },
+  (a) => auth.signIn(a.email, a.password, a.role ?? "employee"),
+  { needsSession: false });
+
+tool("sign_up", "Create your account with your work email and a password you choose. Only people in the employee list can do this.",
   { email: z.string(), password: z.string() },
-  (a) => auth.signIn(a.email, a.password),
+  (a) => auth.signUp({ email: a.email, password: a.password }),
   { needsSession: false });
 
 tool("sign_out", "End the current session.",
   {}, async (a) => auth.signOut(a.session), { needsSession: false });
 
-tool("whoami", "Who is signed in and their role. Reveals no data.",
-  {}, async (_a, actor) => ({ email: actor, role: await ops.roleOf(actor) }));
+tool("whoami", "Who is signed in and the role of this sign-in. Reveals no data.",
+  {}, async (a) => { const s = await auth.sessionFor(a.session); return { email: s.email, role: s.role }; });
 
 tool("set_password", "Set or reset a person's password. HR or IT admin only. The person must sign in again.",
   { email: z.string(), password: z.string() },

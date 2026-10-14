@@ -313,7 +313,7 @@ async function refresh(){
   if(!getSession()){ S.me = null; S.loggedIn = false; S.loaded = true; render(); return; }
   try{
     const me = await call("whoami");
-    S.me = me; S.denied = !(me && me.role); S.loggedIn = !S.denied;
+    S.me = me; S.loggedIn = !!(me && me.role);
   } catch(err){
     // An expired or unknown session sends the person back to sign-in with the reason shown.
     setSession("");
@@ -321,7 +321,6 @@ async function refresh(){
     S.signinError = userMessage(err);
     render(); return;
   }
-  if(S.denied){ S.loaded = true; render(); return; }
   try{
     const roster = await call(TOOL.roster);
     if(!Array.isArray(roster)) throw new Error("The backend answered, but not with a list of employees: " + String(typeof roster === "string" ? roster : JSON.stringify(roster)).slice(0,160));
@@ -531,32 +530,47 @@ function vAudit(){
 /* ---------- render ---------- */
 const canEdit = () => !!(S.me && (S.me.role === "admin" || S.me.role === "it"));
 const roleName = () => S.me && S.me.role === "admin" ? "HR admin" : S.me && S.me.role === "it" ? "IT admin" : "Employee, view only";
+function vSignUp(){
+  return `<section class="hero" style="padding-top:36px">
+    <div class="eyebrow">HR Access Hub · Create account</div>
+    <h1>Create your <span class="grad">account.</span></h1>
+    <form id="signup" class="card" style="max-width:420px;padding:26px 28px;text-align:left;margin-top:16px" novalidate>
+      <p class="muted" style="margin:0 0 14px">Use your work email. It must already be in the employee list, which HR keeps.</p>
+      <div class="field"><label for="su-email">Work email</label><input class="input" id="su-email" type="email" autocomplete="username" required placeholder="name@wohlig.com"></div>
+      <div class="field" style="margin-top:14px"><label for="su-pass">Choose a password</label><input class="input" id="su-pass" type="password" autocomplete="new-password" required><span class="hint">At least 10 characters, with one uppercase letter, one lowercase letter, one number and one special character (such as ! @ # $ %).</span></div>
+      <div class="field" style="margin-top:14px"><label for="su-pass2">Type it again</label><input class="input" id="su-pass2" type="password" autocomplete="new-password" required></div>
+      ${S.signupError ? `<p role="alert" style="margin:14px 0 0;color:var(--bad);font-size:14px">${esc(S.signupError)}</p>` : ""}
+      <button type="submit" class="btn primary" style="width:100%;margin-top:18px">Create account</button>
+      <p class="muted" style="margin:14px 0 0;font-size:12.5px">Already have an account? <button type="button" data-signup-off class="btn link" style="padding:0;font-size:12.5px">Sign in</button></p>
+    </form></section>`;
+}
 function vSignIn(){
+  if(S.signup) return vSignUp();
   return `<section class="hero" style="padding-top:36px">
     <div class="eyebrow">HR Access Hub · Sign in</div>
     <h1>Welcome <span class="grad">back.</span></h1>
-    <form id="signin" class="card" style="max-width:420px;padding:26px 28px;text-align:left;margin-top:16px" novalidate>
+    <div class="card" style="max-width:420px;padding:26px 28px;text-align:left;margin-top:16px">
+    <button type="button" class="btn glass" data-google style="width:100%;justify-content:center;gap:10px;font-family:var(--body);font-weight:600;font-size:15px">
+      <svg width="18" height="18" viewBox="0 0 48 48" aria-hidden="true"><path fill="#EA4335" d="M24 9.5c3.5 0 6.6 1.2 9 3.5l6.7-6.7C35.6 2.5 30.2 0 24 0 14.6 0 6.5 5.4 2.6 13.2l7.8 6.1C12.3 13.5 17.7 9.5 24 9.5z"/><path fill="#4285F4" d="M46.5 24.5c0-1.6-.1-3.1-.4-4.5H24v9h12.7c-.6 3-2.3 5.5-4.8 7.2l7.5 5.8c4.4-4 7.1-10 7.1-17.5z"/><path fill="#FBBC05" d="M10.4 28.7c-.5-1.5-.8-3-.8-4.7s.3-3.2.8-4.7l-7.8-6.1C.9 16.5 0 20.1 0 24s.9 7.5 2.6 10.8l7.8-6.1z"/><path fill="#34A853" d="M24 48c6.5 0 11.9-2.1 15.9-5.8l-7.5-5.8c-2.1 1.4-4.8 2.3-8.4 2.3-6.3 0-11.7-4-13.6-9.5l-7.8 6.1C6.5 42.6 14.6 48 24 48z"/></svg>
+      Continue with Google
+    </button>
+    <div class="muted" style="text-align:center;margin:12px 0;font-size:12.5px">or sign in with email</div>
+    <form id="signin" novalidate>
       <div class="field"><label for="si-email">Work email</label><input class="input" id="si-email" type="email" autocomplete="username" required placeholder="name@wohlig.com"></div>
       <div class="field" style="margin-top:14px"><label for="si-pass">Password</label><input class="input" id="si-pass" type="password" autocomplete="current-password" required></div>
+      <div class="field" style="margin-top:14px"><label for="si-role">Sign in as</label><select class="input" id="si-role">
+        <option value="admin">HR admin</option>
+        <option value="it">IT admin</option>
+        <option value="employee" selected>Employee</option>
+      </select></div>
       ${S.signinError ? `<p role="alert" style="margin:14px 0 0;color:var(--bad);font-size:14px">${esc(S.signinError)}</p>` : ""}
       <button type="submit" class="btn primary" style="width:100%;margin-top:18px">Sign in</button>
-      <p class="muted" style="margin:14px 0 0;font-size:12.5px">Only @wohlig.com accounts can sign in. Ask an HR admin if you need a password.</p>
-    </form></section>`;
-}
-function vDenied(){
-  const who = S.me && S.me.email ? esc(S.me.email) : "your account";
-  return `<section class="hero" style="padding-top:40px">
-    <div class="eyebrow">HR Access Hub · Sign-in</div>
-    <h1>Access <span class="grad">not allowed.</span></h1>
-    <p>You are signed in as <b>${who}</b>. Only HR admins and IT admins can use this system.</p>
-    <div class="card" style="max-width:560px;padding:22px 24px;text-align:left;margin-top:14px">
-      <p style="margin:0 0 10px">If you should have access, ask an HR admin to add your work email. Then reload this page.</p>
-      <p class="muted" style="margin:0">Only @wohlig.com accounts can use the system.</p>
-    </div></section>`;
+      <p class="muted" style="margin:14px 0 0;font-size:12.5px">Only @wohlig.com accounts can sign in. <button type="button" data-signup-on class="btn link" style="padding:0;font-size:12.5px">Create account</button></p>
+    </form>
+  </div></section>`;
 }
 function render(){
   document.body.classList.toggle("viewonly", !canEdit());
-  if(S.denied){ $("#links").innerHTML=""; $("#view").innerHTML=vDenied(); return; }
   if(S.loaded && !S.me){ $("#links").innerHTML=""; $("#view").innerHTML=vSignIn(); $("#who").innerHTML=""; return; }
   renderNav();
   if(!canEdit() && (S.route==="onboard" || S.route==="offboard")){ $("#view").innerHTML=`<section class="section"><div class="empty">Only HR and IT admins can make changes here. You can view the employee list and audit log.</div></section>`; return; }
@@ -655,6 +669,9 @@ document.addEventListener("keydown",ev=>{ if(isDate(ev.target) && ev.key!=="Tab"
 document.addEventListener("beforeinput",ev=>{ if(isDate(ev.target)) ev.preventDefault(); });
 document.addEventListener("paste",ev=>{ if(isDate(ev.target)) ev.preventDefault(); });
 document.addEventListener("click",ev=>{
+  if(ev.target.closest("[data-signup-on]")){ ev.preventDefault(); S.signup=true; S.signupError=""; S.signinError=""; render(); return; }
+  if(ev.target.closest("[data-signup-off]")){ ev.preventDefault(); S.signup=false; S.signupError=""; render(); return; }
+  if(ev.target.closest("[data-google]")){ ev.preventDefault(); S.signinError = "Continue with Google is being set up. For now, sign in with your work email and password."; render(); return; }
   if(ev.target.closest("[data-logout]")){
     ev.preventDefault();
     const tok = getSession();
@@ -692,6 +709,30 @@ document.addEventListener("input",ev=>{
   if(t.id==="q"){S.q=t.value;const r=keepFocus("q");render();r()}
 });
 document.addEventListener("submit",async ev=>{
+  if(ev.target.id==="signup"){
+    ev.preventDefault();
+    const email=$("#su-email").value.trim(), p1=$("#su-pass").value, p2=$("#su-pass2").value;
+    if(!email){ S.signupError="Enter your work email."; render(); return; }
+    const pwProblem = (p)=>{
+      if(p.length<10) return "Password must be at least 10 characters.";
+      if(!/[A-Z]/.test(p)) return "Password needs at least one uppercase letter (A-Z).";
+      if(!/[a-z]/.test(p)) return "Password needs at least one lowercase letter (a-z).";
+      if(!/[0-9]/.test(p)) return "Password needs at least one number (0-9).";
+      if(!/[^A-Za-z0-9]/.test(p)) return "Password needs at least one special character, such as ! @ # $ % &.";
+      return null;
+    };
+    const problem = pwProblem(p1);
+    if(problem){ S.signupError=problem; render(); return; }
+    if(p1!==p2){ S.signupError="The two passwords do not match."; render(); return; }
+    try{
+      await connect();
+      if(!MCP) throw new Error("The HR backend is not connected. Open this page in the Claude desktop app.");
+      await MCP.callTool(SERVER, "sign_up", { email, password: p1 });
+      S.signup=false; S.signupError=""; S.signinError="Account created. Sign in with your email and password.";
+      render();
+    }catch(err){ S.signupError=userMessage(err); render(); }
+    return;
+  }
   if(ev.target.id==="signin"){
     ev.preventDefault();
     const email=$("#si-email").value.trim(), pass=$("#si-pass").value;
@@ -699,7 +740,8 @@ document.addEventListener("submit",async ev=>{
     try{
       await connect();
       if(!MCP) throw new Error("The HR backend is not connected. Open this page in the Claude desktop app.");
-      const r = await MCP.callTool(SERVER, "sign_in", { email, password: pass });
+      const role = $("#si-role").value;
+      const r = await MCP.callTool(SERVER, "sign_in", { email, password: pass, role });
       const txt = (r.content||[]).find(c=>c.type==="text");
       const out = r.payload ?? (txt ? JSON.parse(txt.text) : null);
       if(!out || !out.session) throw new Error("Sign-in did not return a session.");

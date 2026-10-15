@@ -213,6 +213,27 @@ tr.click:hover td{background:rgba(66,84,212,.04)}
 .filters .grow{flex:1;min-width:180px}
 
 /* Footer */
+.stepper{display:flex;gap:10px;flex-wrap:wrap}
+.stp{display:flex;align-items:center;gap:10px;padding:9px 16px 9px 10px;border-radius:999px;background:rgba(255,255,255,.7);box-shadow:inset 0 0 0 1px var(--line);font-weight:600;font-size:14px;color:var(--ink-faint)}
+.stp b{display:grid;place-items:center;width:26px;height:26px;border-radius:50%;background:var(--paper-2);font:600 13px/1 var(--body);color:var(--ink-dim)}
+.stp.on{color:var(--ink);box-shadow:inset 0 0 0 1.5px var(--purple)}
+.stp.on b,.stp.done b{background:var(--purple);color:#fff}
+.stp.done{color:var(--ink)}
+.doc-row{display:flex;align-items:flex-start;gap:14px;padding:14px 24px;border-top:1px solid var(--line);flex-wrap:wrap}
+.doc-row .grow{flex:1;min-width:220px}
+.doc-row .grow b{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.doc-row .sub{display:block;font-size:12.5px;color:var(--ink-faint)}
+.derr{font-size:12px;font-weight:600;color:var(--bad);margin-top:6px}
+.fchip{display:inline-flex;align-items:center;gap:8px;margin:6px 6px 0 0;padding:3px 5px 3px 12px;border-radius:999px;background:#fff;box-shadow:inset 0 0 0 1px var(--line);font-size:13px}
+.fchip button{border:0;background:var(--paper-2);width:22px;height:22px;border-radius:50%;cursor:pointer;color:var(--ink-dim);line-height:1;font-size:15px}
+.rv{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px 24px;margin:0}
+.rv dt{font:600 11px/1.2 var(--body);color:var(--ink-faint);text-transform:uppercase;letter-spacing:.14em}
+.rv dd{margin:4px 0 0;font-weight:500;overflow-wrap:anywhere}
+.srcbadge{font:600 11px/1 var(--body);border-radius:999px;padding:3px 8px;margin-left:8px;letter-spacing:.04em;vertical-align:1px}
+.srcbadge.ocr{background:#eceeff;color:var(--purple)}
+.srcbadge.typed{background:var(--paper-2);color:var(--ink-faint)}
+textarea.input{resize:vertical;font-family:var(--body)}
+@media (max-width:720px){.rv{grid-template-columns:minmax(0,1fr)}.doc-row{padding-inline:16px}.stp{font-size:13px}}
 .foot{display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap;padding-block:28px 40px;border-top:1px solid var(--line);color:var(--ink-faint);font-size:13px}
 .foot .logo{font-size:22px}
 
@@ -257,6 +278,8 @@ const ACTOR = "Shreya Dandare";
 const DOMAIN = "wohlig.com";
 const TODAY = new Date(2026,9,13,10,30);
 const BOOT = Date.now();
+const nowSim=()=>new Date(TODAY.getTime()+(Date.now()-BOOT));
+const todayIso=()=>{const d=nowSim();return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`};
 
 const APPS = [
   {id:"gws",   name:"Google Workspace", sub:"Gmail · Drive · Calendar", mono:"GW", color:"#1a73e8", how:"Admin SDK"},
@@ -391,7 +414,7 @@ const SMILE = `<svg class="smile" viewBox="0 0 34 10" fill="none" aria-hidden="t
 const head = (eyebrow,title,sub,actions="",big=false)=>`<div class="sec-head"><div><div class="eyebrow">${eyebrow}</div><h2 class="${big?"big":""}">${title}</h2>${SMILE}${sub?`<p>${sub}</p>`:""}</div>${actions?`<div class="row">${actions}</div>`:""}</div>`;
 
 const GRANT = {
-  none:["Not started","p-mute"], provisioning:["Giving access","p-info p-busy"], active:["Active","p-ok"],
+  none:["Not started","p-mute"], provisioning:["Giving access","p-info p-busy"], active:["Active","p-ok"], created:["Created, waiting for joining date","p-warn"],
   failed:["Failed","p-bad"], revoking:["Removing","p-warn p-busy"], revoked:["Removed","p-mute"]
 };
 const EMP = {onboarding:["Onboarding","p-info"], active:["Active","p-ok"], offboarding:["Offboarding","p-warn"], offboarded:["Offboarded","p-mute"]};
@@ -427,7 +450,7 @@ const ICONS = {
   info:'<circle cx="12" cy="12" r="9"/><path d="M12 8v5M12 16h.01"/>',
   bundle:'<rect x="4" y="4" width="7" height="7" rx="2"/><rect x="13" y="4" width="7" height="7" rx="2"/><rect x="4" y="13" width="7" height="7" rx="2"/><rect x="13" y="13" width="7" height="7" rx="2"/>',
 };
-const NAV = [["dashboard","Dashboard"],["employees","Employees"],["onboard","Onboarding"],["offboard","Offboarding"],["leave","Leave"],["templates","Access bundles"],["audit","Audit log"]];
+const NAV = [["dashboard","Dashboard"],["employees","Employees"],["onboard","Onboarding"],["docs","My documents"],["offboard","Offboarding"],["leave","Leave"],["templates","Access bundles"],["audit","Audit log"]];
 const svg = k=>`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${ICONS[k]}</svg>`;
 function renderNav(){
   const attn = S.emps.filter(e=>failedOf(e).length).length;
@@ -521,7 +544,7 @@ function vEmployee(){
   </div>
   <div class="grid g-main">
     <div class="card"><div class="card-h"><h3>Tool access</h3><span class="muted">${Object.values(e.grants).filter(s=>s==="active").length} of ${Object.keys(e.grants).length} active</span></div>
-      ${Object.keys(e.grants).map(id=>`<div class="access-row">${appIc(id)}<div class="grow"><b>${esc(APP[id].name)}</b><span class="${e.grants[id]==="failed"?"err":""}">${esc(e.grants[id]==="failed"?(e.errors[id]||"Request failed"):APP[id].sub)}</span></div>${gpill(e.grants[id])}${e.grants[id]==="failed"?`<button class="btn glass sm" data-retry="${e.id}:${id}">Retry</button>`:""}</div>`).join("")}
+      ${Object.keys(e.grants).map(id=>`<div class="access-row">${appIc(id)}<div class="grow"><b>${esc(APP[id].name)}</b><span class="${e.grants[id]==="failed"?"err":""}">${esc(e.grants[id]==="failed"?(e.errors[id]||"Request failed"):e.grants[id]==="created"?`Suspended until ${fdate(e.start)}, then activates automatically`:APP[id].sub)}</span></div>${gpill(e.grants[id])}${e.grants[id]==="failed"?`<button class="btn glass sm" data-retry="${e.id}:${id}">Retry</button>`:""}${e.grants[id]==="created"?`<button class="btn glass sm" data-activate="${e.id}">Activate now</button>`:""}</div>`).join("")}
     </div>
     <div class="card"><div class="card-h"><h3>${c.phase==="on"?"Onboarding":"Offboarding"} checklist</h3><span class="muted">${c.done} of ${c.total}</span></div>
       <div style="padding:0 24px 14px"><div class="progress"><i style="width:${pct}%"></i></div></div>
@@ -529,38 +552,411 @@ function vEmployee(){
       ${c.manual.map(x=>`<label class="check ${x.done?"done":""}"><input type="checkbox" id="chk-${e.id}-${c.phase}-${x.i}" data-task="${e.id}:${c.phase}:${x.i}" ${x.done?"checked":""} ${e.status==="offboarded"?"disabled":""}><div class="grow"><div class="lbl">${esc(x.t)}</div><div class="tag">Manual · ${c.phase==="on"?"IT / Admin":"HR / Admin"}</div></div></label>`).join("")}
     </div>
   </div>
+  ${laptopCard(e)}${recordCard(e)}
   <div class="card"><div class="card-h"><h3>History</h3><button class="btn link" data-go="audit">Full audit log</button></div>
     <div style="padding-bottom:12px">${acts.length?acts.map(tl).join(""):`<div class="empty">No recorded actions yet.</div>`}</div></div>
   </section>`;
 }
 
+/* ---------- Onboarding wizard: 4 steps ----------
+   Who does what: personal details come from the employee list (HR picks the person), the employee uploads their own
+   documents on the "My documents" page, and HR fills in the document data in step 2.
+   Prototype: uploaded files stay in this browser and are not sent anywhere. Reading documents (OCR), creating the
+   Google account and sending email need the backend, so they are simulated here and marked as such. */
+const DOCS = [
+  {k:"aadhaar", name:"Aadhaar card", req:false},
+  {k:"pan", name:"PAN card", req:false},
+  {k:"dl", name:"Driving licence", req:false},
+  {k:"passport", name:"Passport", req:false},
+  {k:"voter", name:"Voter ID", req:false},
+  {k:"exp", name:"Previous experience letters", req:false, multi:true, max:10},
+  {k:"edu", name:"Education certificates", req:false, multi:true, max:5},
+  {k:"bank", name:"Bank passbook or cancelled cheque", req:false},
+];
+const MAX_MB = 5;
+const OB_STEPS = ["Personal details","Documents and data","Work email","Review"];
+const OB_DRAFT_KEY = "hr_ob_draft";
+S.docs = S.docs||{};      // employee id -> { documentKey: [{name,size}] }, uploaded by the employee
+S.docErr = S.docErr||{};
+S.myId = S.myId||null;
+
+const newOb = ()=>({step:1, fromReview:false, empId:null, d:{first:"",last:"",pemail:"",phone:"",address:"",dept:"Engineering",title:"",mgr:"",start:""},
+  ids:{name:"",dob:"",aadhaar:"",pan:"",address:"",acct:"",ifsc:""}, src:{}, apps:null, reviewed:false, errors:{}, ocrDone:false, ocrMsg:""});
+const obDocs = ob=>(ob.empId&&S.docs[ob.empId])||{};
+const docCount = m=>Object.values(m||{}).reduce((n,a)=>n+(a?a.length:0),0);
+function logAs(actor,action,emp,result){ S.audit.unshift({ts:new Date(TODAY.getTime()+(Date.now()-BOOT)),actor,action,emp:emp.name,empId:emp.id,app:null,result:result||"ok"}); }
+
+const digits = s=>String(s||"").replace(/\D/g,"");
+const V = {
+  email: v=>/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(String(v||"").trim()),
+  phone: v=>{let d=digits(v); if(d.length===12&&d.startsWith("91")) d=d.slice(2); return /^[6-9]\d{9}$/.test(d)},
+  aadhaar: v=>/^[2-9]\d{11}$/.test(digits(v)),
+  pan: v=>/^[A-Z]{5}\d{4}[A-Z]$/.test(String(v||"").trim().toUpperCase()),
+  ifsc: v=>/^[A-Z]{4}0[A-Z0-9]{6}$/.test(String(v||"").trim().toUpperCase()),
+  acct: v=>/^\d{9,18}$/.test(digits(v)),
+  dob: v=>{ if(!/^\d{4}-\d{2}-\d{2}$/.test(v||"")) return false; const d=new Date(v+"T00:00:00"); if(isNaN(d)) return false; const age=(TODAY-d)/31557600000; return age>=16&&age<=80; },
+};
+const maskAadhaar = v=>digits(v).length===12?"•••• •••• "+digits(v).slice(-4):"";
+const maskPan = v=>{const p=String(v||"").trim().toUpperCase();return p.length===10?p.slice(0,2)+"••••••"+p.slice(-2):""};
+const maskAcct = v=>digits(v)?"•••• "+digits(v).slice(-4):"";
+const maskMail = v=>{const [a,b]=String(v||"").split("@");return b?a.slice(0,2)+"•••@"+b:""};
+const fmtSize = b=>b>=1048576?(b/1048576).toFixed(1)+" MB":Math.max(1,Math.round(b/1024))+" KB";
+const nameSplit = full=>{const p=String(full||"").trim().split(/\s+/);return {first:p[0]||"",last:p.slice(1).join(" ")}};
+
+/* Work email: name.surname@wohlig.com, lowercase, no spaces or special characters, a number added if taken. */
+function makeWorkEmail(first,last,isTaken){
+  const clean=s=>String(s||"").normalize("NFD").replace(/[̀-ͯ]/g,"").toLowerCase().replace(/[^a-z0-9]/g,"");
+  const a=clean(first), b=clean(last);
+  if(!a||!b) return "";
+  const base=`${a}.${b}`; let n=1, email=`${base}@${DOMAIN}`;
+  while(isTaken(email)){ n++; email=`${base}${n}@${DOMAIN}`; }
+  return email;
+}
+
+/* A file must be PDF, JPG or PNG, not empty, and no larger than MAX_MB. */
+function fileProblem(f){
+  const extOk=/\.(pdf|jpe?g|png)$/i.test(f.name), typeOk=!f.type||["application/pdf","image/jpeg","image/png"].includes(f.type);
+  if(!extOk||!typeOk) return `${f.name}: only PDF, JPG or PNG files are allowed.`;
+  if(f.size===0) return `${f.name}: the file is empty.`;
+  if(f.size>MAX_MB*1048576) return `${f.name}: the file is larger than ${MAX_MB} MB.`;
+  return "";
+}
+
+/* Step 1 asks only for personal and job details. Documents come from the employee, so none are required here. */
+function step1Errors(ob){
+  const d=ob.d, e={};
+  if(!d.first.trim()) e.first="Enter the first name.";
+  if(!d.last.trim()) e.last="Enter the surname.";
+  if(!V.email(d.pemail)) e.pemail="Enter a valid personal email.";
+  else if(/@wohlig\.com$/i.test(d.pemail.trim())) e.pemail="Use a personal email, not a @wohlig.com address.";
+  if(!V.phone(d.phone)) e.phone="Enter a 10-digit mobile number.";
+  if(!d.address.trim()) e.address="Enter the address.";
+  if(!d.title.trim()) e.title="Enter the job title.";
+  if(!d.start) e.start="Pick the start date.";
+  return e;
+}
+function step2Errors(ob){
+  // Every field is optional, since HR may not have the documents yet. A value that is filled in must have the right format.
+  const i=ob.ids, e={}, has=v=>String(v||"").trim()!=="";
+  if(has(i.dob)&&!V.dob(i.dob)) e.dob="Enter a valid date of birth (age 16 to 80).";
+  if(has(i.aadhaar)&&!V.aadhaar(i.aadhaar)) e.aadhaar="Aadhaar number must be 12 digits.";
+  if(has(i.pan)&&!V.pan(i.pan)) e.pan="PAN must look like ABCDE1234F.";
+  if(has(i.acct)&&!V.acct(i.acct)) e.acct="Bank account number must be 9 to 18 digits.";
+  if(has(i.ifsc)&&!V.ifsc(i.ifsc)) e.ifsc="IFSC must look like HDFC0001234.";
+  return e;
+}
+
+/* Simulated document reading: copies the name and address from step 1 into empty fields and marks them.
+   Reading Aadhaar, PAN, date of birth and bank details from the files needs the real OCR service. */
+function ocrRead(ob){
+  if(!docCount(obDocs(ob))) return {ok:false,msg:"The employee has not uploaded any documents yet, so nothing was read."};
+  const fill=(k,v)=>{ if(v&&!ob.ids[k]){ ob.ids[k]=v; ob.src[k]="ocr"; } };
+  fill("name",(ob.d.first+" "+ob.d.last).trim());
+  fill("address",ob.d.address.trim());
+  return {ok:true,msg:"Prototype: name and address were filled in and marked. The other fields need the document-reading service, so type them in."};
+}
+
+/* Personal data comes from the employee list: HR picks a person who is waiting for onboarding. */
+function obFetch(ob,id){
+  const e=S.emps.find(x=>x.id===id); if(!e) return false;
+  const {first,last}=nameSplit(e.name);
+  ob.empId=e.id; ob.apps=null; ob.d.first=first; ob.d.last=last;
+  if(e.start) ob.d.start=e.start;
+  if(e.title&&e.title!=="—") ob.d.title=e.title;
+  if(e.dept) ob.d.dept=e.dept;
+  if(e.manager&&e.manager!=="—") ob.d.mgr=e.manager;
+  if(e.personalEmail) ob.d.pemail=e.personalEmail;
+  if(e.phone) ob.d.phone=e.phone;
+  if(e.address) ob.d.address=e.address;
+  return true;
+}
+
+function obRestoreDraft(ob){
+  try{ const raw=localStorage.getItem(OB_DRAFT_KEY); if(!raw) return false; Object.assign(ob.d,JSON.parse(raw)); return true; }catch(e){ return false; }
+}
+function obSaveDraft(ob){
+  try{ localStorage.setItem(OB_DRAFT_KEY,JSON.stringify(ob.d)); return true; }catch(e){ return false; }
+}
+function obClearDraft(){ try{ localStorage.removeItem(OB_DRAFT_KEY); }catch(e){} }
+
+const obField=(lab,id,val,o={})=>{
+  const {type="text",hint="",err="",ph="",rows=0,mono=false,full=false,badge=""}=o;
+  const ctl=rows?`<textarea class="input" id="ob-${id}" rows="${rows}" placeholder="${esc(ph)}">${esc(val)}</textarea>`
+    :`<input class="input${mono?" mono":""}" id="ob-${id}" type="${type}" value="${esc(val)}" placeholder="${esc(ph)}" autocomplete="off">`;
+  return `<div class="field"${full?` style="grid-column:1/-1"`:""}><label for="ob-${id}">${lab}${badge}</label>${ctl}${hint?`<span class="hint">${hint}</span>`:""}${err?`<span class="ferr" role="alert">${esc(err)}</span>`:""}</div>`;
+};
+
+function obStepper(ob){
+  return `<div class="stepper" role="list">${OB_STEPS.map((s,i)=>`<div class="stp ${ob.step===i+1?"on":ob.step>i+1?"done":""}" role="listitem"><b>${ob.step>i+1?"✓":i+1}</b>${esc(s)}</div>`).join("")}</div>`;
+}
+
+function obStep1(ob){
+  const d=ob.d, er=ob.errors, mgrs=S.emps.filter(e=>e.status!=="offboarded");
+  const waiting=S.emps.filter(e=>e.status==="onboarding").sort((a,b)=>a.name.localeCompare(b.name));
+  const picked=ob.empId&&S.emps.find(x=>x.id===ob.empId);
+  return `<div class="card"><div class="card-h"><h3>Fetch from the employee list</h3><span class="muted">Fills name, joining date, title and department</span></div><div class="card-b">
+      ${picked?`<div class="callout" style="margin-bottom:14px">${svg("info")}<div>Filled from the employee list: <b>${esc(picked.name)}</b>, ${esc(picked.title)}, joining ${esc(fdate(picked.start))}. Phone, address and personal email still need to be added. <button type="button" class="btn link" data-ob-unfetch>Clear</button></div></div>`:""}
+      ${waiting.length?`<div class="row"><select class="input" id="ob-pick" style="max-width:360px" aria-label="Person from the employee list"><option value="">Choose a person waiting for onboarding</option>${waiting.map(w=>`<option value="${w.id}" ${w.id===ob.empId?"selected":""}>${esc(w.name)}</option>`).join("")}</select><button type="button" class="btn glass" data-ob-fetch>Fill from list</button></div>`
+        :`<p class="muted" style="margin:0">No one in the employee list is waiting for onboarding. Type the details below to add a new joiner.</p>`}
+    </div></div>
+    <div class="card"><div class="card-h"><h3>Candidate details</h3></div><div class="card-b form">
+      ${obField("First name","first",d.first,{err:er.first,ph:"e.g. Priya"})}
+      ${obField("Surname","last",d.last,{err:er.last,ph:"e.g. Shah"})}
+      ${obField("Personal email","pemail",d.pemail,{type:"email",err:er.pemail,hint:"The work email and login details are sent here."})}
+      ${obField("Phone","phone",d.phone,{type:"tel",err:er.phone,ph:"10-digit mobile number"})}
+      ${obField("Address","address",d.address,{rows:3,full:true,err:er.address})}
+    </div></div>
+    <div class="card"><div class="card-h"><h3>Job details</h3><span class="muted">Filled in by HR</span></div><div class="card-b form">
+      <div class="field"><label for="ob-dept">Department</label><select class="input" id="ob-dept">${Object.keys(DEPT_TPL).map(x=>`<option ${x===d.dept?"selected":""}>${esc(x)}</option>`).join("")}</select></div>
+      ${obField("Job title","title",d.title,{err:er.title,ph:"e.g. Software Development Engineer"})}
+      <div class="field"><label for="ob-mgr">Reporting manager</label><select class="input" id="ob-mgr"><option value="">None</option>${mgrs.map(m=>`<option ${m.name===d.mgr?"selected":""}>${esc(m.name)}</option>`).join("")}</select></div>
+      ${obField("Start date","start",d.start,{type:"date",err:er.start})}
+    </div></div>`;
+}
+
+/* Documents are uploaded by the employee. HR sees their status here and cannot upload them. */
+function obDocStatus(ob){
+  const m=obDocs(ob), n=docCount(m);
+  return `<div class="card"><div class="card-h"><h3>Documents</h3><span class="muted">Uploaded by the employee</span></div>
+    ${ob.empId?"":`<div class="card-b" style="padding-bottom:0"><div class="callout">${svg("info")}<div>This person has no record yet. The employee can upload documents on the <b>My documents</b> page once the record is created.</div></div></div>`}
+    ${DOCS.map(def=>{const fl=m[def.k]||[];return `<div class="doc-row"><div class="grow"><b>${esc(def.name)} <span class="pill ${fl.length?"p-ok":"p-mute"}">${fl.length?"Received":"Not uploaded"}</span></b>${fl.length?`<div>${fl.map(f=>`<span class="fchip" style="padding-right:12px">${esc(f.name)} · ${fmtSize(f.size)}</span>`).join("")}</div>`:`<span class="sub">Waiting for the employee</span>`}</div></div>`}).join("")}
+    <div class="card-b"><button type="button" class="btn link" data-go="docs">Open My documents</button><span class="muted"> ${n} file${n===1?"":"s"} received so far</span></div></div>`;
+}
+
+function obStep2(ob){
+  const er=ob.errors, i=ob.ids, has=docCount(obDocs(ob))>0;
+  const badge=k=>ob.src[k]==="ocr"?`<span class="srcbadge ocr" id="src-${k}">From document</span>`:`<span class="srcbadge typed" id="src-${k}">Typed</span>`;
+  return `${obDocStatus(ob)}
+    <div class="card"><div class="card-h"><h3>Document data</h3><span class="muted">Filled in by HR</span><button type="button" class="btn glass sm" data-ob-ocr ${has?"":"disabled"}>Read documents</button></div><div class="card-b">
+      ${ob.ocrMsg?`<div class="callout" style="margin-bottom:16px">${svg("info")}<div>${esc(ob.ocrMsg)}</div></div>`:""}
+      <div class="form">
+      ${obField("Full name","id-name",i.name,{err:er.name,badge:badge("name")})}
+      ${obField("Date of birth","id-dob",i.dob,{type:"date",err:er.dob,badge:badge("dob")})}
+      ${obField("Aadhaar number","id-aadhaar",i.aadhaar,{err:er.aadhaar,mono:true,ph:"12 digits",badge:badge("aadhaar")})}
+      ${obField("PAN","id-pan",i.pan,{err:er.pan,mono:true,ph:"ABCDE1234F",badge:badge("pan")})}
+      ${obField("Address","id-address",i.address,{rows:3,full:true,err:er.address,badge:badge("address")})}
+      ${obField("Bank account number","id-acct",i.acct,{err:er.acct,mono:true,badge:badge("acct")})}
+      ${obField("IFSC code","id-ifsc",i.ifsc,{err:er.ifsc,mono:true,ph:"HDFC0001234",badge:badge("ifsc")})}
+      </div><p class="muted" style="margin:14px 0 0">All of these are optional. Any value can be corrected. Fields filled from a document are marked, and the mark changes to "Typed" once you edit it.</p></div></div>`;
+}
+
+function obStep3(ob){
+  const ex=ob.empId&&S.emps.find(x=>x.id===ob.empId);
+  if(ex&&ex.email){
+    ob.workEmail=ex.email;
+    return `<div class="card"><div class="card-h"><h3>Work email</h3></div><div class="card-b" style="display:flex;flex-direction:column;gap:14px">
+      <div class="input mono" style="background:var(--paper-2);font-size:18px">${esc(ob.workEmail)}</div>
+      <div class="callout">${svg("info")}<div>This person already has a work email in the employee list, so none is generated.</div></div>
+    </div></div>`;
+  }
+  ob.workEmail=makeWorkEmail(ob.d.first,ob.d.last,x=>!!emailTaken(x));
+  const base=makeWorkEmail(ob.d.first,ob.d.last,()=>false);
+  const bumped=ob.workEmail&&ob.workEmail!==base;
+  return `<div class="card"><div class="card-h"><h3>Work email</h3></div><div class="card-b" style="display:flex;flex-direction:column;gap:14px">
+      <div class="input mono" style="background:var(--paper-2);font-size:18px">${esc(ob.workEmail||"Add a first name and surname in step 1")}</div>
+      <p style="margin:0;color:var(--ink-dim)">Built as <span class="mono">name.surname@${DOMAIN}</span>, in lowercase, with spaces and special characters removed. If the address is taken, a number is added.</p>
+      ${bumped?`<div class="callout">${svg("info")}<div><b>${esc(base)}</b> already belongs to someone, so <b>${esc(ob.workEmail)}</b> is used.</div></div>`:""}
+      <div class="callout">${svg("info")}<div>${esc(activationNote(ob.d.start))}</div></div>
+      <div class="callout">${svg("info")}<div>On submit, the work email is sent to <b>${esc(maskMail(ob.d.pemail)||"the personal email")}</b>. <span class="muted">Simulated in this prototype: no email is sent.</span></div></div>
+    </div></div>`;
+}
+
+function obStep4(ob){
+  const d=ob.d, i=ob.ids, ex=ob.empId&&S.emps.find(x=>x.id===ob.empId);
+  ob.workEmail=ex&&ex.email?ex.email:makeWorkEmail(d.first,d.last,x=>!!emailTaken(x));
+  const sel=ob.apps||T(DEPT_TPL[d.dept]);
+  const sec=(title,step,body)=>`<div class="card"><div class="card-h"><h3>${title}</h3><button type="button" class="btn link" data-ob-goto="${step}">Edit</button></div><div class="card-b">${body}</div></div>`;
+  const kv=(pairs)=>`<dl class="rv">${pairs.map(([k,v])=>`<div><dt>${k}</dt><dd>${v||"—"}</dd></div>`).join("")}</dl>`;
+  const m=obDocs(ob);
+  const docs=DOCS.map(x=>`<div><dt>${esc(x.name)}</dt><dd>${(m[x.k]||[]).length?m[x.k].map(f=>esc(f.name)).join(", "):`<span class="muted">Not uploaded</span>`}</dd></div>`).join("");
+  return `${sec("Personal details",1,kv([["Name",esc(d.first+" "+d.last)],["Personal email",esc(d.pemail)],["Phone",esc(d.phone)],["Address",esc(d.address)]]))}
+    ${sec("Job details",1,kv([["Department",esc(d.dept)],["Job title",esc(d.title)],["Reporting manager",esc(d.mgr)],["Start date",esc(fdate(d.start))]]))}
+    ${sec("Documents from the employee",2,`<dl class="rv">${docs}</dl>`)}
+    ${sec("Document data",2,kv([["Name",esc(i.name)],["Date of birth",esc(i.dob?fdate(i.dob):"")],["Aadhaar",esc(maskAadhaar(i.aadhaar))],["PAN",esc(maskPan(i.pan))],["Address",esc(i.address)],["Bank account",esc(maskAcct(i.acct))],["IFSC",esc(String(i.ifsc).toUpperCase())]]))}
+    ${sec("Work email",3,kv([["Work email",`<span class="mono">${esc(ob.workEmail)}</span>`],["Activation",esc(d.start&&d.start>todayIso()?`Created now, activates on ${fdate(d.start)}`:"Activated when created")]]))}
+    <div class="card"><div class="card-h"><h3>Tools to give</h3><span class="pill p-info">Bundle: ${esc(TEMPLATES.find(x=>x.id===DEPT_TPL[d.dept]).name)}</span></div><div class="card-b" style="display:flex;flex-direction:column;gap:16px">
+      <div class="tiles" id="ob-apps">${APPS.map(a=>`<label class="tile"><input type="checkbox" value="${a.id}" ${sel.includes(a.id)?"checked":""}>${appIc(a.id)}<span class="t"><b>${esc(a.name)}</b><span>${esc(a.sub)}</span></span></label>`).join("")}</div>
+      <p class="muted" style="margin:0">Saved as this person's tool access, so offboarding can list it later.</p>
+    </div></div>
+    <label class="check" style="border:0;padding:0"><input type="checkbox" id="ob-reviewed" ${ob.reviewed?"checked":""}><div class="grow"><div class="lbl">I have reviewed all the details above</div></div></label>`;
+}
+
 function vOnboard(){
-  const mgrs=S.emps.filter(e=>e.status!=="offboarded");
+  if(!S.ob){ S.ob=newOb(); if(obRestoreDraft(S.ob)) S.obRestored=true; }
+  const ob=S.ob;
+  const body=[obStep1,obStep2,obStep3,obStep4][ob.step-1](ob);
+  const last=ob.step===4;
   return `<section class="section">
-  ${head("Onboarding","Add a new <span class=\"grad\">joiner.</span>","Enter their details once. The department picks a starting bundle of tools, which you can change before giving access.","",true)}
-  <form id="onf" class="grid" style="gap:22px" novalidate>
-    <div class="card"><div class="card-h"><h3>Employee details</h3></div><div class="card-b form">
-      <div class="field"><label for="f-name">Full name</label><input class="input" id="f-name" required value="Meera Pillai"></div>
-      <div class="field"><label for="f-pemail">Personal email</label><input class="input" id="f-pemail" type="email" value="meera.pillai@example.com"><span class="hint">Login details are sent here before day one.</span></div>
-      <div class="field"><label for="f-dept">Department</label><select class="input" id="f-dept">${Object.keys(DEPT_TPL).map(d=>`<option ${d==="Engineering"?"selected":""}>${d}</option>`).join("")}</select></div>
-      <div class="field"><label for="f-title">Job title</label><input class="input" id="f-title" value="Software Development Engineer"></div>
-      <div class="field"><label for="f-mgr">Reporting manager</label><select class="input" id="f-mgr">${mgrs.map(m=>`<option>${esc(m.name)}</option>`).join("")}</select></div>
-      <div class="field"><label for="f-start">Start date</label><input class="input" id="f-start" type="date" value="2026-10-26"></div>
-      <div class="field"><label for="f-email">Work email</label><input class="input mono" id="f-email" type="email" required value="meera.pillai@${DOMAIN}" aria-describedby="f-email-err" aria-invalid="false"><span class="ferr" id="f-email-err" role="alert" hidden></span><span class="hint">Filled in from the name. Must not already belong to anyone.</span></div>
-    </div></div>
-    <div class="card"><div class="card-h"><h3>Tools to give</h3><span class="pill p-info" id="tpl-name">Bundle: Engineering</span></div><div class="card-b" style="display:flex;flex-direction:column;gap:18px">
-      <div class="tiles" id="f-apps">${APPS.map(a=>`<label class="tile"><input type="checkbox" id="app-${a.id}" value="${a.id}" ${T("eng").includes(a.id)?"checked":""}>${appIc(a.id)}<span class="t"><b>${esc(a.name)}</b><span>${esc(a.sub)}</span></span></label>`).join("")}</div>
-      <div class="field"><span class="lab">Also added to the checklist</span><div class="chips">${ON_TASKS.map(t=>`<span class="chip plain">${esc(t)}</span>`).join("")}</div></div>
-    </div></div>
-    <div class="row" style="justify-content:flex-end"><button type="button" class="btn glass" data-go="employees">Cancel</button><button type="submit" class="btn primary">Create employee &amp; give access</button></div>
+  ${head("Onboarding","Add a new <span class=\"grad\">joiner.</span>","Personal details come from the employee list, the employee uploads their own documents, and HR fills in the document data. Nothing is created until you submit.","",true)}
+  ${obStepper(ob)}
+  ${S.obRestored?`<div class="callout">${svg("info")}<div>A saved draft was restored. It holds name, contact and job details only. ID numbers have to be added again. <button type="button" class="btn link" data-ob-cancel>Start over</button></div></div>`:""}
+  <form id="obf" class="grid" style="gap:22px" novalidate>${body}
+    <div class="row" style="justify-content:space-between">
+      <div class="row">${ob.step>1?`<button type="button" class="btn glass" data-ob-back>Back</button>`:`<button type="button" class="btn glass" data-ob-cancel>Cancel</button>`}<button type="button" class="btn glass" data-ob-draft>Save draft</button></div>
+      ${last?`<button type="submit" class="btn primary" id="ob-submit" ${ob.reviewed?"":"disabled"}>Submit and create account</button>`
+            :`<button type="button" class="btn primary" data-ob-next>${ob.fromReview?"Back to review":"Continue"}</button>`}
+    </div>
   </form></section>`;
 }
+
+function obCollect(ob){
+  const g=id=>{const el=$("#ob-"+id);return el?el.value:undefined};
+  if(ob.step===1) for(const k of ["first","last","pemail","phone","address","dept","title","mgr","start"]){const v=g(k); if(v!==undefined) ob.d[k]=v;}
+  if(ob.step===2) for(const k of Object.keys(ob.ids)){const v=g("id-"+k); if(v!==undefined) ob.ids[k]=v;}
+  if(ob.step===4){ const boxes=[...document.querySelectorAll("#ob-apps input")]; if(boxes.length) ob.apps=boxes.filter(b=>b.checked).map(b=>b.value); const r=$("#ob-reviewed"); if(r) ob.reviewed=r.checked; }
+}
+function obFocusError(){ const el=document.querySelector(".ferr,.derr"); if(el){ el.scrollIntoView({block:"center"}); const f=el.closest(".field,.doc-row"); const i=f&&f.querySelector("input:not([type=file]),textarea"); if(i) i.focus(); } }
+
+function obNext(){
+  const ob=S.ob; obCollect(ob);
+  const errs=ob.step===1?step1Errors(ob):ob.step===2?step2Errors(ob):{};
+  ob.errors=errs;
+  if(Object.keys(errs).length){ render(); obFocusError(); toast("Please fix the highlighted fields."); return; }
+  if(ob.step===1){ const r=ocrRead(ob); ob.ocrDone=r.ok; ob.ocrMsg=r.ok?r.msg:"The employee has not uploaded any documents yet. Fill in the document data by hand, or come back once they have."; }
+  ob.step=ob.fromReview?4:ob.step+1; ob.fromReview=false;
+  render(); window.scrollTo(0,0);
+}
+
+function obSubmit(){
+  const ob=S.ob; obCollect(ob);
+  if(!ob.reviewed){ toast("Tick the review box before submitting."); return; }
+  const apps=(ob.apps||[]).slice().sort((a,b)=>(a==="gws"?-1:b==="gws"?1:0));
+  if(!apps.length){ toast("Pick at least one tool to give."); return; }
+  let e=ob.empId?S.emps.find(x=>x.id===ob.empId):null;
+  const existing=!!e;
+  const email=existing&&e.email?e.email:makeWorkEmail(ob.d.first,ob.d.last,x=>!!emailTaken(x));
+  if(!email){ toast("Add a first name and surname first."); return; }
+  const full=(ob.d.first+" "+ob.d.last).trim();
+  if(!existing){
+    e=mk({name:full,dept:ob.d.dept,title:ob.d.title.trim()||"—",manager:ob.d.mgr||"—",start:ob.d.start,status:"onboarding",
+      grants:all(apps,"none"),onTasks:ON_TASKS.map(t=>({t,done:false}))});
+    e.color=AV[S.emps.length%AV.length]; e.email=email;
+    S.emps.push(e);
+    log(`Employee record created (${email})`,e,null,"ok");
+  }else{
+    // The person is already in the employee list, so the record is completed, not duplicated.
+    Object.assign(e,{name:full,dept:ob.d.dept,title:ob.d.title.trim()||e.title,manager:ob.d.mgr||e.manager||"—",start:ob.d.start});
+    for(const a of apps) if(!e.grants[a]||e.grants[a]==="revoked") e.grants[a]="none";
+    log(`Onboarding details completed by HR (${docCount(S.docs[e.id])} document file${docCount(S.docs[e.id])===1?"":"s"} received)`,e,null,"ok");
+  }
+  // Only masked identity data is kept on the record. The numbers themselves are not stored in this prototype.
+  e.personalEmail=ob.d.pemail.trim(); e.phone=ob.d.phone.trim(); e.address=ob.d.address.trim();
+  e.ids={dob:ob.ids.dob,aadhaar:maskAadhaar(ob.ids.aadhaar),pan:maskPan(ob.ids.pan),acct:maskAcct(ob.ids.acct),ifsc:String(ob.ids.ifsc).trim().toUpperCase()};
+  e.laptop=e.laptop||{received:false,serial:"",date:""};
+  log(`Onboarding submitted after review. HR notified`,e,null,"info");
+  log(`Work email sent to ${maskMail(e.personalEmail)} (simulated)`,e,null,"info");
+  obClearDraft(); S.ob=null; S.obRestored=false;
+  toast(`HR notified: ${e.name} was submitted for onboarding.`);
+  go("employee",e.id);
+  const toGive=apps.filter(a=>e.grants[a]!=="active");
+  if(toGive.length) provision(e,toGive);
+}
+
+/* ---------- My documents: the employee uploads their own documents ---------- */
+function vDocs(){
+  const waiting=S.emps.filter(e=>e.status==="onboarding").sort((a,b)=>a.name.localeCompare(b.name));
+  const me=S.myId&&waiting.find(x=>x.id===S.myId);
+  const m=me?(S.docs[me.id]||{}):{};
+  const rows=me?DOCS.map(def=>{
+    const fl=m[def.k]||[], er=S.docErr[def.k];
+    return `<div class="doc-row"><div class="grow"><b>${esc(def.name)} <span class="pill ${fl.length?"p-ok":"p-mute"}">${fl.length?"Uploaded":"Optional"}</span></b>
+      <span class="sub">PDF, JPG or PNG, up to ${MAX_MB} MB${def.multi?`, up to ${def.max} files`:""}</span>
+      <div>${fl.map((f,i)=>`<span class="fchip">${esc(f.name)} · ${fmtSize(f.size)}<button type="button" data-mydoc-rm="${def.k}:${i}" aria-label="Remove ${esc(f.name)}">×</button></span>`).join("")}</div>
+      ${er?`<div class="derr" role="alert">${esc(er)}</div>`:""}</div>
+      <label class="btn glass sm" style="cursor:pointer">${fl.length&&!def.multi?"Replace":"Choose file"+(def.multi?"s":"")}<input type="file" data-mydoc="${def.k}" accept=".pdf,.jpg,.jpeg,.png" ${def.multi?"multiple":""} hidden></label></div>`;
+  }).join(""):"";
+  return `<section class="section">
+  ${head("Employee","My <span class=\"grad\">documents.</span>","Upload your own documents for onboarding. HR can see them and fills in the document data from them.","",true)}
+  <div class="card"><div class="card-h"><h3>Who are you?</h3></div><div class="card-b">
+    ${waiting.length?`<select class="input" id="md-pick" style="max-width:360px" aria-label="Your name"><option value="">Choose your name</option>${waiting.map(w=>`<option value="${w.id}" ${me&&w.id===me.id?"selected":""}>${esc(w.name)}</option>`).join("")}</select>`
+      :`<p class="muted" style="margin:0">No one is waiting for onboarding right now.</p>`}
+    <p class="muted" style="margin:12px 0 0;font-size:12.5px">Prototype: there is no employee sign-in yet, so any name can be chosen. With sign-in, each employee would see only their own page.</p>
+  </div></div>
+  ${me?`<div class="card"><div class="card-h"><h3>Your documents</h3><span class="muted">${docCount(m)} file${docCount(m)===1?"":"s"} uploaded · files stay in your browser in this prototype</span></div>${rows}</div>`:""}
+  </section>`;
+}
+
+document.addEventListener("click",ev=>{
+  const md=ev.target.closest("[data-mydoc-rm]");
+  if(md){ const [k,i]=md.dataset.mydocRm.split(":"); const e=S.emps.find(x=>x.id===S.myId); const arr=S.docs[S.myId]&&S.docs[S.myId][k]; if(e&&arr){ const [gone]=arr.splice(Number(i),1); logAs(`${e.name} (employee)`,`Removed ${DOCS.find(x=>x.k===k).name}: ${gone.name}`,e); S.docErr={}; render(); } return; }
+  const t=ev.target.closest("[data-ob-next],[data-ob-back],[data-ob-goto],[data-ob-draft],[data-ob-cancel],[data-ob-ocr],[data-ob-fetch],[data-ob-unfetch]"); if(!t||!S.ob) return;
+  const ob=S.ob;
+  if(t.hasAttribute("data-ob-next")){ obNext(); return; }
+  obCollect(ob);
+  if(t.hasAttribute("data-ob-back")){ ob.errors={}; ob.step=Math.max(1,ob.step-1); ob.fromReview=false; render(); window.scrollTo(0,0); return; }
+  if(t.dataset.obGoto){ ob.fromReview=ob.step===4; ob.errors={}; ob.step=Number(t.dataset.obGoto); render(); window.scrollTo(0,0); return; }
+  if(t.hasAttribute("data-ob-draft")){ toast(obSaveDraft(ob)?"Draft saved: name, contact and job details only.":"Could not save the draft in this browser."); return; }
+  if(t.hasAttribute("data-ob-cancel")){ obClearDraft(); S.ob=null; S.obRestored=false; render(); window.scrollTo(0,0); return; }
+  if(t.hasAttribute("data-ob-ocr")){ const r=ocrRead(ob); ob.ocrMsg=r.msg; render(); return; }
+  if(t.hasAttribute("data-ob-fetch")){ const id=Number($("#ob-pick")&&$("#ob-pick").value); if(!id){ toast("Choose a person from the list first."); return; } obFetch(ob,id); ob.errors={}; render(); return; }
+  if(t.hasAttribute("data-ob-unfetch")){ ob.empId=null; ob.d=newOb().d; ob.ids=newOb().ids; ob.src={}; ob.apps=null; render(); return; }
+});
+document.addEventListener("change",ev=>{
+  const t=ev.target;
+  if(t.id==="md-pick"){ S.myId=Number(t.value)||null; S.docErr={}; render(); return; }
+  if(t.matches&&t.matches("input[type=file][data-mydoc]")){
+    const e=S.emps.find(x=>x.id===S.myId); if(!e) return;
+    const k=t.dataset.mydoc, def=DOCS.find(x=>x.k===k), map=S.docs[e.id]||(S.docs[e.id]={}), cur=map[k]||(map[k]=[]), probs=[]; let added=0;
+    for(const f of [...t.files]){
+      const p=fileProblem(f); if(p){probs.push(p);continue}
+      if(!def.multi) cur.length=0;
+      else if(cur.length>=def.max){probs.push(`${def.name}: at most ${def.max} files.`);continue}
+      cur.push({name:f.name,size:f.size}); added++;
+    }
+    S.docErr={}; if(probs.length) S.docErr[k]=probs.join(" ");
+    if(added){ logAs(`${e.name} (employee)`,`Uploaded ${def.name}: ${added} file${added===1?"":"s"}`,e); toast(`${def.name} uploaded. HR can see it.`); }
+    render(); return;
+  }
+  const ob=S.ob; if(!ob) return;
+  if(t.id==="ob-dept"){ ob.apps=null; }
+  if(t.id==="ob-reviewed"){ ob.reviewed=t.checked; const b=$("#ob-submit"); if(b) b.disabled=!t.checked; }
+});
+document.addEventListener("input",ev=>{
+  const t=ev.target, ob=S.ob; if(!ob||!t.id||!t.id.startsWith("ob-id-")) return;
+  const k=t.id.slice(6); ob.src[k]="typed"; const b=$("#src-"+k); if(b){ b.className="srcbadge typed"; b.textContent="Typed"; }
+});
+document.addEventListener("submit",ev=>{
+  if(ev.target.id==="obf"){ ev.preventDefault(); if(S.ob&&S.ob.step===4) obSubmit(); return; }
+  if(ev.target.id==="laptopf"){
+    ev.preventDefault();
+    const e=S.emps.find(x=>x.id===S.sel); if(!e) return;
+    const got=$("#lp-got").checked, serial=$("#lp-serial").value.trim(), date=$("#lp-date").value;
+    if(got&&!serial){ toast("Enter the laptop serial number."); $("#lp-serial").focus(); return; }
+    if(got&&!date){ toast("Pick the date the laptop was received."); $("#lp-date").focus(); return; }
+    e.laptop={received:got,serial:got?serial:"",date:got?date:""};
+    log(got?`Laptop received (serial ${serial}, ${fdate(date)})`:"Laptop marked as not received",e,null,"ok");
+    toast("Laptop details saved."); render();
+  }
+});
+
+/* Laptop record and the onboarding record, shown on the employee page. */
+function laptopCard(e){
+  const l=e.laptop||{received:false,serial:"",date:""}, off=e.status==="offboarded";
+  return `<form class="card" id="laptopf" novalidate><div class="card-h"><h3>Laptop</h3><span class="pill ${l.received?"p-ok":"p-mute"}">${l.received?"Received":"Not received"}</span></div><div class="card-b form">
+    <label class="check" style="grid-column:1/-1;border:0;padding:0"><input type="checkbox" id="lp-got" ${l.received?"checked":""} ${off?"disabled":""}><div class="grow"><div class="lbl">Laptop received</div></div></label>
+    <div class="field"><label for="lp-serial">Serial number</label><input class="input mono" id="lp-serial" value="${esc(l.serial)}" placeholder="e.g. C02XK1ABJG5H" ${off?"disabled":""}></div>
+    <div class="field"><label for="lp-date">Date received</label><input class="input" id="lp-date" type="date" value="${esc(l.date)}" ${off?"disabled":""}></div>
+    <div class="row" style="grid-column:1/-1"><button type="submit" class="btn primary sm" ${off?"disabled":""}>Save laptop details</button><span class="muted">Editable by HR.</span></div></div></form>`;
+}
+function recordCard(e){
+  const dm=S.docs[e.id]||{}, n=docCount(dm);
+  if(!n&&!e.phone&&!e.ids) return "";
+  const kv=p=>`<dl class="rv">${p.map(([k,v])=>`<div><dt>${k}</dt><dd>${v||"—"}</dd></div>`).join("")}</dl>`;
+  const i=e.ids||{};
+  return `<div class="card"><div class="card-h"><h3>Onboarding record</h3><span class="muted">ID numbers are masked</span></div><div class="card-b" style="display:flex;flex-direction:column;gap:18px">
+    ${kv([["Personal email",esc(e.personalEmail)],["Phone",esc(e.phone)],["Address",esc(e.address)],["Date of birth",esc(i.dob?fdate(i.dob):"")],["Aadhaar",esc(i.aadhaar)],["PAN",esc(i.pan)],["Bank account",esc(i.acct)],["IFSC",esc(i.ifsc)]])}
+    <div><div class="muted" style="margin-bottom:6px">Documents uploaded by the employee</div>${n?DOCS.filter(d=>(dm[d.k]||[]).length).map(d=>`<div style="font-size:14px"><b>${esc(d.name)}</b> · ${dm[d.k].map(f=>esc(f.name)).join(", ")}</div>`).join(""):`<div class="muted">None uploaded yet.</div>`}</div>
+  </div></div>`;
+}
+
+/* Exposed for the automatic checks. */
+window.__onb={mk,provision,settle,activateDue,todayIso,newOb,makeWorkEmail,fileProblem,step1Errors,step2Errors,ocrRead,obFetch,V,maskAadhaar,maskPan,maskAcct,DOCS,S,emailTaken,docCount};
 
 function vOffboard(){
   const cands=S.emps.filter(e=>e.status==="active"||e.status==="onboarding");
   const busy=S.emps.filter(e=>e.status==="offboarding");
   const e=S.emps.find(x=>x.id===S.offSel)||null;
-  const live = e?Object.keys(e.grants).filter(k=>e.grants[k]==="active"||e.grants[k]==="failed"):[];
+  const live = e?Object.keys(e.grants).filter(k=>["active","failed","created"].includes(e.grants[k])):[];
   const mgrs=S.emps.filter(m=>m.status==="active"&&(!e||m.id!==e.id));
   return `<section class="section">
   ${head("Offboarding","Remove access in <span class=\"grad\">one click.</span>","Pick who is leaving. Their Google account is suspended first, which also blocks sign-in to every tool that uses Google login. Then each tool is removed and recorded.","",true)}
@@ -651,9 +1047,22 @@ function vAudit(){
 }
 
 /* ---------- render ---------- */
+/* Simulated clock: the demo day moves on from the fixed start time. */
+/* Activates any work email that was created ahead of time once the joining date has arrived. */
+function activateDue(){
+  let n=0;
+  for(const e of S.emps) if(e.grants.gws==="created"&&e.start&&e.start<=todayIso()){
+    e.grants.gws="active"; log(`Work email activated on the joining date (${fdate(e.start)})`,e,"gws","ok"); settle(e); n++;
+  }
+  return n;
+}
+const activationNote=start=>!start?"":start>todayIso()
+  ?`The account is created when you submit and stays suspended until the joining date (${fdate(start)}). It then activates automatically. HR can activate it early from the employee page.`
+  :`The joining date (${fdate(start)}) has already passed, so the account is activated as soon as it is created.`;
 function render(){
+  if(activateDue()) toast("A work email was activated on its joining date.");
   renderNav();
-  const v={dashboard:vDashboard,employees:vEmployees,employee:vEmployee,onboard:vOnboard,offboard:vOffboard,leave:vLeave,templates:vTemplates,audit:vAudit}[S.route]||vDashboard;
+  const v={dashboard:vDashboard,employees:vEmployees,employee:vEmployee,onboard:vOnboard,docs:vDocs,offboard:vOffboard,leave:vLeave,templates:vTemplates,audit:vAudit}[S.route]||vDashboard;
   $("#view").innerHTML=v();
 }
 function soft(){ if(S.route!=="onboard") render(); else renderNav(); }
@@ -662,8 +1071,9 @@ function soft(){ if(S.route!=="onboard") render(); else renderNav(); }
 async function provision(e,ids){
   for(const id of ids){
     e.grants[id]="provisioning"; soft(); await sleep(650);
-    e.grants[id]="active"; delete e.errors[id];
-    log({gws:"Account created",gemini:"Licence assigned",claude:"Invite sent",github:"Added to org and team",gcp:"IAM role granted on wohlig-dev"}[id],e,id,"ok");
+    const wait=id==="gws"&&e.start&&e.start>todayIso();   // work email: create now, activate on the joining date
+    e.grants[id]=wait?"created":"active"; delete e.errors[id];
+    log(wait?`Work email created, suspended until the joining date (${fdate(e.start)})`:{gws:"Account created and activated",gemini:"Licence assigned",claude:"Invite sent",github:"Added to org and team",gcp:"IAM role granted on wohlig-dev"}[id],e,id,"ok");
     soft(); await sleep(150);
   }
   settle(e); soft();
@@ -709,7 +1119,8 @@ function editEmployee(e){
 }
 
 document.addEventListener("click",ev=>{
-  const t=ev.target.closest("[data-go],[data-emp],[data-retry],[data-provision],[data-offboard],[data-confirmoff],[data-proto],[data-edit],[data-leave]"); if(!t) return;
+  const t=ev.target.closest("[data-go],[data-emp],[data-retry],[data-provision],[data-offboard],[data-confirmoff],[data-proto],[data-edit],[data-leave],[data-activate]"); if(!t) return;
+  if(t.dataset.activate){const e=S.emps.find(x=>x.id==t.dataset.activate);if(e&&e.grants.gws==="created"){e.grants.gws="active";log("Work email activated early by HR",e,"gws","ok");settle(e);toast(`${e.email} is now active.`);render()}return}
   if(t.dataset.leave){const [lidS,st]=t.dataset.leave.split(":");const l=S.leave.find(x=>x.id==lidS);if(!l||l.status!=="pending")return;l.status=st;log(`${LEAVE_TYPES[l.type]} ${st} (${lrange(l)}, ${l.days} day${l.days>1?"s":""})`,l.emp,null,"ok");toast(`${LEAVE_TYPES[l.type]} for ${l.emp.name} ${st}.`);render();return}
   if(t.dataset.edit){editEmployee(S.emps.find(x=>x.id==t.dataset.edit));return}
   if(t.dataset.go){ev.preventDefault();go(t.dataset.go);return}
@@ -721,7 +1132,7 @@ document.addEventListener("click",ev=>{
   if(t.dataset.confirmoff){
     const e=S.emps.find(x=>x.id==t.dataset.confirmoff);
     const to=$("#o-to")?.value||e.manager; const day=$("#o-day")?.value; const later=$("#o-later")?.checked;
-    const live=Object.keys(e.grants).filter(k=>e.grants[k]==="active"||e.grants[k]==="failed");
+    const live=Object.keys(e.grants).filter(k=>["active","failed","created"].includes(e.grants[k]));
     const m=modal(`<div class="card-h" style="padding-top:24px"><h3>${later?"Schedule":"Offboard"} ${esc(e.name)}?</h3></div><div class="card-b">
       <div class="callout bad">${svg("alert")}<div>${later?`On <b>${esc(fdate(day))}</b> at 6:00 pm, `:""}${esc(e.name.split(" ")[0])} will lose access to <b>${live.length} tools</b>${later?"":" right away"}. Their Drive files and email go to <b>${esc(to)}</b>.</div></div>
       <div class="chips">${live.map(id=>`<span class="chip">${appIc(id)}${esc(APP[id].name)}</span>`).join("")}</div>

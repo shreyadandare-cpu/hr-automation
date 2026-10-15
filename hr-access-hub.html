@@ -125,7 +125,7 @@ tr.click:hover td{background:rgba(66,84,212,.04)}
 .person{display:flex;align-items:center;gap:12px;min-width:0}
 .avatar{width:36px;height:36px;border-radius:50%;display:grid;place-items:center;font:600 13px/1 var(--body);flex:none;color:#fff;box-shadow:0 4px 12px rgba(77,73,221,.2)}
 .person b{display:block;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.person span{display:block;font-size:12.5px;color:var(--ink-faint);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.person span:not(.avatar){display:block;font-size:12.5px;color:var(--ink-faint);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .app-ic{width:28px;height:28px;border-radius:9px;display:grid;place-items:center;font:700 10.5px/1 var(--body);color:#fff;flex:none;letter-spacing:-.02em}
 .apps-row{display:flex;gap:5px;flex-wrap:wrap}
 .apps-row .app-ic{width:24px;height:24px;font-size:9.5px;border-radius:7px}
@@ -139,6 +139,8 @@ tr.click:hover td{background:rgba(66,84,212,.04)}
 /* Lists */
 .li{display:flex;align-items:flex-start;gap:14px;padding:14px 24px;border-top:1px solid var(--line)}
 .li .grow{flex:1;min-width:0}
+.li.wrap{flex-wrap:wrap;align-items:center}
+.li.wrap .grow{min-width:220px}
 .li .meta{font-size:13px;color:var(--ink-faint)}
 .dot{width:8px;height:8px;border-radius:50%;margin-top:8px;flex:none}
 .empty{padding:30px 24px;color:var(--ink-faint);text-align:center;font-size:14px}
@@ -425,7 +427,7 @@ const ICONS = {
   info:'<circle cx="12" cy="12" r="9"/><path d="M12 8v5M12 16h.01"/>',
   bundle:'<rect x="4" y="4" width="7" height="7" rx="2"/><rect x="13" y="4" width="7" height="7" rx="2"/><rect x="4" y="13" width="7" height="7" rx="2"/><rect x="13" y="13" width="7" height="7" rx="2"/>',
 };
-const NAV = [["dashboard","Dashboard"],["employees","Employees"],["onboard","Onboarding"],["offboard","Offboarding"],["templates","Access bundles"],["audit","Audit log"]];
+const NAV = [["dashboard","Dashboard"],["employees","Employees"],["onboard","Onboarding"],["offboard","Offboarding"],["leave","Leave"],["templates","Access bundles"],["audit","Audit log"]];
 const svg = k=>`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${ICONS[k]}</svg>`;
 function renderNav(){
   const attn = S.emps.filter(e=>failedOf(e).length).length;
@@ -578,6 +580,47 @@ function vOffboard(){
   </div></section>`;
 }
 
+/* Leave: sample requests for the prototype. Approving or declining writes one audit row. */
+const LEAVE_TYPES = {casual:"Casual leave", sick:"Sick leave", earned:"Earned leave", wfh:"Work from home"};
+const byName = n=>S.emps.find(e=>e.name===n);
+let lid = 0;
+S.leave = [
+  ["Rajvee Gala","earned","2026-10-19","2026-10-23",5,"Family wedding","pending"],
+  ["Jainam Nisar","sick","2026-10-13","2026-10-13",1,"Fever","pending"],
+  ["Shreyas Nair","casual","2026-10-16","2026-10-16",1,"Personal work","pending"],
+  ["Akash Pawar","wfh","2026-10-14","2026-10-15",2,"Home repairs","approved"],
+  ["Parth Gala","earned","2026-11-02","2026-11-06",5,"Diwali at home","approved"],
+  ["Rahul Matai","casual","2026-10-09","2026-10-09",1,"Bank visit","declined"],
+].filter(r=>byName(r[0])).map(([n,type,from,to,days,reason,status])=>({id:++lid,emp:byName(n),type,from,to,days,reason,status}));
+const LSTAT = {pending:["Waiting","p-warn"], approved:["Approved","p-ok"], declined:["Declined","p-mute"]};
+const lrange = l=>l.from===l.to?fdate(l.from):`${fdate(l.from)} – ${fdate(l.to)}`;
+function vLeave(){
+  const pend=S.leave.filter(l=>l.status==="pending");
+  const today="2026-10-13";
+  const away=S.leave.filter(l=>l.status==="approved"&&l.to>=today).sort((a,b)=>a.from<b.from?-1:1);
+  const done=S.leave.filter(l=>l.status!=="pending");
+  return `<section class="section">
+  ${head("Time off","Leave <span class=\"grad\">management.</span>","Approve or decline leave requests. Every decision is written to the audit log.",`<button class="btn glass" data-proto="Applying for leave">New leave request</button>`,true)}
+  <div class="grid g3">
+    <div class="card stat"><span class="num">${pend.length}</span><span class="lbl">Waiting for you</span></div>
+    <div class="card stat"><span class="num">${away.filter(l=>l.from<=today).length}</span><span class="lbl">Away today</span></div>
+    <div class="card stat"><span class="num">${away.filter(l=>l.from>today).length}</span><span class="lbl">Upcoming leave</span></div>
+  </div>
+  <div class="grid g-main">
+    <div class="card"><div class="card-h"><h3>Requests waiting</h3><span class="muted">${pend.length} open</span></div>
+      ${pend.length?pend.map(l=>`<div class="li wrap"><div class="grow">${person(l.emp,`${LEAVE_TYPES[l.type]} · ${lrange(l)} · ${l.days} day${l.days>1?"s":""}`)}<div class="meta" style="margin:6px 0 0 48px">“${esc(l.reason)}”</div></div>
+        <div class="row" style="gap:8px"><button class="btn glass sm" data-leave="${l.id}:declined">Decline</button><button class="btn primary sm" data-leave="${l.id}:approved">Approve</button></div></div>`).join(""):`<div class="empty">No requests waiting. New ones show up here.</div>`}
+    </div>
+    <div class="card"><div class="card-h"><h3>Away now &amp; coming up</h3></div>
+      ${away.length?away.map(l=>`<div class="li">${person(l.emp,`${LEAVE_TYPES[l.type]} · ${lrange(l)}`)}</div>`).join(""):`<div class="empty">No one is on approved leave.</div>`}
+    </div>
+  </div>
+  <div class="card"><div class="card-h"><h3>Decided</h3></div><div class="tbl-wrap"><table><thead><tr><th>Employee</th><th>Type</th><th class="hide-sm">Dates</th><th>Days</th><th>Status</th></tr></thead><tbody>
+    ${done.length?done.map(l=>`<tr class="click" data-emp="${l.emp.id}"><td>${person(l.emp,l.emp.title)}</td><td>${esc(LEAVE_TYPES[l.type])}</td><td class="num-cell hide-sm">${esc(lrange(l))}</td><td class="num-cell">${l.days}</td><td><span class="pill ${LSTAT[l.status][1]}">${LSTAT[l.status][0]}</span></td></tr>`).join(""):`<tr><td colspan="5"><div class="empty">Nothing decided yet.</div></td></tr>`}
+  </tbody></table></div></div>
+  </section>`;
+}
+
 function vTemplates(){
   return `<section class="section">
   ${head("Settings","Access <span class=\"grad\">bundles.</span>","Each department starts with a bundle of tools. HR can still add or remove tools for one person during onboarding.",`<button class="btn glass" data-proto="Creating bundles">New bundle</button>`,true)}
@@ -610,7 +653,7 @@ function vAudit(){
 /* ---------- render ---------- */
 function render(){
   renderNav();
-  const v={dashboard:vDashboard,employees:vEmployees,employee:vEmployee,onboard:vOnboard,offboard:vOffboard,templates:vTemplates,audit:vAudit}[S.route]||vDashboard;
+  const v={dashboard:vDashboard,employees:vEmployees,employee:vEmployee,onboard:vOnboard,offboard:vOffboard,leave:vLeave,templates:vTemplates,audit:vAudit}[S.route]||vDashboard;
   $("#view").innerHTML=v();
 }
 function soft(){ if(S.route!=="onboard") render(); else renderNav(); }
@@ -666,7 +709,8 @@ function editEmployee(e){
 }
 
 document.addEventListener("click",ev=>{
-  const t=ev.target.closest("[data-go],[data-emp],[data-retry],[data-provision],[data-offboard],[data-confirmoff],[data-proto],[data-edit]"); if(!t) return;
+  const t=ev.target.closest("[data-go],[data-emp],[data-retry],[data-provision],[data-offboard],[data-confirmoff],[data-proto],[data-edit],[data-leave]"); if(!t) return;
+  if(t.dataset.leave){const [lidS,st]=t.dataset.leave.split(":");const l=S.leave.find(x=>x.id==lidS);if(!l||l.status!=="pending")return;l.status=st;log(`${LEAVE_TYPES[l.type]} ${st} (${lrange(l)}, ${l.days} day${l.days>1?"s":""})`,l.emp,null,"ok");toast(`${LEAVE_TYPES[l.type]} for ${l.emp.name} ${st}.`);render();return}
   if(t.dataset.edit){editEmployee(S.emps.find(x=>x.id==t.dataset.edit));return}
   if(t.dataset.go){ev.preventDefault();go(t.dataset.go);return}
   if(t.dataset.emp){go("employee",Number(t.dataset.emp));return}

@@ -3,11 +3,13 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import express from "express";
 import { pool, initDb } from "./db.js";
-import { onboardingErrors, maskAadhaar, maskPan, maskAcct } from "./validate.js";
+import { documentsRouter } from "./documents.js";
+import { bootstrapAuth, loadSession, requireAuth, requireHr, createUser } from "./auth.js";
+import { sessionRouter, accountRouter, usersRouter } from "./users.js";
 
 const DOMAIN = "wohlig.com";
-const DRAFT_ID = "default"; // no sign-in yet, so there is one shared draft
-const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
+const here = path.dirname(fileURLToPath(import.meta.url));
+const root = path.resolve(here, "../..");
 
 const clean = (s) =>
   String(s || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/[^a-z0-9]/g, "");
@@ -33,8 +35,15 @@ const toApi = (r) => ({
 });
 
 const app = express();
+app.use(loadSession);
+app.use("/api/documents", requireAuth, documentsRouter); // raw file bodies, so it goes before the JSON parser
 app.use(express.json({ limit: "100kb" }));
-
+app.use("/api", sessionRouter); // login and logout are the only public API routes
+app.use("/api", accountRouter);
+app.use("/api/users", usersRouter);
+// Onboarding is HR work; employees only reach their own account and documents.
+app.use(["/api/onboarding", "/api/work-email"], requireHr);
+const draftId = (req) => req.user.email.toLowerCase(); // each HR user has their own draft
 const wrap = (fn) => (req, res) => fn(req, res).catch((err) => {
   console.error(err);
   res.status(500).json({ error: "Server error" });
@@ -51,8 +60,8 @@ app.get("/api/work-email", wrap(async (req, res) => {
   res.json({ email: await nextWorkEmail(pool, req.query.first, req.query.last) });
 }));
 
-app.get("/api/onboarding/draft", wrap(async (_req, res) => {
-  const { rows } = await pool.query("SELECT data FROM onboarding_drafts WHERE id=$1", [DRAFT_ID]);
+app.get("/api/onboarding/draft", wrap(async (req, res) => {
+  const { rows } = await pool.query("SELECT data FROM onboarding_drafts WHERE id=$1", [draftId(req)]);
   res.json(rows[0] ? rows[0].data : null);
 }));
 
@@ -63,12 +72,12 @@ app.put("/api/onboarding/draft", wrap(async (req, res) => {
   const data = Object.fromEntries(keep.map((k) => [k, String(d[k] ?? "")]));
   await pool.query(
     `INSERT INTO onboarding_drafts (id,data) VALUES ($1,$2)
-     ON CONFLICT (id) DO UPDATE SET data=$2, updated_at=now()`, [DRAFT_ID, data]);
+     ON CONFLICT (id) DO UPDATE SET data=$2, updated_at=now()`, [draftId(req), data]);
   res.json({ ok: true });
 }));
 
-app.delete("/api/onboarding/draft", wrap(async (_req, res) => {
-  await pool.query("DELETE FROM onboarding_drafts WHERE id=$1", [DRAFT_ID]);
+app.delete("/api/onboarding/draft", wrap(async (req, res) => {
+  await pool.query("DELETE FROM onboarding_drafts WHERE id=$1", [draftId(req)]);
   res.json({ ok: true });
 }));
 
@@ -106,7 +115,9 @@ app.post("/api/onboarding", wrap(async (req, res) => {
     }
     await client.query("INSERT INTO audit_log (action, work_email) VALUES ($1,$2)",
       [existingEmail ? "Onboarding completed" : "Employee record created", email]);
-    await client.query("DELETE FROM onboarding_drafts WHERE id=$1", [DRAFT_ID]);
+    await client.query("DELETE FROM onboarding_drafts WHERE id=$1", [draftId(req)]);
+    // The new joiner gets a login with the default password so they can upload their documents.
+    await createUser(client, email, "employee");
     await client.query("COMMIT");
     const { rows } = await pool.query("SELECT * FROM employees WHERE lower(work_email)=$1", [email.toLowerCase()]);
     res.status(201).json(toApi(rows[0]));
@@ -119,8 +130,17 @@ app.post("/api/onboarding", wrap(async (req, res) => {
 }));
 
 // The page itself, so one command serves everything on the same origin.
-app.get("/", (_req, res) => res.sendFile(path.join(root, "hr-access-hub.html")));
+app.get("/favicon.ico", (_req, res) => res.status(204).end());
+app.get("/favicon.ico", (_req, res) => res.status(204).end());
+app.get("/login", (req, res) => (req.user ? res.redirect("/") : res.sendFile(path.join(here, "../public/login.html"))));
+app.get("/", (req, res) => (req.user ? res.sendFile(path.join(root, "hr-access-hub.html")) : res.redirect("/login")));
+
+app.use((err, _req, res, _next) => {
+  console.error(err);
+  res.status(500).json({ error: "Server error" });
+});
 
 await initDb();
+await bootstrapAuth();
 const port = process.env.PORT || 3000;
 app.listen(port, () => console.log(`HR Access Hub on http://localhost:${port}`));

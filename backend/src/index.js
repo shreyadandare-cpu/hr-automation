@@ -77,6 +77,43 @@ app.get("/api/directory", wrap(async (_req, res) => {
     start: r.start_date, status: r.status, apps: r.apps })));
 }));
 
+// Who reports to whom, for everyone. Only the manager's name is sent, so this is safe for employees too.
+app.get("/api/managers", wrap(async (_req, res) => {
+  const { rows } = await pool.query("SELECT work_email, manager FROM employees WHERE manager IS NOT NULL AND manager <> ''");
+  res.json(rows.map((r) => ({ email: r.work_email, manager: r.manager })));
+}));
+
+// HR changes someone's reporting manager (or clears it with an empty name).
+app.put("/api/employees/manager", requireHr, wrap(async (req, res) => {
+  const email = String(req.body?.email || "").toLowerCase();
+  const manager = String(req.body?.manager || "").trim();
+  const emp = (await pool.query("SELECT name, title FROM employees WHERE lower(work_email)=$1", [email])).rows[0];
+  if (!emp) return res.status(404).json({ error: "Employee not found." });
+  // Directors and the Vice President are at the top of the company, so nobody is above them.
+  if (manager && /\b(director|vice president)\b/i.test(emp.title || "")) {
+    return res.status(400).json({ error: `${emp.name} is at the top of the company and has no reporting manager.` });
+  }
+  if (manager) {
+    const boss = (await pool.query("SELECT name, status FROM employees WHERE lower(name)=lower($1) LIMIT 1", [manager])).rows[0];
+    if (!boss) return res.status(400).json({ error: `${manager} is not in the employee list.` });
+    if (boss.status === "offboarded") return res.status(400).json({ error: `${boss.name} has left, so cannot be a manager.` });
+    // Walk up from the new manager: reaching this person again would make a loop.
+    let cur = boss.name;
+    for (let i = 0; cur && i < 50; i++) {
+      if (cur.toLowerCase() === emp.name.toLowerCase()) {
+        return res.status(400).json({ error: cur === boss.name && boss.name.toLowerCase() === emp.name.toLowerCase()
+          ? "Nobody can be their own reporting manager."
+          : `${boss.name} already reports up to ${emp.name}, so that would make a loop.` });
+      }
+      cur = (await pool.query("SELECT manager FROM employees WHERE lower(name)=lower($1) LIMIT 1", [cur])).rows[0]?.manager || "";
+    }
+  }
+  await pool.query("UPDATE employees SET manager=$1 WHERE lower(work_email)=$2", [manager || null, email]);
+  await pool.query("INSERT INTO audit_log (action, work_email) VALUES ($1,$2)",
+    [manager ? `Reporting manager set to ${manager}` : "Reporting manager cleared", email]);
+  res.json({ email, manager });
+}));
+
 // Preview of the work email that would be issued, with the uniqueness check done against the database.
 app.get("/api/work-email", wrap(async (req, res) => {
   res.json({ email: await nextWorkEmail(pool, req.query.first, req.query.last) });

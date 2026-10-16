@@ -190,7 +190,7 @@ tr.click:hover td{background:rgba(66,84,212,.04)}
 .profile{display:flex;align-items:center;gap:20px;flex-wrap:wrap;padding:26px 28px}
 .profile .avatar{width:64px;height:64px;font-size:20px}
 .profile h2{font-weight:400;font-size:clamp(28px,3.4vw,40px);letter-spacing:-.02em;line-height:1.1}
-.facts{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:16px 24px;padding:18px 28px 24px;border-top:1px solid var(--line);margin:0}
+.facts{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:16px 24px;padding:18px 28px 24px;border-top:1px solid var(--line);margin:0}
 .facts dt{font:600 11px/1.2 var(--body);color:var(--ink-faint);text-transform:uppercase;letter-spacing:.16em}
 .facts dd{margin:6px 0 0;font-weight:500;overflow-wrap:anywhere}
 .access-row{display:flex;align-items:center;gap:14px;padding:14px 24px;border-top:1px solid var(--line)}
@@ -299,10 +299,12 @@ textarea.input{resize:vertical;font-family:var(--body)}
 
 @media (max-width:1080px){.g4{grid-template-columns:repeat(2,minmax(0,1fr))}.g-main,.g3{grid-template-columns:minmax(0,1fr)}.facts{grid-template-columns:repeat(2,minmax(0,1fr))}}
 /* on wide screens let the nav bar run wider than the 1180px page column so all eight links fit on one row */
-@media (min-width:1341px){.wrap.navbar{max-width:1340px}}
-/* eight nav links no longer fit beside the logo and button on mid-size screens, so wrap the links onto their own row */
-@media (max-width:1340px){
-  .pill-nav{flex-wrap:wrap;border-radius:28px;padding:12px 12px 10px 22px}.links{order:3;width:100%;overflow-x:auto;margin:4px -12px 0 -22px;padding:0 12px 0 16px}.cta{margin-left:auto}}
+/* On wide screens the bar may grow past the page column so more links fit on one row. */
+@media (min-width:1341px){.wrap.navbar{max-width:1560px}}
+/* When the links do not fit beside the logo and buttons, fitNav() adds .two-row and they move to their own row. */
+.pill-nav.two-row{flex-wrap:wrap;border-radius:28px;padding:12px 12px 10px 22px}
+.pill-nav.two-row .links{order:3;width:100%;overflow-x:auto;margin:4px -12px 0 -22px;padding:0 12px 0 16px}
+.pill-nav.two-row .logo{margin-right:auto}
 @media (max-width:720px){
   .wrap{padding-inline:16px}
   .view{gap:44px;padding-block:36px 56px}
@@ -315,7 +317,46 @@ textarea.input{resize:vertical;font-family:var(--body)}
 }
 @media (max-width:460px){.stat .num{font-size:34px}.facts{grid-template-columns:minmax(0,1fr)}.btn{padding:11px 18px}}
 body.ro [data-retry],body.ro [data-provision],body.ro [data-offboard],body.ro [data-confirmoff],body.ro [data-proto],body.ro [data-edit],body.ro [data-leave],body.ro [data-activate],body.ro [data-go="onboard"],body.ro [data-go="offboard"],body.ro [data-go="users"]{display:none!important}
+/* Round avatar in the bar, and its menu */
+.avatar-btn{display:inline-grid;place-items:center;width:38px;height:38px;padding:0;border:0;border-radius:50%;overflow:hidden;flex:none;cursor:pointer;color:#fff;font:600 13px/1 var(--body);background:var(--purple);box-shadow:0 0 0 2px var(--surface-2),0 4px 12px rgba(77,73,221,.25)}
+.avatar-btn:hover,.avatar-btn.on{box-shadow:0 0 0 2px var(--purple),0 4px 12px rgba(77,73,221,.3)}
+.avatar-btn img,.pf-avatar img{width:100%;height:100%;object-fit:cover;display:block}
+.acct-menu{position:absolute;right:24px;top:calc(100% + 10px);z-index:30;min-width:270px;max-width:calc(100% - 32px);padding:8px;border-radius:20px;background:var(--surface);border:1px solid var(--card-edge);box-shadow:0 24px 60px rgba(14,10,56,.28)}
+.acct-menu[hidden]{display:none}
+.acct-head{display:flex;align-items:center;gap:12px;padding:10px 12px 12px;border-bottom:1px solid var(--line);margin-bottom:6px}
+.acct-head .avatar-btn{width:44px;height:44px;cursor:default;font-size:15px}
+.acct-head b{display:block;font-weight:600}
+.acct-head span:not(.avatar-btn){display:block;font-size:12.5px;color:var(--ink-faint);overflow-wrap:anywhere}
+.acct-menu a,.acct-menu button[role="menuitem"]{display:block;width:100%;text-align:left;padding:10px 12px;border:0;border-radius:12px;background:none;color:var(--ink);font:500 14.5px/1.2 var(--display);text-decoration:none;cursor:pointer}
+.acct-menu a:hover,.acct-menu button[role="menuitem"]:hover,.acct-menu a:focus-visible,.acct-menu button[role="menuitem"]:focus-visible{background:var(--tint)}
+@media (max-width:720px){.acct-menu{right:16px}}
+td .apps-row{flex-wrap:nowrap}
+/* People who have left: out of the Employees list unless HR asks to see them */
+.former-toggle{display:inline-flex;align-items:center;gap:8px;font-size:13px;color:var(--ink-dim);cursor:pointer;white-space:nowrap}
+.former-toggle input{accent-color:var(--purple);width:16px;height:16px}
+tr.former td{opacity:.6}
+/* Reporting manager picker in the Employees list */
+.mgr-sel{width:auto;min-width:150px;max-width:210px;padding:7px 12px;font-size:13px;border-radius:999px}
+/* Pagination */
+.pager{display:flex;justify-content:space-between;align-items:center;gap:12px 20px;flex-wrap:wrap;padding:14px 24px;border-top:1px solid var(--line)}
+.pager .row{gap:10px}
+.pager label{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--ink-dim)}
+.pager select.input{width:auto;padding:7px 12px;font-size:13px}
+.pg-nav{display:flex;align-items:center;gap:4px;flex-wrap:wrap}
+.pg{min-width:34px;height:34px;padding:0 12px;border:0;border-radius:999px;background:transparent;color:var(--ink-dim);font:600 13.5px/1 var(--body);cursor:pointer}
+.pg:hover:not(:disabled):not(.on){background:var(--tint);color:var(--ink)}
+.pg.on{background:var(--purple);color:#fff;cursor:default}
+.pg:disabled{opacity:.4;cursor:not-allowed}
+.pg-gap{min-width:20px;text-align:center;color:var(--ink-faint)}
+@media (max-width:720px){.pager{padding-inline:16px}}
 /* My profile */
+.pf-avatar-wrap{position:relative;flex:none}
+.pf-avatar{overflow:hidden}
+.pf-cam{position:absolute;right:2px;bottom:2px;width:34px;height:34px;display:grid;place-items:center;border-radius:50%;background:var(--surface);color:var(--ink);box-shadow:0 2px 10px rgba(14,10,56,.35);cursor:pointer}
+.pf-cam:hover{background:var(--tint)}
+.pf-cam:focus-within{outline:2px solid #fff;outline-offset:2px}
+.pf-cam svg{width:18px;height:18px}
+.pf-rm{margin-top:6px;padding:0;border:0;background:none;color:#fff;opacity:.9;font:600 13px/1 var(--body);text-decoration:underline;cursor:pointer}
 .pf-banner{position:relative;min-height:190px;padding:28px;display:flex;align-items:center;gap:22px;flex-wrap:wrap;color:#fff;border-radius:var(--radius) var(--radius) 0 0;
   background:radial-gradient(60% 120% at 88% 0%,rgba(169,187,255,.55),transparent 60%),radial-gradient(50% 100% at 8% 115%,rgba(189,238,226,.35),transparent 60%),linear-gradient(120deg,#2b3aa8,#4254d4 55%,#6f7fee)}
 .pf-avatar{width:112px;height:112px;border-radius:50%;display:grid;place-items:center;font:600 40px/1 var(--body);color:#fff;flex:none;box-shadow:0 0 0 4px rgba(255,255,255,.35)}
@@ -339,10 +380,11 @@ body.ro [data-retry],body.ro [data-provision],body.ro [data-offboard],body.ro [d
   <nav class="pill-nav" aria-label="Main">
     <a class="logo" href="#dashboard" aria-label="wohlig HR Access Hub, dashboard">w<span class="o" aria-hidden="true"></span>hlig<small>HR Access Hub</small></a>
     <div class="links" id="links"></div>
-    <button class="theme-btn" id="acct" type="button" aria-label="Account" title="Account" style="display:none"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 4-6 8-6s8 2 8 6"/></svg></button>
+    <button class="avatar-btn" id="acct" type="button" aria-label="Account menu" aria-haspopup="true" aria-expanded="false" style="display:none"></button>
     <button class="theme-btn" id="theme" type="button" aria-label="Switch to dark mode" title="Switch theme"></button>
     <button class="btn primary sm cta" data-go="onboard">+ <span class="lbl-long">New onboarding</span><span class="lbl-short" hidden>New</span></button>
   </nav>
+  <div class="acct-menu" id="acct-menu" role="menu" hidden></div>
 </div>
 <main class="wrap view" id="view"></main>
 <footer class="wrap"><div class="foot"><a class="logo" href="#dashboard" style="text-decoration:none">w<span class="o" aria-hidden="true"></span>hlig</a><span>HR Access Hub · People Ops · Prototype · roster from HR sheet, 8 Oct 2026</span><span id="who">Signed in as <b style="color:var(--ink)">Shreya Dandare</b>, HR Admin</span></div></footer>
@@ -521,6 +563,7 @@ function toast(msg){const l=$("#layer");const t=document.createElement("div");t.
 
 /* ---------- navigation ---------- */
 const ICONS = {
+  camera:'<path d="M4 8h3l2-2h6l2 2h3v11H4z"/><circle cx="12" cy="13" r="3.5"/>',
   mail:'<rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/>',
   phone:'<path d="M5 4h4l2 5-2.5 1.5a11 11 0 0 0 5 5L15 13l5 2v4a2 2 0 0 1-2 2A16 16 0 0 1 3 6a2 2 0 0 1 2-2z"/>',
   pin:'<path d="M12 21s7-6.2 7-11a7 7 0 0 0-14 0c0 4.8 7 11 7 11z"/><circle cx="12" cy="10" r="2.5"/>',
@@ -532,7 +575,7 @@ const ICONS = {
   info:'<circle cx="12" cy="12" r="9"/><path d="M12 8v5M12 16h.01"/>',
   bundle:'<rect x="4" y="4" width="7" height="7" rx="2"/><rect x="13" y="4" width="7" height="7" rx="2"/><rect x="4" y="13" width="7" height="7" rx="2"/><rect x="13" y="13" width="7" height="7" rx="2"/>',
 };
-const NAV = [["dashboard","Dashboard"],["employees","Employees"],["onboard","Onboarding"],["offboard","Offboarding"],["leave","Leave"],["myleave","My leave"],["profile","My profile"],["templates","Access bundles"],["audit","Audit log"]];
+const NAV = [["dashboard","Dashboard"],["employees","Employees"],["onboard","Onboarding"],["offboard","Offboarding"],["leave","Leave"],["myleave","My leave"],["templates","Access bundles"],["audit","Audit log"]];
 const svg = k=>`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${ICONS[k]}</svg>`;
 /* ---------- Light / dark theme ---------- */
 const THEME_KEY="hr_theme";
@@ -552,6 +595,8 @@ function toggleTheme(){ const t=theme()==="dark"?"light":"dark"; try{localStorag
 const isEmployee = ()=>!!S.user&&S.user.role==="employee";
 /* Everyone signed in can look at the site. Employees see Onboarding as their own documents page and Offboarding as a read-only list. Users, Access bundles and Audit log are HR's. */
 const HR_ONLY=["users","templates","audit","leave"];
+/* Pages reachable from the avatar menu and the address bar that are not links in the bar. */
+const pageKnown=h=>navItems().some(n=>n[0]===h)||h==="profile"||h==="account"||h==="docs";
 function navItems(){ return isEmployee()?NAV.filter(n=>!HR_ONLY.includes(n[0])):NAV; }
 function routeAllowed(r){
   if(!S.user) return r!=="account"&&r!=="users"&&r!=="profile";
@@ -561,10 +606,39 @@ function routeAllowed(r){
 function renderNav(){
   const attn = S.emps.filter(e=>failedOf(e).length).length;
   const active = S.route==="employee"?"employees":S.route==="docs"&&!isEmployee()?"onboard":S.route==="leaveapply"?(S.lw&&S.lw.self?"myleave":"leave"):S.route;
+  renderAcct();
   $("#links").innerHTML = navItems().map(([k,l])=>`<a href="#${k}" class="${active===k?"on":""}">${l}${k==="dashboard"&&attn?`<span class="count">${attn}</span>`:""}</a>`).join("");
+  fitNav();
 }
+/* Measures the bar instead of guessing from the window width: the links need more room for HR than for employees,
+   and the fonts change the widths. If they overflow on one row, they get a row of their own so nothing overlaps. */
+/* The round avatar at the top right: the person's photo, or their initials. It opens a menu. */
+const photoSrc=()=>S.photoLocal||(S.photoV?`/api/profile/photo?v=${S.photoV}`:"");
+const avatarInner=(name,src)=>src?`<img src="${esc(src)}" alt="">`:esc(initials(name));
+function renderAcct(){
+  const b=$("#acct"), m=$("#acct-menu"), u=S.user; if(!b||!m||!u) return;
+  const e=myRecord(), src=photoSrc(), bg=src?"transparent":(e.color||"#4254d4");
+  b.innerHTML=avatarInner(e.name,src); b.style.background=bg; b.title=`${e.name}, account menu`;
+  b.classList.toggle("on",S.route==="profile"||S.route==="account");
+  m.innerHTML=`<div class="acct-head"><span class="avatar-btn" style="background:${bg}">${avatarInner(e.name,src)}</span><div style="min-width:0"><b>${esc(e.name)}</b><span>${esc(u.email)} · ${isEmployee()?"Employee":"HR"}</span></div></div>
+    <a href="#profile" role="menuitem">My profile</a><a href="#account" role="menuitem">Account and password</a>${!isEmployee()&&routeAllowed("users")?`<a href="#users" role="menuitem">Manage users</a>`:""}<button type="button" role="menuitem" data-signout>Sign out</button>`;
+}
+function closeAcct(){ const m=$("#acct-menu"), b=$("#acct"); if(m&&!m.hidden){ m.hidden=true; if(b) b.setAttribute("aria-expanded","false"); } }
+document.addEventListener("click",ev=>{
+  const m=$("#acct-menu"), b=$("#acct"); if(!m||!b) return;
+  if(ev.target.closest("#acct")){ ev.preventDefault(); const open=m.hidden; m.hidden=!open; b.setAttribute("aria-expanded",String(open)); if(open){ const f=m.querySelector("a,button"); if(f) f.focus(); } return; }
+  if(!m.hidden) closeAcct();   // any other click closes it; its links navigate by address
+});
+document.addEventListener("keydown",ev=>{ if(ev.key==="Escape"&&!$("#acct-menu").hidden){ closeAcct(); $("#acct").focus(); } });
+function fitNav(){
+  const nav=$(".pill-nav"), links=$("#links"); if(!nav||!links) return;
+  nav.classList.remove("two-row");
+  if(links.scrollWidth>links.clientWidth+1||nav.scrollWidth>nav.clientWidth+1) nav.classList.add("two-row");
+}
+window.addEventListener("resize",()=>requestAnimationFrame(fitNav));
+if(document.fonts&&document.fonts.ready) document.fonts.ready.then(fitNav);
 function go(r,sel){S.route=r; if(sel!==undefined)S.sel=sel; const h="#"+(r==="employee"?"employees":r); if(location.hash!==h){try{history.replaceState(null,"",h)}catch(e){}} render(); window.scrollTo(0,0)}
-window.addEventListener("hashchange",()=>{const h=location.hash.slice(1);if(navItems().some(n=>n[0]===h)||h==="docs"||h==="account"||(h==="users"&&S.user&&!isEmployee())){S.route=h;render();window.scrollTo(0,0)}});
+window.addEventListener("hashchange",()=>{const h=location.hash.slice(1);if(pageKnown(h)||(h==="users"&&S.user&&!isEmployee())){S.route=h;render();window.scrollTo(0,0)}});
 
 /* ---------- views ---------- */
 function vDashboard(){
@@ -619,17 +693,79 @@ function tl(a){
   return `<div class="tl"><span class="dot" style="background:${c}"></span><div style="min-width:0"><div style="font-size:14px"><b style="font-weight:600">${esc(a.emp)}</b> · ${a.app?esc(APP[a.app].name)+": ":""}${esc(a.action)}</div><div class="meta">${fts(a.ts)} · by ${esc(a.actor)}</div></div></div>`;
 }
 
+/* Page numbers to show: the first, the last, and the pages around the current one, with gaps marked. */
+function pageNumbers(cur,total){
+  const keep=[...new Set([1,total,cur-1,cur,cur+1].filter(n=>n>=1&&n<=total))].sort((a,b)=>a-b), out=[];
+  keep.forEach((n,i)=>{ if(i&&n-keep[i-1]>1) out.push(null); out.push(n); });
+  return out;
+}
+function pager(total,page,size){
+  const pages=Math.max(1,Math.ceil(total/size)), from=total?(page-1)*size+1:0, to=Math.min(total,page*size);
+  return `<div class="pager"><span class="muted" style="font-size:13px">Showing ${from}–${to} of ${total}</span>
+    <div class="row"><label>Rows per page<select class="input" id="emp-size">${[10,25,50].map(n=>`<option ${n===size?"selected":""}>${n}</option>`).join("")}</select></label>
+    ${pages>1?`<nav class="pg-nav" aria-label="Pages"><button type="button" class="pg" data-emp-page="${page-1}" ${page<=1?"disabled":""}>Previous</button>${pageNumbers(page,pages).map(n=>n===null?`<span class="pg-gap" aria-hidden="true">…</span>`:`<button type="button" class="pg ${n===page?"on":""}" data-emp-page="${n}" aria-label="Page ${n}" ${n===page?'aria-current="page"':""}>${n}</button>`).join("")}<button type="button" class="pg" data-emp-page="${page+1}" ${page>=pages?"disabled":""}>Next</button></nav>`:""}</div></div>`;
+}
+/* The reporting manager column: HR picks from a list, everyone else just reads it. */
+const mgrOf=e=>(e.manager&&e.manager!=="—")?e.manager:"";
+/* The server's reporting lines win. Returns true when something changed, so the page only redraws when it needs to. */
+function applyManagers(list){
+  const by=Object.fromEntries(list.map(x=>[x.email.toLowerCase(),x.manager])); let changed=false;
+  for(const e of S.emps){ const m=by[(e.email||"").toLowerCase()]||""; if(m!==mgrOf(e)){ e.manager=m; changed=true; } }
+  return changed;
+}
+/* HR changes a manager while others are signed in, so everyone re-reads the lines when they open a page that shows them
+   and when they come back to the tab. */
+let mgrAt=0;
+async function refreshManagers(force){
+  if(!S.user||Date.now()-mgrAt<(force?0:4000)) return;
+  mgrAt=Date.now();
+  try{ const r=await api("GET","/api/managers"); if(r.ok&&applyManagers(r.data)) render(); }catch(e){}
+}
+window.addEventListener("focus",()=>refreshManagers(true));
+/* Directors and the Vice President are at the top of the company: nobody is above them, so there is nothing to pick. */
+const isTop=e=>/\b(director|vice president)\b/i.test(e.title||"");
+function mgrCell(e){
+  const cur=mgrOf(e);
+  if(isTop(e)) return `<span class="muted" title="At the top of the company">No manager</span>`;
+  if(isEmployee()||e.status==="offboarded") return `<span${cur?"":` class="muted"`}>${esc(cur||"—")}</span>`;
+  const names=S.emps.filter(m=>m.id!==e.id&&m.status!=="offboarded").map(m=>m.name).sort((x,y)=>x.localeCompare(y));
+  if(cur&&!names.includes(cur)) names.unshift(cur);   // keep a manager who has since left visible
+  return `<select class="input mgr-sel" data-mgr-sel="${e.id}" aria-label="Reporting manager for ${esc(e.name)}"><option value="">No manager</option>${names.map(n=>`<option ${n===cur?"selected":""}>${esc(n)}</option>`).join("")}</select>`;
+}
+document.addEventListener("change",async ev=>{
+  const sel=ev.target.closest&&ev.target.closest("[data-mgr-sel]"); if(!sel) return;
+  const e=S.emps.find(x=>x.id===Number(sel.dataset.mgrSel)); if(!e) return;
+  const val=sel.value, prev=mgrOf(e);
+  if(isEmployee()){ sel.value=prev; toast("Only HR can do this."); return; }
+  try{
+    const r=await api("PUT","/api/employees/manager",{email:e.email,manager:val});
+    if(!r.ok){ toast(apiMsg(r)); sel.value=prev; return; }
+  }catch(err){ /* no backend: the change stays on this page */ }
+  e.manager=val;
+  log(val?`Reporting manager set to ${val}`:"Reporting manager cleared",e,null,"ok");
+  toast(val?`${e.name} now reports to ${val}.`:`${e.name} has no reporting manager now.`); render();
+});
 function vEmployees(){
   const q=S.q.toLowerCase();
-  const rows=S.emps.filter(e=>!q||(e.name+e.email+e.dept+e.title).toLowerCase().includes(q));
+  // Once an offboarding is complete the person drops off this list. HR can still bring them back into view.
+  const former=S.emps.filter(e=>e.status==="offboarded").length, showFormer=!isEmployee()&&S.showFormer&&former>0;
+  const all=S.emps.filter(e=>(showFormer||e.status!=="offboarded")&&(!q||(e.name+e.email+e.dept+e.title).toLowerCase().includes(q)));
+  const size=S.empSize||10, pages=Math.max(1,Math.ceil(all.length/size));
+  const page=S.empPage=Math.min(Math.max(1,S.empPage||1),pages);
+  const rows=all.slice((page-1)*size,page*size);
   return `<section class="section">
-  ${head("People","Everyone, <span class=\"grad\">at a glance.</span>","Everyone with a record here, and which tools they can use right now.",`<input class="input" id="q" placeholder="Search by name, team or email" aria-label="Search employees" value="${esc(S.q)}" style="width:280px;border-radius:999px">`,true)}
-  <div class="card"><div class="tbl-wrap"><table><thead><tr><th>Employee</th><th class="hide-sm">Department</th><th>Status</th><th>Tool access</th><th class="hide-sm">Start date</th></tr></thead><tbody>
-  ${rows.length?rows.map(e=>`<tr class="click" data-emp="${e.id}"><td>${person(e)}</td><td class="hide-sm">${esc(e.dept)}<div class="muted">${esc(e.title)}</div></td><td>${epill(e)}</td>
+  ${head("People","Everyone, <span class=\"grad\">at a glance.</span>","Everyone with a record here, and which tools they can use right now.",`${!isEmployee()&&former?`<label class="former-toggle"><input type="checkbox" id="emp-former" ${S.showFormer?"checked":""}>Show former employees (${former})</label>`:""}<input class="input" id="q" placeholder="Search by name, team or email" aria-label="Search employees" value="${esc(S.q)}" style="width:280px;border-radius:999px">`,true)}
+  <div class="card"><div class="tbl-wrap"><table><thead><tr><th>Employee</th><th class="hide-sm">Department</th><th class="hide-sm">Reporting manager</th><th>Status</th><th>Tool access</th><th class="hide-sm">Start date</th></tr></thead><tbody>
+  ${rows.length?rows.map(e=>`<tr class="click${e.status==="offboarded"?" former":""}" data-emp="${e.id}"><td>${person(e)}</td><td class="hide-sm">${esc(e.dept)}<div class="muted">${esc(e.title)}</div></td><td class="hide-sm">${mgrCell(e)}</td><td>${epill(e)}</td>
     <td><div class="apps-row">${Object.keys(e.grants).map(id=>appIc(id,e.grants[id]==="active"?"":e.grants[id]==="failed"?"fail":"off")).join("")}</div></td><td class="num-cell hide-sm">${esc(fdate(e.start))}</td></tr>`).join("")
-  :`<tr><td colspan="5"><div class="empty">No one matches “${esc(S.q)}”.</div></td></tr>`}
-  </tbody></table></div></div></section>`;
+  :`<tr><td colspan="6"><div class="empty">No one matches “${esc(S.q)}”.</div></td></tr>`}
+  </tbody></table></div>${pager(all.length,page,size)}</div></section>`;
 }
+document.addEventListener("click",ev=>{
+  const t=ev.target.closest("[data-emp-page]"); if(!t||t.disabled) return;
+  S.empPage=Number(t.dataset.empPage); render(); window.scrollTo(0,0);
+});
+document.addEventListener("change",ev=>{ if(ev.target.id==="emp-former"){ S.showFormer=ev.target.checked; S.empPage=1; render(); return; } if(ev.target.id==="emp-size"){ S.empSize=Number(ev.target.value); S.empPage=1; render(); } });
 
 function vEmployee(){
   const e=S.emps.find(x=>x.id===S.sel); if(!e) return vEmployees();
@@ -645,6 +781,7 @@ function vEmployee(){
       <div><dt>Employee no.</dt><dd class="mono">${esc(e.no||"Not assigned")}</dd></div>
       <div><dt>Work email</dt><dd class="mono">${esc(e.email)}</dd></div>
       <div><dt>Date of joining</dt><dd>${esc(fdate(e.start))}</dd></div>
+      <div><dt>Reporting manager</dt><dd>${esc(mgrOf(e)||"—")}</dd></div>
       <div><dt>${e.status==="offboarded"?"Left on":"Last working day"}</dt><dd>${esc(e.status==="offboarded"?fdate(e.end):e.lastDay?fdate(e.lastDay):"Not set")}</dd></div>
     </dl>
   </div>
@@ -784,7 +921,7 @@ async function boot(){
         if(!e){ e=mk({name:r.data.name,email:r.data.email,status:"onboarding",dept:"—",title:"—",manager:"—",start:"",grants:{},onTasks:[]}); S.emps.push(e); }
         S.myId=e.id;
         // Land on the documents page unless the address already names another page this person may open (a reload keeps its page).
-        if(!navItems().some(n=>n[0]===location.hash.slice(1)&&routeAllowed(n[0]))) S.route="docs";
+        if(!(pageKnown(location.hash.slice(1))&&routeAllowed(location.hash.slice(1)))) S.route="docs";
       }
     }
   }catch(e){ /* no backend: prototype mode */ }
@@ -792,7 +929,7 @@ async function boot(){
 }
 function applyUser(){
   const u=S.user; if(!u) return;
-  $("#acct").style.display="";
+  $("#acct").style.display=""; renderAcct();
   document.body.classList.toggle("ro",isEmployee());
   const cta=$(".cta"); if(cta) cta.style.display=isEmployee()?"none":"";
   $("#who").innerHTML=`Signed in as <b style="color:var(--ink)">${esc(u.name)}</b>, ${isEmployee()?"Employee":"HR"} · <a href="#" data-signout>Sign out</a>`;
@@ -826,9 +963,10 @@ async function refreshDocs(force){
 async function loadFromServer(){
   try{
     const hr=!isEmployee();
-    const [recs,draft,docs,prof]=await Promise.all([api("GET",hr?"/api/onboarding":"/api/directory"),hr?api("GET","/api/onboarding/draft"):{ok:false},api("GET","/api/documents"),api("GET","/api/profile")]);
+    const [recs,draft,docs,prof,mgrs]=await Promise.all([api("GET",hr?"/api/onboarding":"/api/directory"),hr?api("GET","/api/onboarding/draft"):{ok:false},api("GET","/api/documents"),api("GET","/api/profile"),api("GET","/api/managers")]);
     if(recs.ok) recs.data.forEach(applyServerRecord);
-    if(prof.ok) S.profile=prof.data;
+    if(mgrs.ok) applyManagers(mgrs.data);
+    if(prof.ok){ S.profile=prof.data; S.photoV=prof.data.photoV||null; renderAcct(); }
     if(docs.ok) setDocs(docs.data);
     if(draft.ok) S.serverDraft=draft.data;
     render();
@@ -1242,8 +1380,9 @@ function vProfile(){
   }
   return `<section class="section" style="gap:22px">
   <div class="card" style="overflow:hidden">
-    <div class="pf-banner"><span class="pf-avatar" style="background:${e.color||"#4254d4"}">${esc(initials(e.name))}</span>
-      <div style="min-width:0"><div class="row" style="gap:12px"><h2>${esc(e.name)}</h2>${epill(e)}</div><div class="pf-title">${ic("briefcase")}${esc(e.title||"—")}</div></div></div>
+    <div class="pf-banner"><span class="pf-avatar-wrap"><span class="pf-avatar" style="background:${photoSrc()?"transparent":(e.color||"#4254d4")}">${avatarInner(e.name,photoSrc())}</span>
+        <label class="pf-cam" title="${photoSrc()?"Change photo":"Add your photo"}">${ic("camera")}<span class="sr-only" style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)">${photoSrc()?"Change photo":"Add your photo"}</span><input type="file" id="pf-photo" accept="image/png,image/jpeg" hidden></label></span>
+      <div style="min-width:0"><div class="row" style="gap:12px"><h2>${esc(e.name)}</h2>${epill(e)}</div><div class="pf-title">${ic("briefcase")}${esc(e.title||"—")}</div>${photoSrc()?`<button type="button" class="pf-rm" data-pf-photo-rm>Remove photo</button>`:""}</div></div>
     <div class="pf-facts">
       <span class="pf-fact">${ic("mail")}${esc(e.email)}</span>
       <span class="pf-fact">${ic("phone")}${esc(phone||"—")}</span>
@@ -1254,6 +1393,41 @@ function vProfile(){
   <div class="subtabs" role="tablist" style="margin-bottom:0;align-self:flex-start">${tabs.map(([k,l])=>`<button type="button" role="tab" class="${tab===k?"on":""}" aria-selected="${tab===k}" data-pf-tab="${k}">${l}</button>`).join("")}</div>
   ${body}</section>`;
 }
+/* Crops the picture to a square and shrinks it, so what is sent and stored is small. */
+function squareJpeg(file,size){
+  return new Promise(res=>{
+    const img=new Image(), url=URL.createObjectURL(file);
+    img.onload=()=>{
+      const side=Math.min(img.width,img.height), c=document.createElement("canvas"); c.width=c.height=size;
+      c.getContext("2d").drawImage(img,(img.width-side)/2,(img.height-side)/2,side,side,0,0,size,size);
+      URL.revokeObjectURL(url); c.toBlob(b=>res(b),"image/jpeg",0.9);
+    };
+    img.onerror=()=>{ URL.revokeObjectURL(url); res(null); };
+    img.src=url;
+  });
+}
+async function pfPhoto(file){
+  if(!file) return;
+  if(!/^image\/(jpeg|png)$/.test(file.type)){ toast("Choose a JPG or PNG picture."); return; }
+  if(file.size>8*1048576){ toast("That picture is larger than 8 MB."); return; }
+  const blob=await squareJpeg(file,512);
+  if(!blob){ toast("Could not read that picture."); return; }
+  try{
+    if(typeof DEMO!=="undefined"&&DEMO) throw new Error("no server");
+    const r=await fetch("/api/profile/photo",{method:"PUT",headers:{"Content-Type":"image/jpeg"},body:blob});
+    if(r.status===401){ location.href="/login"; return; }
+    const data=await r.json().catch(()=>null);
+    if(!r.ok){ toast((data&&data.error)||"Could not save the photo."); return; }
+    S.photoV=data.photoV; S.photoLocal=null; toast("Photo updated.");
+  }catch(err){ S.photoLocal=URL.createObjectURL(blob); toast("Photo shown on this page only, because there is no server."); }
+  render();
+}
+async function pfPhotoRemove(){
+  try{ const r=await fetch("/api/profile/photo",{method:"DELETE"}); if(r.status===401){ location.href="/login"; return; } }catch(err){}
+  S.photoV=null; S.photoLocal=null; toast("Photo removed."); render();
+}
+document.addEventListener("change",ev=>{ if(ev.target.id==="pf-photo"){ pfPhoto(ev.target.files[0]); ev.target.value=""; } });
+document.addEventListener("click",ev=>{ if(ev.target.closest("[data-pf-photo-rm]")) pfPhotoRemove(); });
 async function pfSave(sec){
   const e=myRecord(), next=JSON.parse(JSON.stringify(S.profDraft||pfData(e))); let item=null;
   if(sec.startsWith("rm:")) next.education.splice(Number(sec.slice(3)),1);
@@ -1266,7 +1440,7 @@ async function pfSave(sec){
       toast(Object.values(S.profErr)[0]||"Check the highlighted fields."); render(); return;
     }
     if(!r.ok){ toast(apiMsg(r)); return; }
-    S.profile=r.data; toast("Saved.");
+    S.profile=r.data; S.photoV=r.data.photoV||null; toast("Saved.");
   }catch(err){ S.profile=next; toast("Saved on this page only, because there is no server."); }
   S.profEdit=null; S.profDraft=null; S.profErr={}; S.profEduVals=null; render();
 }
@@ -1300,7 +1474,6 @@ function vAccount(){
 document.addEventListener("click",async ev=>{
   const so=ev.target.closest("[data-signout]");
   if(so){ ev.preventDefault(); try{ await fetch("/api/logout",{method:"POST"}); }catch(e){} location.href="/login"; return; }
-  if(ev.target.closest("#acct")){ go("account"); return; }
   const ur=ev.target.closest("[data-u-reset]");
   if(ur){ const em=ur.dataset.uReset; if(!confirm(`Reset ${em} to the default password? They will be signed out.`)) return;
     const r=await api("POST",`/api/users/${encodeURIComponent(em)}/reset`); toast(r.ok?`${em} was reset to the default password.`:apiMsg(r)); return; }
@@ -2103,6 +2276,7 @@ function render(){
   if(!routeAllowed(S.route)) S.route=isEmployee()?"docs":"dashboard";
   if(S.route==="users"&&!S.users&&!S.usersBusy) loadUsers();
   if(S.user&&!isEmployee()&&["onboard","docs","employee"].includes(S.route)) refreshDocs();
+  if(S.user&&["profile","employees","employee","dashboard"].includes(S.route)) refreshManagers();
   renderNav();
   const v={dashboard:vDashboard,employees:vEmployees,employee:vEmployee,onboard:isEmployee()?vDocs:vOnboard,docs:vDocs,offboard:vOffboard,myleave:vMyLeave,leaveapply:vLeaveApply,leave:vLeave,templates:vTemplates,audit:vAudit,users:vUsers,account:vAccount,profile:vProfile}[S.route]||vDashboard;
   $("#view").innerHTML=v();
@@ -2162,6 +2336,7 @@ function editEmployee(e){
 }
 
 document.addEventListener("click",ev=>{
+  if(ev.target.closest("[data-mgr-sel]")) return;
   const t=ev.target.closest("[data-go],[data-emp],[data-retry],[data-provision],[data-offboard],[data-proto],[data-edit],[data-lv],[data-activate],[data-offrun],[data-offcancel]"); if(!t) return;
   if(isEmployee()&&t.matches("[data-retry],[data-provision],[data-offboard],[data-proto],[data-edit],[data-activate],[data-offrun],[data-offcancel]")){ toast("Only HR can do this."); return; }
   if(t.dataset.activate){const e=S.emps.find(x=>x.id==t.dataset.activate);if(e&&e.grants.gws==="created"){e.grants.gws="active";log("Work email activated early by HR",e,"gws","ok");settle(e);toast(`${e.email} is now active.`);render()}return}
@@ -2203,7 +2378,7 @@ document.addEventListener("input",ev=>{
   if(t.id==="f-email"){t.dataset.touched="1";showEmailError("f-email",emailTaken(t.value)?emailProblem(t.value):"")}
   if(t.id==="e-email"){showEmailError("e-email",emailTaken(t.value,Number(t.dataset.id))?emailProblem(t.value,Number(t.dataset.id)):"")}
   if(t.id==="af-q"){S.af={q:t.value,app:$("#af-app").value,res:$("#af-res").value};const r=keepFocus("af-q");render();r()}
-  if(t.id==="q"){S.q=t.value;const r=keepFocus("q");render();r()}
+  if(t.id==="q"){S.q=t.value;S.empPage=1;const r=keepFocus("q");render();r()}
   if(t.id==="lv-q"){S.lvUi.q=t.value;const r=keepFocus("lv-q");render();r()}
 });
 document.addEventListener("submit",ev=>{
@@ -2220,7 +2395,7 @@ document.addEventListener("submit",ev=>{
   go("employee",e.id); provision(e,apps);
 });
 
-const h=location.hash.slice(1); if(NAV.some(n=>n[0]===h)) S.route=h;
+const h=location.hash.slice(1); if(NAV.some(n=>n[0]===h)||h==="profile"||h==="account") S.route=h;
 document.addEventListener("click",ev=>{ if(ev.target.closest("#theme")) toggleTheme(); });
 try{ matchMedia("(prefers-color-scheme: dark)").addEventListener("change",()=>{ let t=null; try{t=localStorage.getItem(THEME_KEY)}catch(e){} if(!t) applyTheme(theme()); }); }catch(e){}
 applyTheme(theme());

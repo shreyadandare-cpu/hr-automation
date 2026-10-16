@@ -171,3 +171,10 @@ CREATE TABLE IF NOT EXISTS profiles (
   data       JSONB NOT NULL DEFAULT '{}',
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+CREATE TABLE IF NOT EXISTS profile_photos (
+  email       TEXT PRIMARY KEY,
+  stored_name TEXT NOT NULL,
+  mime        TEXT NOT NULL,
+  updated_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);

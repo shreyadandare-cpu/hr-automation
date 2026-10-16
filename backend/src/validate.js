@@ -28,16 +28,23 @@ export const maskPan = (v) => {
 };
 export const maskAcct = (v) => (digits(v) ? "•••• " + digits(v).slice(-4) : null);
 
-/** Returns { field: message } for a submitted onboarding payload. Empty object means valid. */
-export function onboardingErrors({ d = {}, ids = {}, apps }) {
+/** Step 1 fields: who the person is and the job. Returns { field: message }. */
+export function detailsErrors(d = {}) {
   const e = {};
   if (!has(d.first)) e.first = "Enter a first name.";
   if (!has(d.last)) e.last = "Enter a surname.";
   if (!V.email(d.pemail)) e.pemail = "Enter a valid personal email.";
+  else if (/@wohlig\.com$/i.test(String(d.pemail).trim())) e.pemail = "Use a personal email, not a @wohlig.com address.";
   if (!V.phone(d.phone)) e.phone = "Enter a valid 10-digit mobile number.";
   if (!has(d.address)) e.address = "Enter an address.";
   if (!has(d.title)) e.title = "Enter a job title.";
   if (!/^\d{4}-\d{2}-\d{2}$/.test(d.start || "")) e.start = "Enter a start date.";
+  return e;
+}
+
+/** Returns { field: message } for a submitted onboarding payload. Empty object means valid. */
+export function onboardingErrors({ d = {}, ids = {}, apps }) {
+  const e = detailsErrors(d);
   if (has(ids.dob) && !V.dob(ids.dob)) e.dob = "Enter a valid date of birth (age 16 to 80).";
   if (has(ids.aadhaar) && !V.aadhaar(ids.aadhaar)) e.aadhaar = "Aadhaar number must be 12 digits.";
   if (has(ids.pan) && !V.pan(ids.pan)) e.pan = "PAN must look like ABCDE1234F.";

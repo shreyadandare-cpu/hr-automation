@@ -190,7 +190,7 @@ tr.click:hover td{background:rgba(66,84,212,.04)}
 .profile{display:flex;align-items:center;gap:20px;flex-wrap:wrap;padding:26px 28px}
 .profile .avatar{width:64px;height:64px;font-size:20px}
 .profile h2{font-weight:400;font-size:clamp(28px,3.4vw,40px);letter-spacing:-.02em;line-height:1.1}
-.facts{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:16px 24px;padding:18px 28px 24px;border-top:1px solid var(--line);margin:0}
+.facts{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:16px 24px;padding:18px 28px 24px;border-top:1px solid var(--line);margin:0}
 .facts dt{font:600 11px/1.2 var(--body);color:var(--ink-faint);text-transform:uppercase;letter-spacing:.16em}
 .facts dd{margin:6px 0 0;font-weight:500;overflow-wrap:anywhere}
 .access-row{display:flex;align-items:center;gap:14px;padding:14px 24px;border-top:1px solid var(--line)}
@@ -285,9 +285,6 @@ tr.click:hover td{background:rgba(66,84,212,.04)}
 .rv{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px 24px;margin:0}
 .rv dt{font:600 11px/1.2 var(--body);color:var(--ink-faint);text-transform:uppercase;letter-spacing:.14em}
 .rv dd{margin:4px 0 0;font-weight:500;overflow-wrap:anywhere}
-.srcbadge{font:600 11px/1 var(--body);border-radius:999px;padding:3px 8px;margin-left:8px;letter-spacing:.04em;vertical-align:1px}
-.srcbadge.ocr{background:var(--tint);color:var(--purple)}
-.srcbadge.typed{background:var(--paper-2);color:var(--ink-faint)}
 textarea.input{resize:vertical;font-family:var(--body)}
 @media (max-width:720px){.rv{grid-template-columns:minmax(0,1fr)}.doc-row{padding-inline:16px}.stp{font-size:13px}}
 .foot{display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap;padding-block:28px 40px;border-top:1px solid var(--line);color:var(--ink-faint);font-size:13px}
@@ -318,10 +315,12 @@ textarea.input{resize:vertical;font-family:var(--body)}
 
 @media (max-width:1080px){.g4{grid-template-columns:repeat(2,minmax(0,1fr))}.g-main,.g3{grid-template-columns:minmax(0,1fr)}.facts{grid-template-columns:repeat(2,minmax(0,1fr))}}
 /* on wide screens let the nav bar run wider than the 1180px page column so all eight links fit on one row */
-@media (min-width:1341px){.wrap.navbar{max-width:1340px}}
-/* eight nav links no longer fit beside the logo and button on mid-size screens, so wrap the links onto their own row */
-@media (max-width:1340px){
-  .pill-nav{flex-wrap:wrap;border-radius:28px;padding:12px 12px 10px 22px}.links{order:3;width:100%;overflow-x:auto;margin:4px -12px 0 -22px;padding:0 12px 0 16px}.cta{margin-left:auto}}
+/* On wide screens the bar may grow past the page column so more links fit on one row. */
+@media (min-width:1341px){.wrap.navbar{max-width:1560px}}
+/* When the links do not fit beside the logo and buttons, fitNav() adds .two-row and they move to their own row. */
+.pill-nav.two-row{flex-wrap:wrap;border-radius:28px;padding:12px 12px 10px 22px}
+.pill-nav.two-row .links{order:3;width:100%;overflow-x:auto;margin:4px -12px 0 -22px;padding:0 12px 0 16px}
+.pill-nav.two-row .logo{margin-right:auto}
 @media (max-width:720px){
   .wrap{padding-inline:16px}
   .view{gap:44px;padding-block:36px 56px}
@@ -333,6 +332,63 @@ textarea.input{resize:vertical;font-family:var(--body)}
   .profile,.facts{padding-inline:18px}
 }
 @media (max-width:460px){.stat .num{font-size:34px}.facts{grid-template-columns:minmax(0,1fr)}.btn{padding:11px 18px}}
+body.ro [data-retry],body.ro [data-provision],body.ro [data-offboard],body.ro [data-confirmoff],body.ro [data-proto],body.ro [data-edit],body.ro [data-leave],body.ro [data-activate],body.ro [data-go="onboard"],body.ro [data-go="offboard"],body.ro [data-go="users"]{display:none!important}
+/* Round avatar in the bar, and its menu */
+.avatar-btn{display:inline-grid;place-items:center;width:38px;height:38px;padding:0;border:0;border-radius:50%;overflow:hidden;flex:none;cursor:pointer;color:#fff;font:600 13px/1 var(--body);background:var(--purple);box-shadow:0 0 0 2px var(--surface-2),0 4px 12px rgba(77,73,221,.25)}
+.avatar-btn:hover,.avatar-btn.on{box-shadow:0 0 0 2px var(--purple),0 4px 12px rgba(77,73,221,.3)}
+.avatar-btn img,.pf-avatar img{width:100%;height:100%;object-fit:cover;display:block}
+.acct-menu{position:absolute;right:24px;top:calc(100% + 10px);z-index:30;min-width:270px;max-width:calc(100% - 32px);padding:8px;border-radius:20px;background:var(--surface);border:1px solid var(--card-edge);box-shadow:0 24px 60px rgba(14,10,56,.28)}
+.acct-menu[hidden]{display:none}
+.acct-head{display:flex;align-items:center;gap:12px;padding:10px 12px 12px;border-bottom:1px solid var(--line);margin-bottom:6px}
+.acct-head .avatar-btn{width:44px;height:44px;cursor:default;font-size:15px}
+.acct-head b{display:block;font-weight:600}
+.acct-head span:not(.avatar-btn){display:block;font-size:12.5px;color:var(--ink-faint);overflow-wrap:anywhere}
+.acct-menu a,.acct-menu button[role="menuitem"]{display:block;width:100%;text-align:left;padding:10px 12px;border:0;border-radius:12px;background:none;color:var(--ink);font:500 14.5px/1.2 var(--display);text-decoration:none;cursor:pointer}
+.acct-menu a:hover,.acct-menu button[role="menuitem"]:hover,.acct-menu a:focus-visible,.acct-menu button[role="menuitem"]:focus-visible{background:var(--tint)}
+@media (max-width:720px){.acct-menu{right:16px}}
+td .apps-row{flex-wrap:nowrap}
+/* People who have left: out of the Employees list unless HR asks to see them */
+.former-toggle{display:inline-flex;align-items:center;gap:8px;font-size:13px;color:var(--ink-dim);cursor:pointer;white-space:nowrap}
+.former-toggle input{accent-color:var(--purple);width:16px;height:16px}
+tr.former td{opacity:.6}
+/* Reporting manager picker in the Employees list */
+.mgr-sel{width:auto;min-width:150px;max-width:210px;padding:7px 12px;font-size:13px;border-radius:999px}
+/* Pagination */
+.pager{display:flex;justify-content:space-between;align-items:center;gap:12px 20px;flex-wrap:wrap;padding:14px 24px;border-top:1px solid var(--line)}
+.pager .row{gap:10px}
+.pager label{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--ink-dim)}
+.pager select.input{width:auto;padding:7px 12px;font-size:13px}
+.pg-nav{display:flex;align-items:center;gap:4px;flex-wrap:wrap}
+.pg{min-width:34px;height:34px;padding:0 12px;border:0;border-radius:999px;background:transparent;color:var(--ink-dim);font:600 13.5px/1 var(--body);cursor:pointer}
+.pg:hover:not(:disabled):not(.on){background:var(--tint);color:var(--ink)}
+.pg.on{background:var(--purple);color:#fff;cursor:default}
+.pg:disabled{opacity:.4;cursor:not-allowed}
+.pg-gap{min-width:20px;text-align:center;color:var(--ink-faint)}
+@media (max-width:720px){.pager{padding-inline:16px}}
+/* My profile */
+.pf-avatar-wrap{position:relative;flex:none}
+.pf-avatar{overflow:hidden}
+.pf-cam{position:absolute;right:2px;bottom:2px;width:34px;height:34px;display:grid;place-items:center;border-radius:50%;background:var(--surface);color:var(--ink);box-shadow:0 2px 10px rgba(14,10,56,.35);cursor:pointer}
+.pf-cam:hover{background:var(--tint)}
+.pf-cam:focus-within{outline:2px solid #fff;outline-offset:2px}
+.pf-cam svg{width:18px;height:18px}
+.pf-rm{margin-top:6px;padding:0;border:0;background:none;color:#fff;opacity:.9;font:600 13px/1 var(--body);text-decoration:underline;cursor:pointer}
+.pf-banner{position:relative;min-height:190px;padding:28px;display:flex;align-items:center;gap:22px;flex-wrap:wrap;color:#fff;border-radius:var(--radius) var(--radius) 0 0;
+  background:radial-gradient(60% 120% at 88% 0%,rgba(169,187,255,.55),transparent 60%),radial-gradient(50% 100% at 8% 115%,rgba(189,238,226,.35),transparent 60%),linear-gradient(120deg,#2b3aa8,#4254d4 55%,#6f7fee)}
+.pf-avatar{width:112px;height:112px;border-radius:50%;display:grid;place-items:center;font:600 40px/1 var(--body);color:#fff;flex:none;box-shadow:0 0 0 4px rgba(255,255,255,.35)}
+.pf-banner h2{color:#fff;font-weight:400;font-size:clamp(28px,3.6vw,42px);letter-spacing:-.02em;line-height:1.1}
+.pf-title{display:flex;align-items:center;gap:8px;margin-top:8px;opacity:.95}
+.pf-title svg{width:16px;height:16px}
+.pf-banner .pill{background:rgba(255,255,255,.2);color:#fff}
+.pf-facts{display:flex;flex-wrap:wrap;gap:12px 36px;padding:20px 28px;border-bottom:1px solid var(--line)}
+.pf-fact{display:flex;align-items:center;gap:10px;min-width:0;overflow-wrap:anywhere}
+.pf-fact svg{width:18px;height:18px;color:var(--ink-faint);flex:none}
+.pf-org{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:16px 24px;padding:18px 28px 22px}
+.pf-org dt{font:600 11px/1.2 var(--body);color:var(--ink-faint);text-transform:uppercase;letter-spacing:.14em}
+.pf-org dd{margin:6px 0 0;font-weight:500}
+.pf-q{margin:0 0 4px;font:600 15px/1.3 var(--display)}
+.pf-a{margin:0 0 18px;color:var(--ink-dim);white-space:pre-wrap;overflow-wrap:anywhere}
+@media (max-width:720px){.pf-banner{padding:22px 18px}.pf-avatar{width:84px;height:84px;font-size:30px}.pf-facts,.pf-org{padding-inline:18px}}
 @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
 </style>
 
@@ -340,10 +396,11 @@ textarea.input{resize:vertical;font-family:var(--body)}
   <nav class="pill-nav" aria-label="Main">
     <a class="logo" href="#dashboard" aria-label="wohlig HR Access Hub, dashboard">w<span class="o" aria-hidden="true"></span>hlig<small>HR Access Hub</small></a>
     <div class="links" id="links"></div>
-    <button class="theme-btn" id="acct" type="button" aria-label="Account" title="Account" style="display:none"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 4-6 8-6s8 2 8 6"/></svg></button>
+    <button class="avatar-btn" id="acct" type="button" aria-label="Account menu" aria-haspopup="true" aria-expanded="false" style="display:none"></button>
     <button class="theme-btn" id="theme" type="button" aria-label="Switch to dark mode" title="Switch theme"></button>
     <button class="btn primary sm cta" data-go="onboard">+ <span class="lbl-long">New onboarding</span><span class="lbl-short" hidden>New</span></button>
   </nav>
+  <div class="acct-menu" id="acct-menu" role="menu" hidden></div>
 </div>
 <main class="wrap view" id="view"></main>
 <footer class="wrap"><div class="foot"><a class="logo" href="#dashboard" style="text-decoration:none">w<span class="o" aria-hidden="true"></span>hlig</a><span>HR Access Hub · People Ops · Prototype · roster from HR sheet, 8 Oct 2026</span><span id="who">Signed in as <b style="color:var(--ink)">Shreya Dandare</b>, HR Admin</span></div></footer>
@@ -522,6 +579,12 @@ function toast(msg){const l=$("#layer");const t=document.createElement("div");t.
 
 /* ---------- navigation ---------- */
 const ICONS = {
+  camera:'<path d="M4 8h3l2-2h6l2 2h3v11H4z"/><circle cx="12" cy="13" r="3.5"/>',
+  mail:'<rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/>',
+  phone:'<path d="M5 4h4l2 5-2.5 1.5a11 11 0 0 0 5 5L15 13l5 2v4a2 2 0 0 1-2 2A16 16 0 0 1 3 6a2 2 0 0 1 2-2z"/>',
+  pin:'<path d="M12 21s7-6.2 7-11a7 7 0 0 0-14 0c0 4.8 7 11 7 11z"/><circle cx="12" cy="10" r="2.5"/>',
+  idcard:'<rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="9" cy="11" r="2"/><path d="M6 16c.5-1.6 1.7-2.4 3-2.4s2.5.8 3 2.4M14 10h4M14 14h4"/>',
+  briefcase:'<rect x="3" y="7" width="18" height="13" rx="2"/><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2M3 13h18"/>',
   onboard:'<circle cx="10" cy="8" r="3.5"/><path d="M3.5 20c.8-3.6 3.4-5.5 6.5-5.5 1.5 0 2.9.4 4 1.3"/><path d="M18 14v6M15 17h6"/>',
   offboard:'<circle cx="10" cy="8" r="3.5"/><path d="M3.5 20c.8-3.6 3.4-5.5 6.5-5.5 1.5 0 2.9.4 4 1.3"/><path d="M15 17h6"/>',
   alert:'<path d="M12 3 2 20h20z"/><path d="M12 10v4M12 17h.01"/>',
@@ -543,24 +606,58 @@ function applyTheme(t){
     :'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>';
 }
 function toggleTheme(){ const t=theme()==="dark"?"light":"dark"; try{localStorage.setItem(THEME_KEY,t)}catch(e){} applyTheme(t); }
-/* Signed in (S.user set): employees only see My documents and My leave. HR sees everything plus Users.
+/* Signed in (S.user set): everyone can view the site. Only HR can change things, and employees can only change their own documents and password.
    Without a backend S.user stays null and the page behaves as the old prototype. */
-const isEmployee = ()=>!!S.user&&S.user.role!=="hr";   // employees and reporting managers: their own pages
-const isManager = ()=>!!S.user&&S.user.role==="manager";
-function navItems(){ return !S.user?[...NAV,["myleave","My leave"]]:isEmployee()?[["dashboard","Dashboard"],["docs","My documents"],["myleave","My leave"],...(isManager()?[["team","Team leave"]]:[])]:[...NAV,["users","Users"]]; }
+const isEmployee = ()=>!!S.user&&S.user.role!=="hr";   // employees and reporting managers: view-only site plus their own pages
+/* A reporting manager: has the manager role, or HR has picked them as someone's manager in the Employees list. */
+const isManager = ()=>!!S.user&&(S.user.role==="manager"||Object.values((S.lv&&S.lv.approvers)||{}).includes(String(S.user.email).toLowerCase()));
+/* Everyone signed in can look at the site. Employees see Onboarding as their own documents page and Offboarding as a read-only list. Users, Access bundles, Audit log and Leave are HR's; employees get My leave (and Team leave if people report to them). */
+const HR_ONLY=["users","templates","audit","leave"];
+/* Pages reachable from the avatar menu and the address bar that are not links in the bar. */
+const pageKnown=h=>navItems().some(n=>n[0]===h)||h==="profile"||h==="account"||h==="docs";
+function navItems(){ return !S.user?[...NAV,["myleave","My leave"]]:isEmployee()?[...NAV.filter(n=>!HR_ONLY.includes(n[0])),["myleave","My leave"],...(isManager()?[["team","Team leave"]]:[])]:NAV; }
 function routeAllowed(r){
-  if(!S.user) return r!=="account"&&r!=="users";
+  if(!S.user) return r!=="account"&&r!=="users"&&r!=="profile";
   if(r==="account") return true;
-  if(isEmployee()) return r==="dashboard"||r==="docs"||r==="myleave"||(r==="team"&&isManager())||(r==="leaveapply"&&!!S.lw&&S.lw.self);
-  return r!=="myleave"&&!(r==="leaveapply"&&S.lw&&S.lw.self);   // HR uses Leave; My leave is the employee view
+  if(isEmployee()) return (!HR_ONLY.includes(r)&&r!=="team")||r==="myleave"||(r==="team"&&isManager())||(r==="leaveapply"&&!!S.lw&&S.lw.self);
+  return r!=="myleave"&&r!=="team"&&!(r==="leaveapply"&&S.lw&&S.lw.self);   // HR uses Leave; My leave and Team leave are the employee views
 }
 function renderNav(){
   const attn = S.emps.filter(e=>failedOf(e).length).length;
   const active = S.route==="employee"?"employees":S.route==="docs"&&!isEmployee()?"onboard":S.route==="leaveapply"?(S.lw&&S.lw.self?"myleave":"leave"):S.route;
+  renderAcct();
   $("#links").innerHTML = navItems().map(([k,l])=>`<a href="#${k}" class="${active===k?"on":""}">${l}${k==="dashboard"&&attn?`<span class="count">${attn}</span>`:""}</a>`).join("");
+  fitNav();
 }
+/* Measures the bar instead of guessing from the window width: the links need more room for HR than for employees,
+   and the fonts change the widths. If they overflow on one row, they get a row of their own so nothing overlaps. */
+/* The round avatar at the top right: the person's photo, or their initials. It opens a menu. */
+const photoSrc=()=>S.photoLocal||(S.photoV?`/api/profile/photo?v=${S.photoV}`:"");
+const avatarInner=(name,src)=>src?`<img src="${esc(src)}" alt="">`:esc(initials(name));
+function renderAcct(){
+  const b=$("#acct"), m=$("#acct-menu"), u=S.user; if(!b||!m||!u) return;
+  const e=myRecord(), src=photoSrc(), bg=src?"transparent":(e.color||"#4254d4");
+  b.innerHTML=avatarInner(e.name,src); b.style.background=bg; b.title=`${e.name}, account menu`;
+  b.classList.toggle("on",S.route==="profile"||S.route==="account");
+  m.innerHTML=`<div class="acct-head"><span class="avatar-btn" style="background:${bg}">${avatarInner(e.name,src)}</span><div style="min-width:0"><b>${esc(e.name)}</b><span>${esc(u.email)} · ${isEmployee()?"Employee":"HR"}</span></div></div>
+    <a href="#profile" role="menuitem">My profile</a><a href="#account" role="menuitem">Account and password</a>${!isEmployee()&&routeAllowed("users")?`<a href="#users" role="menuitem">Manage users</a>`:""}<button type="button" role="menuitem" data-signout>Sign out</button>`;
+}
+function closeAcct(){ const m=$("#acct-menu"), b=$("#acct"); if(m&&!m.hidden){ m.hidden=true; if(b) b.setAttribute("aria-expanded","false"); } }
+document.addEventListener("click",ev=>{
+  const m=$("#acct-menu"), b=$("#acct"); if(!m||!b) return;
+  if(ev.target.closest("#acct")){ ev.preventDefault(); const open=m.hidden; m.hidden=!open; b.setAttribute("aria-expanded",String(open)); if(open){ const f=m.querySelector("a,button"); if(f) f.focus(); } return; }
+  if(!m.hidden) closeAcct();   // any other click closes it; its links navigate by address
+});
+document.addEventListener("keydown",ev=>{ if(ev.key==="Escape"&&!$("#acct-menu").hidden){ closeAcct(); $("#acct").focus(); } });
+function fitNav(){
+  const nav=$(".pill-nav"), links=$("#links"); if(!nav||!links) return;
+  nav.classList.remove("two-row");
+  if(links.scrollWidth>links.clientWidth+1||nav.scrollWidth>nav.clientWidth+1) nav.classList.add("two-row");
+}
+window.addEventListener("resize",()=>requestAnimationFrame(fitNav));
+if(document.fonts&&document.fonts.ready) document.fonts.ready.then(fitNav);
 function go(r,sel){S.route=r; if(sel!==undefined)S.sel=sel; const h="#"+(r==="employee"?"employees":r); if(location.hash!==h){try{history.replaceState(null,"",h)}catch(e){}} render(); window.scrollTo(0,0)}
-window.addEventListener("hashchange",()=>{const h=location.hash.slice(1);if(navItems().some(n=>n[0]===h)||h==="docs"||h==="account"){S.route=h;render();window.scrollTo(0,0)}});
+window.addEventListener("hashchange",()=>{const h=location.hash.slice(1);if(pageKnown(h)||(h==="users"&&S.user&&!isEmployee())){S.route=h;render();window.scrollTo(0,0)}});
 
 /* ---------- views ---------- */
 /* ---------- Team leave: a reporting manager approves their own team's requests ---------- */
@@ -694,8 +791,8 @@ function vDashboard(){
       <div class="card"><div class="tbl-wrap"><table><thead><tr><th>Employee</th><th>Status</th><th class="hide-sm">Date</th><th>Checklist</th></tr></thead><tbody>
         ${[...onb,...leaving].map(e=>{const c=checklist(e);const pct=Math.round(c.done/c.total*100);return `<tr class="click" data-emp="${e.id}"><td>${person(e,e.title)}</td><td>${epill(e)}</td><td class="num-cell hide-sm">${esc(fdate(e.status==="onboarding"?e.start:e.lastDay))}</td><td style="min-width:130px"><div class="progress"><i style="width:${pct}%"></i></div><div class="muted" style="margin-top:5px">${c.done} of ${c.total} done</div></td></tr>`}).join("")}
       </tbody></table></div></div>
-      <div class="card"><div class="card-h"><h3>Recent activity</h3><button class="btn link" data-go="audit">Audit log</button></div>
-        <div style="padding-bottom:12px">${S.audit.slice(0,6).map(tl).join("")}</div></div>
+      ${isEmployee()?"":`<div class="card"><div class="card-h"><h3>Recent activity</h3><button class="btn link" data-go="audit">Audit log</button></div>
+        <div style="padding-bottom:12px">${S.audit.slice(0,6).map(tl).join("")}</div></div>`}
     </div>
   </section>`;
 }
@@ -704,17 +801,79 @@ function tl(a){
   return `<div class="tl"><span class="dot" style="background:${c}"></span><div style="min-width:0"><div style="font-size:14px"><b style="font-weight:600">${esc(a.emp)}</b> · ${a.app?esc(APP[a.app].name)+": ":""}${esc(a.action)}</div><div class="meta">${fts(a.ts)} · by ${esc(a.actor)}</div></div></div>`;
 }
 
+/* Page numbers to show: the first, the last, and the pages around the current one, with gaps marked. */
+function pageNumbers(cur,total){
+  const keep=[...new Set([1,total,cur-1,cur,cur+1].filter(n=>n>=1&&n<=total))].sort((a,b)=>a-b), out=[];
+  keep.forEach((n,i)=>{ if(i&&n-keep[i-1]>1) out.push(null); out.push(n); });
+  return out;
+}
+function pager(total,page,size){
+  const pages=Math.max(1,Math.ceil(total/size)), from=total?(page-1)*size+1:0, to=Math.min(total,page*size);
+  return `<div class="pager"><span class="muted" style="font-size:13px">Showing ${from}–${to} of ${total}</span>
+    <div class="row"><label>Rows per page<select class="input" id="emp-size">${[10,25,50].map(n=>`<option ${n===size?"selected":""}>${n}</option>`).join("")}</select></label>
+    ${pages>1?`<nav class="pg-nav" aria-label="Pages"><button type="button" class="pg" data-emp-page="${page-1}" ${page<=1?"disabled":""}>Previous</button>${pageNumbers(page,pages).map(n=>n===null?`<span class="pg-gap" aria-hidden="true">…</span>`:`<button type="button" class="pg ${n===page?"on":""}" data-emp-page="${n}" aria-label="Page ${n}" ${n===page?'aria-current="page"':""}>${n}</button>`).join("")}<button type="button" class="pg" data-emp-page="${page+1}" ${page>=pages?"disabled":""}>Next</button></nav>`:""}</div></div>`;
+}
+/* The reporting manager column: HR picks from a list, everyone else just reads it. */
+const mgrOf=e=>(e.manager&&e.manager!=="—")?e.manager:"";
+/* The server's reporting lines win. Returns true when something changed, so the page only redraws when it needs to. */
+function applyManagers(list){
+  const by=Object.fromEntries(list.map(x=>[x.email.toLowerCase(),x.manager])); let changed=false;
+  for(const e of S.emps){ const m=by[(e.email||"").toLowerCase()]||""; if(m!==mgrOf(e)){ e.manager=m; changed=true; } }
+  return changed;
+}
+/* HR changes a manager while others are signed in, so everyone re-reads the lines when they open a page that shows them
+   and when they come back to the tab. */
+let mgrAt=0;
+async function refreshManagers(force){
+  if(!S.user||Date.now()-mgrAt<(force?0:4000)) return;
+  mgrAt=Date.now();
+  try{ const r=await api("GET","/api/managers"); if(r.ok&&applyManagers(r.data)) render(); }catch(e){}
+}
+window.addEventListener("focus",()=>refreshManagers(true));
+/* Directors and the Vice President are at the top of the company: nobody is above them, so there is nothing to pick. */
+const isTop=e=>/\b(director|vice president)\b/i.test(e.title||"");
+function mgrCell(e){
+  const cur=mgrOf(e);
+  if(isTop(e)) return `<span class="muted" title="At the top of the company">No manager</span>`;
+  if(isEmployee()||e.status==="offboarded") return `<span${cur?"":` class="muted"`}>${esc(cur||"—")}</span>`;
+  const names=S.emps.filter(m=>m.id!==e.id&&m.status!=="offboarded").map(m=>m.name).sort((x,y)=>x.localeCompare(y));
+  if(cur&&!names.includes(cur)) names.unshift(cur);   // keep a manager who has since left visible
+  return `<select class="input mgr-sel" data-mgr-sel="${e.id}" aria-label="Reporting manager for ${esc(e.name)}"><option value="">No manager</option>${names.map(n=>`<option ${n===cur?"selected":""}>${esc(n)}</option>`).join("")}</select>`;
+}
+document.addEventListener("change",async ev=>{
+  const sel=ev.target.closest&&ev.target.closest("[data-mgr-sel]"); if(!sel) return;
+  const e=S.emps.find(x=>x.id===Number(sel.dataset.mgrSel)); if(!e) return;
+  const val=sel.value, prev=mgrOf(e);
+  if(isEmployee()){ sel.value=prev; toast("Only HR can do this."); return; }
+  try{
+    const r=await api("PUT","/api/employees/manager",{email:e.email,manager:val});
+    if(!r.ok){ toast(apiMsg(r)); sel.value=prev; return; }
+  }catch(err){ /* no backend: the change stays on this page */ }
+  e.manager=val;
+  log(val?`Reporting manager set to ${val}`:"Reporting manager cleared",e,null,"ok");
+  toast(val?`${e.name} now reports to ${val}.`:`${e.name} has no reporting manager now.`); render();
+});
 function vEmployees(){
   const q=S.q.toLowerCase();
-  const rows=S.emps.filter(e=>!q||(e.name+e.email+e.dept+e.title).toLowerCase().includes(q));
+  // Once an offboarding is complete the person drops off this list. HR can still bring them back into view.
+  const former=S.emps.filter(e=>e.status==="offboarded").length, showFormer=!isEmployee()&&S.showFormer&&former>0;
+  const all=S.emps.filter(e=>(showFormer||e.status!=="offboarded")&&(!q||(e.name+e.email+e.dept+e.title).toLowerCase().includes(q)));
+  const size=S.empSize||10, pages=Math.max(1,Math.ceil(all.length/size));
+  const page=S.empPage=Math.min(Math.max(1,S.empPage||1),pages);
+  const rows=all.slice((page-1)*size,page*size);
   return `<section class="section">
-  ${head("People","Everyone, <span class=\"grad\">at a glance.</span>","Everyone with a record here, and which tools they can use right now.",`<input class="input" id="q" placeholder="Search by name, team or email" aria-label="Search employees" value="${esc(S.q)}" style="width:280px;border-radius:999px">`,true)}
-  <div class="card"><div class="tbl-wrap"><table><thead><tr><th>Employee</th><th class="hide-sm">Department</th><th>Status</th><th>Tool access</th><th class="hide-sm">Start date</th></tr></thead><tbody>
-  ${rows.length?rows.map(e=>`<tr class="click" data-emp="${e.id}"><td>${person(e)}</td><td class="hide-sm">${esc(e.dept)}<div class="muted">${esc(e.title)}</div></td><td>${epill(e)}</td>
+  ${head("People","Everyone, <span class=\"grad\">at a glance.</span>","Everyone with a record here, and which tools they can use right now.",`${!isEmployee()&&former?`<label class="former-toggle"><input type="checkbox" id="emp-former" ${S.showFormer?"checked":""}>Show former employees (${former})</label>`:""}<input class="input" id="q" placeholder="Search by name, team or email" aria-label="Search employees" value="${esc(S.q)}" style="width:280px;border-radius:999px">`,true)}
+  <div class="card"><div class="tbl-wrap"><table><thead><tr><th>Employee</th><th class="hide-sm">Department</th><th class="hide-sm">Reporting manager</th><th>Status</th><th>Tool access</th><th class="hide-sm">Start date</th></tr></thead><tbody>
+  ${rows.length?rows.map(e=>`<tr class="click${e.status==="offboarded"?" former":""}" data-emp="${e.id}"><td>${person(e)}</td><td class="hide-sm">${esc(e.dept)}<div class="muted">${esc(e.title)}</div></td><td class="hide-sm">${mgrCell(e)}</td><td>${epill(e)}</td>
     <td><div class="apps-row">${Object.keys(e.grants).map(id=>appIc(id,e.grants[id]==="active"?"":e.grants[id]==="failed"?"fail":"off")).join("")}</div></td><td class="num-cell hide-sm">${esc(fdate(e.start))}</td></tr>`).join("")
-  :`<tr><td colspan="5"><div class="empty">No one matches “${esc(S.q)}”.</div></td></tr>`}
-  </tbody></table></div></div></section>`;
+  :`<tr><td colspan="6"><div class="empty">No one matches “${esc(S.q)}”.</div></td></tr>`}
+  </tbody></table></div>${pager(all.length,page,size)}</div></section>`;
 }
+document.addEventListener("click",ev=>{
+  const t=ev.target.closest("[data-emp-page]"); if(!t||t.disabled) return;
+  S.empPage=Number(t.dataset.empPage); render(); window.scrollTo(0,0);
+});
+document.addEventListener("change",ev=>{ if(ev.target.id==="emp-former"){ S.showFormer=ev.target.checked; S.empPage=1; render(); return; } if(ev.target.id==="emp-size"){ S.empSize=Number(ev.target.value); S.empPage=1; render(); } });
 
 function vEmployee(){
   const e=S.emps.find(x=>x.id===S.sel); if(!e) return vEmployees();
@@ -730,6 +889,7 @@ function vEmployee(){
       <div><dt>Employee no.</dt><dd class="mono">${esc(e.no||"Not assigned")}</dd></div>
       <div><dt>Work email</dt><dd class="mono">${esc(e.email)}</dd></div>
       <div><dt>Date of joining</dt><dd>${esc(fdate(e.start))}</dd></div>
+      <div><dt>Reporting manager</dt><dd>${esc(mgrOf(e)||"—")}</dd></div>
       <div><dt>${e.status==="offboarded"?"Left on":"Last working day"}</dt><dd>${esc(e.status==="offboarded"?fdate(e.end):e.lastDay?fdate(e.lastDay):"Not set")}</dd></div>
     </dl>
   </div>
@@ -746,8 +906,8 @@ function vEmployee(){
   ${laptopCard(e)}${recordCard(e)}
   ${offCard(e)}
   ${leaveCard(e)}
-  <div class="card"><div class="card-h"><h3>History</h3><button class="btn link" data-go="audit">Full audit log</button></div>
-    <div style="padding-bottom:12px">${acts.length?acts.map(tl).join(""):`<div class="empty">No recorded actions yet.</div>`}</div></div>
+  ${isEmployee()?"":`<div class="card"><div class="card-h"><h3>History</h3><button class="btn link" data-go="audit">Full audit log</button></div>
+    <div style="padding-bottom:12px">${acts.length?acts.map(tl).join(""):`<div class="empty">No recorded actions yet.</div>`}</div></div>`}
   </section>`;
 }
 
@@ -767,14 +927,14 @@ const DOCS = [
   {k:"bank", name:"Bank passbook or cancelled cheque", req:false},
 ];
 const MAX_MB = 5;
-const OB_STEPS = ["Personal details","Documents and data","Work email","Review"];
+const OB_STEPS = ["Details and work email","Create login","Tools and review"];
 const OB_DRAFT_KEY = "hr_ob_draft";
 S.docs = S.docs||{};      // employee id -> { documentKey: [{name,size}] }, uploaded by the employee
 S.docErr = S.docErr||{};
 S.myId = S.myId||null;
 
 const newOb = ()=>({step:1, fromReview:false, empId:null, d:{first:"",last:"",pemail:"",phone:"",address:"",dept:"Engineering",title:"",mgr:"",start:""},
-  ids:{name:"",dob:"",aadhaar:"",pan:"",address:"",acct:"",ifsc:""}, src:{}, apps:null, reviewed:false, errors:{}, ocrDone:false, ocrMsg:""});
+  work:null, login:null, busy:false, apps:null, reviewed:false, errors:{}});
 const obDocs = ob=>(ob.empId&&S.docs[ob.empId])||{};
 const docCount = m=>Object.values(m||{}).reduce((n,a)=>n+(a?a.length:0),0);
 function logAs(actor,action,emp,result){ S.audit.unshift({ts:new Date(TODAY.getTime()+(Date.now()-BOOT)),actor,action,emp:emp.name,empId:emp.id,app:null,result:result||"ok"}); }
@@ -828,27 +988,6 @@ function step1Errors(ob){
   if(!d.start) e.start="Pick the start date.";
   return e;
 }
-function step2Errors(ob){
-  // Every field is optional, since HR may not have the documents yet. A value that is filled in must have the right format.
-  const i=ob.ids, e={}, has=v=>String(v||"").trim()!=="";
-  if(has(i.dob)&&!V.dob(i.dob)) e.dob="Enter a valid date of birth (age 16 to 80).";
-  if(has(i.aadhaar)&&!V.aadhaar(i.aadhaar)) e.aadhaar="Aadhaar number must be 12 digits.";
-  if(has(i.pan)&&!V.pan(i.pan)) e.pan="PAN must look like ABCDE1234F.";
-  if(has(i.acct)&&!V.acct(i.acct)) e.acct="Bank account number must be 9 to 18 digits.";
-  if(has(i.ifsc)&&!V.ifsc(i.ifsc)) e.ifsc="IFSC must look like HDFC0001234.";
-  return e;
-}
-
-/* Simulated document reading: copies the name and address from step 1 into empty fields and marks them.
-   Reading Aadhaar, PAN, date of birth and bank details from the files needs the real OCR service. */
-function ocrRead(ob){
-  if(!docCount(obDocs(ob))) return {ok:false,msg:"The employee has not uploaded any documents yet, so nothing was read."};
-  const fill=(k,v)=>{ if(v&&!ob.ids[k]){ ob.ids[k]=v; ob.src[k]="ocr"; } };
-  fill("name",(ob.d.first+" "+ob.d.last).trim());
-  fill("address",ob.d.address.trim());
-  return {ok:true,msg:"Prototype: name and address were filled in and marked. The other fields need the document-reading service, so type them in."};
-}
-
 /* Personal data comes from the employee list: HR picks a person who is waiting for onboarding. */
 function obFetch(ob,id){
   const e=S.emps.find(x=>x.id===id); if(!e) return false;
@@ -861,6 +1000,10 @@ function obFetch(ob,id){
   if(e.personalEmail) ob.d.pemail=e.personalEmail;
   if(e.phone) ob.d.phone=e.phone;
   if(e.address) ob.d.address=e.address;
+  // A person who already has a work email (from the HR sheet, or an earlier attempt) does not get a new one.
+  if(e.googleStatus) ob.work={email:e.email,google:e.googleStatus,error:e.googleError};
+  else if(e.email) ob.work={email:e.email,google:"existing"};
+  ob.login=e.hasLogin?{created:true,existing:true}:null;
   return true;
 }
 
@@ -884,7 +1027,8 @@ async function boot(){
       if(isEmployee()){
         let e=S.emps.find(x=>(x.email||"").toLowerCase()===r.data.email.toLowerCase());
         if(!e){ e=mk({name:r.data.name,email:r.data.email,status:"onboarding",dept:"—",title:"—",manager:"—",start:"",grants:{},onTasks:[]}); S.emps.push(e); }
-        S.myId=e.id; S.route="dashboard";
+        S.myId=e.id;
+        if(!(pageKnown(location.hash.slice(1))&&routeAllowed(location.hash.slice(1)))) S.route="dashboard";
       }
     }
   }catch(e){ /* no backend: prototype mode */ }
@@ -892,7 +1036,8 @@ async function boot(){
 }
 function applyUser(){
   const u=S.user; if(!u) return;
-  $("#acct").style.display="";
+  $("#acct").style.display=""; renderAcct();
+  document.body.classList.toggle("ro",isEmployee());
   const cta=$(".cta"); if(cta) cta.style.display=isEmployee()?"none":"";
   $("#who").innerHTML=`Signed in as <b style="color:var(--ink)">${esc(u.name)}</b>, ${isEmployee()?"Employee":"HR"} · <a href="#" data-signout>Sign out</a>`;
 }
@@ -900,23 +1045,36 @@ S.serverDraft=null;
 function applyServerRecord(rec){
   let e=S.emps.find(x=>(x.email||"").toLowerCase()===rec.email.toLowerCase());
   if(!e){ e=mk({name:rec.name,email:rec.email,status:"onboarding",grants:{},onTasks:ON_TASKS.map(t=>({t,done:false}))}); e.color=AV[S.emps.length%AV.length]; S.emps.push(e); }
-  Object.assign(e,{name:rec.name,dept:rec.dept,title:rec.title||"—",manager:rec.manager||"—",start:rec.start,personalEmail:rec.personalEmail,phone:rec.phone,address:rec.address,ids:rec.ids});
+  Object.assign(e,{name:rec.name,dept:rec.dept,title:rec.title||"—",manager:rec.manager||"—",start:rec.start,personalEmail:rec.personalEmail,phone:rec.phone,address:rec.address,ids:rec.ids,
+    googleStatus:rec.googleStatus,googleError:rec.googleError,hasLogin:rec.hasLogin});
   for(const a of rec.apps) if(!e.grants[a]||e.grants[a]==="revoked") e.grants[a]="none";
   e.laptop=e.laptop||{received:false,serial:"",date:""};
   return e;
 }
+function setDocs(list){
+  const docs={};
+  for(const d of list){
+    const e=S.emps.find(x=>(x.email||"").toLowerCase()===d.email);
+    if(e) ((docs[e.id]=docs[e.id]||{})[d.key]=(docs[e.id][d.key]||[])).push({id:d.id,name:d.name,size:d.size});
+  }
+  const changed=JSON.stringify(docs)!==JSON.stringify(S.docs);
+  S.docs=docs; return changed;
+}
+/* Employees upload while HR is working, so HR reads the latest list when opening a page that shows documents. */
+let docsAt=0;
+async function refreshDocs(force){
+  if(!S.user||Date.now()-docsAt<(force?0:4000)) return;
+  docsAt=Date.now();
+  try{ const r=await api("GET","/api/documents"); if(r.ok&&setDocs(r.data)) render(); }catch(e){}
+}
 async function loadFromServer(){
   try{
     const hr=!isEmployee();
-    const [recs,draft,docs]=await Promise.all([hr?api("GET","/api/onboarding"):{ok:false},hr?api("GET","/api/onboarding/draft"):{ok:false},api("GET","/api/documents")]);
+    const [recs,draft,docs,prof,mgrs]=await Promise.all([api("GET",hr?"/api/onboarding":"/api/directory"),hr?api("GET","/api/onboarding/draft"):{ok:false},api("GET","/api/documents"),api("GET","/api/profile"),api("GET","/api/managers")]);
     if(recs.ok) recs.data.forEach(applyServerRecord);
-    if(docs.ok){
-      S.docs={};
-      for(const d of docs.data){
-        const e=S.emps.find(x=>(x.email||"").toLowerCase()===d.email);
-        if(e) ((S.docs[e.id]=S.docs[e.id]||{})[d.key]=(S.docs[e.id][d.key]||[])).push({id:d.id,name:d.name,size:d.size});
-      }
-    }
+    if(mgrs.ok) applyManagers(mgrs.data);
+    if(prof.ok){ S.profile=prof.data; S.photoV=prof.data.photoV||null; renderAcct(); }
+    if(docs.ok) setDocs(docs.data);
     if(draft.ok) S.serverDraft=draft.data;
     render();
   }catch(e){ /* no backend: carry on locally */ }
@@ -938,9 +1096,9 @@ function obClearDraft(){
 }
 
 const obField=(lab,id,val,o={})=>{
-  const {type="text",hint="",err="",ph="",rows=0,mono=false,full=false,badge=""}=o;
-  const ctl=rows?`<textarea class="input" id="ob-${id}" rows="${rows}" placeholder="${esc(ph)}">${esc(val)}</textarea>`
-    :`<input class="input${mono?" mono":""}" id="ob-${id}" type="${type}" value="${esc(val)}" placeholder="${esc(ph)}" autocomplete="off">`;
+  const {type="text",hint="",err="",ph="",rows=0,mono=false,full=false,badge="",dis=false}=o;
+  const ctl=rows?`<textarea class="input" id="ob-${id}" rows="${rows}" placeholder="${esc(ph)}"${dis?" disabled":""}>${esc(val)}</textarea>`
+    :`<input class="input${mono?" mono":""}" id="ob-${id}" type="${type}" value="${esc(val)}" placeholder="${esc(ph)}" autocomplete="off"${dis?" disabled":""}>`;
   return `<div class="field"${full?` style="grid-column:1/-1"`:""}><label for="ob-${id}">${lab}${badge}</label>${ctl}${hint?`<span class="hint">${hint}</span>`:""}${err?`<span class="ferr" role="alert">${esc(err)}</span>`:""}</div>`;
 };
 
@@ -958,8 +1116,8 @@ function obStep1(ob){
         :`<p class="muted" style="margin:0">No one in the employee list is waiting for onboarding. Type the details below to add a new joiner.</p>`}
     </div></div>
     <div class="card"><div class="card-h"><h3>Candidate details</h3></div><div class="card-b form">
-      ${obField("First name","first",d.first,{err:er.first,ph:"e.g. Priya"})}
-      ${obField("Surname","last",d.last,{err:er.last,ph:"e.g. Shah"})}
+      ${obField("First name","first",d.first,{err:er.first,ph:"e.g. Priya",dis:!!ob.work})}
+      ${obField("Surname","last",d.last,{err:er.last,ph:"e.g. Shah",dis:!!ob.work})}
       ${obField("Personal email","pemail",d.pemail,{type:"email",err:er.pemail,hint:"The work email and login details are sent here."})}
       ${obField("Phone","phone",d.phone,{type:"tel",err:er.phone,ph:"10-digit mobile number"})}
       ${obField("Address","address",d.address,{rows:3,full:true,err:er.address})}
@@ -969,72 +1127,68 @@ function obStep1(ob){
       ${obField("Job title","title",d.title,{err:er.title,ph:"e.g. Software Development Engineer"})}
       <div class="field"><label for="ob-mgr">Reporting manager</label><select class="input" id="ob-mgr"><option value="">None</option>${mgrs.map(m=>`<option ${m.name===d.mgr?"selected":""}>${esc(m.name)}</option>`).join("")}</select></div>
       ${obField("Start date","start",d.start,{type:"date",err:er.start})}
-    </div></div>`;
+    </div></div>
+    ${obWorkEmailCard(ob)}
+    ${obDocsCard(ob)}`;
 }
 
-/* Documents are uploaded by the employee. HR sees their status here and cannot upload them. */
-function obDocStatus(ob){
-  const m=obDocs(ob), n=docCount(m);
-  return `<div class="card"><div class="card-h"><h3>Documents</h3><span class="muted">Uploaded by the employee</span></div>
-    ${ob.empId?"":`<div class="card-b" style="padding-bottom:0"><div class="callout">${svg("info")}<div>This person has no record yet. The employee can upload documents on the <b>Employee documents</b> tab once the record is created.</div></div></div>`}
-    ${DOCS.map(def=>{const fl=m[def.k]||[];return `<div class="doc-row"><div class="grow"><b>${esc(def.name)} <span class="pill ${fl.length?"p-ok":"p-mute"}">${fl.length?"Received":"Not uploaded"}</span></b>${fl.length?`<div>${fl.map(f=>`<span class="fchip" style="padding-right:12px">${esc(f.name)} · ${fmtSize(f.size)}</span>`).join("")}</div>`:`<span class="sub">Waiting for the employee</span>`}</div></div>`}).join("")}
-    <div class="card-b"><button type="button" class="btn link" data-go="docs">Open Employee documents</button><span class="muted"> ${n} file${n===1?"":"s"} received so far</span></div></div>`;
+/* What the chosen person has uploaded. HR can open and save every file. */
+function obDocsCard(ob){
+  const e=ob.empId&&S.emps.find(x=>x.id===ob.empId); if(!e) return "";
+  const m=S.docs[e.id]||{}, n=docCount(m);
+  return `<div class="card"><div class="card-h"><h3>Documents uploaded by ${esc(e.name)}</h3><span class="muted">${n?`${n} file${n===1?"":"s"}`:"Nothing uploaded yet"}</span></div>
+    ${n?DOCS.filter(d=>(m[d.k]||[]).length).map(d=>`<div class="doc-row"><div class="grow"><b>${esc(d.name)}</b>${m[d.k].map(f=>`<div class="sub">${docLinks(f)} · ${fmtSize(f.size)}</div>`).join("")}</div></div>`).join("")
+      :`<div class="card-b muted">The employee uploads documents after signing in. They will show here.</div>`}</div>`;
 }
 
-function obStep2(ob){
-  const er=ob.errors, i=ob.ids, has=docCount(obDocs(ob))>0;
-  const badge=k=>ob.src[k]==="ocr"?`<span class="srcbadge ocr" id="src-${k}">From document</span>`:`<span class="srcbadge typed" id="src-${k}">Typed</span>`;
-  return `${obDocStatus(ob)}
-    <div class="card"><div class="card-h"><h3>Document data</h3><span class="muted">Filled in by HR</span><button type="button" class="btn glass sm" data-ob-ocr ${has?"":"disabled"}>Read documents</button></div><div class="card-b">
-      ${ob.ocrMsg?`<div class="callout" style="margin-bottom:16px">${svg("info")}<div>${esc(ob.ocrMsg)}</div></div>`:""}
-      <div class="form">
-      ${obField("Full name","id-name",i.name,{err:er.name,badge:badge("name")})}
-      ${obField("Date of birth","id-dob",i.dob,{type:"date",err:er.dob,badge:badge("dob")})}
-      ${obField("Aadhaar number","id-aadhaar",i.aadhaar,{err:er.aadhaar,mono:true,ph:"12 digits",badge:badge("aadhaar")})}
-      ${obField("PAN","id-pan",i.pan,{err:er.pan,mono:true,ph:"ABCDE1234F",badge:badge("pan")})}
-      ${obField("Address","id-address",i.address,{rows:3,full:true,err:er.address,badge:badge("address")})}
-      ${obField("Bank account number","id-acct",i.acct,{err:er.acct,mono:true,badge:badge("acct")})}
-      ${obField("IFSC code","id-ifsc",i.ifsc,{err:er.ifsc,mono:true,ph:"HDFC0001234",badge:badge("ifsc")})}
-      </div><p class="muted" style="margin:14px 0 0">All of these are optional. Any value can be corrected. Fields filled from a document are marked, and the mark changes to "Typed" once you edit it.</p></div></div>`;
-}
-
-function obStep3(ob){
-  const ex=ob.empId&&S.emps.find(x=>x.id===ob.empId);
-  if(ex&&ex.email){
-    ob.workEmail=ex.email;
-    return `<div class="card"><div class="card-h"><h3>Work email</h3></div><div class="card-b" style="display:flex;flex-direction:column;gap:14px">
-      <div class="input mono" style="background:var(--paper-2);font-size:18px">${esc(ob.workEmail)}</div>
-      <div class="callout">${svg("info")}<div>This person already has a work email in the employee list, so none is generated.</div></div>
+/* The work email is created in Google Workspace and active straight away. Only HR can do this. */
+function obWorkEmailCard(ob){
+  const w=ob.work, d=ob.d;
+  const note=(txt)=>`<div class="callout">${svg("info")}<div>${txt}</div></div>`;
+  if(!w){
+    const preview=makeWorkEmail(d.first,d.last,x=>!!emailTaken(x));
+    return `<div class="card"><div class="card-h"><h3>Work email</h3><span class="muted">Created in Google and active straight away</span></div><div class="card-b" style="display:flex;flex-direction:column;gap:14px">
+      <div class="input mono" style="background:var(--paper-2);font-size:18px">${esc(preview||"Add a first name and surname above")}</div>
+      <p style="margin:0;color:var(--ink-dim)">Built as <span class="mono">name.surname@${DOMAIN}</span>, in lowercase. If the address is taken, a number is added. Fill in the details above, then create it. The name cannot be changed afterwards.</p>
+      ${note("The account starts with the default password and the employee must choose a new one at first sign-in.")}
+      <div class="row"><button type="button" class="btn primary" data-ob-mkmail ${ob.busy?"disabled":""}>${ob.busy?"Creating…":"Create work email"}</button></div>
     </div></div>`;
   }
-  ob.workEmail=makeWorkEmail(ob.d.first,ob.d.last,x=>!!emailTaken(x));
-  const base=makeWorkEmail(ob.d.first,ob.d.last,()=>false);
-  const bumped=ob.workEmail&&ob.workEmail!==base;
-  return `<div class="card"><div class="card-h"><h3>Work email</h3></div><div class="card-b" style="display:flex;flex-direction:column;gap:14px">
-      <div class="input mono" style="background:var(--paper-2);font-size:18px">${esc(ob.workEmail||"Add a first name and surname in step 1")}</div>
-      <p style="margin:0;color:var(--ink-dim)">Built as <span class="mono">name.surname@${DOMAIN}</span>, in lowercase, with spaces and special characters removed. If the address is taken, a number is added.</p>
-      ${bumped?`<div class="callout">${svg("info")}<div><b>${esc(base)}</b> already belongs to someone, so <b>${esc(ob.workEmail)}</b> is used.</div></div>`:""}
-      <div class="callout">${svg("info")}<div>${esc(activationNote(ob.d.start))}</div></div>
-      <div class="callout">${svg("info")}<div>On submit, the work email is sent to <b>${esc(maskMail(ob.d.pemail)||"the personal email")}</b>. <span class="muted">Simulated in this prototype: no email is sent.</span></div></div>
+  const label={active:"Active in Google Workspace",simulated:"Created (simulated)",existing:"Already in the employee list",local:"Created (prototype, no backend)",failed:"Google could not create it"}[w.google]||w.google;
+  const ok=w.google!=="failed";
+  return `<div class="card"><div class="card-h"><h3>Work email</h3><span class="pill ${ok?"p-ok":"p-bad"}">${esc(label)}</span></div><div class="card-b" style="display:flex;flex-direction:column;gap:14px">
+      <div class="input mono" style="background:var(--paper-2);font-size:18px">${esc(w.email)}</div>
+      ${w.google==="failed"?note(`${esc(w.error||"Google returned an error.")} The address is reserved for this person. Retry when the problem is fixed.`)
+        :w.google==="simulated"?note("Google is not connected yet, so this account was only simulated. Add the Google credentials in backend/.env to create real accounts.")
+        :w.google==="existing"?note("This person already has a work email, so none is created."):""}
+      ${w.google==="failed"?`<div class="row"><button type="button" class="btn primary" data-ob-mkmail ${ob.busy?"disabled":""}>${ob.busy?"Retrying…":"Retry"}</button></div>`:""}
     </div></div>`;
 }
 
-function obStep4(ob){
-  const d=ob.d, i=ob.ids, ex=ob.empId&&S.emps.find(x=>x.id===ob.empId);
-  ob.workEmail=ex&&ex.email?ex.email:makeWorkEmail(d.first,d.last,x=>!!emailTaken(x));
-  const sel=ob.apps||T(DEPT_TPL[d.dept]);
+/* Step 2: HR creates the app login for the new joiner. Employees cannot do this. */
+function obStep2(ob){
+  const w=ob.work, l=ob.login;
+  return `<div class="card"><div class="card-h"><h3>Login for the app</h3><span class="muted">Only HR can create it</span></div><div class="card-b" style="display:flex;flex-direction:column;gap:14px">
+      <dl class="rv"><div><dt>Signs in with</dt><dd><span class="mono">${esc(w.email)}</span></dd></div><div><dt>Role</dt><dd>Employee</dd></div></dl>
+      <p style="margin:0;color:var(--ink-dim)">The employee signs in with their work email and the default password, then uploads their own documents. Details from their resume will be added later.</p>
+      ${l?`<div class="callout">${svg("info")}<div>${l.existing?"This person already has a login.":`Login created. Password: <b class="mono">${esc(l.password||"the default password")}</b>. Tell the employee to change it on their Account page.`}</div></div>`
+         :`<div class="row"><button type="button" class="btn primary" data-ob-mklogin ${ob.busy?"disabled":""}>${ob.busy?"Creating…":"Create login"}</button></div>`}
+    </div></div>`;
+}
+
+/* Step 3: review, choose the tools, submit. */
+function obStep3(ob){
+  const d=ob.d, w=ob.work, sel=ob.apps||T(DEPT_TPL[d.dept]);
   const sec=(title,step,body)=>`<div class="card"><div class="card-h"><h3>${title}</h3><button type="button" class="btn link" data-ob-goto="${step}">Edit</button></div><div class="card-b">${body}</div></div>`;
   const kv=(pairs)=>`<dl class="rv">${pairs.map(([k,v])=>`<div><dt>${k}</dt><dd>${v||"—"}</dd></div>`).join("")}</dl>`;
-  const m=obDocs(ob);
-  const docs=DOCS.map(x=>`<div><dt>${esc(x.name)}</dt><dd>${(m[x.k]||[]).length?m[x.k].map(f=>esc(f.name)).join(", "):`<span class="muted">Not uploaded</span>`}</dd></div>`).join("");
+  const gstat={active:"Active in Google Workspace",simulated:"Active (simulated)",existing:"Already in the employee list",local:"Created (prototype)"}[w.google]||w.google;
   return `${sec("Personal details",1,kv([["Name",esc(d.first+" "+d.last)],["Personal email",esc(d.pemail)],["Phone",esc(d.phone)],["Address",esc(d.address)]]))}
     ${sec("Job details",1,kv([["Department",esc(d.dept)],["Job title",esc(d.title)],["Reporting manager",esc(d.mgr)],["Start date",esc(fdate(d.start))]]))}
-    ${sec("Documents from the employee",2,`<dl class="rv">${docs}</dl>`)}
-    ${sec("Document data",2,kv([["Name",esc(i.name)],["Date of birth",esc(i.dob?fdate(i.dob):"")],["Aadhaar",esc(maskAadhaar(i.aadhaar))],["PAN",esc(maskPan(i.pan))],["Address",esc(i.address)],["Bank account",esc(maskAcct(i.acct))],["IFSC",esc(String(i.ifsc).toUpperCase())]]))}
-    ${sec("Work email",3,kv([["Work email",`<span class="mono">${esc(ob.workEmail)}</span>`],["Activation",esc(d.start&&d.start>todayIso()?`Created now, activates on ${fdate(d.start)}`:"Activated when created")]]))}
+    <div class="card"><div class="card-h"><h3>Work email and login</h3></div><div class="card-b">${kv([["Work email",`<span class="mono">${esc(w.email)}</span>`],["Google",esc(gstat)],["App login","Created, employee role"]])}</div></div>
+    ${obDocsCard(ob)}
     <div class="card"><div class="card-h"><h3>Tools to give</h3><span class="pill p-info">Bundle: ${esc(TEMPLATES.find(x=>x.id===DEPT_TPL[d.dept]).name)}</span></div><div class="card-b" style="display:flex;flex-direction:column;gap:16px">
-      <div class="tiles" id="ob-apps">${APPS.map(a=>`<label class="tile"><input type="checkbox" value="${a.id}" ${sel.includes(a.id)?"checked":""}>${appIc(a.id)}<span class="t"><b>${esc(a.name)}</b><span>${esc(a.sub)}</span></span></label>`).join("")}</div>
-      <p class="muted" style="margin:0">Saved as this person's tool access, so offboarding can list it later.</p>
+      <div class="tiles" id="ob-apps">${APPS.map(a=>`<label class="tile"><input type="checkbox" value="${a.id}" ${a.id==="gws"||sel.includes(a.id)?"checked":""} ${a.id==="gws"?"disabled":""}>${appIc(a.id)}<span class="t"><b>${esc(a.name)}</b><span>${a.id==="gws"?"Created in step 1":esc(a.sub)}</span></span></label>`).join("")}</div>
+      <p class="muted" style="margin:0">Saved as this person's tool access, so offboarding can list it later. The employee uploads documents after signing in, and resume details will be added later.</p>
     </div></div>
     <label class="check" style="border:0;padding:0"><input type="checkbox" id="ob-reviewed" ${ob.reviewed?"checked":""}><div class="grow"><div class="lbl">I have reviewed all the details above</div></div></label>`;
 }
@@ -1043,17 +1197,17 @@ const obTabs=cur=>`<div class="subtabs" role="tablist"><button type="button" rol
 function vOnboard(){
   if(!S.ob){ S.ob=newOb(); if(obRestoreDraft(S.ob)) S.obRestored=true; }
   const ob=S.ob;
-  const body=[obStep1,obStep2,obStep3,obStep4][ob.step-1](ob);
-  const last=ob.step===4;
+  const body=[obStep1,obStep2,obStep3][ob.step-1](ob);
+  const last=ob.step===OB_STEPS.length;
   return `<section class="section">
   ${obTabs("onboard")}
-  ${head("Onboarding","Add a new <span class=\"grad\">joiner.</span>","Personal details come from the employee list, the employee uploads their own documents, and HR fills in the document data. Nothing is created until you submit.","",true)}
+  ${head("Onboarding","Add a new <span class=\"grad\">joiner.</span>","HR enters the details and the work email is created in Google. HR then creates the login, and the employee uploads their own documents later.","",true)}
   ${obStepper(ob)}
-  ${S.obRestored?`<div class="callout">${svg("info")}<div>A saved draft was restored. It holds name, contact and job details only. ID numbers have to be added again. <button type="button" class="btn link" data-ob-cancel>Start over</button></div></div>`:""}
+  ${S.obRestored?`<div class="callout">${svg("info")}<div>A saved draft was restored. It holds name, contact and job details only. <button type="button" class="btn link" data-ob-cancel>Start over</button></div></div>`:""}
   <form id="obf" class="grid" style="gap:22px" novalidate>${body}
     <div class="row" style="justify-content:space-between">
       <div class="row">${ob.step>1?`<button type="button" class="btn glass" data-ob-back>Back</button>`:`<button type="button" class="btn glass" data-ob-cancel>Cancel</button>`}<button type="button" class="btn glass" data-ob-draft>Save draft</button></div>
-      ${last?`<button type="submit" class="btn primary" id="ob-submit" ${ob.reviewed?"":"disabled"}>Submit and create account</button>`
+      ${last?`<button type="submit" class="btn primary" id="ob-submit" ${ob.reviewed?"":"disabled"}>Submit onboarding</button>`
             :`<button type="button" class="btn primary" data-ob-next>${ob.fromReview?"Back to review":"Continue"}</button>`}
     </div>
   </form></section>`;
@@ -1062,32 +1216,71 @@ function vOnboard(){
 function obCollect(ob){
   const g=id=>{const el=$("#ob-"+id);return el?el.value:undefined};
   if(ob.step===1) for(const k of ["first","last","pemail","phone","address","dept","title","mgr","start"]){const v=g(k); if(v!==undefined) ob.d[k]=v;}
-  if(ob.step===2) for(const k of Object.keys(ob.ids)){const v=g("id-"+k); if(v!==undefined) ob.ids[k]=v;}
-  if(ob.step===4){ const boxes=[...document.querySelectorAll("#ob-apps input")]; if(boxes.length) ob.apps=boxes.filter(b=>b.checked).map(b=>b.value); const r=$("#ob-reviewed"); if(r) ob.reviewed=r.checked; }
+  if(ob.step===3){ const boxes=[...document.querySelectorAll("#ob-apps input")]; if(boxes.length) ob.apps=boxes.filter(b=>b.checked).map(b=>b.value); const r=$("#ob-reviewed"); if(r) ob.reviewed=r.checked; }
 }
 function obFocusError(){ const el=document.querySelector(".ferr,.derr"); if(el){ el.scrollIntoView({block:"center"}); const f=el.closest(".field,.doc-row"); const i=f&&f.querySelector("input:not([type=file]),textarea"); if(i) i.focus(); } }
 
 function obNext(){
   const ob=S.ob; obCollect(ob);
-  const errs=ob.step===1?step1Errors(ob):ob.step===2?step2Errors(ob):{};
+  const errs=ob.step===1?step1Errors(ob):{};
   ob.errors=errs;
   if(Object.keys(errs).length){ render(); obFocusError(); toast("Please fix the highlighted fields."); return; }
-  if(ob.step===1){ const r=ocrRead(ob); ob.ocrDone=r.ok; ob.ocrMsg=r.ok?r.msg:"The employee has not uploaded any documents yet. Fill in the document data by hand, or come back once they have."; }
-  ob.step=ob.fromReview?4:ob.step+1; ob.fromReview=false;
+  if(ob.step===1&&(!ob.work||ob.work.google==="failed")){ toast("Create the work email first."); return; }
+  if(ob.step===2&&!ob.login){ toast("Create the login first."); return; }
+  ob.step=ob.fromReview?3:ob.step+1; ob.fromReview=false;
   render(); window.scrollTo(0,0);
+}
+
+/* Step 1: save the details, create the work email and activate it in Google. */
+async function obMakeEmail(){
+  const ob=S.ob; obCollect(ob);
+  ob.errors=step1Errors(ob);
+  if(Object.keys(ob.errors).length){ render(); obFocusError(); toast("Please fix the highlighted fields."); return; }
+  const picked=ob.empId&&S.emps.find(x=>x.id===ob.empId);
+  ob.busy=true; render();
+  try{
+    const r=await api("POST","/api/onboarding/work-email",{d:ob.d,existingEmail:(ob.work&&ob.work.email)||(picked&&picked.email)||undefined});
+    if(r.status===400){ ob.errors=r.data.errors||{}; toast(Object.values(ob.errors)[0]||(r.data&&r.data.error)||"The server rejected the details."); }
+    else if(r.status===502){ ob.work={email:r.data.email,google:"failed",error:r.data.error}; toast("Google could not create the account."); }
+    else if(!r.ok){ toast(apiMsg(r)); }
+    else{
+      const e=applyServerRecord(r.data); ob.empId=e.id;
+      ob.work={email:r.data.email,google:r.data.googleStatus};
+      ob.login=r.data.hasLogin?{created:true,existing:true}:null;
+      toast(`${r.data.email} is ready${r.data.googleStatus==="active"?" and active in Google":""}.`);
+    }
+  }catch(err){
+    // No backend: carry on with the prototype behaviour.
+    const email=picked&&picked.email?picked.email:makeWorkEmail(ob.d.first,ob.d.last,x=>!!emailTaken(x));
+    ob.work={email,google:"local"};
+  }
+  ob.busy=false; render();
+}
+
+/* Step 2: HR creates the app login with the default password. */
+async function obMakeLogin(){
+  const ob=S.ob; if(!ob.work) return;
+  ob.busy=true; render();
+  try{
+    const r=await api("POST","/api/users",{email:ob.work.email,role:"employee"});
+    if(r.ok) ob.login={created:true,password:r.data.defaultPassword};
+    else if(r.status===409) ob.login={created:true,existing:true};
+    else toast(apiMsg(r));
+  }catch(err){ ob.login={created:true,existing:true}; }   // no backend: nothing to create
+  ob.busy=false; render();
 }
 
 async function obSubmit(){
   const ob=S.ob; obCollect(ob);
   if(!ob.reviewed){ toast("Tick the review box before submitting."); return; }
-  const apps=(ob.apps||[]).slice().sort((a,b)=>(a==="gws"?-1:b==="gws"?1:0));
-  if(!apps.length){ toast("Pick at least one tool to give."); return; }
+  if(!ob.work||!ob.login){ toast("Create the work email and the login first."); return; }
+  const apps=["gws",...(ob.apps||[]).filter(a=>a!=="gws")];   // the Google account already exists, so it is always included
   let e=ob.empId?S.emps.find(x=>x.id===ob.empId):null;
   const existing=!!e;
-  let email=existing&&e.email?e.email:makeWorkEmail(ob.d.first,ob.d.last,x=>!!emailTaken(x));
+  let email=ob.work.email;
   let saved=null;
   try{
-    const r=await api("POST","/api/onboarding",{d:ob.d,ids:ob.ids,apps,existingEmail:existing?e.email:undefined});
+    const r=await api("POST","/api/onboarding",{d:ob.d,apps,existingEmail:ob.work.email});
     if(r.status===400){ ob.errors=r.data.errors||{}; toast(Object.values(ob.errors)[0]||"The server rejected the details."); render(); return; }
     if(!r.ok){ toast("The server could not save this onboarding. Try again."); return; }
     saved=r.data; email=saved.email;
@@ -1104,19 +1297,22 @@ async function obSubmit(){
     // The person is already in the employee list, so the record is completed, not duplicated.
     Object.assign(e,{name:full,dept:ob.d.dept,title:ob.d.title.trim()||e.title,manager:ob.d.mgr||e.manager||"—",start:ob.d.start});
     for(const a of apps) if(!e.grants[a]||e.grants[a]==="revoked") e.grants[a]="none";
-    log(`Onboarding details completed by HR (${docCount(S.docs[e.id])} document file${docCount(S.docs[e.id])===1?"":"s"} received)`,e,null,"ok");
+    log("Onboarding details completed by HR",e,null,"ok");
   }
-  // Only masked identity data is kept on the record. The numbers themselves are not stored in this prototype.
   e.personalEmail=ob.d.pemail.trim(); e.phone=ob.d.phone.trim(); e.address=ob.d.address.trim();
-  e.ids={dob:ob.ids.dob,aadhaar:maskAadhaar(ob.ids.aadhaar),pan:maskPan(ob.ids.pan),acct:maskAcct(ob.ids.acct),ifsc:String(ob.ids.ifsc).trim().toUpperCase()};
+  // The Google account was created and activated in step 1, so there is nothing left to provision for it.
+  if(e.grants.gws!=="active"){
+    e.grants.gws="active";
+    log(ob.work.google==="active"?"Work email created and active in Google Workspace":"Work email active (simulated, Google is not connected)",e,"gws","ok");
+  }
   e.laptop=e.laptop||{received:false,serial:"",date:""};
   log(`Onboarding submitted after review. HR notified`,e,null,"info");
   log(`Work email sent to ${maskMail(e.personalEmail)} (simulated)`,e,null,"info");
   obClearDraft(); S.ob=null; S.obRestored=false;
-  toast(`HR notified: ${e.name} was submitted for onboarding.${saved&&S.user?" A login was created with the default password.":""}`);
+  toast(`HR notified: ${e.name} was submitted for onboarding.`);
   go("employee",e.id);
   const toGive=apps.filter(a=>e.grants[a]!=="active");
-  if(toGive.length) provision(e,toGive);
+  if(toGive.length) provision(e,toGive); else settle(e);
 }
 
 /* ---------- My documents: the employee uploads their own documents ---------- */
@@ -1149,7 +1345,7 @@ function vDocs(){
   }).join(""):"";
   return `<section class="section">
   ${S.user?"":obTabs("docs")}
-  ${head(S.user?"Employee":"Onboarding",S.user?"My <span class=\"grad\">documents.</span>":"Employee <span class=\"grad\">documents.</span>","Upload your own documents for onboarding. HR can see them and fills in the document data from them.","",true)}
+  ${head("Onboarding",S.user?"Your <span class=\"grad\">documents.</span>":"Employee <span class=\"grad\">documents.</span>","Upload your own documents for onboarding. HR can see them and fills in the document data from them.","",true)}
   ${S.user?"":`<div class="card"><div class="card-h"><h3>Who are you?</h3></div><div class="card-b">
     ${waiting.length?`<select class="input" id="md-pick" style="max-width:360px" aria-label="Your name"><option value="">Choose your name</option>${waiting.map(w=>`<option value="${w.id}" ${me&&w.id===me.id?"selected":""}>${esc(w.name)}</option>`).join("")}</select>`
       :`<p class="muted" style="margin:0">No one is waiting for onboarding right now.</p>`}
@@ -1193,6 +1389,178 @@ function vUsers(){
   </section>`;
 }
 
+/* ---------- My profile ----------
+   The personal sections a person fills in about themselves. Everyone edits only their own, and the server saves them per login. */
+const PF_OPTS={
+  gender:["","Female","Male","Other","Prefer not to say"],
+  marital:["","Single","Married","Divorced","Widowed"],
+  blood:["","A+","A-","B+","B-","AB+","AB-","O+","O-"],
+  handicapped:["","No","Yes"],
+};
+const pfAddr=(which)=>[[`addresses.${which}.line`,"Address","textarea"],[`addresses.${which}.city`,"City"],[`addresses.${which}.state`,"State"],[`addresses.${which}.country`,"Country"],[`addresses.${which}.pin`,"PIN code"]];
+const PF_SECTIONS={
+  about:{title:"About",fields:[["about","About me","textarea"],["loveJob","What I love about my job?","textarea"],["hobbies","My interests and hobbies","textarea"]]},
+  primary:{title:"Primary details",fields:[["primary.first","First name"],["primary.middle","Middle name"],["primary.last","Last name"],["primary.gender","Gender","select","gender"],["primary.dob","Date of birth","date"],["primary.marital","Marital status","select","marital"],["primary.blood","Blood group","select","blood"],["primary.handicapped","Physically handicapped","select","handicapped"],["primary.nationality","Nationality"]]},
+  contact:{title:"Contact details",fields:[["contact.personalEmail","Personal email","email"],["contact.phone","Phone","tel"]]},
+  current:{title:"Current address",fields:pfAddr("current")},
+  permanent:{title:"Permanent address",fields:pfAddr("permanent")},
+  edu:{title:"Add education",fields:[["degree","Degree"],["branch","Branch / specialisation"],["college","University / college"],["cgpa","CGPA / percentage"],["joining","Year of joining","date"],["completion","Year of completion","date"]]},
+};
+const getPath=(o,k)=>k.split(".").reduce((a,x)=>a==null?a:a[x],o);
+const setPath=(o,k,v)=>{const ks=k.split("."); const last=ks.pop(); const t=ks.reduce((a,x)=>a[x]=a[x]||{},o); t[last]=v;};
+const pfId=k=>"pf-"+k.replace(/\./g,"-");
+const pfVal=k=>{const el=$("#"+pfId(k)); return el?el.value:"";};
+
+/* The signed-in person's own record. HR who are not in the roster get a stand-in so the page still works. */
+function myRecord(){
+  const u=S.user;
+  let e=S.emps.find(x=>(x.email||"").toLowerCase()===u.email.toLowerCase());
+  if(!e){ e=mk({name:u.name,email:u.email,status:"active",dept:"—",title:"—",manager:"—",start:"",grants:{},onTasks:[]}); e.color=AV[0]; }
+  return e;
+}
+/* What the page shows: saved answers, with the employee list filling in what is already known. */
+function pfData(e){
+  const {first,last}=nameSplit(e.name), p=S.profile||{}, ad=p.addresses||{};
+  const addr=(a,line)=>({line:line||"",city:"",state:"",country:"",pin:"",...(a||{})});
+  return {
+    about:p.about||"", loveJob:p.loveJob||"", hobbies:p.hobbies||"", education:(p.education||[]).map(x=>({...x})),
+    primary:{first,middle:"",last,gender:"",dob:(e.ids&&e.ids.dob)||"",marital:"",blood:"",handicapped:"",nationality:"",...(p.primary||{})},
+    contact:{personalEmail:e.personalEmail||"",phone:e.phone||"",...(p.contact||{})},
+    addresses:{current:addr(ad.current,e.address),permanent:addr(ad.permanent,"")},
+  };
+}
+function pfField(k,label,type,opt,val,err){
+  const id=pfId(k);
+  const ctl=type==="textarea"?`<textarea class="input" id="${id}" rows="3">${esc(val)}</textarea>`
+    :type==="select"?`<select class="input" id="${id}">${PF_OPTS[opt].map(o=>`<option value="${esc(o)}" ${o===val?"selected":""}>${esc(o||"Select")}</option>`).join("")}</select>`
+    :`<input class="input" id="${id}" type="${type||"text"}" value="${esc(val)}" autocomplete="off">`;
+  return `<div class="field"${type==="textarea"?` style="grid-column:1/-1"`:""}><label for="${id}">${label}</label>${ctl}${err?`<span class="ferr" role="alert">${esc(err)}</span>`:""}</div>`;
+}
+const pfEditBtns=(sec)=>`<div class="row" style="grid-column:1/-1"><button type="button" class="btn primary sm" data-pf-save="${sec}">Save</button><button type="button" class="btn glass sm" data-pf-cancel>Cancel</button></div>`;
+/* One section: its saved values, or its form while it is being edited. */
+function pfSection(sec,d){
+  const c=PF_SECTIONS[sec], editing=S.profEdit===sec, er=S.profErr||{};
+  if(editing) return `<div class="card"><div class="card-h"><h3>${c.title}</h3></div><div class="card-b form">${c.fields.map(([k,l,t,o])=>pfField(k,l,t,o,getPath(d,k)||"",er[k])).join("")}${pfEditBtns(sec)}</div></div>`;
+  const edit=`<button type="button" class="btn link" data-pf-edit="${sec}">Edit</button>`;
+  if(sec==="about") return `<div class="card"><div class="card-h"><h3>${c.title}</h3>${edit}</div><div class="card-b">${c.fields.map(([k,l])=>{const v=getPath(d,k); return `<p class="pf-q">${l}</p>${v?`<p class="pf-a">${esc(v)}</p>`:`<p class="pf-a"><button type="button" class="btn glass sm" data-pf-edit="about">Add your response</button></p>`}`}).join("")}</div></div>`;
+  return `<div class="card"><div class="card-h"><h3>${c.title}</h3>${edit}</div><div class="card-b"><dl class="rv">${c.fields.map(([k,l])=>`<div${c.fields.length===5&&k.endsWith(".line")?` style="grid-column:1/-1"`:""}><dt>${l}</dt><dd>${esc(getPath(d,k)||"—")}</dd></div>`).join("")}</dl></div></div>`;
+}
+function pfEducation(d){
+  const er=S.profErr||{}, n=d.education.length, vals=S.profEduVals||{};
+  const list=d.education.map((x,i)=>`<div class="card-b" style="${i?"border-top:1px solid var(--line);padding-top:18px":""}"><dl class="rv">
+    <div><dt>Degree</dt><dd>${esc(x.degree||"—")}</dd></div><div><dt>Branch / specialisation</dt><dd>${esc(x.branch||"—")}</dd></div>
+    <div><dt>University / college</dt><dd>${esc(x.college||"—")}</dd></div><div><dt>CGPA / percentage</dt><dd>${esc(x.cgpa||"—")}</dd></div>
+    <div><dt>Year of joining</dt><dd>${esc(x.joining?fdate(x.joining):"—")}</dd></div><div><dt>Year of completion</dt><dd>${esc(x.completion?fdate(x.completion):"—")}</dd></div></dl>
+    <div style="margin-top:10px"><button type="button" class="btn link" data-pf-rm="${i}">Remove</button></div></div>`).join("");
+  const form=S.profEdit==="edu"?`<div class="card-b form" style="border-top:1px solid var(--line);padding-top:18px">${PF_SECTIONS.edu.fields.map(([k,l,t])=>pfField(k,l,t,"",vals[k]||"",er[`education.${n}.${k}`])).join("")}${pfEditBtns("edu")}</div>`:"";
+  return `<div class="card"><div class="card-h"><h3>Education</h3>${S.profEdit==="edu"?"":`<button type="button" class="btn link" data-pf-edit="edu">Add</button>`}</div>
+    ${n||S.profEdit==="edu"?list+form:`<div class="card-b muted">No education added yet.</div>`}</div>`;
+}
+function vProfile(){
+  const e=myRecord(), d=(S.profEdit&&S.profDraft)||pfData(e), tab=S.profTab||"about";
+  const ic=k=>`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${ICONS[k]}</svg>`;
+  const city=[d.addresses.current.city,d.addresses.current.state].filter(Boolean).join(", ");
+  const mgr=e.manager&&e.manager!=="—"?e.manager:"—";
+  const phone=d.contact.phone||e.phone||"";
+  const tabs=[["about","About"],["job","Job"],["documents","Documents"],["assets","Assets"]];
+  let body="";
+  if(tab==="about") body=`${pfSection("about",d)}${pfEducation(d)}${pfSection("primary",d)}${pfSection("contact",d)}${pfSection("current",d)}${pfSection("permanent",d)}`;
+  if(tab==="job"){
+    const live=Object.keys(e.grants||{}).filter(k=>e.grants[k]==="active");
+    body=`<div class="card"><div class="card-h"><h3>Job details</h3><span class="muted">Set by HR</span></div><div class="card-b"><dl class="rv">
+      <div><dt>Employee no.</dt><dd class="mono">${esc(e.no||"Not assigned")}</dd></div><div><dt>Work email</dt><dd class="mono">${esc(e.email)}</dd></div>
+      <div><dt>Job title</dt><dd>${esc(e.title||"—")}</dd></div><div><dt>Department</dt><dd>${esc(e.dept||"—")}</dd></div>
+      <div><dt>Reporting manager</dt><dd>${esc(mgr)}</dd></div><div><dt>Date of joining</dt><dd>${esc(e.start?fdate(e.start):"—")}</dd></div></dl></div></div>
+      <div class="card"><div class="card-h"><h3>Tool access</h3><span class="muted">${live.length} active</span></div><div class="card-b">${live.length?`<div class="chips">${live.map(id=>`<span class="chip">${appIc(id)}${esc(APP[id].name)}</span>`).join("")}</div>`:`<span class="muted">No tools yet.</span>`}</div></div>`;
+  }
+  if(tab==="documents"){
+    const m=S.docs[e.id]||{}, n=docCount(m);
+    body=`<div class="card"><div class="card-h"><h3>My documents</h3><a class="btn glass sm" href="#onboard">Upload or replace</a></div>
+      ${n?DOCS.filter(x=>(m[x.k]||[]).length).map(x=>`<div class="doc-row"><div class="grow"><b>${esc(x.name)}</b>${m[x.k].map(f=>`<div class="sub">${docLinks(f)} · ${fmtSize(f.size)}</div>`).join("")}</div></div>`).join("")
+        :`<div class="card-b muted">Nothing uploaded yet. Use Upload or replace to add your documents.</div>`}</div>`;
+  }
+  if(tab==="assets"){
+    const l=e.laptop||{received:false,serial:"",date:""};
+    body=`<div class="card"><div class="card-h"><h3>Laptop</h3><span class="pill ${l.received?"p-ok":"p-mute"}">${l.received?"Received":"Not received"}</span></div><div class="card-b">
+      <dl class="rv"><div><dt>Serial number</dt><dd class="mono">${esc(l.serial||"—")}</dd></div><div><dt>Date received</dt><dd>${esc(l.date?fdate(l.date):"—")}</dd></div></dl>
+      <p class="muted" style="margin:14px 0 0">HR records assets. Ask HR if something here is wrong.</p></div></div>`;
+  }
+  return `<section class="section" style="gap:22px">
+  <div class="card" style="overflow:hidden">
+    <div class="pf-banner"><span class="pf-avatar-wrap"><span class="pf-avatar" style="background:${photoSrc()?"transparent":(e.color||"#4254d4")}">${avatarInner(e.name,photoSrc())}</span>
+        <label class="pf-cam" title="${photoSrc()?"Change photo":"Add your photo"}">${ic("camera")}<span class="sr-only" style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)">${photoSrc()?"Change photo":"Add your photo"}</span><input type="file" id="pf-photo" accept="image/png,image/jpeg" hidden></label></span>
+      <div style="min-width:0"><div class="row" style="gap:12px"><h2>${esc(e.name)}</h2>${epill(e)}</div><div class="pf-title">${ic("briefcase")}${esc(e.title||"—")}</div>${photoSrc()?`<button type="button" class="pf-rm" data-pf-photo-rm>Remove photo</button>`:""}</div></div>
+    <div class="pf-facts">
+      <span class="pf-fact">${ic("mail")}${esc(e.email)}</span>
+      <span class="pf-fact">${ic("phone")}${esc(phone||"—")}</span>
+      <span class="pf-fact">${ic("pin")}${esc(city||"—")}</span>
+      <span class="pf-fact">${ic("idcard")}${esc(e.no||"Not assigned")}</span></div>
+    <dl class="pf-org"><div><dt>Business unit</dt><dd>Wohlig Transformations</dd></div><div><dt>Department</dt><dd>${esc(e.dept||"—")}</dd></div><div><dt>Reporting manager</dt><dd>${esc(mgr)}</dd></div></dl>
+  </div>
+  <div class="subtabs" role="tablist" style="margin-bottom:0;align-self:flex-start">${tabs.map(([k,l])=>`<button type="button" role="tab" class="${tab===k?"on":""}" aria-selected="${tab===k}" data-pf-tab="${k}">${l}</button>`).join("")}</div>
+  ${body}</section>`;
+}
+/* Crops the picture to a square and shrinks it, so what is sent and stored is small. */
+function squareJpeg(file,size){
+  return new Promise(res=>{
+    const img=new Image(), url=URL.createObjectURL(file);
+    img.onload=()=>{
+      const side=Math.min(img.width,img.height), c=document.createElement("canvas"); c.width=c.height=size;
+      c.getContext("2d").drawImage(img,(img.width-side)/2,(img.height-side)/2,side,side,0,0,size,size);
+      URL.revokeObjectURL(url); c.toBlob(b=>res(b),"image/jpeg",0.9);
+    };
+    img.onerror=()=>{ URL.revokeObjectURL(url); res(null); };
+    img.src=url;
+  });
+}
+async function pfPhoto(file){
+  if(!file) return;
+  if(!/^image\/(jpeg|png)$/.test(file.type)){ toast("Choose a JPG or PNG picture."); return; }
+  if(file.size>8*1048576){ toast("That picture is larger than 8 MB."); return; }
+  const blob=await squareJpeg(file,512);
+  if(!blob){ toast("Could not read that picture."); return; }
+  try{
+    if(typeof DEMO!=="undefined"&&DEMO) throw new Error("no server");
+    const r=await fetch("/api/profile/photo",{method:"PUT",headers:{"Content-Type":"image/jpeg"},body:blob});
+    if(r.status===401){ location.href="/login"; return; }
+    const data=await r.json().catch(()=>null);
+    if(!r.ok){ toast((data&&data.error)||"Could not save the photo."); return; }
+    S.photoV=data.photoV; S.photoLocal=null; toast("Photo updated.");
+  }catch(err){ S.photoLocal=URL.createObjectURL(blob); toast("Photo shown on this page only, because there is no server."); }
+  render();
+}
+async function pfPhotoRemove(){
+  try{ const r=await fetch("/api/profile/photo",{method:"DELETE"}); if(r.status===401){ location.href="/login"; return; } }catch(err){}
+  S.photoV=null; S.photoLocal=null; toast("Photo removed."); render();
+}
+document.addEventListener("change",ev=>{ if(ev.target.id==="pf-photo"){ pfPhoto(ev.target.files[0]); ev.target.value=""; } });
+document.addEventListener("click",ev=>{ if(ev.target.closest("[data-pf-photo-rm]")) pfPhotoRemove(); });
+async function pfSave(sec){
+  const e=myRecord(), next=JSON.parse(JSON.stringify(S.profDraft||pfData(e))); let item=null;
+  if(sec.startsWith("rm:")) next.education.splice(Number(sec.slice(3)),1);
+  else if(sec==="edu"){ item={}; for(const [k] of PF_SECTIONS.edu.fields) item[k]=pfVal(k); next.education.push(item); }
+  else for(const [k] of PF_SECTIONS[sec].fields) setPath(next,k,pfVal(k));
+  try{
+    const r=await api("PUT","/api/profile",next);
+    if(r.status===400){
+      S.profErr=r.data.errors||{}; S.profEduVals=item; S.profDraft=item?null:next;
+      toast(Object.values(S.profErr)[0]||"Check the highlighted fields."); render(); return;
+    }
+    if(!r.ok){ toast(apiMsg(r)); return; }
+    S.profile=r.data; S.photoV=r.data.photoV||null; toast("Saved.");
+  }catch(err){ S.profile=next; toast("Saved on this page only, because there is no server."); }
+  S.profEdit=null; S.profDraft=null; S.profErr={}; S.profEduVals=null; render();
+}
+document.addEventListener("click",ev=>{
+  const t=ev.target.closest("[data-pf-tab],[data-pf-edit],[data-pf-cancel],[data-pf-save],[data-pf-rm]"); if(!t) return;
+  const reset=()=>{ S.profEdit=null; S.profDraft=null; S.profErr={}; S.profEduVals=null; };
+  if(t.dataset.pfTab){ reset(); S.profTab=t.dataset.pfTab; render(); return; }
+  if(t.dataset.pfEdit){ reset(); S.profEdit=t.dataset.pfEdit; render(); const f=document.querySelector("#view .form .input"); if(f) f.focus(); return; }
+  if(t.hasAttribute("data-pf-cancel")){ reset(); render(); return; }
+  if(t.dataset.pfSave){ pfSave(t.dataset.pfSave); return; }
+  if(t.dataset.pfRm!==undefined){ pfSave("rm:"+t.dataset.pfRm); return; }
+});
+
 function vAccount(){
   const u=S.user;
   return `<section class="section">
@@ -1205,6 +1573,7 @@ function vAccount(){
       <div class="row" style="grid-column:1/-1"><button type="submit" class="btn primary sm">Change password</button></div>
     </form>
   </div></div>
+  ${isEmployee()?"":`<div class="card"><div class="card-h"><h3>Logins and roles</h3></div><div class="card-b"><p class="muted" style="margin:0 0 12px">Create accounts, change roles, reset passwords and set the default password.</p><button type="button" class="btn glass" data-go="users">Manage users</button></div></div>`}
   <div class="card"><div class="card-b"><button type="button" class="btn glass" data-signout>Sign out</button></div></div>
   </section>`;
 }
@@ -1212,7 +1581,6 @@ function vAccount(){
 document.addEventListener("click",async ev=>{
   const so=ev.target.closest("[data-signout]");
   if(so){ ev.preventDefault(); try{ await fetch("/api/logout",{method:"POST"}); }catch(e){} location.href="/login"; return; }
-  if(ev.target.closest("#acct")){ go("account"); return; }
   const ur=ev.target.closest("[data-u-reset]");
   if(ur){ const em=ur.dataset.uReset; if(!confirm(`Reset ${em} to the default password? They will be signed out.`)) return;
     const r=await api("POST",`/api/users/${encodeURIComponent(em)}/reset`); toast(r.ok?`${em} was reset to the default password.`:apiMsg(r)); return; }
@@ -1253,17 +1621,18 @@ document.addEventListener("submit",async ev=>{
 document.addEventListener("click",ev=>{
   const md=ev.target.closest("[data-mydoc-rm]");
   if(md){ const [k,i]=md.dataset.mydocRm.split(":"); const e=S.emps.find(x=>x.id===S.myId); const arr=S.docs[S.myId]&&S.docs[S.myId][k]; if(e&&arr){ const [gone]=arr.splice(Number(i),1); if(gone.id) api("DELETE","/api/documents/"+gone.id).catch(()=>{}); logAs(`${e.name} (employee)`,`Removed ${DOCS.find(x=>x.k===k).name}: ${gone.name}`,e); S.docErr={}; render(); } return; }
-  const t=ev.target.closest("[data-ob-next],[data-ob-back],[data-ob-goto],[data-ob-draft],[data-ob-cancel],[data-ob-ocr],[data-ob-fetch],[data-ob-unfetch]"); if(!t||!S.ob) return;
+  const t=ev.target.closest("[data-ob-next],[data-ob-back],[data-ob-goto],[data-ob-draft],[data-ob-cancel],[data-ob-mkmail],[data-ob-mklogin],[data-ob-fetch],[data-ob-unfetch]"); if(!t||!S.ob) return;
   const ob=S.ob;
   if(t.hasAttribute("data-ob-next")){ obNext(); return; }
   obCollect(ob);
   if(t.hasAttribute("data-ob-back")){ ob.errors={}; ob.step=Math.max(1,ob.step-1); ob.fromReview=false; render(); window.scrollTo(0,0); return; }
-  if(t.dataset.obGoto){ ob.fromReview=ob.step===4; ob.errors={}; ob.step=Number(t.dataset.obGoto); render(); window.scrollTo(0,0); return; }
+  if(t.dataset.obGoto){ ob.fromReview=ob.step===OB_STEPS.length; ob.errors={}; ob.step=Number(t.dataset.obGoto); render(); window.scrollTo(0,0); return; }
   if(t.hasAttribute("data-ob-draft")){ obSaveDraft(ob).then(ok=>toast(ok?"Draft saved: name, contact and job details only.":"Could not save the draft.")); return; }
   if(t.hasAttribute("data-ob-cancel")){ obClearDraft(); S.ob=null; S.obRestored=false; render(); window.scrollTo(0,0); return; }
-  if(t.hasAttribute("data-ob-ocr")){ const r=ocrRead(ob); ob.ocrMsg=r.msg; render(); return; }
-  if(t.hasAttribute("data-ob-fetch")){ const id=Number($("#ob-pick")&&$("#ob-pick").value); if(!id){ toast("Choose a person from the list first."); return; } obFetch(ob,id); ob.errors={}; render(); return; }
-  if(t.hasAttribute("data-ob-unfetch")){ ob.empId=null; ob.d=newOb().d; ob.ids=newOb().ids; ob.src={}; ob.apps=null; render(); return; }
+  if(t.hasAttribute("data-ob-mkmail")){ obMakeEmail(); return; }
+  if(t.hasAttribute("data-ob-mklogin")){ obMakeLogin(); return; }
+  if(t.hasAttribute("data-ob-fetch")){ const id=Number($("#ob-pick")&&$("#ob-pick").value); if(!id){ toast("Choose a person from the list first."); return; } obFetch(ob,id); ob.errors={}; render(); refreshDocs(true); return; }
+  if(t.hasAttribute("data-ob-unfetch")){ ob.empId=null; ob.d=newOb().d; ob.work=null; ob.login=null; ob.apps=null; render(); return; }
 });
 document.addEventListener("change",async ev=>{
   const t=ev.target;
@@ -1294,14 +1663,10 @@ document.addEventListener("change",async ev=>{
   if(t.id==="ob-dept"){ ob.apps=null; }
   if(t.id==="ob-reviewed"){ ob.reviewed=t.checked; const b=$("#ob-submit"); if(b) b.disabled=!t.checked; }
 });
-document.addEventListener("input",ev=>{
-  const t=ev.target, ob=S.ob; if(!ob||!t.id||!t.id.startsWith("ob-id-")) return;
-  const k=t.id.slice(6); ob.src[k]="typed"; const b=$("#src-"+k); if(b){ b.className="srcbadge typed"; b.textContent="Typed"; }
-});
 document.addEventListener("submit",ev=>{
-  if(ev.target.id==="obf"){ ev.preventDefault(); if(S.ob&&S.ob.step===4) obSubmit(); return; }
+  if(ev.target.id==="obf"){ ev.preventDefault(); if(S.ob&&S.ob.step===OB_STEPS.length) obSubmit(); return; }
   if(ev.target.id==="laptopf"){
-    ev.preventDefault();
+    ev.preventDefault(); if(isEmployee()){ toast("Only HR can do this."); return; }
     const e=S.emps.find(x=>x.id===S.sel); if(!e) return;
     const got=$("#lp-got").checked, serial=$("#lp-serial").value.trim(), date=$("#lp-date").value;
     if(got&&!serial){ toast("Enter the laptop serial number."); $("#lp-serial").focus(); return; }
@@ -1322,6 +1687,7 @@ function laptopCard(e){
     <div class="row" style="grid-column:1/-1"><button type="submit" class="btn primary sm" ${off?"disabled":""}>Save laptop details</button><span class="muted">Editable by HR.</span></div></div></form>`;
 }
 function recordCard(e){
+  if(isEmployee()&&e.id!==S.myId) return "";   // personal details and documents belong to HR and the person themselves
   const dm=S.docs[e.id]||{}, n=docCount(dm);
   if(!n&&!e.phone&&!e.ids) return "";
   const kv=p=>`<dl class="rv">${p.map(([k,v])=>`<div><dt>${k}</dt><dd>${v||"—"}</dd></div>`).join("")}</dl>`;
@@ -1333,8 +1699,17 @@ function recordCard(e){
 }
 
 /* Exposed for the automatic checks. */
-window.__onb={mk,provision,settle,activateDue,todayIso,newOb,makeWorkEmail,fileProblem,step1Errors,step2Errors,ocrRead,obFetch,V,maskAadhaar,maskPan,maskAcct,DOCS,S,emailTaken,docCount};
+window.__onb={mk,provision,settle,activateDue,todayIso,newOb,makeWorkEmail,fileProblem,step1Errors,obFetch,V,maskAadhaar,maskPan,maskAcct,DOCS,S,emailTaken,docCount};
 
+/* Employees can see who is leaving and how far along it is. HR runs the offboarding. */
+function vOffboardView(){
+  const list=S.emps.filter(e=>["offboarding","offboarded"].includes(e.status)||e.lastDay).sort((a,b)=>a.name.localeCompare(b.name));
+  return `<section class="section">
+  ${head("Offboarding","How people <span class=\"grad\">leave.</span>","When someone leaves, HR suspends their Google account first, then removes each tool and records it.","",true)}
+  <div class="card"><div class="card-h"><h3>Leaving and left</h3><span class="muted">${list.length}</span></div>
+    ${list.length?list.map(c=>`<div class="radio-li" style="cursor:pointer" data-emp="${c.id}">${person(c,c.title+" · "+c.dept)}<span style="margin-left:auto">${epill(c)}</span></div>`).join(""):`<div class="card-b muted">No one is leaving right now.</div>`}</div>
+  </section>`;
+}
 /* ---------- leave ---------- */
 /* Rules come from leave-rules.js (shared with the server). With the backend running, every change goes through the API and
    is saved in Postgres. Without it (file opened directly, or the claude.ai copy) the page uses sample data in memory. */
@@ -1638,6 +2013,7 @@ function owErrors(w){
   return er;
 }
 function vOffboard(){
+  if(isEmployee()) return vOffboardView();
   if(!S.ow) S.ow=newOw(S.offSel);
   const w=S.ow, er=w.errors, e=S.emps.find(x=>x.id===w.empId)||null;
   if(e&&!w.tools) w.tools=liveTools(e);
@@ -2047,17 +2423,17 @@ function activateDue(){
   }
   return n;
 }
-const activationNote=start=>!start?"":start>todayIso()
-  ?`The account is created when you submit and stays suspended until the joining date (${fdate(start)}). It then activates automatically. HR can activate it early from the employee page.`
-  :`The joining date (${fdate(start)}) has already passed, so the account is activated as soon as it is created.`;
 function render(){
   if(activateDue()) toast("A work email was activated on its joining date.");
   if(S.route==="leaveapply"&&!S.lw) S.route=isEmployee()?"myleave":"leave";
   if(!routeAllowed(S.route)) S.route="dashboard";
   if(S.route==="users"&&!S.users&&!S.usersBusy) loadUsers();
+  if(S.user&&!isEmployee()&&["onboard","docs","employee"].includes(S.route)) refreshDocs();
+  if(S.user&&["profile","employees","employee","dashboard"].includes(S.route)) refreshManagers();
   renderNav();
-  const v={dashboard:vDashboard,employees:vEmployees,employee:vEmployee,onboard:vOnboard,docs:vDocs,offboard:vOffboard,myleave:vMyLeave,team:vTeam,leaveapply:vLeaveApply,leave:vLeave,templates:vTemplates,audit:vAudit,users:vUsers,account:vAccount}[S.route]||vDashboard;
+  const v={dashboard:vDashboard,employees:vEmployees,employee:vEmployee,onboard:isEmployee()?vDocs:vOnboard,docs:vDocs,offboard:vOffboard,myleave:vMyLeave,team:vTeam,leaveapply:vLeaveApply,leave:vLeave,templates:vTemplates,audit:vAudit,users:vUsers,account:vAccount,profile:vProfile}[S.route]||vDashboard;
   $("#view").innerHTML=v();
+  if(isEmployee()) document.querySelectorAll("#view #laptopf input,#view #laptopf button").forEach(x=>x.disabled=true);
 }
 function soft(){ if(S.route!=="onboard") render(); else renderNav(); }
 
@@ -2113,7 +2489,9 @@ function editEmployee(e){
 }
 
 document.addEventListener("click",ev=>{
+  if(ev.target.closest("[data-mgr-sel]")) return;
   const t=ev.target.closest("[data-go],[data-emp],[data-retry],[data-provision],[data-offboard],[data-proto],[data-edit],[data-lv],[data-activate],[data-offrun],[data-offcancel]"); if(!t) return;
+  if(isEmployee()&&t.matches("[data-retry],[data-provision],[data-offboard],[data-proto],[data-edit],[data-activate],[data-offrun],[data-offcancel]")){ toast("Only HR can do this."); return; }
   if(t.dataset.activate){const e=S.emps.find(x=>x.id==t.dataset.activate);if(e&&e.grants.gws==="created"){e.grants.gws="active";log("Work email activated early by HR",e,"gws","ok");settle(e);toast(`${e.email} is now active.`);render()}return}
   if(t.dataset.lv){lvAction(t.dataset.lv);return}
   if(t.dataset.edit){editEmployee(S.emps.find(x=>x.id==t.dataset.edit));return}
@@ -2136,6 +2514,7 @@ document.addEventListener("click",ev=>{
 
 document.addEventListener("change",ev=>{
   const t=ev.target;
+  if(t.dataset.task&&isEmployee()){ t.checked=!t.checked; toast("Only HR can do this."); return; }
   if(t.dataset.task&&t.dataset.task.split(":")[1]==="off"&&S.off.online){const [eid,,i]=t.dataset.task.split(":");const e=S.emps.find(x=>x.id==eid);const k=e.offTasks[i];
     offCall("POST",`/api/offboarding/${e.offId}/steps/${k.key}`,{done:t.checked}).then(r=>{if(!r.ok)toast(r.error);else{log(`Checklist: ${k.t}${t.checked?"":" (unticked)"}`,e,null,"ok");if(e.status==="offboarded")toast(`${e.name} is fully offboarded`)}render()});return}
   if(t.dataset.task){const [eid,ph,i]=t.dataset.task.split(":");const e=S.emps.find(x=>x.id==eid);const list=ph==="on"?e.onTasks:e.offTasks;list[i].done=t.checked;log(`Checklist: ${list[i].t}${t.checked?"":" (unticked)"}`,e,null,"ok");settle(e);render();return}
@@ -2152,7 +2531,7 @@ document.addEventListener("input",ev=>{
   if(t.id==="f-email"){t.dataset.touched="1";showEmailError("f-email",emailTaken(t.value)?emailProblem(t.value):"")}
   if(t.id==="e-email"){showEmailError("e-email",emailTaken(t.value,Number(t.dataset.id))?emailProblem(t.value,Number(t.dataset.id)):"")}
   if(t.id==="af-q"){S.af={q:t.value,app:$("#af-app").value,res:$("#af-res").value};const r=keepFocus("af-q");render();r()}
-  if(t.id==="q"){S.q=t.value;const r=keepFocus("q");render();r()}
+  if(t.id==="q"){S.q=t.value;S.empPage=1;const r=keepFocus("q");render();r()}
   if(t.id==="lv-q"){S.lvUi.q=t.value;const r=keepFocus("lv-q");render();r()}
 });
 document.addEventListener("submit",ev=>{
@@ -2169,7 +2548,7 @@ document.addEventListener("submit",ev=>{
   go("employee",e.id); provision(e,apps);
 });
 
-const h=location.hash.slice(1); if(NAV.some(n=>n[0]===h)||h==="myleave") S.route=h;
+const h=location.hash.slice(1); if(NAV.some(n=>n[0]===h)||["profile","account","myleave","team"].includes(h)) S.route=h;
 document.addEventListener("click",ev=>{ if(ev.target.closest("#theme")) toggleTheme(); });
 try{ matchMedia("(prefers-color-scheme: dark)").addEventListener("change",()=>{ let t=null; try{t=localStorage.getItem(THEME_KEY)}catch(e){} if(!t) applyTheme(theme()); }); }catch(e){}
 applyTheme(theme());

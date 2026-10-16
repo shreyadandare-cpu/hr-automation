@@ -2,7 +2,7 @@ import express from "express";
 import L from "../../frontend/leave-rules.js";
 import { pool } from "./db.js";
 import { requireAuth, requireHr } from "./auth.js";
-import { approverOf } from "./teams.js";
+import { approverOf, approverMap } from "./teams.js";
 
 const num = (v) => (v === null || v === undefined ? null : Number(v));
 const todayIso = () => new Date().toISOString().slice(0, 10);
@@ -18,12 +18,11 @@ const toEmp = (e) => ({ name: e.name, status: e.status, start: e.start_date, cas
 
 // Employees see and act on their own leave only; HR sees everyone and makes the decisions.
 const isHr = (req) => req.user && req.user.role === "hr";
-const isManager = (req) => req.user && req.user.role === "manager";
 const self = (req) => req.user.email.toLowerCase();
 // A reporting manager decides their own team's requests; HR decides the managers' own (and anyone without a manager).
 // Only the reporting manager decides. HR views leave but never approves; requests with no manager to approve them
 // (the managers' own, or someone whose manager has left) are approved automatically when submitted.
-const mayDecide = (req, approver) => isManager(req) && approver !== "hr" && approver === self(req);
+const mayDecide = (req, approver) => !isHr(req) && approver !== "hr" && approver === self(req);
 const notYours = () => ({ error: "Only this person's reporting manager can approve or decline this request." });
 
 const holidayDays = async (db) => (await db.query("SELECT day FROM holidays ORDER BY day")).rows.map((h) => h.day);
@@ -68,17 +67,15 @@ export function leaveRouter(wrap) {
     let scope = null;   // null = everyone (HR)
     if (!isHr(req)) {
       scope = [self(req)];
-      if (isManager(req)) {
-        const { rows } = await pool.query("SELECT lower(work_email) AS e FROM employees WHERE lower(reporting_manager)=$1", [self(req)]);
-        scope.push(...rows.map((x) => x.e));
-      }
+      // plus the people they are reporting manager of (set by HR in the Employees list)
+      const { rows } = await pool.query(
+        `SELECT lower(e.work_email) AS e FROM employees e JOIN employees me ON lower(me.name) = lower(e.manager)
+         WHERE lower(me.work_email) = $1`, [self(req)]);
+      scope.push(...rows.map((x) => x.e));
     }
     const where = scope ? "WHERE lower(work_email) = ANY($1)" : "";
     const args = scope ? [scope] : [];
-    const { rows: rm } = await pool.query(
-      `SELECT lower(e.work_email) AS email, lower(e.reporting_manager) AS rm, m.status AS mstatus FROM employees e
-       LEFT JOIN employees m ON lower(m.work_email)=lower(e.reporting_manager) ${scope ? "WHERE lower(e.work_email) = ANY($1)" : ""}`, args);
-    const approvers = Object.fromEntries(rm.map((x) => [x.email, x.rm && x.mstatus && !["offboarding", "offboarded"].includes(x.mstatus) ? x.rm : "hr"]));
+    const approvers = await approverMap(pool, scope);
     const [reqs, comps, hols, pay] = await Promise.all([
       pool.query(`SELECT * FROM leave_requests ${where} ORDER BY from_date DESC, id DESC`, args),
       pool.query(`SELECT * FROM comp_off_credits ${where} ORDER BY worked_on DESC`, args),

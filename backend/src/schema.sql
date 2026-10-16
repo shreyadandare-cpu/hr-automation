@@ -166,6 +166,19 @@ CREATE TABLE IF NOT EXISTS offboarding_steps (
   UNIQUE (offboarding_id, key)
 );
 
+CREATE TABLE IF NOT EXISTS profiles (
+  email      TEXT PRIMARY KEY,
+  data       JSONB NOT NULL DEFAULT '{}',
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS profile_photos (
+  email       TEXT PRIMARY KEY,
+  stored_name TEXT NOT NULL,
+  mime        TEXT NOT NULL,
+  updated_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
 -- Reporting managers. A 'manager' login approves their team's leave; HR approves the managers' own leave.
 ALTER TABLE users DROP CONSTRAINT IF EXISTS users_role_check;
 ALTER TABLE users ADD CONSTRAINT users_role_check CHECK (role IN ('hr','manager','employee'));

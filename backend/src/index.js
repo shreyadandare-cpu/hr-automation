@@ -9,7 +9,7 @@ import { sessionRouter, accountRouter, usersRouter } from "./users.js";
 
 const DOMAIN = "wohlig.com";
 const here = path.dirname(fileURLToPath(import.meta.url));
-const root = path.resolve(here, "../..");
+const frontendDir = path.resolve(here, "../../frontend");
 
 const clean = (s) =>
   String(s || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/[^a-z0-9]/g, "");
@@ -133,7 +133,7 @@ app.post("/api/onboarding", wrap(async (req, res) => {
 app.get("/favicon.ico", (_req, res) => res.status(204).end());
 app.get("/favicon.ico", (_req, res) => res.status(204).end());
 app.get("/login", (req, res) => (req.user ? res.redirect("/") : res.sendFile(path.join(here, "../public/login.html"))));
-app.get("/", (req, res) => (req.user ? res.sendFile(path.join(root, "hr-access-hub.html")) : res.redirect("/login")));
+app.get("/", (req, res) => (req.user ? res.sendFile(path.join(frontendDir, "hr-access-hub.html")) : res.redirect("/login")));
 
 app.use((err, _req, res, _next) => {
   console.error(err);

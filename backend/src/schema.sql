@@ -165,3 +165,8 @@ CREATE TABLE IF NOT EXISTS offboarding_steps (
   done_at        TIMESTAMPTZ,
   UNIQUE (offboarding_id, key)
 );
+
+-- Reporting managers. A 'manager' login approves their team's leave; HR approves the managers' own leave.
+ALTER TABLE users DROP CONSTRAINT IF EXISTS users_role_check;
+ALTER TABLE users ADD CONSTRAINT users_role_check CHECK (role IN ('hr','manager','employee'));
+ALTER TABLE employees ADD COLUMN IF NOT EXISTS reporting_manager TEXT;

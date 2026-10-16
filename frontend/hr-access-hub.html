@@ -8,7 +8,7 @@
    Light and dark themes: follows the system setting until the user picks one with the toggle. */
 :root{
   color-scheme:light;
-  --surface:#fff; --surface-2:rgba(255,255,255,.75); --surface-3:rgba(255,255,255,.85); --tint:#eceeff; --tint-2:#f1f2ff; --card-edge:rgba(255,255,255,.9); --toast-fg:#fff;
+  --surface:#fff; --surface-2:rgba(255,255,255,.75); --surface-3:rgba(255,255,255,.85); --tint:#eceeff; --tint-2:#f1f2ff; --card-edge:rgba(255,255,255,.9); --toast-fg:#fff; --lv-casual:#4f5fd9; --lv-sick:#1f8a5b; --lv-comp:#0f8592; --lv-unpaid:#c2552b; --lv-track:rgba(77,73,221,.10);
   --tile-grad:linear-gradient(135deg,#eef0ff,#e3e6ff); --callout:rgba(236,238,255,.85);
   --blob1:rgba(169,187,255,.45); --blob2:rgba(198,205,255,.55); --blob3:rgba(189,238,226,.38); --blob4:rgba(220,200,255,.35);
   --paper:#fdfcff; --paper-2:#f5f5fe; --ink:#0e0a38; --ink-dim:#555177; --ink-faint:#7c7aa0;
@@ -36,7 +36,7 @@
   --grad-btn:linear-gradient(135deg,#8d9bff -20%,#5668e8 45%,#4254d4);
   --glass:linear-gradient(135deg,rgba(40,38,78,.85),rgba(28,27,58,.7) 45%,rgba(36,34,72,.8));
   --glass-shadow:inset 0 1px 0 rgba(255,255,255,.07),0 2px 6px rgba(0,0,0,.3),0 24px 60px rgba(0,0,0,.35);
-  --surface:#23224a; --surface-2:rgba(255,255,255,.06); --surface-3:rgba(255,255,255,.08); --tint:rgba(141,155,255,.16); --tint-2:rgba(141,155,255,.14); --card-edge:rgba(255,255,255,.08); --toast-fg:#0f0e1f;
+  --surface:#23224a; --surface-2:rgba(255,255,255,.06); --surface-3:rgba(255,255,255,.08); --tint:rgba(141,155,255,.16); --tint-2:rgba(141,155,255,.14); --card-edge:rgba(255,255,255,.08); --toast-fg:#0f0e1f; --lv-casual:#8d9bff; --lv-sick:#5fd3a0; --lv-comp:#4fd1dc; --lv-unpaid:#f29a6b; --lv-track:rgba(255,255,255,.10);
   --tile-grad:linear-gradient(135deg,rgba(141,155,255,.22),rgba(141,155,255,.12)); --callout:rgba(141,155,255,.14);
   --blob1:rgba(80,92,210,.35); --blob2:rgba(120,90,220,.25); --blob3:rgba(40,150,130,.2); --blob4:rgba(150,90,200,.2);
 }
@@ -50,7 +50,7 @@
     --grad-btn:linear-gradient(135deg,#8d9bff -20%,#5668e8 45%,#4254d4);
     --glass:linear-gradient(135deg,rgba(40,38,78,.85),rgba(28,27,58,.7) 45%,rgba(36,34,72,.8));
     --glass-shadow:inset 0 1px 0 rgba(255,255,255,.07),0 2px 6px rgba(0,0,0,.3),0 24px 60px rgba(0,0,0,.35);
-    --surface:#23224a; --surface-2:rgba(255,255,255,.06); --surface-3:rgba(255,255,255,.08); --tint:rgba(141,155,255,.16); --tint-2:rgba(141,155,255,.14); --card-edge:rgba(255,255,255,.08); --toast-fg:#0f0e1f;
+    --surface:#23224a; --surface-2:rgba(255,255,255,.06); --surface-3:rgba(255,255,255,.08); --tint:rgba(141,155,255,.16); --tint-2:rgba(141,155,255,.14); --card-edge:rgba(255,255,255,.08); --toast-fg:#0f0e1f; --lv-casual:#8d9bff; --lv-sick:#5fd3a0; --lv-comp:#4fd1dc; --lv-unpaid:#f29a6b; --lv-track:rgba(255,255,255,.10);
     --tile-grad:linear-gradient(135deg,rgba(141,155,255,.22),rgba(141,155,255,.12)); --callout:rgba(141,155,255,.14);
     --blob1:rgba(80,92,210,.35); --blob2:rgba(120,90,220,.25); --blob3:rgba(40,150,130,.2); --blob4:rgba(150,90,200,.2);
   }
@@ -219,6 +219,22 @@ tr.click:hover td{background:rgba(66,84,212,.04)}
 .tile{display:flex;align-items:center;gap:12px;border-radius:16px;padding:12px 14px;cursor:pointer;background:var(--surface-2);box-shadow:inset 0 0 0 1px var(--line);transition:box-shadow .2s,background .2s}
 .tile input{accent-color:var(--purple);width:17px;height:17px;flex:none}
 .tile.off{opacity:.5;cursor:not-allowed}
+.combo{position:relative}
+.combo-menu{position:absolute;left:0;right:0;top:calc(100% + 6px);z-index:30;background:var(--surface);border-radius:14px;box-shadow:0 18px 40px rgba(14,10,56,.22),inset 0 0 0 1px var(--line-2);padding:6px;max-height:300px;overflow-y:auto}
+.combo-menu[hidden]{display:none}
+.combo-opt{display:flex;align-items:center;gap:12px;width:100%;border:0;background:none;padding:8px 10px;border-radius:10px;text-align:left;cursor:pointer;color:var(--ink);font:inherit}
+.combo-opt:hover,.combo-opt.on{background:var(--tint)}
+.combo-opt .avatar{width:30px;height:30px;font-size:11px;box-shadow:none}
+.combo-opt b{display:block;font-weight:600;font-size:14px;line-height:1.3}.combo-opt .sub{display:block;font-size:12px;color:var(--ink-faint);line-height:1.3}
+.combo-empty{padding:10px 12px;color:var(--ink-faint);font-size:13px}
+.pchips{display:flex;flex-wrap:wrap;gap:8px}
+.pchip{display:inline-flex;align-items:center;gap:8px;padding:4px 6px 4px 4px;border-radius:999px;background:var(--surface);box-shadow:inset 0 0 0 1px var(--line-2);font-size:13.5px;font-weight:500;color:var(--ink)}
+.pchip .avatar{width:24px;height:24px;font-size:10px;box-shadow:none}
+.pchip button{border:0;background:var(--paper-2);color:var(--ink-dim);width:22px;height:22px;border-radius:50%;cursor:pointer;line-height:1;font-size:15px;display:grid;place-items:center}
+.pick-list{max-height:340px;overflow-y:auto;border-radius:16px;box-shadow:inset 0 0 0 1px var(--line)}
+.pick-list .radio-li{padding:10px 16px}.pick-list .radio-li:first-child{border-top:0}.pick-list .radio-li[hidden]{display:none}
+.picked{display:flex;align-items:center;gap:12px;padding:10px 14px;border-radius:14px;background:rgba(66,84,212,.06);box-shadow:inset 0 0 0 1.5px var(--purple)}
+.picked .person{flex:1;min-width:0}
 .tile:has(input:checked){background:var(--tint-2);box-shadow:inset 0 0 0 1.5px var(--purple)}
 .tile .t b{display:block;font-size:14px;font-weight:600}
 .tile .t span{display:block;font-size:12px;color:var(--ink-faint)}
@@ -277,15 +293,15 @@ textarea.input{resize:vertical;font-family:var(--body)}
 .foot{display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap;padding-block:28px 40px;border-top:1px solid var(--line);color:var(--ink-faint);font-size:13px}
 .foot .logo{font-size:22px}
 /* Leave */
-.settle{display:flex;flex-direction:column;border-radius:14px;box-shadow:inset 0 0 0 1px var(--line);background:#fff}
+.settle{display:flex;flex-direction:column;border-radius:14px;box-shadow:inset 0 0 0 1px var(--line);background:var(--surface)}
 .settle>div{display:flex;justify-content:space-between;gap:12px;align-items:baseline;padding:10px 14px;border-top:1px solid var(--line);font-size:14px}
 .settle>div:first-child{border-top:0}.settle small{display:block;font-size:12px;color:var(--ink-faint)}
 .settle b{white-space:nowrap}.settle .neg{color:var(--bad)}.settle .tot{background:var(--paper-2);border-radius:0 0 14px 14px}
 .lv-dates{display:grid;grid-template-columns:minmax(0,1fr) auto minmax(0,1fr);gap:12px;align-items:end}
 .lv-dates>[hidden]{display:none}
-.lv-days{align-self:center;margin-top:20px;padding:8px 12px;border-radius:12px;box-shadow:inset 0 0 0 1px var(--line-2);font-size:13px;font-weight:600;white-space:nowrap;background:#fff}
+.lv-days{align-self:center;margin-top:20px;padding:8px 12px;border-radius:12px;box-shadow:inset 0 0 0 1px var(--line-2);font-size:13px;font-weight:600;white-space:nowrap;background:var(--surface)}
 .ring{width:132px;height:132px;border-radius:50%;display:grid;place-items:center;margin:4px auto 18px}
-.ring>div{width:104px;height:104px;border-radius:50%;background:#fff;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center}
+.ring>div{width:104px;height:104px;border-radius:50%;background:var(--surface);color:var(--ink);display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center}
 .ring b{font:600 17px/1.2 var(--display)}.ring span{font-size:12px;color:var(--ink-faint)}
 .lv-cells{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px 16px;margin:0;padding-top:14px;border-top:1px solid var(--line)}
 .lv-cells dt{font:600 10.5px/1.2 var(--body);color:var(--ink-faint);text-transform:uppercase;letter-spacing:.14em}
@@ -512,7 +528,7 @@ const ICONS = {
   info:'<circle cx="12" cy="12" r="9"/><path d="M12 8v5M12 16h.01"/>',
   bundle:'<rect x="4" y="4" width="7" height="7" rx="2"/><rect x="13" y="4" width="7" height="7" rx="2"/><rect x="4" y="13" width="7" height="7" rx="2"/><rect x="13" y="13" width="7" height="7" rx="2"/>',
 };
-const NAV = [["dashboard","Dashboard"],["employees","Employees"],["onboard","Onboarding"],["offboard","Offboarding"],["leave","Leave"],["myleave","My leave"],["templates","Access bundles"],["audit","Audit log"]];
+const NAV = [["dashboard","Dashboard"],["employees","Employees"],["onboard","Onboarding"],["offboard","Offboarding"],["leave","Leave"],["templates","Access bundles"],["audit","Audit log"]];
 const svg = k=>`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${ICONS[k]}</svg>`;
 /* ---------- Light / dark theme ---------- */
 const THEME_KEY="hr_theme";
@@ -529,12 +545,14 @@ function applyTheme(t){
 function toggleTheme(){ const t=theme()==="dark"?"light":"dark"; try{localStorage.setItem(THEME_KEY,t)}catch(e){} applyTheme(t); }
 /* Signed in (S.user set): employees only see My documents and My leave. HR sees everything plus Users.
    Without a backend S.user stays null and the page behaves as the old prototype. */
-const isEmployee = ()=>!!S.user&&S.user.role==="employee";
-function navItems(){ return !S.user?NAV:isEmployee()?[["docs","My documents"],["myleave","My leave"]]:[...NAV,["users","Users"]]; }
+const isEmployee = ()=>!!S.user&&S.user.role!=="hr";   // employees and reporting managers: their own pages
+const isManager = ()=>!!S.user&&S.user.role==="manager";
+function navItems(){ return !S.user?[...NAV,["myleave","My leave"]]:isEmployee()?[["dashboard","Dashboard"],["docs","My documents"],["myleave","My leave"],...(isManager()?[["team","Team leave"]]:[])]:[...NAV,["users","Users"]]; }
 function routeAllowed(r){
   if(!S.user) return r!=="account"&&r!=="users";
   if(r==="account") return true;
-  return isEmployee()?r==="docs"||r==="myleave"||(r==="leaveapply"&&!!S.lw&&S.lw.self):true;
+  if(isEmployee()) return r==="dashboard"||r==="docs"||r==="myleave"||(r==="team"&&isManager())||(r==="leaveapply"&&!!S.lw&&S.lw.self);
+  return r!=="myleave"&&!(r==="leaveapply"&&S.lw&&S.lw.self);   // HR uses Leave; My leave is the employee view
 }
 function renderNav(){
   const attn = S.emps.filter(e=>failedOf(e).length).length;
@@ -545,7 +563,96 @@ function go(r,sel){S.route=r; if(sel!==undefined)S.sel=sel; const h="#"+(r==="em
 window.addEventListener("hashchange",()=>{const h=location.hash.slice(1);if(navItems().some(n=>n[0]===h)||h==="docs"||h==="account"){S.route=h;render();window.scrollTo(0,0)}});
 
 /* ---------- views ---------- */
+/* ---------- Team leave: a reporting manager approves their own team's requests ---------- */
+function vTeam(){
+  const me=lc(myEmail()), today=lvToday(), year=Number(today.slice(0,4));
+  const team=S.emps.filter(e=>lc(e.email)!==me&&approverOf(e.email)===me).sort((a,b)=>a.name<b.name?-1:1);
+  const inTeam=new Set(team.map(e=>lc(e.email)));
+  const all=S.lv.requests.filter(r=>inTeam.has(lc(r.email))).map(r=>({...r,emp:empBy(r.email)})).filter(r=>r.emp);
+  const pend=all.filter(r=>r.status==="pending").sort((a,b)=>a.from<b.from?-1:1);
+  const compPend=S.lv.compOffs.filter(c=>c.status==="pending"&&inTeam.has(lc(c.email))).map(c=>({...c,emp:empBy(c.email)})).filter(c=>c.emp);
+  const away=all.filter(r=>r.status==="approved"&&r.to>=today).sort((a,b)=>a.from<b.from?-1:1);
+  const done=all.filter(r=>r.status==="approved"||r.status==="declined").sort((a,b)=>a.from<b.from?1:-1).slice(0,15);
+  const pendDays=e=>all.filter(r=>r.status==="pending"&&lc(r.email)===lc(e.email)).reduce((n,r)=>n+Number(r.days||0),0);
+  return `<section class="section">
+  ${head("Team","Team <span class=\"grad\">leave.</span>","Leave and comp-off requests from the people who report to you. You approve them; your own leave is approved automatically.","",true)}
+  <div class="grid g4">
+    <div class="card stat"><span class="num">${team.length}</span><span class="lbl">People in your team</span></div>
+    <div class="card stat ${pend.length+compPend.length?"alert":""}"><span class="num">${pend.length+compPend.length}</span><span class="lbl">Waiting for you</span></div>
+    <div class="card stat"><span class="num">${away.filter(r=>r.from<=today).length}</span><span class="lbl">Away today</span></div>
+    <div class="card stat"><span class="num">${away.filter(r=>r.from>today).length}</span><span class="lbl">Upcoming leave</span></div>
+  </div>
+  <div class="grid g-main">
+    <div class="card"><div class="card-h"><h3>Requests waiting</h3><span class="muted">${pend.length+compPend.length} open</span></div>
+      ${compPend.map(c=>`<div class="li wrap"><div class="grow">${person(c.emp,`Comp off credit · worked on ${fdate(c.workedOn)}`)}<div class="meta" style="margin:6px 0 0 48px">“${esc(c.reason)}”</div></div>${decideBtns("comp-decide",c.id,c.email)}</div>`).join("")}
+      ${pend.map(r=>{const a=lvPreview(r);return `<div class="li wrap"><div class="grow">${person(r.emp,`${LTYPE[r.type]} · ${lrange(r)} · ${dd(a.paid+a.lop)}`)}
+        <div class="meta" style="margin:6px 0 0 48px">“${esc(r.reason)}”</div>
+        <div class="meta" style="margin:4px 0 0 48px">If approved now: <b style="color:var(--ink)">${dd(a.paid)} paid</b>${a.lop?` · <b style="color:var(--bad)">${dd(a.lop)} loss of pay</b>`:""}</div></div>
+        ${decideBtns("decide",r.id,r.email)}</div>`}).join("")}
+      ${pend.length||compPend.length?"":`<div class="empty">Nothing waiting. New requests from your team show up here.</div>`}
+    </div>
+    <div class="card"><div class="card-h"><h3>Away now &amp; coming up</h3></div>
+      ${away.length?away.map(r=>`<div class="li">${person(r.emp,`${LTYPE[r.type]} · ${lrange(r)}`)}</div>`).join(""):`<div class="empty">No one in your team is on approved leave.</div>`}
+    </div>
+  </div>
+  <div class="card"><div class="card-h"><h3>Team balances ${year}</h3></div><div class="tbl-wrap"><table><thead><tr><th>Employee</th><th>Casual left</th><th>Sick left</th><th>Comp off left</th><th>Waiting</th></tr></thead><tbody>
+    ${team.length?team.map(e=>{const b=lvBal(e,year);return `<tr><td>${person(e,e.title)}</td><td class="num-cell">${b.casual.left}</td><td class="num-cell">${b.sick.left}</td><td class="num-cell">${b.compoff.left}</td><td class="num-cell">${pendDays(e)?dd(pendDays(e)):"—"}</td></tr>`}).join("")
+      :`<tr><td colspan="5"><div class="empty">No one reports to you yet.</div></td></tr>`}
+  </tbody></table></div></div>
+  <div class="card"><div class="card-h"><h3>Decided recently</h3></div><div class="tbl-wrap"><table><thead><tr><th>Employee</th><th>Type</th><th class="hide-sm">Dates</th><th>Days</th><th>Status</th></tr></thead><tbody>
+    ${done.length?done.map(r=>`<tr><td>${person(r.emp,r.emp.title)}</td><td>${esc(LTYPE[r.type])}</td><td class="num-cell hide-sm">${esc(lrange(r))}</td><td class="num-cell">${r.status==="approved"?`${r.paidDays} paid${r.lopDays?` · ${r.lopDays} loss of pay`:""}`:dd(r.days)}</td><td><span class="pill ${LSTAT[r.status][1]}">${LSTAT[r.status][0]}</span></td></tr>`).join("")
+      :`<tr><td colspan="5"><div class="empty">Nothing decided yet.</div></td></tr>`}
+  </tbody></table></div></div>
+  </section>`;
+}
+
+/* The employee's own dashboard: their leave, their documents and what is coming up. No one else's data. */
+function vEmpDashboard(){
+  const me=empBy(myEmail()); if(!me) return `<section class="section"><div class="empty">Your employee record wasn't found. Ask HR to check your work email.</div></section>`;
+  const today=lvToday(), year=Number(today.slice(0,4)), b=R?lvBal(me,year):null;
+  const mine=reqsOf(me.email);
+  const pend=mine.filter(r=>r.status==="pending"), compPend=compsOf(me.email).filter(c=>c.status==="pending");
+  const next=mine.filter(r=>r.status==="approved"&&r.to>=today).sort((a,c)=>a.from<c.from?-1:1).slice(0,3);
+  const hols=S.lv.holidays.filter(h=>h.day>=today).slice(0,4);
+  const dm=S.docs[me.id]||{}, got=DOCS.filter(d=>(dm[d.k]||[]).length).length;
+  const first=me.name.split(" ")[0], when=new Date(today+"T00:00:00").toLocaleDateString("en-IN",{weekday:"long",day:"numeric",month:"long"});
+  return `
+  <section class="hero">
+    <div class="eyebrow">${esc(when)}</div>
+    <h1>Hello, <span class="grad">${esc(first)}.</span></h1>
+    <p>Your leave, your documents and what is coming up, in one place.</p>
+    <div class="row"><button class="btn primary" data-lv="me-new">Request leave</button><button class="btn glass" data-go="docs">Upload documents</button></div>
+    ${b?`<div class="grid g4 stats">
+      <div class="card stat"><span class="num">${b.casual.left}</span><span class="lbl">Casual leave available</span></div>
+      <div class="card stat"><span class="num">${b.sick.left}</span><span class="lbl">Sick leave available</span></div>
+      <div class="card stat"><span class="num">${b.compoff.left}</span><span class="lbl">Comp off available</span></div>
+      <div class="card stat"><span class="num">${pend.length+compPend.length}</span><span class="lbl">Waiting for approval</span></div>
+    </div>`:""}
+  </section>
+  <section class="section">
+    ${isManager()?(()=>{const n=S.lv.requests.filter(r=>r.status==="pending"&&lc(r.email)!==lc(me.email)&&approverOf(r.email)===lc(me.email)).length+S.lv.compOffs.filter(c=>c.status==="pending"&&approverOf(c.email)===lc(me.email)).length;
+      return n?`<div class="callout">${svg("info")}<div><b>${n} request${n===1?"":"s"} from your team ${n===1?"is":"are"} waiting for you.</b> <button class="btn link" data-go="team">Open Team leave</button></div></div>`:""})():""}
+    ${head("Coming up","What's <span class=\"grad\">next.</span>","",`<button class="btn link" data-go="myleave">My leave</button>`)}
+    <div class="grid g-main">
+      <div class="card"><div class="card-h"><h3>Your requests</h3><span class="muted">${pend.length+compPend.length} waiting</span></div>
+        ${pend.map(r=>`<div class="li"><div class="grow"><b style="font-weight:600">${esc(LTYPE[r.type])}</b> · ${esc(lrange(r))}<div class="meta">${dd(r.days)}</div></div><span class="pill p-warn">${myWaitPill("leave")}</span></div>`).join("")}
+        ${compPend.map(c=>`<div class="li"><div class="grow"><b style="font-weight:600">Comp off credit</b> · worked on ${esc(fdate(c.workedOn))}</div><span class="pill p-warn">${myWaitPill("comp")}</span></div>`).join("")}
+        ${next.map(r=>`<div class="li"><div class="grow"><b style="font-weight:600">${esc(LTYPE[r.type])}</b> · ${esc(lrange(r))}<div class="meta">${dd(r.days)}</div></div><span class="pill p-ok">Approved</span></div>`).join("")}
+        ${pend.length||compPend.length||next.length?"":`<div class="empty">No leave waiting or coming up.</div>`}
+      </div>
+      <div class="card"><div class="card-h"><h3>Holidays ahead</h3></div>
+        ${hols.length?hols.map(h=>`<div class="li"><div class="grow"><b style="font-weight:600">${esc(h.name)}</b><div class="meta">${esc(fdate(h.day))}</div></div></div>`).join(""):`<div class="empty">No upcoming holidays added yet.</div>`}
+      </div>
+    </div>
+    <div class="card"><div class="card-h"><h3>Your documents</h3><button class="btn link" data-go="docs">My documents</button></div>
+      <div class="card-b" style="display:flex;flex-direction:column;gap:10px">
+        <div class="progress"><i style="width:${Math.round(got/DOCS.length*100)}%"></i></div>
+        <span class="muted">${got} of ${DOCS.length} document types uploaded</span>
+      </div></div>
+  </section>`;
+}
 function vDashboard(){
+  if(isEmployee()) return vEmpDashboard();
   const act=S.emps.filter(e=>e.status==="active").length;
   const onb=S.emps.filter(e=>e.status==="onboarding");
   const leaving=S.emps.filter(e=>e.status==="offboarding"||e.lastDay&&e.status==="active");
@@ -777,7 +884,7 @@ async function boot(){
       if(isEmployee()){
         let e=S.emps.find(x=>(x.email||"").toLowerCase()===r.data.email.toLowerCase());
         if(!e){ e=mk({name:r.data.name,email:r.data.email,status:"onboarding",dept:"—",title:"—",manager:"—",start:"",grants:{},onTasks:[]}); S.emps.push(e); }
-        S.myId=e.id; S.route="docs";
+        S.myId=e.id; S.route="dashboard";
       }
     }
   }catch(e){ /* no backend: prototype mode */ }
@@ -1066,7 +1173,7 @@ function vUsers(){
   const top=head("People","Logins and <span class=\"grad\">roles.</span>","HR creates every account. New accounts start with the default password, and people can change it on their Account page.");
   if(!d) return `<section class="section">${top}<div class="card"><div class="card-b muted">Loading…</div></div></section>`;
   const rows=d.users.map(u=>`<tr><td><b>${esc(u.name||u.email)}</b><div class="muted">${esc(u.email)}</div></td>
-    <td><select class="input" data-u-role="${esc(u.email)}" style="max-width:140px" aria-label="Role for ${esc(u.email)}"><option value="employee" ${u.role==="employee"?"selected":""}>Employee</option><option value="hr" ${u.role==="hr"?"selected":""}>HR</option></select></td>
+    <td><select class="input" data-u-role="${esc(u.email)}" style="max-width:140px" aria-label="Role for ${esc(u.email)}"><option value="employee" ${u.role==="employee"?"selected":""}>Employee</option><option value="manager" ${u.role==="manager"?"selected":""}>Manager</option><option value="hr" ${u.role==="hr"?"selected":""}>HR</option></select></td>
     <td class="hide-sm">${u.lastLogin?esc(new Date(u.lastLogin).toLocaleString()):"Never"}</td>
     <td><div class="row"><button type="button" class="btn glass sm" data-u-reset="${esc(u.email)}">Reset password</button><button type="button" class="btn glass sm" data-u-del="${esc(u.email)}" ${u.email.toLowerCase()===me?"disabled":""}>Delete</button></div></td></tr>`).join("");
   return `<section class="section">${top}
@@ -1077,7 +1184,7 @@ function vUsers(){
   <div class="card"><div class="card-h"><h3>Create an account</h3></div><div class="card-b">
     <form id="ucf" class="row" novalidate>
       <input class="input" id="uc-email" type="email" placeholder="name.surname@wohlig.com" style="max-width:300px" aria-label="Work email" autocomplete="off">
-      <select class="input" id="uc-role" style="max-width:150px" aria-label="Role"><option value="employee">Employee</option><option value="hr">HR</option></select>
+      <select class="input" id="uc-role" style="max-width:150px" aria-label="Role"><option value="employee">Employee</option><option value="manager">Manager</option><option value="hr">HR</option></select>
       <button type="submit" class="btn primary sm">Create account</button>
       <button type="button" class="btn glass sm" data-u-bulk ${d.withoutAccount?"":"disabled"}>Create for everyone without one (${d.withoutAccount})</button>
     </form>
@@ -1247,6 +1354,15 @@ const reqsOf = email=>S.lv.requests.filter(r=>lc(r.email)===lc(email));
 const compsOf = email=>S.lv.compOffs.filter(c=>lc(c.email)===lc(email));
 const payOf = email=>S.lv.pay[lc(email)]||{monthlyGross:null,casualOpening:0};
 const holDays = ()=>S.lv.holidays.map(h=>h.day);
+/* Approvals: a reporting manager decides their team's requests, HR decides the managers' own. Without sign-in (prototype) anyone can. */
+const approverOf=email=>(S.lv.approvers||{})[lc(email)]||"hr";
+function canDecide(email){ if(!S.user) return true; const a=approverOf(email); return isManager()&&a!=="hr"&&a===lc(S.user.email); }
+const approverName=email=>{const a=approverOf(email);return a==="hr"?"HR":((empBy(a)||{}).name||a)};
+const decideBtns=(kind,id,email)=>canDecide(email)
+  ?`<div class="row" style="gap:8px"><button class="btn glass sm" data-lv="${kind}:${id}:declined">Decline</button><button class="btn primary sm" data-lv="${kind}:${id}:approved">Approve</button></div>`
+  :`<span class="pill p-warn">Waiting for ${esc(approverName(email))}</span>`;
+/* What an employee sees on their own pending requests. Managers' own leave goes to HR. */
+const myWaitPill=kind=>approverOf(myEmail())==="hr"?"Waiting for HR":kind==="comp"?"Waiting for reporting manager":"Waiting for manager";
 function lvBal(e,year){ return R.balances(year,{start:e.start,casualOpening:payOf(e.email).casualOpening},reqsOf(e.email),compsOf(e.email)); }
 function lvPreview(r){ const e=empBy(r.email); const days=R.requestDays(r.from,r.to,r.half,holDays()); return e?R.allocate(r.type,days,lvBal(e,Number(r.from.slice(0,4)))):{paid:0,lop:days}; }
 function lopDaysIn(month,email){
@@ -1341,7 +1457,7 @@ async function lvLoad(){
     if(r.status===401||r.status===403){ render(); return; }   // signed out or not allowed: no sample data either
     if(!r.ok||!r.data) throw 0;
     const d=r.data;
-    S.lv={online:true,today:d.today,requests:d.requests,compOffs:d.compOffs,holidays:d.holidays,pay:Object.fromEntries(d.pay.map(p=>[lc(p.email),p]))};
+    S.lv={online:true,today:d.today,requests:d.requests,compOffs:d.compOffs,holidays:d.holidays,pay:Object.fromEntries(d.pay.map(p=>[lc(p.email),p])),approvers:d.approvers||{}};
   }catch(e){ if(!S.lv.online&&!S.lv.requests.length) lvSample(); }
   render();
 }
@@ -1427,13 +1543,13 @@ function vLeave(){
     <div class="card stat ${lopDaysIn(today.slice(0,7))?"alert":""}"><span class="num">${lopDaysIn(today.slice(0,7))}</span><span class="lbl">Loss-of-pay days this month</span></div>
   </div>
   <div class="grid g-main">
-    <div class="card"><div class="card-h"><h3>Requests waiting</h3><span class="muted">${pend.length+compPend.length} open</span></div>
+    <div class="card"><div class="card-h"><h3>Requests waiting</h3><span class="muted">${pend.length+compPend.length} open · approved by each person's reporting manager</span></div>
       ${compPend.map(c=>`<div class="li wrap"><div class="grow">${person(c.emp,`Comp off credit · worked on ${fdate(c.workedOn)}`)}<div class="meta" style="margin:6px 0 0 48px">“${esc(c.reason)}”</div></div>
-        <div class="row" style="gap:8px"><button class="btn glass sm" data-lv="comp-decide:${c.id}:declined">Decline</button><button class="btn primary sm" data-lv="comp-decide:${c.id}:approved">Approve</button></div></div>`).join("")}
+        ${decideBtns("comp-decide",c.id,c.email)}</div>`).join("")}
       ${pend.length?pend.map(r=>{const a=lvPreview(r);return `<div class="li wrap"><div class="grow">${person(r.emp,`${LTYPE[r.type]} · ${lrange(r)} · ${dd(a.paid+a.lop)}`)}
         <div class="meta" style="margin:6px 0 0 48px">“${esc(r.reason)}”</div>
         <div class="meta" style="margin:4px 0 0 48px">If approved now: <b style="color:var(--ink)">${dd(a.paid)} paid</b>${a.lop?` · <b style="color:var(--bad)">${dd(a.lop)} loss of pay</b>`:""}</div></div>
-        <div class="row" style="gap:8px"><button class="btn glass sm" data-lv="decide:${r.id}:declined">Decline</button><button class="btn primary sm" data-lv="decide:${r.id}:approved">Approve</button></div></div>`}).join(""):(compPend.length?"":`<div class="empty">No requests waiting. New ones show up here.</div>`)}
+        ${decideBtns("decide",r.id,r.email)}</div>`}).join(""):(compPend.length?"":`<div class="empty">No requests waiting. New ones show up here.</div>`)}
     </div>
     <div class="card"><div class="card-h"><h3>Away now &amp; coming up</h3></div>
       ${away.length?away.map(r=>`<div class="li">${person(r.emp,`${LTYPE[r.type]} · ${lrange(r)}`)}</div>`).join(""):`<div class="empty">No one is on approved leave.</div>`}
@@ -1530,9 +1646,19 @@ function vOffboard(){
   const mgrs=S.emps.filter(m=>m.status==="active"&&(!e||m.id!==e.id)).sort((a,b)=>a.name<b.name?-1:1);
   const toName=(empBy(w.to)||{}).name||"";
   let body="";
-  if(w.step===1) body=`<div class="card"><div class="card-h"><h3>Who is leaving?</h3><span class="muted">${cands.length} people</span></div>
-      ${er.emp?`<div class="card-b" style="padding-bottom:0"><span class="ferr" role="alert">${esc(er.emp)}</span></div>`:""}
-      ${cands.map(c=>`<label class="radio-li"><input type="radio" name="ow-emp" value="${c.id}" ${e&&e.id===c.id?"checked":""}>${person(c,c.title+" · "+c.dept)}<span style="margin-left:auto">${epill(c)}</span></label>`).join("")}</div>`;
+  if(w.step===1){
+    const q=lc(w.q||""), hit=c=>!q||lc(c.name+" "+c.title+" "+c.dept+" "+c.email).includes(q);
+    body=`<div class="card"><div class="card-h"><h3>Who is leaving?</h3><span class="muted">${cands.length} people</span></div>
+      <div class="card-b" style="display:flex;flex-direction:column;gap:12px;padding-bottom:16px">
+        <input class="input" id="ow-q" type="search" placeholder="Search by name, job title or team" aria-label="Search employees" value="${esc(w.q||"")}" autocomplete="off">
+        ${e?`<div class="picked">${person(e,e.title+" · "+e.dept)}<span class="pill p-info">Selected</span></div>`:""}
+        ${er.emp?`<span class="ferr" role="alert">${esc(er.emp)}</span>`:""}
+        <div class="pick-list" role="radiogroup" aria-label="Employees">
+          ${cands.map(c=>`<label class="radio-li" data-s="${esc(lc(c.name+" "+c.title+" "+c.dept+" "+c.email))}" ${hit(c)?"":"hidden"}><input type="radio" name="ow-emp" value="${c.id}" ${e&&e.id===c.id?"checked":""}>${person(c,c.title+" · "+c.dept)}<span style="margin-left:auto">${epill(c)}</span></label>`).join("")}
+          <div class="empty" id="ow-none" ${cands.some(hit)?"hidden":""}>No one matches that search.</div>
+        </div>
+      </div></div>`;
+  }
   if(w.step===2){
     const live=liveTools(e);
     body=`<div class="card"><div class="card-h"><h3>Access to remove</h3><span class="muted">Claude</span></div><div class="card-b">
@@ -1629,9 +1755,10 @@ function vLeaveApply(){
   if(w.step===3) body=`<div class="card"><div class="card-h"><h3>Note</h3></div><div class="card-b form">
       <div style="grid-column:1/-1">${wf("lw-reason","Note",`<textarea class="input" id="lw-reason" rows="3" placeholder="Type here">${esc(w.reason)}</textarea>`,er.reason)}</div>
       <div class="field" style="grid-column:1/-1"><label for="lw-notify">Notify <span class="muted">(optional)</span></label>
-        <input class="input" id="lw-notify" list="lw-people" placeholder="Search employee" autocomplete="off">
-        <datalist id="lw-people">${S.emps.filter(x=>x.status!=="offboarded"&&lc(x.email)!==lc(w.email)).map(x=>`<option value="${esc(x.name)}"></option>`).join("")}</datalist>
-        <div>${w.notify.map((x,i)=>`<span class="fchip">${esc((empBy(x)||{name:x}).name)}<button type="button" data-lw-rmn="${i}" aria-label="Remove">×</button></span>`).join("")}</div></div></div></div>`;
+        <div class="combo"><input class="input" id="lw-notify" type="search" placeholder="Search by name or job title" autocomplete="off" role="combobox" aria-expanded="false" aria-controls="lw-menu" aria-autocomplete="list">
+          <div class="combo-menu" id="lw-menu" role="listbox" hidden></div></div>
+        ${w.notify.length?`<div class="pchips">${w.notify.map((x,i)=>{const p=empBy(x)||{name:x,color:"var(--purple)"};return `<span class="pchip">${avatar(p)}<span>${esc(p.name)}</span><button type="button" data-lw-rmn="${i}" aria-label="Remove ${esc(p.name)}">×</button></span>`}).join("")}</div>`:`<span class="hint">They get a note about your leave. Your approver is told anyway.</span>`}
+      </div></div></div>`;
   if(w.step===4){
     const v=lwVal(w);
     body=`${w.self?"":rsec("Employee","data-lw-goto",1,rkv([["Name",esc(e.name)],["Work email",`<span class="mono">${esc(e.email)}</span>`]]))}
@@ -1641,7 +1768,7 @@ function vLeaveApply(){
     <label class="check" style="border:0;padding:0"><input type="checkbox" id="lw-reviewed" ${w.reviewed?"checked":""}><div class="grow"><div class="lbl">I have reviewed all the details above</div></div></label>`;
   }
   return `<section class="section">
-  ${head(w.self?"Me":"Time off",w.self?"Request <span class=\"grad\">leave.</span>":"Add leave for <span class=\"grad\">someone.</span>",w.self?"Pick your dates and the type of leave, add a note, then review. Your manager approves it.":"For when HR enters leave on an employee's behalf. It still goes to the approval list.","",true)}
+  ${head(w.self?"Me":"Time off",w.self?"Request <span class=\"grad\">leave.</span>":"Add leave for <span class=\"grad\">someone.</span>",w.self?`Pick your dates and the type of leave, add a note, then review. ${approverOf(w.email)==="hr"?"It is approved automatically.":"Your manager approves it."}`:"For when HR enters leave on an employee's behalf. It still goes to the approval list.","",true)}
   ${stepper(LW_STEPS,w.step)}
   <form id="lwf" class="grid" style="gap:22px" novalidate>${body}
   ${wizFoot("lw",w.step,w.step===4,w.reviewed,w.fromReview,"Request leave",false)}</form></section>`;
@@ -1660,13 +1787,25 @@ async function lwSubmit(){
     w.errors=errs; w.step=["email","from","to","half"].includes(k)?1:k==="type"?2:3; w.reviewed=false; render(); toast(errs[k]); return;
   }
   const e=empBy(v.email); log(`${LTYPE[v.type]} requested: ${lrange(v)}${v.notify.length?` (notify ${v.notify.map(x=>empBy(x).name).join(", ")})`:""}`,e,null,"info");
-  const back=w.self?"myleave":"leave"; S.lw=null; toast(w.self?"Leave requested. Your manager will review it.":`Leave request for ${e.name} sent for approval.`); go(back);
+  const back=w.self?"myleave":"leave"; S.lw=null; toast(w.self?(approverOf(v.email)==="hr"?"Leave approved.":"Leave requested. Your manager will review it."):`Leave request for ${e.name} sent for approval.`); go(back);
 }
-const lwAddNotify=()=>{const w=S.lw,n=$("#lw-notify"); if(!w||!n) return; const hit=S.emps.find(x=>lc(x.name)===lc(n.value.trim()));
-  if(hit&&!w.notify.includes(hit.email)&&lc(hit.email)!==lc(w.email)){ w.notify.push(hit.email); render(); $("#lw-notify")&&$("#lw-notify").focus(); }};
+/* Notify picker: type to filter colleagues, pick with a click or the arrow keys and Enter. */
+let lwMenuAt=0;
+function lwMenu(open){
+  const w=S.lw, inp=$("#lw-notify"), menu=$("#lw-menu"); if(!w||!inp||!menu) return;
+  if(!open){ menu.hidden=true; inp.setAttribute("aria-expanded","false"); return; }
+  const q=lc(inp.value.trim());
+  const opts=S.emps.filter(x=>x.status!=="offboarded"&&lc(x.email)!==lc(w.email)&&!w.notify.includes(x.email)&&(!q||lc(x.name+" "+x.title).includes(q)))
+    .sort((a,b)=>a.name<b.name?-1:1).slice(0,8);
+  lwMenuAt=Math.min(lwMenuAt,Math.max(0,opts.length-1));
+  menu.innerHTML=opts.length?opts.map((x,i)=>`<button type="button" class="combo-opt${i===lwMenuAt?" on":""}" role="option" aria-selected="${i===lwMenuAt}" data-lw-pick="${esc(x.email)}">${avatar(x)}<span><b>${esc(x.name)}</b><span class="sub">${esc(x.title)}</span></span></button>`).join("")
+    :`<div class="combo-empty">No one matches that.</div>`;
+  menu.hidden=false; inp.setAttribute("aria-expanded","true");
+}
+function lwPick(email){ const w=S.lw; if(!w||!email||w.notify.includes(email)) return; w.notify.push(email); lwMenuAt=0; render(); const n=$("#lw-notify"); if(n) n.focus(); }
 
 document.addEventListener("click",ev=>{
-  const t=ev.target.closest("[data-ow-next],[data-ow-back],[data-ow-cancel],[data-ow-goto],[data-lw-next],[data-lw-back],[data-lw-cancel],[data-lw-goto],[data-lw-rmn]"); if(!t) return;
+  const t=ev.target.closest("[data-ow-next],[data-ow-back],[data-ow-cancel],[data-ow-goto],[data-lw-next],[data-lw-back],[data-lw-cancel],[data-lw-goto],[data-lw-rmn],[data-lw-pick]"); if(!t) return;
   const ow=S.ow, lw=S.lw;
   if(t.hasAttribute("data-ow-next")) return owNext();
   if(t.hasAttribute("data-ow-back")&&ow){ ow.errors={}; ow.step=Math.max(1,ow.step-1); ow.fromReview=false; render(); window.scrollTo(0,0); return; }
@@ -1676,11 +1815,12 @@ document.addEventListener("click",ev=>{
   if(t.hasAttribute("data-lw-back")&&lw){ lw.errors={}; lw.step=Math.max(1,lw.step-1); lw.fromReview=false; render(); window.scrollTo(0,0); return; }
   if(t.hasAttribute("data-lw-cancel")){ const back=lw&&lw.self?"myleave":"leave"; S.lw=null; go(back); return; }
   if(t.dataset.lwGoto&&lw){ lw.fromReview=lw.step===4; lw.errors={}; lw.step=Number(t.dataset.lwGoto); render(); window.scrollTo(0,0); return; }
+  if(t.dataset.lwPick&&lw) return lwPick(t.dataset.lwPick);
   if(t.dataset.lwRmn!==undefined&&lw){ lw.notify.splice(Number(t.dataset.lwRmn),1); render(); }
 });
 document.addEventListener("change",ev=>{
   const t=ev.target, w=S.ow, l=S.lw;
-  if(w&&t.name==="ow-emp"){ const n=newOw(Number(t.value)); n.step=1; S.ow=n; render(); return; }
+  if(w&&t.name==="ow-emp"){ const list=$(".pick-list"), top=list?list.scrollTop:0; const n=newOw(Number(t.value)); n.step=1; n.q=w.q; S.ow=n; render(); const l2=$(".pick-list"); if(l2) l2.scrollTop=top; return; }
   if(w&&t.id&&t.id.startsWith("ow-tool-")){ w.tools=[...document.querySelectorAll('[id^="ow-tool-"]:checked')].map(x=>x.value); return; }
   if(w&&t.id==="ow-to"){ w.to=t.value; return; }
   if(w&&t.id==="ow-day"){ w.lastDay=t.value; const e=S.emps.find(x=>x.id===w.empId); if(e&&$("#ow-settle")) $("#ow-settle").innerHTML=settlementHtml(e,w.lastDay,true); return; }
@@ -1690,11 +1830,23 @@ document.addEventListener("change",ev=>{
   if(l&&t.name==="lw-dur"){ l.dur=t.value; render(); return; }
   if(l&&(t.id==="lw-from"||t.id==="lw-to"||t.id==="lw-half")){ l[t.id.slice(3)]=t.value; if(t.id==="lw-from"&&l.to<l.from) { l.to=l.from; const x=$("#lw-to"); if(x) x.value=l.to; } $("#lw-days").textContent=dd(lwDays(l)); return; }
   if(l&&t.name==="lw-type"){ l.type=t.value; render(); return; }
-  if(l&&t.id==="lw-notify"){ lwAddNotify(); return; }
   if(l&&t.id==="lw-reviewed"){ l.reviewed=t.checked; const s=$("#lw-submit"); if(s) s.disabled=!t.checked; }
 });
-document.addEventListener("input",ev=>{ const t=ev.target; if(S.lw&&t.id==="lw-reason") S.lw.reason=t.value; });
-document.addEventListener("keydown",ev=>{ if(ev.key==="Enter"&&ev.target.id==="lw-notify"){ ev.preventDefault(); lwAddNotify(); } });
+document.addEventListener("input",ev=>{ const t=ev.target; if(S.lw&&t.id==="lw-reason") S.lw.reason=t.value;
+  if(S.lw&&t.id==="lw-notify"){ lwMenuAt=0; lwMenu(true); }
+  if(S.ow&&t.id==="ow-q"){   // filter in place so the search box keeps focus
+    S.ow.q=t.value; const q=lc(t.value.trim()); let n=0;
+    document.querySelectorAll(".pick-list .radio-li").forEach(r=>{ const on=!q||r.dataset.s.includes(q); r.hidden=!on; if(on) n++; });
+    const none=$("#ow-none"); if(none) none.hidden=n>0; } });
+document.addEventListener("keydown",ev=>{
+  if(ev.target.id!=="lw-notify") return;
+  const opts=[...document.querySelectorAll("#lw-menu .combo-opt")];
+  if(ev.key==="ArrowDown"||ev.key==="ArrowUp"){ ev.preventDefault(); if($("#lw-menu").hidden) return lwMenu(true); lwMenuAt=(lwMenuAt+(ev.key==="ArrowDown"?1:-1)+opts.length)%Math.max(1,opts.length); lwMenu(true); }
+  else if(ev.key==="Enter"){ ev.preventDefault(); if(opts[lwMenuAt]) lwPick(opts[lwMenuAt].dataset.lwPick); }
+  else if(ev.key==="Escape"){ lwMenu(false); }
+});
+document.addEventListener("focusin",ev=>{ if(ev.target.id==="lw-notify") lwMenu(true); });
+document.addEventListener("click",ev=>{ if(!ev.target.closest(".combo")) lwMenu(false); });
 document.addEventListener("submit",ev=>{
   if(ev.target.id==="owf"){ ev.preventDefault(); if(S.ow&&S.ow.step===4) owSubmit(); else owNext(); }
   if(ev.target.id==="lwf"){ ev.preventDefault(); if(S.lw&&S.lw.step===4) lwSubmit(); else lwNext(); }
@@ -1741,7 +1893,7 @@ const ME_KEY="hr_me";
 S.me=(()=>{try{return localStorage.getItem(ME_KEY)||""}catch(e){return ""}})();
 /* Signed in: always the signed-in person. Only the offline prototype (no sign-in) lets you pick a name. */
 const myEmail=()=>S.user?S.user.email:S.me;
-const ring=(pct,color,label,sub="Available")=>`<div class="ring" style="background:conic-gradient(${color} ${Math.max(0,Math.min(100,pct))}%,var(--paper-2) 0)"><div><b>${label}</b><span>${sub}</span></div></div>`;
+const ring=(pct,color,label,sub="Available")=>`<div class="ring" style="background:conic-gradient(${color} ${Math.max(0,Math.min(100,pct))}%,var(--lv-track) 0)"><div><b>${label}</b><span>${sub}</span></div></div>`;
 function vMyLeave(){
   const me=empBy(myEmail());
   const picker=S.user?"":`<select class="input" id="me-pick" aria-label="Viewing as" style="width:auto;min-width:220px"><option value="">Choose your name</option>${empOptions(S.me)}</select>`;
@@ -1767,8 +1919,8 @@ function vMyLeave(){
   <div class="grid g-main">
     <div class="card"><div class="card-h"><h3>Pending leave requests</h3><span class="muted">${pend.length+compPend.length} waiting</span></div>
       ${pend.length||compPend.length?pend.map(r=>`<div class="li wrap"><div class="grow"><b style="font-weight:600">${esc(LTYPE[r.type])}</b> · ${esc(lrange(r))} · ${dd(r.days)}<div class="meta">“${esc(r.reason)}”${r.notify&&r.notify.length?` · Notify: ${esc(r.notify.map(x=>(empBy(x)||{name:x}).name).join(", "))}`:""}</div></div>
-          <span class="pill p-warn">Waiting for manager</span><button class="btn glass sm" data-lv="cancel:${r.id}">Cancel</button></div>`).join("")
-        +compPend.map(c=>`<div class="li"><div class="grow"><b style="font-weight:600">Comp off credit</b> · worked on ${esc(fdate(c.workedOn))}<div class="meta">“${esc(c.reason)}”</div></div><span class="pill p-warn">Waiting for reporting manager</span></div>`).join("")
+          <span class="pill p-warn">${myWaitPill("leave")}</span><button class="btn glass sm" data-lv="cancel:${r.id}">Cancel</button></div>`).join("")
+        +compPend.map(c=>`<div class="li"><div class="grow"><b style="font-weight:600">Comp off credit</b> · worked on ${esc(fdate(c.workedOn))}<div class="meta">“${esc(c.reason)}”</div></div><span class="pill p-warn">${myWaitPill("comp")}</span></div>`).join("")
         :`<div class="empty">No pending leave requests. Request leave on the right.</div>`}
     </div>
     <div class="card" style="align-self:start"><div class="card-b" style="display:flex;flex-direction:column;gap:12px;align-items:flex-start;padding-top:22px">
@@ -1779,10 +1931,10 @@ function vMyLeave(){
   </div>
   <div class="section" style="gap:16px"><h3 style="font-size:22px">Leave balances ${year}${future?" (projected)":""}</h3>
   <div class="grid g4">
-    ${card(LTYPE.casual,cTot?b.casual.left/cTot*100:0,"var(--purple-soft)",dd(b.casual.left),[["Available",dd(b.casual.left)],["Consumed",dd(b.consumed.casual)],["Pending approval",dd(pendOf("casual"))],["Annual quota",dd(b.casual.quota)],["Carried over",dd(b.casual.carried)]])}
-    ${card(LTYPE.compoff,b.compoff.earned?b.compoff.left/b.compoff.earned*100:0,"#0e7c86",b.compoff.earned?dd(b.compoff.left):"None",[["Available",dd(b.compoff.left)],["Consumed",dd(b.consumed.compoff)],["Pending approval",dd(pendOf("compoff"))],["Earned",dd(b.compoff.earned)],["Lapses","31 Dec"]])}
-    ${card(LTYPE.sick,b.sick.quota?b.sick.left/b.sick.quota*100:0,"#8fae3e",dd(b.sick.left),[["Available",dd(b.sick.left)],["Consumed",dd(b.consumed.sick)],["Pending approval",dd(pendOf("sick"))],["Annual quota",dd(b.sick.quota)],["Lapses","31 Dec"]])}
-    ${card(LTYPE.unpaid,b.consumed.unpaid?100:0,"var(--bad)",dd(b.consumed.unpaid),[["Consumed",dd(b.consumed.unpaid)],["Pending approval",dd(pendOf("unpaid"))],["Annual quota","No limit"]],future?`Taken in ${year}`:"Taken this year")}
+    ${card(LTYPE.casual,cTot?b.casual.left/cTot*100:0,"var(--lv-casual)",dd(b.casual.left),[["Available",dd(b.casual.left)],["Consumed",dd(b.consumed.casual)],["Pending approval",dd(pendOf("casual"))],["Annual quota",dd(b.casual.quota)],["Carried over",dd(b.casual.carried)]])}
+    ${card(LTYPE.compoff,b.compoff.earned?b.compoff.left/b.compoff.earned*100:0,"var(--lv-comp)",b.compoff.earned?dd(b.compoff.left):"None",[["Available",dd(b.compoff.left)],["Consumed",dd(b.consumed.compoff)],["Pending approval",dd(pendOf("compoff"))],["Earned",dd(b.compoff.earned)],["Lapses","31 Dec"]])}
+    ${card(LTYPE.sick,b.sick.quota?b.sick.left/b.sick.quota*100:0,"var(--lv-sick)",dd(b.sick.left),[["Available",dd(b.sick.left)],["Consumed",dd(b.consumed.sick)],["Pending approval",dd(pendOf("sick"))],["Annual quota",dd(b.sick.quota)],["Lapses","31 Dec"]])}
+    ${card(LTYPE.unpaid,b.consumed.unpaid?100:0,"var(--lv-unpaid)",dd(b.consumed.unpaid),[["Consumed",dd(b.consumed.unpaid)],["Pending approval",dd(pendOf("unpaid"))],["Annual quota","No limit"]],future?`Taken in ${year}`:"Taken this year")}
   </div></div>
   <div class="card"><div class="card-h"><h3>Leave history</h3></div><div class="tbl-wrap"><table><thead><tr><th>Type</th><th>Dates</th><th>Days</th><th class="hide-sm">Note</th><th>Status</th></tr></thead><tbody>
     ${hist.length?hist.map(r=>`<tr><td>${esc(LTYPE[r.type])}</td><td class="num-cell">${esc(lrange(r))}</td><td class="num-cell">${r.status==="approved"?`${r.paidDays} paid${r.lopDays?` · <span style="color:var(--bad)">${r.lopDays} loss of pay</span>`:""}`:dd(r.days)}</td><td class="hide-sm">${esc(r.reason)}</td><td><span class="pill ${LSTAT[r.status][1]}">${LSTAT[r.status][0]}</span></td></tr>`).join("")
@@ -1901,10 +2053,10 @@ const activationNote=start=>!start?"":start>todayIso()
 function render(){
   if(activateDue()) toast("A work email was activated on its joining date.");
   if(S.route==="leaveapply"&&!S.lw) S.route=isEmployee()?"myleave":"leave";
-  if(!routeAllowed(S.route)) S.route=isEmployee()?"docs":"dashboard";
+  if(!routeAllowed(S.route)) S.route="dashboard";
   if(S.route==="users"&&!S.users&&!S.usersBusy) loadUsers();
   renderNav();
-  const v={dashboard:vDashboard,employees:vEmployees,employee:vEmployee,onboard:vOnboard,docs:vDocs,offboard:vOffboard,myleave:vMyLeave,leaveapply:vLeaveApply,leave:vLeave,templates:vTemplates,audit:vAudit,users:vUsers,account:vAccount}[S.route]||vDashboard;
+  const v={dashboard:vDashboard,employees:vEmployees,employee:vEmployee,onboard:vOnboard,docs:vDocs,offboard:vOffboard,myleave:vMyLeave,team:vTeam,leaveapply:vLeaveApply,leave:vLeave,templates:vTemplates,audit:vAudit,users:vUsers,account:vAccount}[S.route]||vDashboard;
   $("#view").innerHTML=v();
 }
 function soft(){ if(S.route!=="onboard") render(); else renderNav(); }
@@ -2017,7 +2169,7 @@ document.addEventListener("submit",ev=>{
   go("employee",e.id); provision(e,apps);
 });
 
-const h=location.hash.slice(1); if(NAV.some(n=>n[0]===h)) S.route=h;
+const h=location.hash.slice(1); if(NAV.some(n=>n[0]===h)||h==="myleave") S.route=h;
 document.addEventListener("click",ev=>{ if(ev.target.closest("#theme")) toggleTheme(); });
 try{ matchMedia("(prefers-color-scheme: dark)").addEventListener("change",()=>{ let t=null; try{t=localStorage.getItem(THEME_KEY)}catch(e){} if(!t) applyTheme(theme()); }); }catch(e){}
 applyTheme(theme());

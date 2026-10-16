@@ -165,3 +165,9 @@ CREATE TABLE IF NOT EXISTS offboarding_steps (
   done_at        TIMESTAMPTZ,
   UNIQUE (offboarding_id, key)
 );
+
+CREATE TABLE IF NOT EXISTS profiles (
+  email      TEXT PRIMARY KEY,
+  data       JSONB NOT NULL DEFAULT '{}',
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);

@@ -315,6 +315,23 @@ textarea.input{resize:vertical;font-family:var(--body)}
 }
 @media (max-width:460px){.stat .num{font-size:34px}.facts{grid-template-columns:minmax(0,1fr)}.btn{padding:11px 18px}}
 body.ro [data-retry],body.ro [data-provision],body.ro [data-offboard],body.ro [data-confirmoff],body.ro [data-proto],body.ro [data-edit],body.ro [data-leave],body.ro [data-activate],body.ro [data-go="onboard"],body.ro [data-go="offboard"],body.ro [data-go="users"]{display:none!important}
+/* My profile */
+.pf-banner{position:relative;min-height:190px;padding:28px;display:flex;align-items:center;gap:22px;flex-wrap:wrap;color:#fff;border-radius:var(--radius) var(--radius) 0 0;
+  background:radial-gradient(60% 120% at 88% 0%,rgba(169,187,255,.55),transparent 60%),radial-gradient(50% 100% at 8% 115%,rgba(189,238,226,.35),transparent 60%),linear-gradient(120deg,#2b3aa8,#4254d4 55%,#6f7fee)}
+.pf-avatar{width:112px;height:112px;border-radius:50%;display:grid;place-items:center;font:600 40px/1 var(--body);color:#fff;flex:none;box-shadow:0 0 0 4px rgba(255,255,255,.35)}
+.pf-banner h2{color:#fff;font-weight:400;font-size:clamp(28px,3.6vw,42px);letter-spacing:-.02em;line-height:1.1}
+.pf-title{display:flex;align-items:center;gap:8px;margin-top:8px;opacity:.95}
+.pf-title svg{width:16px;height:16px}
+.pf-banner .pill{background:rgba(255,255,255,.2);color:#fff}
+.pf-facts{display:flex;flex-wrap:wrap;gap:12px 36px;padding:20px 28px;border-bottom:1px solid var(--line)}
+.pf-fact{display:flex;align-items:center;gap:10px;min-width:0;overflow-wrap:anywhere}
+.pf-fact svg{width:18px;height:18px;color:var(--ink-faint);flex:none}
+.pf-org{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:16px 24px;padding:18px 28px 22px}
+.pf-org dt{font:600 11px/1.2 var(--body);color:var(--ink-faint);text-transform:uppercase;letter-spacing:.14em}
+.pf-org dd{margin:6px 0 0;font-weight:500}
+.pf-q{margin:0 0 4px;font:600 15px/1.3 var(--display)}
+.pf-a{margin:0 0 18px;color:var(--ink-dim);white-space:pre-wrap;overflow-wrap:anywhere}
+@media (max-width:720px){.pf-banner{padding:22px 18px}.pf-avatar{width:84px;height:84px;font-size:30px}.pf-facts,.pf-org{padding-inline:18px}}
 @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
 </style>
 
@@ -504,13 +521,18 @@ function toast(msg){const l=$("#layer");const t=document.createElement("div");t.
 
 /* ---------- navigation ---------- */
 const ICONS = {
+  mail:'<rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/>',
+  phone:'<path d="M5 4h4l2 5-2.5 1.5a11 11 0 0 0 5 5L15 13l5 2v4a2 2 0 0 1-2 2A16 16 0 0 1 3 6a2 2 0 0 1 2-2z"/>',
+  pin:'<path d="M12 21s7-6.2 7-11a7 7 0 0 0-14 0c0 4.8 7 11 7 11z"/><circle cx="12" cy="10" r="2.5"/>',
+  idcard:'<rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="9" cy="11" r="2"/><path d="M6 16c.5-1.6 1.7-2.4 3-2.4s2.5.8 3 2.4M14 10h4M14 14h4"/>',
+  briefcase:'<rect x="3" y="7" width="18" height="13" rx="2"/><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2M3 13h18"/>',
   onboard:'<circle cx="10" cy="8" r="3.5"/><path d="M3.5 20c.8-3.6 3.4-5.5 6.5-5.5 1.5 0 2.9.4 4 1.3"/><path d="M18 14v6M15 17h6"/>',
   offboard:'<circle cx="10" cy="8" r="3.5"/><path d="M3.5 20c.8-3.6 3.4-5.5 6.5-5.5 1.5 0 2.9.4 4 1.3"/><path d="M15 17h6"/>',
   alert:'<path d="M12 3 2 20h20z"/><path d="M12 10v4M12 17h.01"/>',
   info:'<circle cx="12" cy="12" r="9"/><path d="M12 8v5M12 16h.01"/>',
   bundle:'<rect x="4" y="4" width="7" height="7" rx="2"/><rect x="13" y="4" width="7" height="7" rx="2"/><rect x="4" y="13" width="7" height="7" rx="2"/><rect x="13" y="13" width="7" height="7" rx="2"/>',
 };
-const NAV = [["dashboard","Dashboard"],["employees","Employees"],["onboard","Onboarding"],["offboard","Offboarding"],["leave","Leave"],["myleave","My leave"],["templates","Access bundles"],["audit","Audit log"]];
+const NAV = [["dashboard","Dashboard"],["employees","Employees"],["onboard","Onboarding"],["offboard","Offboarding"],["leave","Leave"],["myleave","My leave"],["profile","My profile"],["templates","Access bundles"],["audit","Audit log"]];
 const svg = k=>`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${ICONS[k]}</svg>`;
 /* ---------- Light / dark theme ---------- */
 const THEME_KEY="hr_theme";
@@ -530,9 +552,9 @@ function toggleTheme(){ const t=theme()==="dark"?"light":"dark"; try{localStorag
 const isEmployee = ()=>!!S.user&&S.user.role==="employee";
 /* Everyone signed in can look at the site. Employees see Onboarding as their own documents page and Offboarding as a read-only list. Users, Access bundles and Audit log are HR's. */
 const HR_ONLY=["users","templates","audit","leave"];
-function navItems(){ return isEmployee()?[...NAV.filter(n=>!HR_ONLY.includes(n[0])),["myleave","My leave"]]:NAV; }
+function navItems(){ return isEmployee()?NAV.filter(n=>!HR_ONLY.includes(n[0])):NAV; }
 function routeAllowed(r){
-  if(!S.user) return r!=="account"&&r!=="users";
+  if(!S.user) return r!=="account"&&r!=="users"&&r!=="profile";
   if(r==="account") return true;
   return isEmployee()?(!HR_ONLY.includes(r)||r==="myleave"||(r==="leaveapply"&&!!S.lw&&S.lw.self)):true;
 }
@@ -760,7 +782,9 @@ async function boot(){
       if(isEmployee()){
         let e=S.emps.find(x=>(x.email||"").toLowerCase()===r.data.email.toLowerCase());
         if(!e){ e=mk({name:r.data.name,email:r.data.email,status:"onboarding",dept:"—",title:"—",manager:"—",start:"",grants:{},onTasks:[]}); S.emps.push(e); }
-        S.myId=e.id; S.route="docs";
+        S.myId=e.id;
+        // Land on the documents page unless the address already names another page this person may open (a reload keeps its page).
+        if(!navItems().some(n=>n[0]===location.hash.slice(1)&&routeAllowed(n[0]))) S.route="docs";
       }
     }
   }catch(e){ /* no backend: prototype mode */ }
@@ -802,8 +826,9 @@ async function refreshDocs(force){
 async function loadFromServer(){
   try{
     const hr=!isEmployee();
-    const [recs,draft,docs]=await Promise.all([api("GET",hr?"/api/onboarding":"/api/directory"),hr?api("GET","/api/onboarding/draft"):{ok:false},api("GET","/api/documents")]);
+    const [recs,draft,docs,prof]=await Promise.all([api("GET",hr?"/api/onboarding":"/api/directory"),hr?api("GET","/api/onboarding/draft"):{ok:false},api("GET","/api/documents"),api("GET","/api/profile")]);
     if(recs.ok) recs.data.forEach(applyServerRecord);
+    if(prof.ok) S.profile=prof.data;
     if(docs.ok) setDocs(docs.data);
     if(draft.ok) S.serverDraft=draft.data;
     render();
@@ -1118,6 +1143,142 @@ function vUsers(){
   <div class="card"><div class="card-h"><h3>Accounts</h3><span class="muted">${d.users.length}</span></div><div class="tbl-wrap"><table><thead><tr><th>Person</th><th>Role</th><th class="hide-sm">Last sign-in</th><th></th></tr></thead><tbody>${rows||`<tr><td colspan="4"><div class="empty">No accounts yet.</div></td></tr>`}</tbody></table></div></div>
   </section>`;
 }
+
+/* ---------- My profile ----------
+   The personal sections a person fills in about themselves. Everyone edits only their own, and the server saves them per login. */
+const PF_OPTS={
+  gender:["","Female","Male","Other","Prefer not to say"],
+  marital:["","Single","Married","Divorced","Widowed"],
+  blood:["","A+","A-","B+","B-","AB+","AB-","O+","O-"],
+  handicapped:["","No","Yes"],
+};
+const pfAddr=(which)=>[[`addresses.${which}.line`,"Address","textarea"],[`addresses.${which}.city`,"City"],[`addresses.${which}.state`,"State"],[`addresses.${which}.country`,"Country"],[`addresses.${which}.pin`,"PIN code"]];
+const PF_SECTIONS={
+  about:{title:"About",fields:[["about","About me","textarea"],["loveJob","What I love about my job?","textarea"],["hobbies","My interests and hobbies","textarea"]]},
+  primary:{title:"Primary details",fields:[["primary.first","First name"],["primary.middle","Middle name"],["primary.last","Last name"],["primary.gender","Gender","select","gender"],["primary.dob","Date of birth","date"],["primary.marital","Marital status","select","marital"],["primary.blood","Blood group","select","blood"],["primary.handicapped","Physically handicapped","select","handicapped"],["primary.nationality","Nationality"]]},
+  contact:{title:"Contact details",fields:[["contact.personalEmail","Personal email","email"],["contact.phone","Phone","tel"]]},
+  current:{title:"Current address",fields:pfAddr("current")},
+  permanent:{title:"Permanent address",fields:pfAddr("permanent")},
+  edu:{title:"Add education",fields:[["degree","Degree"],["branch","Branch / specialisation"],["college","University / college"],["cgpa","CGPA / percentage"],["joining","Year of joining","date"],["completion","Year of completion","date"]]},
+};
+const getPath=(o,k)=>k.split(".").reduce((a,x)=>a==null?a:a[x],o);
+const setPath=(o,k,v)=>{const ks=k.split("."); const last=ks.pop(); const t=ks.reduce((a,x)=>a[x]=a[x]||{},o); t[last]=v;};
+const pfId=k=>"pf-"+k.replace(/\./g,"-");
+const pfVal=k=>{const el=$("#"+pfId(k)); return el?el.value:"";};
+
+/* The signed-in person's own record. HR who are not in the roster get a stand-in so the page still works. */
+function myRecord(){
+  const u=S.user;
+  let e=S.emps.find(x=>(x.email||"").toLowerCase()===u.email.toLowerCase());
+  if(!e){ e=mk({name:u.name,email:u.email,status:"active",dept:"—",title:"—",manager:"—",start:"",grants:{},onTasks:[]}); e.color=AV[0]; }
+  return e;
+}
+/* What the page shows: saved answers, with the employee list filling in what is already known. */
+function pfData(e){
+  const {first,last}=nameSplit(e.name), p=S.profile||{}, ad=p.addresses||{};
+  const addr=(a,line)=>({line:line||"",city:"",state:"",country:"",pin:"",...(a||{})});
+  return {
+    about:p.about||"", loveJob:p.loveJob||"", hobbies:p.hobbies||"", education:(p.education||[]).map(x=>({...x})),
+    primary:{first,middle:"",last,gender:"",dob:(e.ids&&e.ids.dob)||"",marital:"",blood:"",handicapped:"",nationality:"",...(p.primary||{})},
+    contact:{personalEmail:e.personalEmail||"",phone:e.phone||"",...(p.contact||{})},
+    addresses:{current:addr(ad.current,e.address),permanent:addr(ad.permanent,"")},
+  };
+}
+function pfField(k,label,type,opt,val,err){
+  const id=pfId(k);
+  const ctl=type==="textarea"?`<textarea class="input" id="${id}" rows="3">${esc(val)}</textarea>`
+    :type==="select"?`<select class="input" id="${id}">${PF_OPTS[opt].map(o=>`<option value="${esc(o)}" ${o===val?"selected":""}>${esc(o||"Select")}</option>`).join("")}</select>`
+    :`<input class="input" id="${id}" type="${type||"text"}" value="${esc(val)}" autocomplete="off">`;
+  return `<div class="field"${type==="textarea"?` style="grid-column:1/-1"`:""}><label for="${id}">${label}</label>${ctl}${err?`<span class="ferr" role="alert">${esc(err)}</span>`:""}</div>`;
+}
+const pfEditBtns=(sec)=>`<div class="row" style="grid-column:1/-1"><button type="button" class="btn primary sm" data-pf-save="${sec}">Save</button><button type="button" class="btn glass sm" data-pf-cancel>Cancel</button></div>`;
+/* One section: its saved values, or its form while it is being edited. */
+function pfSection(sec,d){
+  const c=PF_SECTIONS[sec], editing=S.profEdit===sec, er=S.profErr||{};
+  if(editing) return `<div class="card"><div class="card-h"><h3>${c.title}</h3></div><div class="card-b form">${c.fields.map(([k,l,t,o])=>pfField(k,l,t,o,getPath(d,k)||"",er[k])).join("")}${pfEditBtns(sec)}</div></div>`;
+  const edit=`<button type="button" class="btn link" data-pf-edit="${sec}">Edit</button>`;
+  if(sec==="about") return `<div class="card"><div class="card-h"><h3>${c.title}</h3>${edit}</div><div class="card-b">${c.fields.map(([k,l])=>{const v=getPath(d,k); return `<p class="pf-q">${l}</p>${v?`<p class="pf-a">${esc(v)}</p>`:`<p class="pf-a"><button type="button" class="btn glass sm" data-pf-edit="about">Add your response</button></p>`}`}).join("")}</div></div>`;
+  return `<div class="card"><div class="card-h"><h3>${c.title}</h3>${edit}</div><div class="card-b"><dl class="rv">${c.fields.map(([k,l])=>`<div${c.fields.length===5&&k.endsWith(".line")?` style="grid-column:1/-1"`:""}><dt>${l}</dt><dd>${esc(getPath(d,k)||"—")}</dd></div>`).join("")}</dl></div></div>`;
+}
+function pfEducation(d){
+  const er=S.profErr||{}, n=d.education.length, vals=S.profEduVals||{};
+  const list=d.education.map((x,i)=>`<div class="card-b" style="${i?"border-top:1px solid var(--line);padding-top:18px":""}"><dl class="rv">
+    <div><dt>Degree</dt><dd>${esc(x.degree||"—")}</dd></div><div><dt>Branch / specialisation</dt><dd>${esc(x.branch||"—")}</dd></div>
+    <div><dt>University / college</dt><dd>${esc(x.college||"—")}</dd></div><div><dt>CGPA / percentage</dt><dd>${esc(x.cgpa||"—")}</dd></div>
+    <div><dt>Year of joining</dt><dd>${esc(x.joining?fdate(x.joining):"—")}</dd></div><div><dt>Year of completion</dt><dd>${esc(x.completion?fdate(x.completion):"—")}</dd></div></dl>
+    <div style="margin-top:10px"><button type="button" class="btn link" data-pf-rm="${i}">Remove</button></div></div>`).join("");
+  const form=S.profEdit==="edu"?`<div class="card-b form" style="border-top:1px solid var(--line);padding-top:18px">${PF_SECTIONS.edu.fields.map(([k,l,t])=>pfField(k,l,t,"",vals[k]||"",er[`education.${n}.${k}`])).join("")}${pfEditBtns("edu")}</div>`:"";
+  return `<div class="card"><div class="card-h"><h3>Education</h3>${S.profEdit==="edu"?"":`<button type="button" class="btn link" data-pf-edit="edu">Add</button>`}</div>
+    ${n||S.profEdit==="edu"?list+form:`<div class="card-b muted">No education added yet.</div>`}</div>`;
+}
+function vProfile(){
+  const e=myRecord(), d=(S.profEdit&&S.profDraft)||pfData(e), tab=S.profTab||"about";
+  const ic=k=>`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${ICONS[k]}</svg>`;
+  const city=[d.addresses.current.city,d.addresses.current.state].filter(Boolean).join(", ");
+  const mgr=e.manager&&e.manager!=="—"?e.manager:"—";
+  const phone=d.contact.phone||e.phone||"";
+  const tabs=[["about","About"],["job","Job"],["documents","Documents"],["assets","Assets"]];
+  let body="";
+  if(tab==="about") body=`${pfSection("about",d)}${pfEducation(d)}${pfSection("primary",d)}${pfSection("contact",d)}${pfSection("current",d)}${pfSection("permanent",d)}`;
+  if(tab==="job"){
+    const live=Object.keys(e.grants||{}).filter(k=>e.grants[k]==="active");
+    body=`<div class="card"><div class="card-h"><h3>Job details</h3><span class="muted">Set by HR</span></div><div class="card-b"><dl class="rv">
+      <div><dt>Employee no.</dt><dd class="mono">${esc(e.no||"Not assigned")}</dd></div><div><dt>Work email</dt><dd class="mono">${esc(e.email)}</dd></div>
+      <div><dt>Job title</dt><dd>${esc(e.title||"—")}</dd></div><div><dt>Department</dt><dd>${esc(e.dept||"—")}</dd></div>
+      <div><dt>Reporting manager</dt><dd>${esc(mgr)}</dd></div><div><dt>Date of joining</dt><dd>${esc(e.start?fdate(e.start):"—")}</dd></div></dl></div></div>
+      <div class="card"><div class="card-h"><h3>Tool access</h3><span class="muted">${live.length} active</span></div><div class="card-b">${live.length?`<div class="chips">${live.map(id=>`<span class="chip">${appIc(id)}${esc(APP[id].name)}</span>`).join("")}</div>`:`<span class="muted">No tools yet.</span>`}</div></div>`;
+  }
+  if(tab==="documents"){
+    const m=S.docs[e.id]||{}, n=docCount(m);
+    body=`<div class="card"><div class="card-h"><h3>My documents</h3><a class="btn glass sm" href="#onboard">Upload or replace</a></div>
+      ${n?DOCS.filter(x=>(m[x.k]||[]).length).map(x=>`<div class="doc-row"><div class="grow"><b>${esc(x.name)}</b>${m[x.k].map(f=>`<div class="sub">${docLinks(f)} · ${fmtSize(f.size)}</div>`).join("")}</div></div>`).join("")
+        :`<div class="card-b muted">Nothing uploaded yet. Use Upload or replace to add your documents.</div>`}</div>`;
+  }
+  if(tab==="assets"){
+    const l=e.laptop||{received:false,serial:"",date:""};
+    body=`<div class="card"><div class="card-h"><h3>Laptop</h3><span class="pill ${l.received?"p-ok":"p-mute"}">${l.received?"Received":"Not received"}</span></div><div class="card-b">
+      <dl class="rv"><div><dt>Serial number</dt><dd class="mono">${esc(l.serial||"—")}</dd></div><div><dt>Date received</dt><dd>${esc(l.date?fdate(l.date):"—")}</dd></div></dl>
+      <p class="muted" style="margin:14px 0 0">HR records assets. Ask HR if something here is wrong.</p></div></div>`;
+  }
+  return `<section class="section" style="gap:22px">
+  <div class="card" style="overflow:hidden">
+    <div class="pf-banner"><span class="pf-avatar" style="background:${e.color||"#4254d4"}">${esc(initials(e.name))}</span>
+      <div style="min-width:0"><div class="row" style="gap:12px"><h2>${esc(e.name)}</h2>${epill(e)}</div><div class="pf-title">${ic("briefcase")}${esc(e.title||"—")}</div></div></div>
+    <div class="pf-facts">
+      <span class="pf-fact">${ic("mail")}${esc(e.email)}</span>
+      <span class="pf-fact">${ic("phone")}${esc(phone||"—")}</span>
+      <span class="pf-fact">${ic("pin")}${esc(city||"—")}</span>
+      <span class="pf-fact">${ic("idcard")}${esc(e.no||"Not assigned")}</span></div>
+    <dl class="pf-org"><div><dt>Business unit</dt><dd>Wohlig Transformations</dd></div><div><dt>Department</dt><dd>${esc(e.dept||"—")}</dd></div><div><dt>Reporting manager</dt><dd>${esc(mgr)}</dd></div></dl>
+  </div>
+  <div class="subtabs" role="tablist" style="margin-bottom:0;align-self:flex-start">${tabs.map(([k,l])=>`<button type="button" role="tab" class="${tab===k?"on":""}" aria-selected="${tab===k}" data-pf-tab="${k}">${l}</button>`).join("")}</div>
+  ${body}</section>`;
+}
+async function pfSave(sec){
+  const e=myRecord(), next=JSON.parse(JSON.stringify(S.profDraft||pfData(e))); let item=null;
+  if(sec.startsWith("rm:")) next.education.splice(Number(sec.slice(3)),1);
+  else if(sec==="edu"){ item={}; for(const [k] of PF_SECTIONS.edu.fields) item[k]=pfVal(k); next.education.push(item); }
+  else for(const [k] of PF_SECTIONS[sec].fields) setPath(next,k,pfVal(k));
+  try{
+    const r=await api("PUT","/api/profile",next);
+    if(r.status===400){
+      S.profErr=r.data.errors||{}; S.profEduVals=item; S.profDraft=item?null:next;
+      toast(Object.values(S.profErr)[0]||"Check the highlighted fields."); render(); return;
+    }
+    if(!r.ok){ toast(apiMsg(r)); return; }
+    S.profile=r.data; toast("Saved.");
+  }catch(err){ S.profile=next; toast("Saved on this page only, because there is no server."); }
+  S.profEdit=null; S.profDraft=null; S.profErr={}; S.profEduVals=null; render();
+}
+document.addEventListener("click",ev=>{
+  const t=ev.target.closest("[data-pf-tab],[data-pf-edit],[data-pf-cancel],[data-pf-save],[data-pf-rm]"); if(!t) return;
+  const reset=()=>{ S.profEdit=null; S.profDraft=null; S.profErr={}; S.profEduVals=null; };
+  if(t.dataset.pfTab){ reset(); S.profTab=t.dataset.pfTab; render(); return; }
+  if(t.dataset.pfEdit){ reset(); S.profEdit=t.dataset.pfEdit; render(); const f=document.querySelector("#view .form .input"); if(f) f.focus(); return; }
+  if(t.hasAttribute("data-pf-cancel")){ reset(); render(); return; }
+  if(t.dataset.pfSave){ pfSave(t.dataset.pfSave); return; }
+  if(t.dataset.pfRm!==undefined){ pfSave("rm:"+t.dataset.pfRm); return; }
+});
 
 function vAccount(){
   const u=S.user;
@@ -1943,7 +2104,7 @@ function render(){
   if(S.route==="users"&&!S.users&&!S.usersBusy) loadUsers();
   if(S.user&&!isEmployee()&&["onboard","docs","employee"].includes(S.route)) refreshDocs();
   renderNav();
-  const v={dashboard:vDashboard,employees:vEmployees,employee:vEmployee,onboard:isEmployee()?vDocs:vOnboard,docs:vDocs,offboard:vOffboard,myleave:vMyLeave,leaveapply:vLeaveApply,leave:vLeave,templates:vTemplates,audit:vAudit,users:vUsers,account:vAccount}[S.route]||vDashboard;
+  const v={dashboard:vDashboard,employees:vEmployees,employee:vEmployee,onboard:isEmployee()?vDocs:vOnboard,docs:vDocs,offboard:vOffboard,myleave:vMyLeave,leaveapply:vLeaveApply,leave:vLeave,templates:vTemplates,audit:vAudit,users:vUsers,account:vAccount,profile:vProfile}[S.route]||vDashboard;
   $("#view").innerHTML=v();
   if(isEmployee()) document.querySelectorAll("#view #laptopf input,#view #laptopf button").forEach(x=>x.disabled=true);
 }

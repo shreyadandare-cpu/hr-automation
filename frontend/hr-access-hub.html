@@ -268,9 +268,6 @@ tr.click:hover td{background:rgba(66,84,212,.04)}
 .rv{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px 24px;margin:0}
 .rv dt{font:600 11px/1.2 var(--body);color:var(--ink-faint);text-transform:uppercase;letter-spacing:.14em}
 .rv dd{margin:4px 0 0;font-weight:500;overflow-wrap:anywhere}
-.srcbadge{font:600 11px/1 var(--body);border-radius:999px;padding:3px 8px;margin-left:8px;letter-spacing:.04em;vertical-align:1px}
-.srcbadge.ocr{background:var(--tint);color:var(--purple)}
-.srcbadge.typed{background:var(--paper-2);color:var(--ink-faint)}
 textarea.input{resize:vertical;font-family:var(--body)}
 @media (max-width:720px){.rv{grid-template-columns:minmax(0,1fr)}.doc-row{padding-inline:16px}.stp{font-size:13px}}
 .foot{display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap;padding-block:28px 40px;border-top:1px solid var(--line);color:var(--ink-faint);font-size:13px}
@@ -301,6 +298,7 @@ textarea.input{resize:vertical;font-family:var(--body)}
   .profile,.facts{padding-inline:18px}
 }
 @media (max-width:460px){.stat .num{font-size:34px}.facts{grid-template-columns:minmax(0,1fr)}.btn{padding:11px 18px}}
+body.ro [data-retry],body.ro [data-provision],body.ro [data-offboard],body.ro [data-confirmoff],body.ro [data-proto],body.ro [data-edit],body.ro [data-leave],body.ro [data-activate],body.ro [data-go="onboard"],body.ro [data-go="offboard"],body.ro [data-go="users"]{display:none!important}
 @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
 </style>
 
@@ -510,22 +508,23 @@ function applyTheme(t){
     :'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>';
 }
 function toggleTheme(){ const t=theme()==="dark"?"light":"dark"; try{localStorage.setItem(THEME_KEY,t)}catch(e){} applyTheme(t); }
-/* Signed in (S.user set): employees only see My documents. HR sees everything plus Users.
+/* Signed in (S.user set): everyone can view the site. Only HR can change things, and employees can only change their own documents and password.
    Without a backend S.user stays null and the page behaves as the old prototype. */
 const isEmployee = ()=>!!S.user&&S.user.role==="employee";
-function navItems(){ return !S.user?NAV:isEmployee()?[["docs","My documents"]]:[...NAV,["users","Users"]]; }
+/* Everyone signed in can look at the site. Employees see Onboarding as their own documents page and Offboarding as a read-only list. Users, Access bundles and Audit log are HR's. */
+const HR_ONLY=["users","templates","audit"];
+function navItems(){ return isEmployee()?NAV.filter(n=>!HR_ONLY.includes(n[0])):NAV; }
 function routeAllowed(r){
   if(!S.user) return r!=="account"&&r!=="users";
-  if(r==="account") return true;
-  return isEmployee()?r==="docs":true;
+  return isEmployee()?!HR_ONLY.includes(r):true;
 }
 function renderNav(){
   const attn = S.emps.filter(e=>failedOf(e).length).length;
-  const active = S.route==="employee"?"employees":S.route==="docs"&&!isEmployee()?"onboard":S.route;
+  const active = S.route==="employee"?"employees":S.route==="docs"?"onboard":S.route;
   $("#links").innerHTML = navItems().map(([k,l])=>`<a href="#${k}" class="${active===k?"on":""}">${l}${k==="dashboard"&&attn?`<span class="count">${attn}</span>`:""}</a>`).join("");
 }
 function go(r,sel){S.route=r; if(sel!==undefined)S.sel=sel; const h="#"+(r==="employee"?"employees":r); if(location.hash!==h){try{history.replaceState(null,"",h)}catch(e){}} render(); window.scrollTo(0,0)}
-window.addEventListener("hashchange",()=>{const h=location.hash.slice(1);if(navItems().some(n=>n[0]===h)||h==="docs"||h==="account"){S.route=h;render();window.scrollTo(0,0)}});
+window.addEventListener("hashchange",()=>{const h=location.hash.slice(1);if(navItems().some(n=>n[0]===h)||h==="docs"||h==="account"||(h==="users"&&S.user&&!isEmployee())){S.route=h;render();window.scrollTo(0,0)}});
 
 /* ---------- views ---------- */
 function vDashboard(){
@@ -570,8 +569,8 @@ function vDashboard(){
       <div class="card"><div class="tbl-wrap"><table><thead><tr><th>Employee</th><th>Status</th><th class="hide-sm">Date</th><th>Checklist</th></tr></thead><tbody>
         ${[...onb,...leaving].map(e=>{const c=checklist(e);const pct=Math.round(c.done/c.total*100);return `<tr class="click" data-emp="${e.id}"><td>${person(e,e.title)}</td><td>${epill(e)}</td><td class="num-cell hide-sm">${esc(fdate(e.status==="onboarding"?e.start:e.lastDay))}</td><td style="min-width:130px"><div class="progress"><i style="width:${pct}%"></i></div><div class="muted" style="margin-top:5px">${c.done} of ${c.total} done</div></td></tr>`}).join("")}
       </tbody></table></div></div>
-      <div class="card"><div class="card-h"><h3>Recent activity</h3><button class="btn link" data-go="audit">Audit log</button></div>
-        <div style="padding-bottom:12px">${S.audit.slice(0,6).map(tl).join("")}</div></div>
+      ${isEmployee()?"":`<div class="card"><div class="card-h"><h3>Recent activity</h3><button class="btn link" data-go="audit">Audit log</button></div>
+        <div style="padding-bottom:12px">${S.audit.slice(0,6).map(tl).join("")}</div></div>`}
     </div>
   </section>`;
 }
@@ -620,8 +619,8 @@ function vEmployee(){
     </div>
   </div>
   ${laptopCard(e)}${recordCard(e)}
-  <div class="card"><div class="card-h"><h3>History</h3><button class="btn link" data-go="audit">Full audit log</button></div>
-    <div style="padding-bottom:12px">${acts.length?acts.map(tl).join(""):`<div class="empty">No recorded actions yet.</div>`}</div></div>
+  ${isEmployee()?"":`<div class="card"><div class="card-h"><h3>History</h3><button class="btn link" data-go="audit">Full audit log</button></div>
+    <div style="padding-bottom:12px">${acts.length?acts.map(tl).join(""):`<div class="empty">No recorded actions yet.</div>`}</div></div>`}
   </section>`;
 }
 
@@ -641,14 +640,14 @@ const DOCS = [
   {k:"bank", name:"Bank passbook or cancelled cheque", req:false},
 ];
 const MAX_MB = 5;
-const OB_STEPS = ["Personal details","Documents and data","Work email","Review"];
+const OB_STEPS = ["Details and work email","Create login","Tools and review"];
 const OB_DRAFT_KEY = "hr_ob_draft";
 S.docs = S.docs||{};      // employee id -> { documentKey: [{name,size}] }, uploaded by the employee
 S.docErr = S.docErr||{};
 S.myId = S.myId||null;
 
 const newOb = ()=>({step:1, fromReview:false, empId:null, d:{first:"",last:"",pemail:"",phone:"",address:"",dept:"Engineering",title:"",mgr:"",start:""},
-  ids:{name:"",dob:"",aadhaar:"",pan:"",address:"",acct:"",ifsc:""}, src:{}, apps:null, reviewed:false, errors:{}, ocrDone:false, ocrMsg:""});
+  work:null, login:null, busy:false, apps:null, reviewed:false, errors:{}});
 const obDocs = ob=>(ob.empId&&S.docs[ob.empId])||{};
 const docCount = m=>Object.values(m||{}).reduce((n,a)=>n+(a?a.length:0),0);
 function logAs(actor,action,emp,result){ S.audit.unshift({ts:new Date(TODAY.getTime()+(Date.now()-BOOT)),actor,action,emp:emp.name,empId:emp.id,app:null,result:result||"ok"}); }
@@ -702,27 +701,6 @@ function step1Errors(ob){
   if(!d.start) e.start="Pick the start date.";
   return e;
 }
-function step2Errors(ob){
-  // Every field is optional, since HR may not have the documents yet. A value that is filled in must have the right format.
-  const i=ob.ids, e={}, has=v=>String(v||"").trim()!=="";
-  if(has(i.dob)&&!V.dob(i.dob)) e.dob="Enter a valid date of birth (age 16 to 80).";
-  if(has(i.aadhaar)&&!V.aadhaar(i.aadhaar)) e.aadhaar="Aadhaar number must be 12 digits.";
-  if(has(i.pan)&&!V.pan(i.pan)) e.pan="PAN must look like ABCDE1234F.";
-  if(has(i.acct)&&!V.acct(i.acct)) e.acct="Bank account number must be 9 to 18 digits.";
-  if(has(i.ifsc)&&!V.ifsc(i.ifsc)) e.ifsc="IFSC must look like HDFC0001234.";
-  return e;
-}
-
-/* Simulated document reading: copies the name and address from step 1 into empty fields and marks them.
-   Reading Aadhaar, PAN, date of birth and bank details from the files needs the real OCR service. */
-function ocrRead(ob){
-  if(!docCount(obDocs(ob))) return {ok:false,msg:"The employee has not uploaded any documents yet, so nothing was read."};
-  const fill=(k,v)=>{ if(v&&!ob.ids[k]){ ob.ids[k]=v; ob.src[k]="ocr"; } };
-  fill("name",(ob.d.first+" "+ob.d.last).trim());
-  fill("address",ob.d.address.trim());
-  return {ok:true,msg:"Prototype: name and address were filled in and marked. The other fields need the document-reading service, so type them in."};
-}
-
 /* Personal data comes from the employee list: HR picks a person who is waiting for onboarding. */
 function obFetch(ob,id){
   const e=S.emps.find(x=>x.id===id); if(!e) return false;
@@ -735,6 +713,10 @@ function obFetch(ob,id){
   if(e.personalEmail) ob.d.pemail=e.personalEmail;
   if(e.phone) ob.d.phone=e.phone;
   if(e.address) ob.d.address=e.address;
+  // A person who already has a work email (from the HR sheet, or an earlier attempt) does not get a new one.
+  if(e.googleStatus) ob.work={email:e.email,google:e.googleStatus,error:e.googleError};
+  else if(e.email) ob.work={email:e.email,google:"existing"};
+  ob.login=e.hasLogin?{created:true,existing:true}:null;
   return true;
 }
 
@@ -767,6 +749,7 @@ async function boot(){
 function applyUser(){
   const u=S.user; if(!u) return;
   $("#acct").style.display="";
+  document.body.classList.toggle("ro",isEmployee());
   const cta=$(".cta"); if(cta) cta.style.display=isEmployee()?"none":"";
   $("#who").innerHTML=`Signed in as <b style="color:var(--ink)">${esc(u.name)}</b>, ${isEmployee()?"Employee":"HR"} · <a href="#" data-signout>Sign out</a>`;
 }
@@ -774,23 +757,34 @@ S.serverDraft=null;
 function applyServerRecord(rec){
   let e=S.emps.find(x=>(x.email||"").toLowerCase()===rec.email.toLowerCase());
   if(!e){ e=mk({name:rec.name,email:rec.email,status:"onboarding",grants:{},onTasks:ON_TASKS.map(t=>({t,done:false}))}); e.color=AV[S.emps.length%AV.length]; S.emps.push(e); }
-  Object.assign(e,{name:rec.name,dept:rec.dept,title:rec.title||"—",manager:rec.manager||"—",start:rec.start,personalEmail:rec.personalEmail,phone:rec.phone,address:rec.address,ids:rec.ids});
+  Object.assign(e,{name:rec.name,dept:rec.dept,title:rec.title||"—",manager:rec.manager||"—",start:rec.start,personalEmail:rec.personalEmail,phone:rec.phone,address:rec.address,ids:rec.ids,
+    googleStatus:rec.googleStatus,googleError:rec.googleError,hasLogin:rec.hasLogin});
   for(const a of rec.apps) if(!e.grants[a]||e.grants[a]==="revoked") e.grants[a]="none";
   e.laptop=e.laptop||{received:false,serial:"",date:""};
   return e;
 }
+function setDocs(list){
+  const docs={};
+  for(const d of list){
+    const e=S.emps.find(x=>(x.email||"").toLowerCase()===d.email);
+    if(e) ((docs[e.id]=docs[e.id]||{})[d.key]=(docs[e.id][d.key]||[])).push({id:d.id,name:d.name,size:d.size});
+  }
+  const changed=JSON.stringify(docs)!==JSON.stringify(S.docs);
+  S.docs=docs; return changed;
+}
+/* Employees upload while HR is working, so HR reads the latest list when opening a page that shows documents. */
+let docsAt=0;
+async function refreshDocs(force){
+  if(!S.user||Date.now()-docsAt<(force?0:4000)) return;
+  docsAt=Date.now();
+  try{ const r=await api("GET","/api/documents"); if(r.ok&&setDocs(r.data)) render(); }catch(e){}
+}
 async function loadFromServer(){
   try{
     const hr=!isEmployee();
-    const [recs,draft,docs]=await Promise.all([hr?api("GET","/api/onboarding"):{ok:false},hr?api("GET","/api/onboarding/draft"):{ok:false},api("GET","/api/documents")]);
+    const [recs,draft,docs]=await Promise.all([api("GET",hr?"/api/onboarding":"/api/directory"),hr?api("GET","/api/onboarding/draft"):{ok:false},api("GET","/api/documents")]);
     if(recs.ok) recs.data.forEach(applyServerRecord);
-    if(docs.ok){
-      S.docs={};
-      for(const d of docs.data){
-        const e=S.emps.find(x=>(x.email||"").toLowerCase()===d.email);
-        if(e) ((S.docs[e.id]=S.docs[e.id]||{})[d.key]=(S.docs[e.id][d.key]||[])).push({id:d.id,name:d.name,size:d.size});
-      }
-    }
+    if(docs.ok) setDocs(docs.data);
     if(draft.ok) S.serverDraft=draft.data;
     render();
   }catch(e){ /* no backend: carry on locally */ }
@@ -812,9 +806,9 @@ function obClearDraft(){
 }
 
 const obField=(lab,id,val,o={})=>{
-  const {type="text",hint="",err="",ph="",rows=0,mono=false,full=false,badge=""}=o;
-  const ctl=rows?`<textarea class="input" id="ob-${id}" rows="${rows}" placeholder="${esc(ph)}">${esc(val)}</textarea>`
-    :`<input class="input${mono?" mono":""}" id="ob-${id}" type="${type}" value="${esc(val)}" placeholder="${esc(ph)}" autocomplete="off">`;
+  const {type="text",hint="",err="",ph="",rows=0,mono=false,full=false,badge="",dis=false}=o;
+  const ctl=rows?`<textarea class="input" id="ob-${id}" rows="${rows}" placeholder="${esc(ph)}"${dis?" disabled":""}>${esc(val)}</textarea>`
+    :`<input class="input${mono?" mono":""}" id="ob-${id}" type="${type}" value="${esc(val)}" placeholder="${esc(ph)}" autocomplete="off"${dis?" disabled":""}>`;
   return `<div class="field"${full?` style="grid-column:1/-1"`:""}><label for="ob-${id}">${lab}${badge}</label>${ctl}${hint?`<span class="hint">${hint}</span>`:""}${err?`<span class="ferr" role="alert">${esc(err)}</span>`:""}</div>`;
 };
 
@@ -832,8 +826,8 @@ function obStep1(ob){
         :`<p class="muted" style="margin:0">No one in the employee list is waiting for onboarding. Type the details below to add a new joiner.</p>`}
     </div></div>
     <div class="card"><div class="card-h"><h3>Candidate details</h3></div><div class="card-b form">
-      ${obField("First name","first",d.first,{err:er.first,ph:"e.g. Priya"})}
-      ${obField("Surname","last",d.last,{err:er.last,ph:"e.g. Shah"})}
+      ${obField("First name","first",d.first,{err:er.first,ph:"e.g. Priya",dis:!!ob.work})}
+      ${obField("Surname","last",d.last,{err:er.last,ph:"e.g. Shah",dis:!!ob.work})}
       ${obField("Personal email","pemail",d.pemail,{type:"email",err:er.pemail,hint:"The work email and login details are sent here."})}
       ${obField("Phone","phone",d.phone,{type:"tel",err:er.phone,ph:"10-digit mobile number"})}
       ${obField("Address","address",d.address,{rows:3,full:true,err:er.address})}
@@ -843,72 +837,68 @@ function obStep1(ob){
       ${obField("Job title","title",d.title,{err:er.title,ph:"e.g. Software Development Engineer"})}
       <div class="field"><label for="ob-mgr">Reporting manager</label><select class="input" id="ob-mgr"><option value="">None</option>${mgrs.map(m=>`<option ${m.name===d.mgr?"selected":""}>${esc(m.name)}</option>`).join("")}</select></div>
       ${obField("Start date","start",d.start,{type:"date",err:er.start})}
-    </div></div>`;
+    </div></div>
+    ${obWorkEmailCard(ob)}
+    ${obDocsCard(ob)}`;
 }
 
-/* Documents are uploaded by the employee. HR sees their status here and cannot upload them. */
-function obDocStatus(ob){
-  const m=obDocs(ob), n=docCount(m);
-  return `<div class="card"><div class="card-h"><h3>Documents</h3><span class="muted">Uploaded by the employee</span></div>
-    ${ob.empId?"":`<div class="card-b" style="padding-bottom:0"><div class="callout">${svg("info")}<div>This person has no record yet. The employee can upload documents on the <b>Employee documents</b> tab once the record is created.</div></div></div>`}
-    ${DOCS.map(def=>{const fl=m[def.k]||[];return `<div class="doc-row"><div class="grow"><b>${esc(def.name)} <span class="pill ${fl.length?"p-ok":"p-mute"}">${fl.length?"Received":"Not uploaded"}</span></b>${fl.length?`<div>${fl.map(f=>`<span class="fchip" style="padding-right:12px">${esc(f.name)} · ${fmtSize(f.size)}</span>`).join("")}</div>`:`<span class="sub">Waiting for the employee</span>`}</div></div>`}).join("")}
-    <div class="card-b"><button type="button" class="btn link" data-go="docs">Open Employee documents</button><span class="muted"> ${n} file${n===1?"":"s"} received so far</span></div></div>`;
+/* What the chosen person has uploaded. HR can open and save every file. */
+function obDocsCard(ob){
+  const e=ob.empId&&S.emps.find(x=>x.id===ob.empId); if(!e) return "";
+  const m=S.docs[e.id]||{}, n=docCount(m);
+  return `<div class="card"><div class="card-h"><h3>Documents uploaded by ${esc(e.name)}</h3><span class="muted">${n?`${n} file${n===1?"":"s"}`:"Nothing uploaded yet"}</span></div>
+    ${n?DOCS.filter(d=>(m[d.k]||[]).length).map(d=>`<div class="doc-row"><div class="grow"><b>${esc(d.name)}</b>${m[d.k].map(f=>`<div class="sub">${docLinks(f)} · ${fmtSize(f.size)}</div>`).join("")}</div></div>`).join("")
+      :`<div class="card-b muted">The employee uploads documents after signing in. They will show here.</div>`}</div>`;
 }
 
-function obStep2(ob){
-  const er=ob.errors, i=ob.ids, has=docCount(obDocs(ob))>0;
-  const badge=k=>ob.src[k]==="ocr"?`<span class="srcbadge ocr" id="src-${k}">From document</span>`:`<span class="srcbadge typed" id="src-${k}">Typed</span>`;
-  return `${obDocStatus(ob)}
-    <div class="card"><div class="card-h"><h3>Document data</h3><span class="muted">Filled in by HR</span><button type="button" class="btn glass sm" data-ob-ocr ${has?"":"disabled"}>Read documents</button></div><div class="card-b">
-      ${ob.ocrMsg?`<div class="callout" style="margin-bottom:16px">${svg("info")}<div>${esc(ob.ocrMsg)}</div></div>`:""}
-      <div class="form">
-      ${obField("Full name","id-name",i.name,{err:er.name,badge:badge("name")})}
-      ${obField("Date of birth","id-dob",i.dob,{type:"date",err:er.dob,badge:badge("dob")})}
-      ${obField("Aadhaar number","id-aadhaar",i.aadhaar,{err:er.aadhaar,mono:true,ph:"12 digits",badge:badge("aadhaar")})}
-      ${obField("PAN","id-pan",i.pan,{err:er.pan,mono:true,ph:"ABCDE1234F",badge:badge("pan")})}
-      ${obField("Address","id-address",i.address,{rows:3,full:true,err:er.address,badge:badge("address")})}
-      ${obField("Bank account number","id-acct",i.acct,{err:er.acct,mono:true,badge:badge("acct")})}
-      ${obField("IFSC code","id-ifsc",i.ifsc,{err:er.ifsc,mono:true,ph:"HDFC0001234",badge:badge("ifsc")})}
-      </div><p class="muted" style="margin:14px 0 0">All of these are optional. Any value can be corrected. Fields filled from a document are marked, and the mark changes to "Typed" once you edit it.</p></div></div>`;
-}
-
-function obStep3(ob){
-  const ex=ob.empId&&S.emps.find(x=>x.id===ob.empId);
-  if(ex&&ex.email){
-    ob.workEmail=ex.email;
-    return `<div class="card"><div class="card-h"><h3>Work email</h3></div><div class="card-b" style="display:flex;flex-direction:column;gap:14px">
-      <div class="input mono" style="background:var(--paper-2);font-size:18px">${esc(ob.workEmail)}</div>
-      <div class="callout">${svg("info")}<div>This person already has a work email in the employee list, so none is generated.</div></div>
+/* The work email is created in Google Workspace and active straight away. Only HR can do this. */
+function obWorkEmailCard(ob){
+  const w=ob.work, d=ob.d;
+  const note=(txt)=>`<div class="callout">${svg("info")}<div>${txt}</div></div>`;
+  if(!w){
+    const preview=makeWorkEmail(d.first,d.last,x=>!!emailTaken(x));
+    return `<div class="card"><div class="card-h"><h3>Work email</h3><span class="muted">Created in Google and active straight away</span></div><div class="card-b" style="display:flex;flex-direction:column;gap:14px">
+      <div class="input mono" style="background:var(--paper-2);font-size:18px">${esc(preview||"Add a first name and surname above")}</div>
+      <p style="margin:0;color:var(--ink-dim)">Built as <span class="mono">name.surname@${DOMAIN}</span>, in lowercase. If the address is taken, a number is added. Fill in the details above, then create it. The name cannot be changed afterwards.</p>
+      ${note("The account starts with the default password and the employee must choose a new one at first sign-in.")}
+      <div class="row"><button type="button" class="btn primary" data-ob-mkmail ${ob.busy?"disabled":""}>${ob.busy?"Creating…":"Create work email"}</button></div>
     </div></div>`;
   }
-  ob.workEmail=makeWorkEmail(ob.d.first,ob.d.last,x=>!!emailTaken(x));
-  const base=makeWorkEmail(ob.d.first,ob.d.last,()=>false);
-  const bumped=ob.workEmail&&ob.workEmail!==base;
-  return `<div class="card"><div class="card-h"><h3>Work email</h3></div><div class="card-b" style="display:flex;flex-direction:column;gap:14px">
-      <div class="input mono" style="background:var(--paper-2);font-size:18px">${esc(ob.workEmail||"Add a first name and surname in step 1")}</div>
-      <p style="margin:0;color:var(--ink-dim)">Built as <span class="mono">name.surname@${DOMAIN}</span>, in lowercase, with spaces and special characters removed. If the address is taken, a number is added.</p>
-      ${bumped?`<div class="callout">${svg("info")}<div><b>${esc(base)}</b> already belongs to someone, so <b>${esc(ob.workEmail)}</b> is used.</div></div>`:""}
-      <div class="callout">${svg("info")}<div>${esc(activationNote(ob.d.start))}</div></div>
-      <div class="callout">${svg("info")}<div>On submit, the work email is sent to <b>${esc(maskMail(ob.d.pemail)||"the personal email")}</b>. <span class="muted">Simulated in this prototype: no email is sent.</span></div></div>
+  const label={active:"Active in Google Workspace",simulated:"Created (simulated)",existing:"Already in the employee list",local:"Created (prototype, no backend)",failed:"Google could not create it"}[w.google]||w.google;
+  const ok=w.google!=="failed";
+  return `<div class="card"><div class="card-h"><h3>Work email</h3><span class="pill ${ok?"p-ok":"p-bad"}">${esc(label)}</span></div><div class="card-b" style="display:flex;flex-direction:column;gap:14px">
+      <div class="input mono" style="background:var(--paper-2);font-size:18px">${esc(w.email)}</div>
+      ${w.google==="failed"?note(`${esc(w.error||"Google returned an error.")} The address is reserved for this person. Retry when the problem is fixed.`)
+        :w.google==="simulated"?note("Google is not connected yet, so this account was only simulated. Add the Google credentials in backend/.env to create real accounts.")
+        :w.google==="existing"?note("This person already has a work email, so none is created."):""}
+      ${w.google==="failed"?`<div class="row"><button type="button" class="btn primary" data-ob-mkmail ${ob.busy?"disabled":""}>${ob.busy?"Retrying…":"Retry"}</button></div>`:""}
     </div></div>`;
 }
 
-function obStep4(ob){
-  const d=ob.d, i=ob.ids, ex=ob.empId&&S.emps.find(x=>x.id===ob.empId);
-  ob.workEmail=ex&&ex.email?ex.email:makeWorkEmail(d.first,d.last,x=>!!emailTaken(x));
-  const sel=ob.apps||T(DEPT_TPL[d.dept]);
+/* Step 2: HR creates the app login for the new joiner. Employees cannot do this. */
+function obStep2(ob){
+  const w=ob.work, l=ob.login;
+  return `<div class="card"><div class="card-h"><h3>Login for the app</h3><span class="muted">Only HR can create it</span></div><div class="card-b" style="display:flex;flex-direction:column;gap:14px">
+      <dl class="rv"><div><dt>Signs in with</dt><dd><span class="mono">${esc(w.email)}</span></dd></div><div><dt>Role</dt><dd>Employee</dd></div></dl>
+      <p style="margin:0;color:var(--ink-dim)">The employee signs in with their work email and the default password, then uploads their own documents. Details from their resume will be added later.</p>
+      ${l?`<div class="callout">${svg("info")}<div>${l.existing?"This person already has a login.":`Login created. Password: <b class="mono">${esc(l.password||"the default password")}</b>. Tell the employee to change it on their Account page.`}</div></div>`
+         :`<div class="row"><button type="button" class="btn primary" data-ob-mklogin ${ob.busy?"disabled":""}>${ob.busy?"Creating…":"Create login"}</button></div>`}
+    </div></div>`;
+}
+
+/* Step 3: review, choose the tools, submit. */
+function obStep3(ob){
+  const d=ob.d, w=ob.work, sel=ob.apps||T(DEPT_TPL[d.dept]);
   const sec=(title,step,body)=>`<div class="card"><div class="card-h"><h3>${title}</h3><button type="button" class="btn link" data-ob-goto="${step}">Edit</button></div><div class="card-b">${body}</div></div>`;
   const kv=(pairs)=>`<dl class="rv">${pairs.map(([k,v])=>`<div><dt>${k}</dt><dd>${v||"—"}</dd></div>`).join("")}</dl>`;
-  const m=obDocs(ob);
-  const docs=DOCS.map(x=>`<div><dt>${esc(x.name)}</dt><dd>${(m[x.k]||[]).length?m[x.k].map(f=>esc(f.name)).join(", "):`<span class="muted">Not uploaded</span>`}</dd></div>`).join("");
+  const gstat={active:"Active in Google Workspace",simulated:"Active (simulated)",existing:"Already in the employee list",local:"Created (prototype)"}[w.google]||w.google;
   return `${sec("Personal details",1,kv([["Name",esc(d.first+" "+d.last)],["Personal email",esc(d.pemail)],["Phone",esc(d.phone)],["Address",esc(d.address)]]))}
     ${sec("Job details",1,kv([["Department",esc(d.dept)],["Job title",esc(d.title)],["Reporting manager",esc(d.mgr)],["Start date",esc(fdate(d.start))]]))}
-    ${sec("Documents from the employee",2,`<dl class="rv">${docs}</dl>`)}
-    ${sec("Document data",2,kv([["Name",esc(i.name)],["Date of birth",esc(i.dob?fdate(i.dob):"")],["Aadhaar",esc(maskAadhaar(i.aadhaar))],["PAN",esc(maskPan(i.pan))],["Address",esc(i.address)],["Bank account",esc(maskAcct(i.acct))],["IFSC",esc(String(i.ifsc).toUpperCase())]]))}
-    ${sec("Work email",3,kv([["Work email",`<span class="mono">${esc(ob.workEmail)}</span>`],["Activation",esc(d.start&&d.start>todayIso()?`Created now, activates on ${fdate(d.start)}`:"Activated when created")]]))}
+    <div class="card"><div class="card-h"><h3>Work email and login</h3></div><div class="card-b">${kv([["Work email",`<span class="mono">${esc(w.email)}</span>`],["Google",esc(gstat)],["App login","Created, employee role"]])}</div></div>
+    ${obDocsCard(ob)}
     <div class="card"><div class="card-h"><h3>Tools to give</h3><span class="pill p-info">Bundle: ${esc(TEMPLATES.find(x=>x.id===DEPT_TPL[d.dept]).name)}</span></div><div class="card-b" style="display:flex;flex-direction:column;gap:16px">
-      <div class="tiles" id="ob-apps">${APPS.map(a=>`<label class="tile"><input type="checkbox" value="${a.id}" ${sel.includes(a.id)?"checked":""}>${appIc(a.id)}<span class="t"><b>${esc(a.name)}</b><span>${esc(a.sub)}</span></span></label>`).join("")}</div>
-      <p class="muted" style="margin:0">Saved as this person's tool access, so offboarding can list it later.</p>
+      <div class="tiles" id="ob-apps">${APPS.map(a=>`<label class="tile"><input type="checkbox" value="${a.id}" ${a.id==="gws"||sel.includes(a.id)?"checked":""} ${a.id==="gws"?"disabled":""}>${appIc(a.id)}<span class="t"><b>${esc(a.name)}</b><span>${a.id==="gws"?"Created in step 1":esc(a.sub)}</span></span></label>`).join("")}</div>
+      <p class="muted" style="margin:0">Saved as this person's tool access, so offboarding can list it later. The employee uploads documents after signing in, and resume details will be added later.</p>
     </div></div>
     <label class="check" style="border:0;padding:0"><input type="checkbox" id="ob-reviewed" ${ob.reviewed?"checked":""}><div class="grow"><div class="lbl">I have reviewed all the details above</div></div></label>`;
 }
@@ -917,17 +907,17 @@ const obTabs=cur=>`<div class="subtabs" role="tablist"><button type="button" rol
 function vOnboard(){
   if(!S.ob){ S.ob=newOb(); if(obRestoreDraft(S.ob)) S.obRestored=true; }
   const ob=S.ob;
-  const body=[obStep1,obStep2,obStep3,obStep4][ob.step-1](ob);
-  const last=ob.step===4;
+  const body=[obStep1,obStep2,obStep3][ob.step-1](ob);
+  const last=ob.step===OB_STEPS.length;
   return `<section class="section">
   ${obTabs("onboard")}
-  ${head("Onboarding","Add a new <span class=\"grad\">joiner.</span>","Personal details come from the employee list, the employee uploads their own documents, and HR fills in the document data. Nothing is created until you submit.","",true)}
+  ${head("Onboarding","Add a new <span class=\"grad\">joiner.</span>","HR enters the details and the work email is created in Google. HR then creates the login, and the employee uploads their own documents later.","",true)}
   ${obStepper(ob)}
-  ${S.obRestored?`<div class="callout">${svg("info")}<div>A saved draft was restored. It holds name, contact and job details only. ID numbers have to be added again. <button type="button" class="btn link" data-ob-cancel>Start over</button></div></div>`:""}
+  ${S.obRestored?`<div class="callout">${svg("info")}<div>A saved draft was restored. It holds name, contact and job details only. <button type="button" class="btn link" data-ob-cancel>Start over</button></div></div>`:""}
   <form id="obf" class="grid" style="gap:22px" novalidate>${body}
     <div class="row" style="justify-content:space-between">
       <div class="row">${ob.step>1?`<button type="button" class="btn glass" data-ob-back>Back</button>`:`<button type="button" class="btn glass" data-ob-cancel>Cancel</button>`}<button type="button" class="btn glass" data-ob-draft>Save draft</button></div>
-      ${last?`<button type="submit" class="btn primary" id="ob-submit" ${ob.reviewed?"":"disabled"}>Submit and create account</button>`
+      ${last?`<button type="submit" class="btn primary" id="ob-submit" ${ob.reviewed?"":"disabled"}>Submit onboarding</button>`
             :`<button type="button" class="btn primary" data-ob-next>${ob.fromReview?"Back to review":"Continue"}</button>`}
     </div>
   </form></section>`;
@@ -936,32 +926,71 @@ function vOnboard(){
 function obCollect(ob){
   const g=id=>{const el=$("#ob-"+id);return el?el.value:undefined};
   if(ob.step===1) for(const k of ["first","last","pemail","phone","address","dept","title","mgr","start"]){const v=g(k); if(v!==undefined) ob.d[k]=v;}
-  if(ob.step===2) for(const k of Object.keys(ob.ids)){const v=g("id-"+k); if(v!==undefined) ob.ids[k]=v;}
-  if(ob.step===4){ const boxes=[...document.querySelectorAll("#ob-apps input")]; if(boxes.length) ob.apps=boxes.filter(b=>b.checked).map(b=>b.value); const r=$("#ob-reviewed"); if(r) ob.reviewed=r.checked; }
+  if(ob.step===3){ const boxes=[...document.querySelectorAll("#ob-apps input")]; if(boxes.length) ob.apps=boxes.filter(b=>b.checked).map(b=>b.value); const r=$("#ob-reviewed"); if(r) ob.reviewed=r.checked; }
 }
 function obFocusError(){ const el=document.querySelector(".ferr,.derr"); if(el){ el.scrollIntoView({block:"center"}); const f=el.closest(".field,.doc-row"); const i=f&&f.querySelector("input:not([type=file]),textarea"); if(i) i.focus(); } }
 
 function obNext(){
   const ob=S.ob; obCollect(ob);
-  const errs=ob.step===1?step1Errors(ob):ob.step===2?step2Errors(ob):{};
+  const errs=ob.step===1?step1Errors(ob):{};
   ob.errors=errs;
   if(Object.keys(errs).length){ render(); obFocusError(); toast("Please fix the highlighted fields."); return; }
-  if(ob.step===1){ const r=ocrRead(ob); ob.ocrDone=r.ok; ob.ocrMsg=r.ok?r.msg:"The employee has not uploaded any documents yet. Fill in the document data by hand, or come back once they have."; }
-  ob.step=ob.fromReview?4:ob.step+1; ob.fromReview=false;
+  if(ob.step===1&&(!ob.work||ob.work.google==="failed")){ toast("Create the work email first."); return; }
+  if(ob.step===2&&!ob.login){ toast("Create the login first."); return; }
+  ob.step=ob.fromReview?3:ob.step+1; ob.fromReview=false;
   render(); window.scrollTo(0,0);
+}
+
+/* Step 1: save the details, create the work email and activate it in Google. */
+async function obMakeEmail(){
+  const ob=S.ob; obCollect(ob);
+  ob.errors=step1Errors(ob);
+  if(Object.keys(ob.errors).length){ render(); obFocusError(); toast("Please fix the highlighted fields."); return; }
+  const picked=ob.empId&&S.emps.find(x=>x.id===ob.empId);
+  ob.busy=true; render();
+  try{
+    const r=await api("POST","/api/onboarding/work-email",{d:ob.d,existingEmail:(ob.work&&ob.work.email)||(picked&&picked.email)||undefined});
+    if(r.status===400){ ob.errors=r.data.errors||{}; toast(Object.values(ob.errors)[0]||(r.data&&r.data.error)||"The server rejected the details."); }
+    else if(r.status===502){ ob.work={email:r.data.email,google:"failed",error:r.data.error}; toast("Google could not create the account."); }
+    else if(!r.ok){ toast(apiMsg(r)); }
+    else{
+      const e=applyServerRecord(r.data); ob.empId=e.id;
+      ob.work={email:r.data.email,google:r.data.googleStatus};
+      ob.login=r.data.hasLogin?{created:true,existing:true}:null;
+      toast(`${r.data.email} is ready${r.data.googleStatus==="active"?" and active in Google":""}.`);
+    }
+  }catch(err){
+    // No backend: carry on with the prototype behaviour.
+    const email=picked&&picked.email?picked.email:makeWorkEmail(ob.d.first,ob.d.last,x=>!!emailTaken(x));
+    ob.work={email,google:"local"};
+  }
+  ob.busy=false; render();
+}
+
+/* Step 2: HR creates the app login with the default password. */
+async function obMakeLogin(){
+  const ob=S.ob; if(!ob.work) return;
+  ob.busy=true; render();
+  try{
+    const r=await api("POST","/api/users",{email:ob.work.email,role:"employee"});
+    if(r.ok) ob.login={created:true,password:r.data.defaultPassword};
+    else if(r.status===409) ob.login={created:true,existing:true};
+    else toast(apiMsg(r));
+  }catch(err){ ob.login={created:true,existing:true}; }   // no backend: nothing to create
+  ob.busy=false; render();
 }
 
 async function obSubmit(){
   const ob=S.ob; obCollect(ob);
   if(!ob.reviewed){ toast("Tick the review box before submitting."); return; }
-  const apps=(ob.apps||[]).slice().sort((a,b)=>(a==="gws"?-1:b==="gws"?1:0));
-  if(!apps.length){ toast("Pick at least one tool to give."); return; }
+  if(!ob.work||!ob.login){ toast("Create the work email and the login first."); return; }
+  const apps=["gws",...(ob.apps||[]).filter(a=>a!=="gws")];   // the Google account already exists, so it is always included
   let e=ob.empId?S.emps.find(x=>x.id===ob.empId):null;
   const existing=!!e;
-  let email=existing&&e.email?e.email:makeWorkEmail(ob.d.first,ob.d.last,x=>!!emailTaken(x));
+  let email=ob.work.email;
   let saved=null;
   try{
-    const r=await api("POST","/api/onboarding",{d:ob.d,ids:ob.ids,apps,existingEmail:existing?e.email:undefined});
+    const r=await api("POST","/api/onboarding",{d:ob.d,apps,existingEmail:ob.work.email});
     if(r.status===400){ ob.errors=r.data.errors||{}; toast(Object.values(ob.errors)[0]||"The server rejected the details."); render(); return; }
     if(!r.ok){ toast("The server could not save this onboarding. Try again."); return; }
     saved=r.data; email=saved.email;
@@ -978,19 +1007,22 @@ async function obSubmit(){
     // The person is already in the employee list, so the record is completed, not duplicated.
     Object.assign(e,{name:full,dept:ob.d.dept,title:ob.d.title.trim()||e.title,manager:ob.d.mgr||e.manager||"—",start:ob.d.start});
     for(const a of apps) if(!e.grants[a]||e.grants[a]==="revoked") e.grants[a]="none";
-    log(`Onboarding details completed by HR (${docCount(S.docs[e.id])} document file${docCount(S.docs[e.id])===1?"":"s"} received)`,e,null,"ok");
+    log("Onboarding details completed by HR",e,null,"ok");
   }
-  // Only masked identity data is kept on the record. The numbers themselves are not stored in this prototype.
   e.personalEmail=ob.d.pemail.trim(); e.phone=ob.d.phone.trim(); e.address=ob.d.address.trim();
-  e.ids={dob:ob.ids.dob,aadhaar:maskAadhaar(ob.ids.aadhaar),pan:maskPan(ob.ids.pan),acct:maskAcct(ob.ids.acct),ifsc:String(ob.ids.ifsc).trim().toUpperCase()};
+  // The Google account was created and activated in step 1, so there is nothing left to provision for it.
+  if(e.grants.gws!=="active"){
+    e.grants.gws="active";
+    log(ob.work.google==="active"?"Work email created and active in Google Workspace":"Work email active (simulated, Google is not connected)",e,"gws","ok");
+  }
   e.laptop=e.laptop||{received:false,serial:"",date:""};
   log(`Onboarding submitted after review. HR notified`,e,null,"info");
   log(`Work email sent to ${maskMail(e.personalEmail)} (simulated)`,e,null,"info");
   obClearDraft(); S.ob=null; S.obRestored=false;
-  toast(`HR notified: ${e.name} was submitted for onboarding.${saved&&S.user?" A login was created with the default password.":""}`);
+  toast(`HR notified: ${e.name} was submitted for onboarding.`);
   go("employee",e.id);
   const toGive=apps.filter(a=>e.grants[a]!=="active");
-  if(toGive.length) provision(e,toGive);
+  if(toGive.length) provision(e,toGive); else settle(e);
 }
 
 /* ---------- My documents: the employee uploads their own documents ---------- */
@@ -1023,7 +1055,7 @@ function vDocs(){
   }).join(""):"";
   return `<section class="section">
   ${S.user?"":obTabs("docs")}
-  ${head(S.user?"Employee":"Onboarding",S.user?"My <span class=\"grad\">documents.</span>":"Employee <span class=\"grad\">documents.</span>","Upload your own documents for onboarding. HR can see them and fills in the document data from them.","",true)}
+  ${head("Onboarding",S.user?"Your <span class=\"grad\">documents.</span>":"Employee <span class=\"grad\">documents.</span>","Upload your own documents for onboarding. HR can see them and fills in the document data from them.","",true)}
   ${S.user?"":`<div class="card"><div class="card-h"><h3>Who are you?</h3></div><div class="card-b">
     ${waiting.length?`<select class="input" id="md-pick" style="max-width:360px" aria-label="Your name"><option value="">Choose your name</option>${waiting.map(w=>`<option value="${w.id}" ${me&&w.id===me.id?"selected":""}>${esc(w.name)}</option>`).join("")}</select>`
       :`<p class="muted" style="margin:0">No one is waiting for onboarding right now.</p>`}
@@ -1079,6 +1111,7 @@ function vAccount(){
       <div class="row" style="grid-column:1/-1"><button type="submit" class="btn primary sm">Change password</button></div>
     </form>
   </div></div>
+  ${isEmployee()?"":`<div class="card"><div class="card-h"><h3>Logins and roles</h3></div><div class="card-b"><p class="muted" style="margin:0 0 12px">Create accounts, change roles, reset passwords and set the default password.</p><button type="button" class="btn glass" data-go="users">Manage users</button></div></div>`}
   <div class="card"><div class="card-b"><button type="button" class="btn glass" data-signout>Sign out</button></div></div>
   </section>`;
 }
@@ -1127,17 +1160,18 @@ document.addEventListener("submit",async ev=>{
 document.addEventListener("click",ev=>{
   const md=ev.target.closest("[data-mydoc-rm]");
   if(md){ const [k,i]=md.dataset.mydocRm.split(":"); const e=S.emps.find(x=>x.id===S.myId); const arr=S.docs[S.myId]&&S.docs[S.myId][k]; if(e&&arr){ const [gone]=arr.splice(Number(i),1); if(gone.id) api("DELETE","/api/documents/"+gone.id).catch(()=>{}); logAs(`${e.name} (employee)`,`Removed ${DOCS.find(x=>x.k===k).name}: ${gone.name}`,e); S.docErr={}; render(); } return; }
-  const t=ev.target.closest("[data-ob-next],[data-ob-back],[data-ob-goto],[data-ob-draft],[data-ob-cancel],[data-ob-ocr],[data-ob-fetch],[data-ob-unfetch]"); if(!t||!S.ob) return;
+  const t=ev.target.closest("[data-ob-next],[data-ob-back],[data-ob-goto],[data-ob-draft],[data-ob-cancel],[data-ob-mkmail],[data-ob-mklogin],[data-ob-fetch],[data-ob-unfetch]"); if(!t||!S.ob) return;
   const ob=S.ob;
   if(t.hasAttribute("data-ob-next")){ obNext(); return; }
   obCollect(ob);
   if(t.hasAttribute("data-ob-back")){ ob.errors={}; ob.step=Math.max(1,ob.step-1); ob.fromReview=false; render(); window.scrollTo(0,0); return; }
-  if(t.dataset.obGoto){ ob.fromReview=ob.step===4; ob.errors={}; ob.step=Number(t.dataset.obGoto); render(); window.scrollTo(0,0); return; }
+  if(t.dataset.obGoto){ ob.fromReview=ob.step===OB_STEPS.length; ob.errors={}; ob.step=Number(t.dataset.obGoto); render(); window.scrollTo(0,0); return; }
   if(t.hasAttribute("data-ob-draft")){ obSaveDraft(ob).then(ok=>toast(ok?"Draft saved: name, contact and job details only.":"Could not save the draft.")); return; }
   if(t.hasAttribute("data-ob-cancel")){ obClearDraft(); S.ob=null; S.obRestored=false; render(); window.scrollTo(0,0); return; }
-  if(t.hasAttribute("data-ob-ocr")){ const r=ocrRead(ob); ob.ocrMsg=r.msg; render(); return; }
-  if(t.hasAttribute("data-ob-fetch")){ const id=Number($("#ob-pick")&&$("#ob-pick").value); if(!id){ toast("Choose a person from the list first."); return; } obFetch(ob,id); ob.errors={}; render(); return; }
-  if(t.hasAttribute("data-ob-unfetch")){ ob.empId=null; ob.d=newOb().d; ob.ids=newOb().ids; ob.src={}; ob.apps=null; render(); return; }
+  if(t.hasAttribute("data-ob-mkmail")){ obMakeEmail(); return; }
+  if(t.hasAttribute("data-ob-mklogin")){ obMakeLogin(); return; }
+  if(t.hasAttribute("data-ob-fetch")){ const id=Number($("#ob-pick")&&$("#ob-pick").value); if(!id){ toast("Choose a person from the list first."); return; } obFetch(ob,id); ob.errors={}; render(); refreshDocs(true); return; }
+  if(t.hasAttribute("data-ob-unfetch")){ ob.empId=null; ob.d=newOb().d; ob.work=null; ob.login=null; ob.apps=null; render(); return; }
 });
 document.addEventListener("change",async ev=>{
   const t=ev.target;
@@ -1168,14 +1202,10 @@ document.addEventListener("change",async ev=>{
   if(t.id==="ob-dept"){ ob.apps=null; }
   if(t.id==="ob-reviewed"){ ob.reviewed=t.checked; const b=$("#ob-submit"); if(b) b.disabled=!t.checked; }
 });
-document.addEventListener("input",ev=>{
-  const t=ev.target, ob=S.ob; if(!ob||!t.id||!t.id.startsWith("ob-id-")) return;
-  const k=t.id.slice(6); ob.src[k]="typed"; const b=$("#src-"+k); if(b){ b.className="srcbadge typed"; b.textContent="Typed"; }
-});
 document.addEventListener("submit",ev=>{
-  if(ev.target.id==="obf"){ ev.preventDefault(); if(S.ob&&S.ob.step===4) obSubmit(); return; }
+  if(ev.target.id==="obf"){ ev.preventDefault(); if(S.ob&&S.ob.step===OB_STEPS.length) obSubmit(); return; }
   if(ev.target.id==="laptopf"){
-    ev.preventDefault();
+    ev.preventDefault(); if(isEmployee()){ toast("Only HR can do this."); return; }
     const e=S.emps.find(x=>x.id===S.sel); if(!e) return;
     const got=$("#lp-got").checked, serial=$("#lp-serial").value.trim(), date=$("#lp-date").value;
     if(got&&!serial){ toast("Enter the laptop serial number."); $("#lp-serial").focus(); return; }
@@ -1196,6 +1226,7 @@ function laptopCard(e){
     <div class="row" style="grid-column:1/-1"><button type="submit" class="btn primary sm" ${off?"disabled":""}>Save laptop details</button><span class="muted">Editable by HR.</span></div></div></form>`;
 }
 function recordCard(e){
+  if(isEmployee()&&e.id!==S.myId) return "";   // personal details and documents belong to HR and the person themselves
   const dm=S.docs[e.id]||{}, n=docCount(dm);
   if(!n&&!e.phone&&!e.ids) return "";
   const kv=p=>`<dl class="rv">${p.map(([k,v])=>`<div><dt>${k}</dt><dd>${v||"—"}</dd></div>`).join("")}</dl>`;
@@ -1207,9 +1238,19 @@ function recordCard(e){
 }
 
 /* Exposed for the automatic checks. */
-window.__onb={mk,provision,settle,activateDue,todayIso,newOb,makeWorkEmail,fileProblem,step1Errors,step2Errors,ocrRead,obFetch,V,maskAadhaar,maskPan,maskAcct,DOCS,S,emailTaken,docCount};
+window.__onb={mk,provision,settle,activateDue,todayIso,newOb,makeWorkEmail,fileProblem,step1Errors,obFetch,V,maskAadhaar,maskPan,maskAcct,DOCS,S,emailTaken,docCount};
 
+/* Employees can see who is leaving and how far along it is. HR runs the offboarding. */
+function vOffboardView(){
+  const list=S.emps.filter(e=>["offboarding","offboarded"].includes(e.status)||e.lastDay).sort((a,b)=>a.name.localeCompare(b.name));
+  return `<section class="section">
+  ${head("Offboarding","How people <span class=\"grad\">leave.</span>","When someone leaves, HR suspends their Google account first, then removes each tool and records it.","",true)}
+  <div class="card"><div class="card-h"><h3>Leaving and left</h3><span class="muted">${list.length}</span></div>
+    ${list.length?list.map(c=>`<div class="radio-li" style="cursor:pointer" data-emp="${c.id}">${person(c,c.title+" · "+c.dept)}<span style="margin-left:auto">${epill(c)}</span></div>`).join(""):`<div class="card-b muted">No one is leaving right now.</div>`}</div>
+  </section>`;
+}
 function vOffboard(){
+  if(isEmployee()) return vOffboardView();
   const cands=S.emps.filter(e=>e.status==="active"||e.status==="onboarding");
   const busy=S.emps.filter(e=>e.status==="offboarding");
   const e=S.emps.find(x=>x.id===S.offSel)||null;
@@ -1313,16 +1354,15 @@ function activateDue(){
   }
   return n;
 }
-const activationNote=start=>!start?"":start>todayIso()
-  ?`The account is created when you submit and stays suspended until the joining date (${fdate(start)}). It then activates automatically. HR can activate it early from the employee page.`
-  :`The joining date (${fdate(start)}) has already passed, so the account is activated as soon as it is created.`;
 function render(){
   if(activateDue()) toast("A work email was activated on its joining date.");
   if(!routeAllowed(S.route)) S.route=isEmployee()?"docs":"dashboard";
   if(S.route==="users"&&!S.users&&!S.usersBusy) loadUsers();
+  if(S.user&&!isEmployee()&&["onboard","docs","employee"].includes(S.route)) refreshDocs();
   renderNav();
-  const v={dashboard:vDashboard,employees:vEmployees,employee:vEmployee,onboard:vOnboard,docs:vDocs,offboard:vOffboard,leave:vLeave,templates:vTemplates,audit:vAudit,users:vUsers,account:vAccount}[S.route]||vDashboard;
+  const v={dashboard:vDashboard,employees:vEmployees,employee:vEmployee,onboard:isEmployee()?vDocs:vOnboard,docs:vDocs,offboard:vOffboard,leave:vLeave,templates:vTemplates,audit:vAudit,users:vUsers,account:vAccount}[S.route]||vDashboard;
   $("#view").innerHTML=v();
+  if(isEmployee()) document.querySelectorAll("#view #laptopf input,#view #laptopf button").forEach(x=>x.disabled=true);
 }
 function soft(){ if(S.route!=="onboard") render(); else renderNav(); }
 
@@ -1379,6 +1419,7 @@ function editEmployee(e){
 
 document.addEventListener("click",ev=>{
   const t=ev.target.closest("[data-go],[data-emp],[data-retry],[data-provision],[data-offboard],[data-confirmoff],[data-proto],[data-edit],[data-leave],[data-activate]"); if(!t) return;
+  if(isEmployee()&&t.matches("[data-retry],[data-provision],[data-offboard],[data-confirmoff],[data-proto],[data-edit],[data-leave],[data-activate]")){ toast("Only HR can do this."); return; }
   if(t.dataset.activate){const e=S.emps.find(x=>x.id==t.dataset.activate);if(e&&e.grants.gws==="created"){e.grants.gws="active";log("Work email activated early by HR",e,"gws","ok");settle(e);toast(`${e.email} is now active.`);render()}return}
   if(t.dataset.leave){const [lidS,st]=t.dataset.leave.split(":");const l=S.leave.find(x=>x.id==lidS);if(!l||l.status!=="pending")return;l.status=st;log(`${LEAVE_TYPES[l.type]} ${st} (${lrange(l)}, ${l.days} day${l.days>1?"s":""})`,l.emp,null,"ok");toast(`${LEAVE_TYPES[l.type]} for ${l.emp.name} ${st}.`);render();return}
   if(t.dataset.edit){editEmployee(S.emps.find(x=>x.id==t.dataset.edit));return}
@@ -1407,7 +1448,7 @@ document.addEventListener("click",ev=>{
 
 document.addEventListener("change",ev=>{
   const t=ev.target;
-  if(t.dataset.task){const [eid,ph,i]=t.dataset.task.split(":");const e=S.emps.find(x=>x.id==eid);const list=ph==="on"?e.onTasks:e.offTasks;list[i].done=t.checked;log(`Checklist: ${list[i].t}${t.checked?"":" (unticked)"}`,e,null,"ok");settle(e);render();return}
+  if(t.dataset.task){ if(isEmployee()){ t.checked=!t.checked; toast("Only HR can do this."); return; } const [eid,ph,i]=t.dataset.task.split(":");const e=S.emps.find(x=>x.id==eid);const list=ph==="on"?e.onTasks:e.offTasks;list[i].done=t.checked;log(`Checklist: ${list[i].t}${t.checked?"":" (unticked)"}`,e,null,"ok");settle(e);render();return}
   if(t.name==="offsel"){S.offSel=Number(t.value);render();return}
   if(t.id==="f-dept"){const tid=DEPT_TPL[t.value];$("#tpl-name").textContent="Bundle: "+TEMPLATES.find(x=>x.id===tid).name;APPS.forEach(a=>{$("#app-"+a.id).checked=T(tid).includes(a.id)});return}
   if(t.id==="af-app"||t.id==="af-res"){S.af={q:$("#af-q").value,app:$("#af-app").value,res:$("#af-res").value};render();return}

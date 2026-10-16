@@ -87,3 +87,6 @@ CREATE TABLE IF NOT EXISTS settings (
   key   TEXT PRIMARY KEY,
   value TEXT NOT NULL
 );
+
+ALTER TABLE employees ADD COLUMN IF NOT EXISTS google_status TEXT;  -- pending, active, simulated, existing, failed
+ALTER TABLE employees ADD COLUMN IF NOT EXISTS google_error TEXT;

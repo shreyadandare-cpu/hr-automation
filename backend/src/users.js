@@ -73,7 +73,7 @@ usersRouter.post("/", wrap(async (req, res) => {
   if (!V.email(email)) return res.status(400).json({ error: "Enter a valid email." });
   if (!ROLES.includes(role)) return res.status(400).json({ error: "Pick a role." });
   if (!(await createUser(pool, email, role))) return res.status(409).json({ error: `${email} already has an account.` });
-  res.status(201).json({ ok: true });
+  res.status(201).json({ ok: true, defaultPassword: await getDefaultPassword() });
 }));
 
 // One login for every current employee who does not have one yet.

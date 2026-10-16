@@ -489,7 +489,7 @@ const failedOf = e=>Object.keys(e.grants).filter(k=>e.grants[k]==="failed");
 
 function checklist(e){
   const phase = (e.status==="offboarding"||e.status==="offboarded")?"off":"on";
-  const auto = Object.keys(e.grants).map(id=>{
+  const auto = Object.keys(e.grants).filter(id=>phase==="on"||OFF_TOOLS.includes(id)).map(id=>{
     const s=e.grants[id];
     const done = phase==="on" ? s==="active" : s==="revoked";
     return {t:(phase==="on"?"Give access: ":"Remove access: ")+APP[id].name, done};
@@ -1505,8 +1505,9 @@ const wizFoot=(prefix,step,last,reviewed,fromReview,submitLabel,danger)=>`<div c
         :`<button type="button" class="btn primary" data-${prefix}-next>${fromReview?"Back to review":"Continue"}</button>`}</div>`;
 
 /* Offboarding: who is leaving → which access goes and who gets their files → last day and settlement → review. */
-const OW_STEPS=["Who is leaving","Access & handover","Last day & settlement","Review"];
-const liveTools=e=>Object.keys(e.grants).filter(k=>["active","failed","created"].includes(e.grants[k]));
+const OW_STEPS=["Who is leaving","Access","Last day & settlement","Review"];
+const OFF_TOOLS=["claude"];   // offboarding handles Claude only for now; add tool ids here to bring others back
+const liveTools=e=>Object.keys(e.grants).filter(k=>OFF_TOOLS.includes(k)&&["active","failed","created"].includes(e.grants[k]));
 const TOOL_DO={gws:"Suspend, sign out everywhere, reset password, move Drive and email",gemini:"Remove the Gemini licence",claude:"Remove from the Claude Team workspace",github:"Remove from the wohlig org and teams",gcp:"Remove IAM roles from all projects"};
 function newOw(empId){
   const e=S.emps.find(x=>x.id===empId);
@@ -1534,12 +1535,12 @@ function vOffboard(){
       ${cands.map(c=>`<label class="radio-li"><input type="radio" name="ow-emp" value="${c.id}" ${e&&e.id===c.id?"checked":""}>${person(c,c.title+" · "+c.dept)}<span style="margin-left:auto">${epill(c)}</span></label>`).join("")}</div>`;
   if(w.step===2){
     const live=liveTools(e);
-    body=`<div class="card"><div class="card-h"><h3>Access to remove</h3><span class="muted">Google Workspace goes first. It also blocks sign-in to every tool that uses Google login.</span></div><div class="card-b">
+    body=`<div class="card"><div class="card-h"><h3>Access to remove</h3><span class="muted">Claude</span></div><div class="card-b">
       ${live.length?`<div class="tiles">${live.map(id=>`<label class="tile"><input type="checkbox" id="ow-tool-${id}" value="${id}" ${(w.tools||[]).includes(id)?"checked":""}>${appIc(id)}<span class="t"><b>${esc(APP[id].name)}</b><span>${esc(TOOL_DO[id])}</span></span></label>`).join("")}</div>`
         :`<p class="muted" style="margin:0">${esc(e.name)} has no tool access to remove.</p>`}</div></div>
-    <div class="card"><div class="card-h"><h3>Handover</h3></div><div class="card-b form">
+    ${OFF_TOOLS.includes("gws")?`<div class="card"><div class="card-h"><h3>Handover</h3></div><div class="card-b form">
       ${wf("ow-to","Move Drive files and email to",`<select class="input" id="ow-to"><option value="">Choose…</option>${mgrs.map(m=>`<option value="${esc(m.email)}" ${lc(m.email)===lc(w.to)?"selected":""}>${esc(m.name)}</option>`).join("")}</select>`,er.to,(w.tools||[]).includes("gws")?"Needed because Google Workspace is being removed.":"Only needed when Google Workspace is removed.")}
-    </div></div>`;
+    </div></div>`:""}`;
   }
   if(w.step===3) body=`<div class="card"><div class="card-h"><h3>Last working day</h3></div><div class="card-b" style="display:flex;flex-direction:column;gap:18px">
       <div class="form">${wf("ow-day","Last working day",`<input class="input" type="date" id="ow-day" value="${esc(w.lastDay)}">`,er.lastDay)}
@@ -1548,13 +1549,13 @@ function vOffboard(){
     </div></div>
     <div class="card"><div class="card-h"><h3>Final settlement</h3><span class="muted">Leave only</span></div><div class="card-b" id="ow-settle">${settlementHtml(e,w.lastDay,true)}</div></div>`;
   if(w.step===4) body=`${rsec("Who is leaving","data-ow-goto",1,rkv([["Name",esc(e.name)],["Job title",esc(e.title)],["Department",esc(e.dept)],["Work email",`<span class="mono">${esc(e.email)}</span>`]]))}
-    ${rsec("Access & handover","data-ow-goto",2,`<div class="chips" style="margin-bottom:14px">${(w.tools||[]).map(id=>`<span class="chip">${appIc(id)}${esc(APP[id].name)}</span>`).join("")||`<span class="muted">No tool access to remove</span>`}</div>${rkv([["Drive files and email go to",esc(toName||"—")]])}`)}
+    ${rsec("Access","data-ow-goto",2,`<div class="chips" style="margin-bottom:14px">${(w.tools||[]).map(id=>`<span class="chip">${appIc(id)}${esc(APP[id].name)}</span>`).join("")||`<span class="muted">No tool access to remove</span>`}</div>${OFF_TOOLS.includes("gws")?rkv([["Drive files and email go to",esc(toName||"—")]]):""}`)}
     ${rsec("Last working day","data-ow-goto",3,rkv([["Last working day",esc(fdate(w.lastDay))],["Access removed",w.when==="later"?`On ${esc(fdate(w.lastDay))} at 6:00 pm`:"Right away, when you submit"]]))}
     ${rsec("Final settlement","data-ow-goto",3,settlementHtml(e,w.lastDay,true))}
     <div class="callout bad">${svg("alert")}<div>${esc(e.name.split(" ")[0])} will lose access to <b>${(w.tools||[]).length} tool${(w.tools||[]).length===1?"":"s"}</b>${w.when==="later"?` on ${esc(fdate(w.lastDay))} at 6:00 pm`:" right away"}, and their HR Access Hub login is removed. Every step is written to the audit log.</div></div>
     <label class="check" style="border:0;padding:0"><input type="checkbox" id="ow-reviewed" ${w.reviewed?"checked":""}><div class="grow"><div class="lbl">I have reviewed all the details above</div></div></label>`;
   return `<section class="section">
-  ${head("Offboarding","Remove access, <span class=\"grad\">step by step.</span>","Pick who is leaving, choose what to remove and who gets their files, set the last day, then review. Nothing happens until you submit.","",true)}
+  ${head("Offboarding","Remove access, <span class=\"grad\">step by step.</span>","Pick who is leaving, confirm the access to remove, set the last day, then review. Nothing happens until you submit.","",true)}
   ${S.off.online?"":`<div class="callout">${svg("info")}<div><b>Simulated.</b> The backend isn't connected, so offboarding here is not saved and no access is removed.</div></div>`}
   ${busy.length?`<div class="callout">${svg("info")}<div>${busy.map(b=>`<b>${esc(b.name)}</b>`).join(", ")} ${busy.length>1?"are":"is"} still being offboarded. <button type="button" class="btn link" data-emp="${busy[0].id}">Open checklist</button></div></div>`:""}
   ${sched.length?`<div class="callout">${svg("info")}<div>Scheduled: ${sched.map(b=>`<button type="button" class="btn link" data-emp="${b.id}">${esc(b.name)}, ${esc(fdate(b.lastDay))}</button>`).join(" · ")}</div></div>`:""}
@@ -1922,7 +1923,7 @@ async function provision(e,ids){
 async function revoke(e,to){
   e.status="offboarding"; e.offTasks=OFF_TASKS.map(t=>({t,done:false}));
   log("Offboarding started",e,null,"ok");
-  const order=Object.keys(e.grants).filter(k=>e.grants[k]!=="none"&&e.grants[k]!=="revoked").sort((a,b)=>(a==="gws"?-1:b==="gws"?1:0));
+  const order=Object.keys(e.grants).filter(k=>OFF_TOOLS.includes(k)&&e.grants[k]!=="none"&&e.grants[k]!=="revoked").sort((a,b)=>(a==="gws"?-1:b==="gws"?1:0));
   soft();
   for(const id of order){
     e.grants[id]="revoking"; soft(); await sleep(650);

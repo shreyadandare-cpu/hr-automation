@@ -1,6 +1,7 @@
 import express from "express";
-import L from "../../leave-rules.js";
+import L from "../../frontend/leave-rules.js";
 import { pool } from "./db.js";
+import { requireAuth, requireHr } from "./auth.js";
 
 const num = (v) => (v === null || v === undefined ? null : Number(v));
 const todayIso = () => new Date().toISOString().slice(0, 10);
@@ -13,6 +14,10 @@ const toRequest = (r) => ({
 });
 const toCompOff = (c) => ({ id: c.id, email: c.work_email, workedOn: c.worked_on, days: num(c.days), reason: c.reason, status: c.status });
 const toEmp = (e) => ({ name: e.name, status: e.status, start: e.start_date, casualOpening: num(e.casual_opening) });
+
+// Employees see and act on their own leave only; HR sees everyone and makes the decisions.
+const isHr = (req) => req.user && req.user.role === "hr";
+const self = (req) => req.user.email.toLowerCase();
 
 const holidayDays = async (db) => (await db.query("SELECT day FROM holidays ORDER BY day")).rows.map((h) => h.day);
 
@@ -49,14 +54,18 @@ async function tx(res, fn) {
 
 export function leaveRouter(wrap) {
   const r = express.Router();
+  r.use(["/api/leave", "/api/employees"], requireAuth);
 
   // Everything the Leave page needs; the page works out balances with the same leave-rules.js.
-  r.get("/api/leave", wrap(async (_req, res) => {
+  r.get("/api/leave", wrap(async (req, res) => {
+    const only = isHr(req) ? null : self(req);   // an employee gets their own rows only
+    const where = only ? "WHERE lower(work_email)=$1" : "";
+    const args = only ? [only] : [];
     const [reqs, comps, hols, pay] = await Promise.all([
-      pool.query("SELECT * FROM leave_requests ORDER BY from_date DESC, id DESC"),
-      pool.query("SELECT * FROM comp_off_credits ORDER BY worked_on DESC"),
+      pool.query(`SELECT * FROM leave_requests ${where} ORDER BY from_date DESC, id DESC`, args),
+      pool.query(`SELECT * FROM comp_off_credits ${where} ORDER BY worked_on DESC`, args),
       pool.query("SELECT day, name FROM holidays ORDER BY day"),
-      pool.query("SELECT work_email, start_date, monthly_gross, casual_opening FROM employees"),
+      pool.query(`SELECT work_email, start_date, monthly_gross, casual_opening FROM employees ${where}`, args),
     ]);
     res.json({
       policy: L.POLICY,
@@ -69,7 +78,8 @@ export function leaveRouter(wrap) {
   }));
 
   r.post("/api/leave/requests", wrap(async (req, res) => {
-    const { email, type, from, reason } = req.body || {};
+    const { type, from, reason } = req.body || {};
+    const email = isHr(req) ? req.body && req.body.email : self(req);   // employees always apply for themselves
     const half = req.body && req.body.half ? req.body.half : null;
     const to = half ? from : req.body && req.body.to;   // a half day is always a single date
     await tx(res, async (client) => {
@@ -95,7 +105,7 @@ export function leaveRouter(wrap) {
   }));
 
   // Approve or decline. Approval fixes how many days are paid and how many are loss of pay, using the balance right now.
-  r.post("/api/leave/requests/:id/decision", wrap(async (req, res) => {
+  r.post("/api/leave/requests/:id/decision", requireHr, wrap(async (req, res) => {
     const decision = req.body && req.body.decision;
     if (!["approved", "declined"].includes(decision)) return res.status(400).json({ error: "Decision must be approved or declined." });
     await tx(res, async (client) => {
@@ -131,6 +141,7 @@ export function leaveRouter(wrap) {
       const { rows } = await client.query("SELECT * FROM leave_requests WHERE id=$1 FOR UPDATE", [Number(req.params.id) || 0]);
       if (!rows[0]) return [404, { error: "Leave request not found." }];
       const lr = toRequest(rows[0]);
+      if (!isHr(req) && lr.email.toLowerCase() !== self(req)) return [404, { error: "Leave request not found." }];
       if (lr.status !== "pending") return [409, { error: `This request was already ${lr.status}, so it can't be cancelled.` }];
       const { rows: out } = await client.query("UPDATE leave_requests SET status='cancelled', decided_at=now() WHERE id=$1 RETURNING *", [lr.id]);
       await audit(client, `${L.TYPES[lr.type].name} cancelled by the employee: ${when(lr)}`, lr.email);
@@ -140,7 +151,8 @@ export function leaveRouter(wrap) {
 
   // HR records a comp off directly (approved at once), or an employee asks for one (pending until HR decides).
   const addCompOff = (status) => wrap(async (req, res) => {
-    const { email, workedOn, reason } = req.body || {};
+    const { workedOn, reason } = req.body || {};
+    const email = isHr(req) ? req.body && req.body.email : self(req);
     await tx(res, async (client) => {
       const emp = await lockEmployee(client, email);
       const { compOffs } = emp ? await historyOf(client, emp.work_email) : { compOffs: [] };
@@ -155,7 +167,7 @@ export function leaveRouter(wrap) {
   });
   r.post("/api/leave/comp-off-requests", addCompOff("pending"));
 
-  r.post("/api/leave/comp-offs/:id/decision", wrap(async (req, res) => {
+  r.post("/api/leave/comp-offs/:id/decision", requireHr, wrap(async (req, res) => {
     const decision = req.body && req.body.decision;
     if (!["approved", "declined"].includes(decision)) return res.status(400).json({ error: "Decision must be approved or declined." });
     await tx(res, async (client) => {
@@ -168,8 +180,8 @@ export function leaveRouter(wrap) {
     });
   }));
 
-  r.post("/api/leave/comp-offs", addCompOff("approved"));
-  r.post("/api/leave/holidays", wrap(async (req, res) => {
+  r.post("/api/leave/comp-offs", requireHr, addCompOff("approved"));
+  r.post("/api/leave/holidays", requireHr, wrap(async (req, res) => {
     const { day, name } = req.body || {};
     if (!L.validDate(day) || !String(name || "").trim()) return res.status(400).json({ error: "Enter a date and a name for the holiday." });
     await tx(res, async (client) => {
@@ -180,7 +192,7 @@ export function leaveRouter(wrap) {
     });
   }));
 
-  r.delete("/api/leave/holidays/:day", wrap(async (req, res) => {
+  r.delete("/api/leave/holidays/:day", requireHr, wrap(async (req, res) => {
     await tx(res, async (client) => {
       const { rows } = await client.query("DELETE FROM holidays WHERE day=$1 RETURNING name", [L.validDate(req.params.day) ? req.params.day : null]);
       if (!rows[0]) return [404, { error: "Holiday not found." }];
@@ -190,7 +202,7 @@ export function leaveRouter(wrap) {
   }));
 
   // Monthly gross (for the salary cut) and the casual balance someone had before this system started.
-  r.put("/api/employees/:email/pay", wrap(async (req, res) => {
+  r.put("/api/employees/:email/pay", requireHr, wrap(async (req, res) => {
     const { monthlyGross, casualOpening } = req.body || {};
     const gross = monthlyGross === "" || monthlyGross === null || monthlyGross === undefined ? null : Number(monthlyGross);
     const opening = Number(casualOpening ?? 0);
@@ -212,7 +224,7 @@ export function leaveRouter(wrap) {
   }));
 
   // Salary cuts for one month: loss-of-pay days that fall in that month × monthly gross / 30.
-  r.get("/api/leave/salary-cuts", wrap(async (req, res) => {
+  r.get("/api/leave/salary-cuts", requireHr, wrap(async (req, res) => {
     const month = String(req.query.month || "");
     if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(month)) return res.status(400).json({ error: "Month must look like 2026-10." });
     const [reqs, emps, holidays] = await Promise.all([

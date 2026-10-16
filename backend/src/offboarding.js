@@ -1,6 +1,7 @@
 import express from "express";
-import L from "../../leave-rules.js";
+import L from "../../frontend/leave-rules.js";
 import { pool } from "./db.js";
+import { requireHr } from "./auth.js";
 import { TOOLS, TOOL_NAMES, removeAccess } from "./connectors.js";
 
 // Manual tasks HR ticks off; the order matches the checklist on the page.
@@ -93,6 +94,15 @@ export async function runRemoval(id) {
   const o = rows[0];
   try {
     await pool.query("UPDATE employees SET status='offboarding' WHERE lower(work_email)=$1", [o.work_email.toLowerCase()]);
+    // Their HR Access Hub login goes too (signing them out), unless they are the last HR account.
+    const lc = o.work_email.toLowerCase();
+    const { rows: hrLeft } = await pool.query("SELECT count(*)::int AS n FROM users WHERE role='hr' AND lower(email)<>$1", [lc]);
+    const { rowCount: gone } = await pool.query(
+      "DELETE FROM users WHERE lower(email)=$1 AND (role<>'hr' OR $2::int > 0)", [lc, hrLeft[0].n]);
+    if (gone) {
+      await pool.query("DELETE FROM sessions WHERE lower(email)=$1", [lc]);
+      await audit(pool, "HR Access Hub login removed", o.work_email);
+    }
     if (before[0] && before[0].status === "scheduled") await audit(pool, "Scheduled offboarding started: removing tool access", o.work_email);
     const { rows: tools } = await pool.query(
       "SELECT * FROM offboarding_steps WHERE offboarding_id=$1 AND kind='tool' AND status<>'done' ORDER BY (key='gws') DESC, id", [id]);
@@ -122,6 +132,7 @@ export async function runDue() {
 
 export function offboardingRouter(wrap) {
   const r = express.Router();
+  r.use("/api/offboarding", requireHr);   // offboarding is HR work
 
   r.get("/api/offboarding", wrap(async (_req, res) => {
     const { rows } = await pool.query("SELECT id FROM offboardings WHERE status<>'cancelled' ORDER BY created_at");

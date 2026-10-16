@@ -5,9 +5,12 @@
 <style>
 /* Layout: wohlig.com language. Floating glass pill nav, centred serif hero with glass stat cards,
    then left-aligned sections (eyebrow + serif heading + smile underline) on lavender "smoke" paper.
-   Deliberately single light theme, matching the website. */
+   Light and dark themes: follows the system setting until the user picks one with the toggle. */
 :root{
   color-scheme:light;
+  --surface:#fff; --surface-2:rgba(255,255,255,.75); --surface-3:rgba(255,255,255,.85); --tint:#eceeff; --tint-2:#f1f2ff; --card-edge:rgba(255,255,255,.9); --toast-fg:#fff;
+  --tile-grad:linear-gradient(135deg,#eef0ff,#e3e6ff); --callout:rgba(236,238,255,.85);
+  --blob1:rgba(169,187,255,.45); --blob2:rgba(198,205,255,.55); --blob3:rgba(189,238,226,.38); --blob4:rgba(220,200,255,.35);
   --paper:#fdfcff; --paper-2:#f5f5fe; --ink:#0e0a38; --ink-dim:#555177; --ink-faint:#7c7aa0;
   --purple:#4254d4; --purple-deep:#3242b2; --purple-soft:#7d8cee; --lilac:#c6cdff; --periwinkle:#a9bbff; --mint:#bdeee2;
   --line:rgba(77,73,221,.12); --line-2:rgba(77,73,221,.22);
@@ -22,13 +25,46 @@
   --radius:24px; --radius-sm:16px;
   --ease:cubic-bezier(.22,.8,.26,.99);
 }
+
+/* ---------- Dark theme ---------- */
+:root[data-theme="dark"]{
+  color-scheme:dark;
+  --paper:#0f0e1f; --paper-2:#1b1a33; --ink:#ecebff; --ink-dim:#b4b2d6; --ink-faint:#8d8bb4;
+  --purple:#8d9bff; --purple-deep:#6f7fee; --purple-soft:#9aa6ff; --lilac:#3a3f7a; --periwinkle:#6f7fee; --mint:#1f4a43;
+  --line:rgba(160,168,255,.16); --line-2:rgba(160,168,255,.30);
+  --ok:#4fd08f; --ok-soft:rgba(79,208,143,.14); --warn:#f0b255; --warn-soft:rgba(240,178,85,.14); --bad:#ff7a70; --bad-soft:rgba(255,122,112,.14);
+  --grad-btn:linear-gradient(135deg,#8d9bff -20%,#5668e8 45%,#4254d4);
+  --glass:linear-gradient(135deg,rgba(40,38,78,.85),rgba(28,27,58,.7) 45%,rgba(36,34,72,.8));
+  --glass-shadow:inset 0 1px 0 rgba(255,255,255,.07),0 2px 6px rgba(0,0,0,.3),0 24px 60px rgba(0,0,0,.35);
+  --surface:#23224a; --surface-2:rgba(255,255,255,.06); --surface-3:rgba(255,255,255,.08); --tint:rgba(141,155,255,.16); --tint-2:rgba(141,155,255,.14); --card-edge:rgba(255,255,255,.08); --toast-fg:#0f0e1f;
+  --tile-grad:linear-gradient(135deg,rgba(141,155,255,.22),rgba(141,155,255,.12)); --callout:rgba(141,155,255,.14);
+  --blob1:rgba(80,92,210,.35); --blob2:rgba(120,90,220,.25); --blob3:rgba(40,150,130,.2); --blob4:rgba(150,90,200,.2);
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    color-scheme:dark;
+    --paper:#0f0e1f; --paper-2:#1b1a33; --ink:#ecebff; --ink-dim:#b4b2d6; --ink-faint:#8d8bb4;
+    --purple:#8d9bff; --purple-deep:#6f7fee; --purple-soft:#9aa6ff; --lilac:#3a3f7a; --periwinkle:#6f7fee; --mint:#1f4a43;
+    --line:rgba(160,168,255,.16); --line-2:rgba(160,168,255,.30);
+    --ok:#4fd08f; --ok-soft:rgba(79,208,143,.14); --warn:#f0b255; --warn-soft:rgba(240,178,85,.14); --bad:#ff7a70; --bad-soft:rgba(255,122,112,.14);
+    --grad-btn:linear-gradient(135deg,#8d9bff -20%,#5668e8 45%,#4254d4);
+    --glass:linear-gradient(135deg,rgba(40,38,78,.85),rgba(28,27,58,.7) 45%,rgba(36,34,72,.8));
+    --glass-shadow:inset 0 1px 0 rgba(255,255,255,.07),0 2px 6px rgba(0,0,0,.3),0 24px 60px rgba(0,0,0,.35);
+    --surface:#23224a; --surface-2:rgba(255,255,255,.06); --surface-3:rgba(255,255,255,.08); --tint:rgba(141,155,255,.16); --tint-2:rgba(141,155,255,.14); --card-edge:rgba(255,255,255,.08); --toast-fg:#0f0e1f;
+    --tile-grad:linear-gradient(135deg,rgba(141,155,255,.22),rgba(141,155,255,.12)); --callout:rgba(141,155,255,.14);
+    --blob1:rgba(80,92,210,.35); --blob2:rgba(120,90,220,.25); --blob3:rgba(40,150,130,.2); --blob4:rgba(150,90,200,.2);
+  }
+}
+.theme-btn{display:inline-grid;place-items:center;width:38px;height:38px;border:0;border-radius:50%;background:var(--surface-2);box-shadow:inset 0 0 0 1px var(--line);color:var(--ink);cursor:pointer;flex:none}
+.theme-btn:hover{box-shadow:inset 0 0 0 1px var(--line-2)}
+.theme-btn svg{width:18px;height:18px}
 *{box-sizing:border-box}
 body{background:var(--paper);color:var(--ink);font:400 15px/1.55 var(--body);letter-spacing:-.01em;-webkit-font-smoothing:antialiased;min-height:100%}
 body::before{content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;background:
-  radial-gradient(42% 38% at 12% 8%,rgba(169,187,255,.45),transparent 70%),
-  radial-gradient(36% 34% at 88% 14%,rgba(198,205,255,.55),transparent 70%),
-  radial-gradient(40% 40% at 70% 92%,rgba(189,238,226,.38),transparent 70%),
-  radial-gradient(30% 30% at 20% 80%,rgba(220,200,255,.35),transparent 70%),var(--paper)}
+  radial-gradient(42% 38% at 12% 8%,var(--blob1),transparent 70%),
+  radial-gradient(36% 34% at 88% 14%,var(--blob2),transparent 70%),
+  radial-gradient(40% 40% at 70% 92%,var(--blob3),transparent 70%),
+  radial-gradient(30% 30% at 20% 80%,var(--blob4),transparent 70%),var(--paper)}
 button,input,select{font:inherit;color:inherit;letter-spacing:inherit}
 h1,h2,h3{margin:0;font-family:var(--display);color:var(--ink);text-wrap:balance}
 .wrap{width:100%;max-width:1180px;margin:0 auto;padding-inline:24px}
@@ -50,7 +86,7 @@ h1,h2,h3{margin:0;font-family:var(--display);color:var(--ink);text-wrap:balance}
 .btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;border:0;border-radius:999px;padding:12px 24px;font:600 15.5px/1 var(--display);cursor:pointer;white-space:nowrap;text-decoration:none;transition:transform .25s var(--ease),box-shadow .25s var(--ease)}
 .btn.primary{background:var(--grad-btn);color:#fff;box-shadow:inset 0 1px 0 rgba(255,255,255,.35),0 10px 26px rgba(77,73,221,.35)}
 .btn.primary:hover{transform:translateY(-1px);box-shadow:inset 0 1px 0 rgba(255,255,255,.35),0 14px 32px rgba(77,73,221,.42)}
-.btn.glass{background:#fff;color:var(--ink);box-shadow:inset 0 0 0 1px var(--line),0 6px 18px rgba(77,73,221,.10)}
+.btn.glass{background:var(--surface);color:var(--ink);box-shadow:inset 0 0 0 1px var(--line),0 6px 18px rgba(77,73,221,.10)}
 .btn.glass:hover{transform:translateY(-1px)}
 .btn.danger{background:linear-gradient(135deg,#e0665b,#c0352b);color:#fff;box-shadow:0 10px 26px rgba(192,53,43,.28)}
 .btn.sm{padding:8px 15px;font-size:13.5px}
@@ -77,11 +113,11 @@ h1,h2,h3{margin:0;font-family:var(--display);color:var(--ink);text-wrap:balance}
 .section{display:flex;flex-direction:column;gap:24px}
 
 /* ---------- Glass cards ---------- */
-.card{background:var(--glass);border-radius:var(--radius);box-shadow:var(--glass-shadow);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);min-width:0;border:1px solid rgba(255,255,255,.9)}
+.card{background:var(--glass);border-radius:var(--radius);box-shadow:var(--glass-shadow);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);min-width:0;border:1px solid var(--card-edge)}
 .card-h{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:20px 24px 14px}
 .card-h h3{font-size:20px;font-weight:600;letter-spacing:-.01em}
 .card-b{padding:4px 24px 22px}
-.icon-tile{width:38px;height:38px;border-radius:12px;background:linear-gradient(135deg,#eef0ff,#e3e6ff);display:grid;place-items:center;color:var(--purple);flex:none;box-shadow:inset 0 0 0 1px rgba(66,84,212,.12)}
+.icon-tile{width:38px;height:38px;border-radius:12px;background:var(--tile-grad);display:grid;place-items:center;color:var(--purple);flex:none;box-shadow:inset 0 0 0 1px rgba(66,84,212,.12)}
 .icon-tile svg{width:18px;height:18px}
 .grid{display:grid;gap:22px}
 .g4{grid-template-columns:repeat(4,minmax(0,1fr))}
@@ -103,7 +139,7 @@ h1,h2,h3{margin:0;font-family:var(--display);color:var(--ink);text-wrap:balance}
 .p-ok{color:var(--ok);background:var(--ok-soft)}
 .p-warn{color:var(--warn);background:var(--warn-soft)}
 .p-bad{color:var(--bad);background:var(--bad-soft)}
-.p-info{color:var(--purple);background:#eceeff}
+.p-info{color:var(--purple);background:var(--tint)}
 .p-mute{color:var(--ink-faint);background:var(--paper-2)}
 .p-busy::before{animation:blink 1s infinite}
 @keyframes blink{50%{opacity:.25}}
@@ -130,9 +166,9 @@ tr.click:hover td{background:rgba(66,84,212,.04)}
 .apps-row{display:flex;gap:5px;flex-wrap:wrap}
 .apps-row .app-ic{width:24px;height:24px;font-size:9.5px;border-radius:7px}
 .app-ic.off{opacity:.25;filter:grayscale(1)}
-.app-ic.fail{box-shadow:0 0 0 2px #fff,0 0 0 4px var(--bad)}
+.app-ic.fail{box-shadow:0 0 0 2px var(--surface),0 0 0 4px var(--bad)}
 .chips{display:flex;flex-wrap:wrap;gap:8px}
-.chip{display:inline-flex;align-items:center;gap:7px;border-radius:999px;padding:4px 12px 4px 4px;font-size:13px;font-weight:500;background:#fff;box-shadow:inset 0 0 0 1px var(--line)}
+.chip{display:inline-flex;align-items:center;gap:7px;border-radius:999px;padding:4px 12px 4px 4px;font-size:13px;font-weight:500;background:var(--surface);box-shadow:inset 0 0 0 1px var(--line)}
 .chip .app-ic{width:22px;height:22px;font-size:8.5px;border-radius:50%}
 .chip.plain{padding-left:12px}
 
@@ -177,24 +213,27 @@ tr.click:hover td{background:rgba(66,84,212,.04)}
 .field .hint{font-size:12px;color:var(--ink-faint)}
 .field .ferr{font-size:12px;font-weight:600;color:var(--bad)}
 .input[aria-invalid="true"]{box-shadow:inset 0 0 0 2px var(--bad)}
-.input{border:0;box-shadow:inset 0 0 0 1px var(--line-2);background:rgba(255,255,255,.85);border-radius:14px;padding:12px 14px;font-size:14.5px;width:100%;min-width:0}
+.input{border:0;box-shadow:inset 0 0 0 1px var(--line-2);background:var(--surface-3);border-radius:14px;padding:12px 14px;font-size:14.5px;width:100%;min-width:0}
 .input:focus{outline:0;box-shadow:inset 0 0 0 2px var(--purple)}
 .tiles{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:12px}
-.tile{display:flex;align-items:center;gap:12px;border-radius:16px;padding:12px 14px;cursor:pointer;background:rgba(255,255,255,.75);box-shadow:inset 0 0 0 1px var(--line);transition:box-shadow .2s,background .2s}
+.tile{display:flex;align-items:center;gap:12px;border-radius:16px;padding:12px 14px;cursor:pointer;background:var(--surface-2);box-shadow:inset 0 0 0 1px var(--line);transition:box-shadow .2s,background .2s}
 .tile input{accent-color:var(--purple);width:17px;height:17px;flex:none}
-.tile:has(input:checked){background:#f1f2ff;box-shadow:inset 0 0 0 1.5px var(--purple)}
+.tile:has(input:checked){background:var(--tint-2);box-shadow:inset 0 0 0 1.5px var(--purple)}
 .tile .t b{display:block;font-size:14px;font-weight:600}
 .tile .t span{display:block;font-size:12px;color:var(--ink-faint)}
+.subtabs{display:inline-flex;gap:4px;padding:4px;border-radius:999px;background:var(--paper-2);box-shadow:inset 0 0 0 1px var(--line);margin-bottom:-8px;flex-wrap:wrap}
+.subtabs button{border:0;background:transparent;color:var(--ink-dim);padding:9px 18px;border-radius:999px;font:600 14px/1 var(--body);cursor:pointer}
+.subtabs button.on{background:var(--surface);color:var(--purple);box-shadow:0 2px 8px rgba(77,73,221,.15)}
 .seg{display:inline-flex;background:var(--paper-2);border-radius:999px;padding:4px;gap:4px;flex-wrap:wrap}
 .seg label{padding:8px 16px;border-radius:999px;font:600 13px/1 var(--body);cursor:pointer}
 .seg input{position:absolute;opacity:0;pointer-events:none}
-.seg label:has(input:checked){background:#fff;color:var(--purple);box-shadow:0 2px 8px rgba(77,73,221,.15)}
+.seg label:has(input:checked){background:var(--surface);color:var(--purple);box-shadow:0 2px 8px rgba(77,73,221,.15)}
 .seg label:has(input:focus-visible){outline:2px solid var(--purple)}
-.revoke-item{display:flex;align-items:center;gap:12px;padding:10px 14px;border-radius:14px;background:rgba(255,255,255,.75);box-shadow:inset 0 0 0 1px var(--line)}
+.revoke-item{display:flex;align-items:center;gap:12px;padding:10px 14px;border-radius:14px;background:var(--surface-2);box-shadow:inset 0 0 0 1px var(--line)}
 .revoke-item .grow{flex:1;min-width:0}
 .revoke-item b{display:block;font-size:14px}
 .revoke-item span{display:block;font-size:12px;color:var(--ink-faint)}
-.callout{display:flex;gap:12px;padding:14px 18px;border-radius:16px;background:rgba(236,238,255,.85);font-size:14px;align-items:flex-start}
+.callout{display:flex;gap:12px;padding:14px 18px;border-radius:16px;background:var(--callout);font-size:14px;align-items:flex-start}
 .callout.bad{background:var(--bad-soft)}
 .callout svg{width:18px;height:18px;flex:none;color:var(--purple);margin-top:2px}
 .callout.bad svg{color:var(--bad)}
@@ -214,7 +253,7 @@ tr.click:hover td{background:rgba(66,84,212,.04)}
 
 /* Footer */
 .stepper{display:flex;gap:10px;flex-wrap:wrap}
-.stp{display:flex;align-items:center;gap:10px;padding:9px 16px 9px 10px;border-radius:999px;background:rgba(255,255,255,.7);box-shadow:inset 0 0 0 1px var(--line);font-weight:600;font-size:14px;color:var(--ink-faint)}
+.stp{display:flex;align-items:center;gap:10px;padding:9px 16px 9px 10px;border-radius:999px;background:var(--surface-2);box-shadow:inset 0 0 0 1px var(--line);font-weight:600;font-size:14px;color:var(--ink-faint)}
 .stp b{display:grid;place-items:center;width:26px;height:26px;border-radius:50%;background:var(--paper-2);font:600 13px/1 var(--body);color:var(--ink-dim)}
 .stp.on{color:var(--ink);box-shadow:inset 0 0 0 1.5px var(--purple)}
 .stp.on b,.stp.done b{background:var(--purple);color:#fff}
@@ -224,13 +263,13 @@ tr.click:hover td{background:rgba(66,84,212,.04)}
 .doc-row .grow b{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
 .doc-row .sub{display:block;font-size:12.5px;color:var(--ink-faint)}
 .derr{font-size:12px;font-weight:600;color:var(--bad);margin-top:6px}
-.fchip{display:inline-flex;align-items:center;gap:8px;margin:6px 6px 0 0;padding:3px 5px 3px 12px;border-radius:999px;background:#fff;box-shadow:inset 0 0 0 1px var(--line);font-size:13px}
+.fchip{display:inline-flex;align-items:center;gap:8px;margin:6px 6px 0 0;padding:3px 5px 3px 12px;border-radius:999px;background:var(--surface);box-shadow:inset 0 0 0 1px var(--line);font-size:13px}
 .fchip button{border:0;background:var(--paper-2);width:22px;height:22px;border-radius:50%;cursor:pointer;color:var(--ink-dim);line-height:1;font-size:15px}
 .rv{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px 24px;margin:0}
 .rv dt{font:600 11px/1.2 var(--body);color:var(--ink-faint);text-transform:uppercase;letter-spacing:.14em}
 .rv dd{margin:4px 0 0;font-weight:500;overflow-wrap:anywhere}
 .srcbadge{font:600 11px/1 var(--body);border-radius:999px;padding:3px 8px;margin-left:8px;letter-spacing:.04em;vertical-align:1px}
-.srcbadge.ocr{background:#eceeff;color:var(--purple)}
+.srcbadge.ocr{background:var(--tint);color:var(--purple)}
 .srcbadge.typed{background:var(--paper-2);color:var(--ink-faint)}
 textarea.input{resize:vertical;font-family:var(--body)}
 @media (max-width:720px){.rv{grid-template-columns:minmax(0,1fr)}.doc-row{padding-inline:16px}.stp{font-size:13px}}
@@ -254,15 +293,17 @@ textarea.input{resize:vertical;font-family:var(--body)}
 
 /* Modal + toast */
 .scrim{position:fixed;inset:0;background:rgba(14,10,56,.35);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);display:grid;place-items:center;padding:16px;z-index:50}
-.modal{background:#fff;border-radius:var(--radius);box-shadow:0 30px 80px rgba(14,10,56,.3);width:min(540px,100%);max-height:90vh;overflow:auto}
+.modal{background:var(--surface);border-radius:var(--radius);box-shadow:0 30px 80px rgba(14,10,56,.3);width:min(540px,100%);max-height:90vh;overflow:auto}
 .modal .card-b{display:flex;flex-direction:column;gap:16px}
 .modal-f{display:flex;justify-content:flex-end;gap:10px;padding:16px 24px 22px;flex-wrap:wrap}
-.toast{position:fixed;bottom:calc(22px + env(safe-area-inset-bottom,0px));left:50%;transform:translateX(-50%);background:var(--ink);color:#fff;padding:12px 20px;border-radius:999px;font-size:14px;font-weight:500;z-index:60;box-shadow:0 18px 40px rgba(14,10,56,.3);max-width:calc(100% - 32px);text-align:center}
+.toast{position:fixed;bottom:calc(22px + env(safe-area-inset-bottom,0px));left:50%;transform:translateX(-50%);background:var(--ink);color:var(--toast-fg);padding:12px 20px;border-radius:999px;font-size:14px;font-weight:500;z-index:60;box-shadow:0 18px 40px rgba(14,10,56,.3);max-width:calc(100% - 32px);text-align:center}
 .row{display:flex;gap:12px;align-items:center;flex-wrap:wrap}
 
 @media (max-width:1080px){.g4{grid-template-columns:repeat(2,minmax(0,1fr))}.g-main,.g3{grid-template-columns:minmax(0,1fr)}.facts{grid-template-columns:repeat(2,minmax(0,1fr))}}
+/* on wide screens let the nav bar run wider than the 1180px page column so all eight links fit on one row */
+@media (min-width:1341px){.wrap.navbar{max-width:1340px}}
 /* eight nav links no longer fit beside the logo and button on mid-size screens, so wrap the links onto their own row */
-@media (max-width:1380px){
+@media (max-width:1340px){
   .pill-nav{flex-wrap:wrap;border-radius:28px;padding:12px 12px 10px 22px}.links{order:3;width:100%;overflow-x:auto;margin:4px -12px 0 -22px;padding:0 12px 0 16px}.cta{margin-left:auto}}
 @media (max-width:720px){
   .wrap{padding-inline:16px}
@@ -282,17 +323,19 @@ textarea.input{resize:vertical;font-family:var(--body)}
   <nav class="pill-nav" aria-label="Main">
     <a class="logo" href="#dashboard" aria-label="wohlig HR Access Hub, dashboard">w<span class="o" aria-hidden="true"></span>hlig<small>HR Access Hub</small></a>
     <div class="links" id="links"></div>
+    <button class="theme-btn" id="acct" type="button" aria-label="Account" title="Account" style="display:none"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 4-6 8-6s8 2 8 6"/></svg></button>
+    <button class="theme-btn" id="theme" type="button" aria-label="Switch to dark mode" title="Switch theme"></button>
     <button class="btn primary sm cta" data-go="onboard">+ <span class="lbl-long">New onboarding</span><span class="lbl-short" hidden>New</span></button>
   </nav>
 </div>
 <main class="wrap view" id="view"></main>
-<footer class="wrap"><div class="foot"><a class="logo" href="#dashboard" style="text-decoration:none">w<span class="o" aria-hidden="true"></span>hlig</a><span>HR Access Hub · People Ops · Prototype · roster from HR sheet, 8 Oct 2026</span><span>Signed in as <b style="color:var(--ink)">Shreya Dandare</b>, HR Admin</span></div></footer>
+<footer class="wrap"><div class="foot"><a class="logo" href="#dashboard" style="text-decoration:none">w<span class="o" aria-hidden="true"></span>hlig</a><span>HR Access Hub · People Ops · Prototype · roster from HR sheet, 8 Oct 2026</span><span id="who">Signed in as <b style="color:var(--ink)">Shreya Dandare</b>, HR Admin</span></div></footer>
 <div id="layer"></div>
 
 <script src="leave-rules.js"></script>
 <script>
 (function(){
-const ACTOR = "Shreya Dandare";
+let ACTOR = "Shreya Dandare";
 const DOMAIN = "wohlig.com";
 const TODAY = new Date(2026,9,13,10,30);
 const BOOT = Date.now();
@@ -468,15 +511,37 @@ const ICONS = {
   info:'<circle cx="12" cy="12" r="9"/><path d="M12 8v5M12 16h.01"/>',
   bundle:'<rect x="4" y="4" width="7" height="7" rx="2"/><rect x="13" y="4" width="7" height="7" rx="2"/><rect x="4" y="13" width="7" height="7" rx="2"/><rect x="13" y="13" width="7" height="7" rx="2"/>',
 };
-const NAV = [["dashboard","Dashboard"],["employees","Employees"],["onboard","Onboarding"],["docs","My documents"],["myleave","My leave"],["offboard","Offboarding"],["leave","Leave"],["templates","Access bundles"],["audit","Audit log"]];
+const NAV = [["dashboard","Dashboard"],["employees","Employees"],["onboard","Onboarding"],["offboard","Offboarding"],["leave","Leave"],["myleave","My leave"],["templates","Access bundles"],["audit","Audit log"]];
 const svg = k=>`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${ICONS[k]}</svg>`;
+/* ---------- Light / dark theme ---------- */
+const THEME_KEY="hr_theme";
+const sysDark=()=>!!(window.matchMedia&&matchMedia("(prefers-color-scheme: dark)").matches);
+function theme(){ let t=null; try{t=localStorage.getItem(THEME_KEY)}catch(e){} return t==="dark"||t==="light"?t:(sysDark()?"dark":"light"); }
+function applyTheme(t){
+  document.documentElement.setAttribute("data-theme",t);
+  const b=$("#theme"); if(!b) return;
+  b.setAttribute("aria-label",t==="dark"?"Switch to light mode":"Switch to dark mode");
+  b.innerHTML=t==="dark"
+    ?'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>'
+    :'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>';
+}
+function toggleTheme(){ const t=theme()==="dark"?"light":"dark"; try{localStorage.setItem(THEME_KEY,t)}catch(e){} applyTheme(t); }
+/* Signed in (S.user set): employees only see My documents and My leave. HR sees everything plus Users.
+   Without a backend S.user stays null and the page behaves as the old prototype. */
+const isEmployee = ()=>!!S.user&&S.user.role==="employee";
+function navItems(){ return !S.user?NAV:isEmployee()?[["docs","My documents"],["myleave","My leave"]]:[...NAV,["users","Users"]]; }
+function routeAllowed(r){
+  if(!S.user) return r!=="account"&&r!=="users";
+  if(r==="account") return true;
+  return isEmployee()?r==="docs"||r==="myleave":true;
+}
 function renderNav(){
   const attn = S.emps.filter(e=>failedOf(e).length).length;
-  const active = S.route==="employee"?"employees":S.route;
-  $("#links").innerHTML = NAV.map(([k,l])=>`<a href="#${k}" class="${active===k?"on":""}">${l}${k==="dashboard"&&attn?`<span class="count">${attn}</span>`:""}</a>`).join("");
+  const active = S.route==="employee"?"employees":S.route==="docs"&&!isEmployee()?"onboard":S.route;
+  $("#links").innerHTML = navItems().map(([k,l])=>`<a href="#${k}" class="${active===k?"on":""}">${l}${k==="dashboard"&&attn?`<span class="count">${attn}</span>`:""}</a>`).join("");
 }
 function go(r,sel){S.route=r; if(sel!==undefined)S.sel=sel; const h="#"+(r==="employee"?"employees":r); if(location.hash!==h){try{history.replaceState(null,"",h)}catch(e){}} render(); window.scrollTo(0,0)}
-window.addEventListener("hashchange",()=>{const h=location.hash.slice(1);if(NAV.some(n=>n[0]===h)){S.route=h;render();window.scrollTo(0,0)}});
+window.addEventListener("hashchange",()=>{const h=location.hash.slice(1);if(navItems().some(n=>n[0]===h)||h==="docs"||h==="account"){S.route=h;render();window.scrollTo(0,0)}});
 
 /* ---------- views ---------- */
 function vDashboard(){
@@ -580,7 +645,7 @@ function vEmployee(){
 
 /* ---------- Onboarding wizard: 4 steps ----------
    Who does what: personal details come from the employee list (HR picks the person), the employee uploads their own
-   documents on the "My documents" page, and HR fills in the document data in step 2.
+   documents on the Employee documents tab, and HR fills in the document data in step 2.
    Prototype: uploaded files stay in this browser and are not sent anywhere. Reading documents (OCR), creating the
    Google account and sending email need the backend, so they are simulated here and marked as such. */
 const DOCS = [
@@ -696,8 +761,33 @@ function obFetch(ob,id){
 const api=async(method,url,body)=>{
   const r=await fetch(url,{method,headers:body?{"Content-Type":"application/json"}:undefined,body:body?JSON.stringify(body):undefined});
   const data=await r.json().catch(()=>null);
+  if(r.status===401){ location.href="/login"; }
   return {ok:r.ok,status:r.status,data};
 };
+const apiMsg=r=>(r.data&&r.data.error)||"Something went wrong. Try again.";
+
+/* Who is signed in. An employee works on their own record, which is created here if the roster lacks it. */
+async function boot(){
+  try{
+    const r=await api("GET","/api/me");
+    if(r.status===401) return;
+    if(r.ok){
+      S.user=r.data; ACTOR=r.data.name;
+      if(isEmployee()){
+        let e=S.emps.find(x=>(x.email||"").toLowerCase()===r.data.email.toLowerCase());
+        if(!e){ e=mk({name:r.data.name,email:r.data.email,status:"onboarding",dept:"—",title:"—",manager:"—",start:"",grants:{},onTasks:[]}); S.emps.push(e); }
+        S.myId=e.id; S.route="docs";
+      }
+    }
+  }catch(e){ /* no backend: prototype mode */ }
+  applyUser(); render(); loadFromServer();
+}
+function applyUser(){
+  const u=S.user; if(!u) return;
+  $("#acct").style.display="";
+  const cta=$(".cta"); if(cta) cta.style.display=isEmployee()?"none":"";
+  $("#who").innerHTML=`Signed in as <b style="color:var(--ink)">${esc(u.name)}</b>, ${isEmployee()?"Employee":"HR"} · <a href="#" data-signout>Sign out</a>`;
+}
 S.serverDraft=null;
 function applyServerRecord(rec){
   let e=S.emps.find(x=>(x.email||"").toLowerCase()===rec.email.toLowerCase());
@@ -709,8 +799,16 @@ function applyServerRecord(rec){
 }
 async function loadFromServer(){
   try{
-    const [recs,draft]=await Promise.all([api("GET","/api/onboarding"),api("GET","/api/onboarding/draft")]);
+    const hr=!isEmployee();
+    const [recs,draft,docs]=await Promise.all([hr?api("GET","/api/onboarding"):{ok:false},hr?api("GET","/api/onboarding/draft"):{ok:false},api("GET","/api/documents")]);
     if(recs.ok) recs.data.forEach(applyServerRecord);
+    if(docs.ok){
+      S.docs={};
+      for(const d of docs.data){
+        const e=S.emps.find(x=>(x.email||"").toLowerCase()===d.email);
+        if(e) ((S.docs[e.id]=S.docs[e.id]||{})[d.key]=(S.docs[e.id][d.key]||[])).push({id:d.id,name:d.name,size:d.size});
+      }
+    }
     if(draft.ok) S.serverDraft=draft.data;
     render();
   }catch(e){ /* no backend: carry on locally */ }
@@ -770,9 +868,9 @@ function obStep1(ob){
 function obDocStatus(ob){
   const m=obDocs(ob), n=docCount(m);
   return `<div class="card"><div class="card-h"><h3>Documents</h3><span class="muted">Uploaded by the employee</span></div>
-    ${ob.empId?"":`<div class="card-b" style="padding-bottom:0"><div class="callout">${svg("info")}<div>This person has no record yet. The employee can upload documents on the <b>My documents</b> page once the record is created.</div></div></div>`}
+    ${ob.empId?"":`<div class="card-b" style="padding-bottom:0"><div class="callout">${svg("info")}<div>This person has no record yet. The employee can upload documents on the <b>Employee documents</b> tab once the record is created.</div></div></div>`}
     ${DOCS.map(def=>{const fl=m[def.k]||[];return `<div class="doc-row"><div class="grow"><b>${esc(def.name)} <span class="pill ${fl.length?"p-ok":"p-mute"}">${fl.length?"Received":"Not uploaded"}</span></b>${fl.length?`<div>${fl.map(f=>`<span class="fchip" style="padding-right:12px">${esc(f.name)} · ${fmtSize(f.size)}</span>`).join("")}</div>`:`<span class="sub">Waiting for the employee</span>`}</div></div>`}).join("")}
-    <div class="card-b"><button type="button" class="btn link" data-go="docs">Open My documents</button><span class="muted"> ${n} file${n===1?"":"s"} received so far</span></div></div>`;
+    <div class="card-b"><button type="button" class="btn link" data-go="docs">Open Employee documents</button><span class="muted"> ${n} file${n===1?"":"s"} received so far</span></div></div>`;
 }
 
 function obStep2(ob){
@@ -833,12 +931,14 @@ function obStep4(ob){
     <label class="check" style="border:0;padding:0"><input type="checkbox" id="ob-reviewed" ${ob.reviewed?"checked":""}><div class="grow"><div class="lbl">I have reviewed all the details above</div></div></label>`;
 }
 
+const obTabs=cur=>`<div class="subtabs" role="tablist"><button type="button" role="tab" class="${cur==="onboard"?"on":""}" aria-selected="${cur==="onboard"}" data-go="onboard">New joiner</button><button type="button" role="tab" class="${cur==="docs"?"on":""}" aria-selected="${cur==="docs"}" data-go="docs">Employee documents</button></div>`;
 function vOnboard(){
   if(!S.ob){ S.ob=newOb(); if(obRestoreDraft(S.ob)) S.obRestored=true; }
   const ob=S.ob;
   const body=[obStep1,obStep2,obStep3,obStep4][ob.step-1](ob);
   const last=ob.step===4;
   return `<section class="section">
+  ${obTabs("onboard")}
   ${head("Onboarding","Add a new <span class=\"grad\">joiner.</span>","Personal details come from the employee list, the employee uploads their own documents, and HR fills in the document data. Nothing is created until you submit.","",true)}
   ${obStepper(ob)}
   ${S.obRestored?`<div class="callout">${svg("info")}<div>A saved draft was restored. It holds name, contact and job details only. ID numbers have to be added again. <button type="button" class="btn link" data-ob-cancel>Start over</button></div></div>`:""}
@@ -905,39 +1005,146 @@ async function obSubmit(){
   log(`Onboarding submitted after review. HR notified`,e,null,"info");
   log(`Work email sent to ${maskMail(e.personalEmail)} (simulated)`,e,null,"info");
   obClearDraft(); S.ob=null; S.obRestored=false;
-  toast(`HR notified: ${e.name} was submitted for onboarding.`);
+  toast(`HR notified: ${e.name} was submitted for onboarding.${saved&&S.user?" A login was created with the default password.":""}`);
   go("employee",e.id);
   const toGive=apps.filter(a=>e.grants[a]!=="active");
   if(toGive.length) provision(e,toGive);
 }
 
 /* ---------- My documents: the employee uploads their own documents ---------- */
+const docLinks=f=>f.id?`<a href="/api/documents/${f.id}/file" target="_blank" rel="noopener">${esc(f.name)}</a> · <a href="/api/documents/${f.id}/file?download=1" download="${esc(f.name)}">Save</a>`:esc(f.name);
+/* HR reads what employees uploaded. Employees upload from their own login. */
+function vDocsHr(){
+  const withDocs=S.emps.filter(e=>docCount(S.docs[e.id])>0).sort((a,b)=>a.name.localeCompare(b.name));
+  const waiting=S.emps.filter(e=>e.status==="onboarding"&&!docCount(S.docs[e.id])).sort((a,b)=>a.name.localeCompare(b.name));
+  return `<section class="section">
+  ${obTabs("docs")}
+  ${head("Onboarding","Employee <span class=\"grad\">documents.</span>","Employees upload their own documents after signing in. You can open or save every file here.","",true)}
+  ${withDocs.length?withDocs.map(e=>{const m=S.docs[e.id];return `<div class="card"><div class="card-h"><h3>${esc(e.name)}</h3><span class="muted">${esc(e.email)} · ${docCount(m)} file${docCount(m)===1?"":"s"}</span></div>
+    ${DOCS.filter(d=>(m[d.k]||[]).length).map(d=>`<div class="doc-row"><div class="grow"><b>${esc(d.name)}</b>${m[d.k].map(f=>`<div class="sub">${docLinks(f)} · ${fmtSize(f.size)}</div>`).join("")}</div></div>`).join("")}</div>`}).join("")
+    :`<div class="card"><div class="card-b muted">No employee has uploaded a document yet.</div></div>`}
+  ${waiting.length?`<div class="card"><div class="card-h"><h3>Waiting for documents</h3><span class="muted">${waiting.length} in onboarding, nothing uploaded yet</span></div><div class="card-b muted">${waiting.map(e=>esc(e.name)).join(", ")}</div></div>`:""}
+  </section>`;
+}
 function vDocs(){
+  if(S.user&&!isEmployee()) return vDocsHr();
   const waiting=S.emps.filter(e=>e.status==="onboarding").sort((a,b)=>a.name.localeCompare(b.name));
-  const me=S.myId&&waiting.find(x=>x.id===S.myId);
+  const me=S.user?S.emps.find(x=>x.id===S.myId):S.myId&&waiting.find(x=>x.id===S.myId);
   const m=me?(S.docs[me.id]||{}):{};
   const rows=me?DOCS.map(def=>{
     const fl=m[def.k]||[], er=S.docErr[def.k];
     return `<div class="doc-row"><div class="grow"><b>${esc(def.name)} <span class="pill ${fl.length?"p-ok":"p-mute"}">${fl.length?"Uploaded":"Optional"}</span></b>
       <span class="sub">PDF, JPG or PNG, up to ${MAX_MB} MB${def.multi?`, up to ${def.max} files`:""}</span>
-      <div>${fl.map((f,i)=>`<span class="fchip">${esc(f.name)} · ${fmtSize(f.size)}<button type="button" data-mydoc-rm="${def.k}:${i}" aria-label="Remove ${esc(f.name)}">×</button></span>`).join("")}</div>
+      <div>${fl.map((f,i)=>`<span class="fchip">${f.id?`<a href="/api/documents/${f.id}/file" target="_blank" rel="noopener">${esc(f.name)}</a>`:esc(f.name)} · ${fmtSize(f.size)}${f.id?` · <a href="/api/documents/${f.id}/file?download=1" download="${esc(f.name)}">Save</a>`:""}<button type="button" data-mydoc-rm="${def.k}:${i}" aria-label="Remove ${esc(f.name)}">×</button></span>`).join("")}</div>
       ${er?`<div class="derr" role="alert">${esc(er)}</div>`:""}</div>
       <label class="btn glass sm" style="cursor:pointer">${fl.length&&!def.multi?"Replace":"Choose file"+(def.multi?"s":"")}<input type="file" data-mydoc="${def.k}" accept=".pdf,.jpg,.jpeg,.png" ${def.multi?"multiple":""} hidden></label></div>`;
   }).join(""):"";
   return `<section class="section">
-  ${head("Employee","My <span class=\"grad\">documents.</span>","Upload your own documents for onboarding. HR can see them and fills in the document data from them.","",true)}
-  <div class="card"><div class="card-h"><h3>Who are you?</h3></div><div class="card-b">
+  ${S.user?"":obTabs("docs")}
+  ${head(S.user?"Employee":"Onboarding",S.user?"My <span class=\"grad\">documents.</span>":"Employee <span class=\"grad\">documents.</span>","Upload your own documents for onboarding. HR can see them and fills in the document data from them.","",true)}
+  ${S.user?"":`<div class="card"><div class="card-h"><h3>Who are you?</h3></div><div class="card-b">
     ${waiting.length?`<select class="input" id="md-pick" style="max-width:360px" aria-label="Your name"><option value="">Choose your name</option>${waiting.map(w=>`<option value="${w.id}" ${me&&w.id===me.id?"selected":""}>${esc(w.name)}</option>`).join("")}</select>`
       :`<p class="muted" style="margin:0">No one is waiting for onboarding right now.</p>`}
     <p class="muted" style="margin:12px 0 0;font-size:12.5px">Prototype: there is no employee sign-in yet, so any name can be chosen. With sign-in, each employee would see only their own page.</p>
-  </div></div>
-  ${me?`<div class="card"><div class="card-h"><h3>Your documents</h3><span class="muted">${docCount(m)} file${docCount(m)===1?"":"s"} uploaded · files stay in your browser in this prototype</span></div>${rows}</div>`:""}
+  </div></div>`}
+  ${me?`<div class="card"><div class="card-h"><h3>Your documents</h3><span class="muted">${docCount(m)} file${docCount(m)===1?"":"s"} uploaded</span></div>${rows}</div>`:""}
   </section>`;
 }
 
+/* ---------- Users (HR) and Account ---------- */
+async function loadUsers(){
+  S.usersBusy=true;
+  try{ const r=await api("GET","/api/users"); if(r.ok) S.users=r.data; else { toast(apiMsg(r)); S.users={users:[],withoutAccount:0,defaultPassword:"",failed:true}; } }
+  catch(e){ toast("Could not reach the server."); S.users={users:[],withoutAccount:0,defaultPassword:"",failed:true}; }
+  S.usersBusy=false; if(S.route==="users") render();
+}
+const reloadUsers=()=>{ S.users=null; loadUsers(); };
+
+function vUsers(){
+  const d=S.users, me=S.user.email.toLowerCase();
+  const top=head("People","Logins and <span class=\"grad\">roles.</span>","HR creates every account. New accounts start with the default password, and people can change it on their Account page.");
+  if(!d) return `<section class="section">${top}<div class="card"><div class="card-b muted">Loading…</div></div></section>`;
+  const rows=d.users.map(u=>`<tr><td><b>${esc(u.name||u.email)}</b><div class="muted">${esc(u.email)}</div></td>
+    <td><select class="input" data-u-role="${esc(u.email)}" style="max-width:140px" aria-label="Role for ${esc(u.email)}"><option value="employee" ${u.role==="employee"?"selected":""}>Employee</option><option value="hr" ${u.role==="hr"?"selected":""}>HR</option></select></td>
+    <td class="hide-sm">${u.lastLogin?esc(new Date(u.lastLogin).toLocaleString()):"Never"}</td>
+    <td><div class="row"><button type="button" class="btn glass sm" data-u-reset="${esc(u.email)}">Reset password</button><button type="button" class="btn glass sm" data-u-del="${esc(u.email)}" ${u.email.toLowerCase()===me?"disabled":""}>Delete</button></div></td></tr>`).join("");
+  return `<section class="section">${top}
+  <div class="card"><div class="card-h"><h3>Default password</h3><span class="muted">Given to every new account and every reset</span></div><div class="card-b">
+    <form id="dpf" class="row" novalidate><input class="input mono" id="dp-val" value="${esc(d.defaultPassword)}" style="max-width:280px" aria-label="Default password" autocomplete="off"><button type="submit" class="btn glass sm">Change default</button></form>
+    <p class="muted" style="margin:12px 0 0;font-size:12.5px">Anyone who knows this password can sign in as a person who has not changed theirs yet. Share it only with the person it is for, and tell everyone to change it.</p>
+  </div></div>
+  <div class="card"><div class="card-h"><h3>Create an account</h3></div><div class="card-b">
+    <form id="ucf" class="row" novalidate>
+      <input class="input" id="uc-email" type="email" placeholder="name.surname@wohlig.com" style="max-width:300px" aria-label="Work email" autocomplete="off">
+      <select class="input" id="uc-role" style="max-width:150px" aria-label="Role"><option value="employee">Employee</option><option value="hr">HR</option></select>
+      <button type="submit" class="btn primary sm">Create account</button>
+      <button type="button" class="btn glass sm" data-u-bulk ${d.withoutAccount?"":"disabled"}>Create for everyone without one (${d.withoutAccount})</button>
+    </form>
+  </div></div>
+  <div class="card"><div class="card-h"><h3>Accounts</h3><span class="muted">${d.users.length}</span></div><div class="tbl-wrap"><table><thead><tr><th>Person</th><th>Role</th><th class="hide-sm">Last sign-in</th><th></th></tr></thead><tbody>${rows||`<tr><td colspan="4"><div class="empty">No accounts yet.</div></td></tr>`}</tbody></table></div></div>
+  </section>`;
+}
+
+function vAccount(){
+  const u=S.user;
+  return `<section class="section">
+  ${head("Account","Your <span class=\"grad\">account.</span>",`${esc(u.email)} · ${isEmployee()?"Employee":"HR"}`)}
+  <div class="card"><div class="card-h"><h3>Change password</h3></div><div class="card-b">
+    <form id="pwf" class="form" novalidate>
+      <div class="field" style="grid-column:1/-1"><label for="pw-cur">Current password</label><input class="input" id="pw-cur" type="password" autocomplete="current-password"></div>
+      <div class="field"><label for="pw-new">New password</label><input class="input" id="pw-new" type="password" autocomplete="new-password"><span class="hint">At least 8 characters.</span></div>
+      <div class="field"><label for="pw-new2">New password again</label><input class="input" id="pw-new2" type="password" autocomplete="new-password"></div>
+      <div class="row" style="grid-column:1/-1"><button type="submit" class="btn primary sm">Change password</button></div>
+    </form>
+  </div></div>
+  <div class="card"><div class="card-b"><button type="button" class="btn glass" data-signout>Sign out</button></div></div>
+  </section>`;
+}
+
+document.addEventListener("click",async ev=>{
+  const so=ev.target.closest("[data-signout]");
+  if(so){ ev.preventDefault(); try{ await fetch("/api/logout",{method:"POST"}); }catch(e){} location.href="/login"; return; }
+  if(ev.target.closest("#acct")){ go("account"); return; }
+  const ur=ev.target.closest("[data-u-reset]");
+  if(ur){ const em=ur.dataset.uReset; if(!confirm(`Reset ${em} to the default password? They will be signed out.`)) return;
+    const r=await api("POST",`/api/users/${encodeURIComponent(em)}/reset`); toast(r.ok?`${em} was reset to the default password.`:apiMsg(r)); return; }
+  const ud=ev.target.closest("[data-u-del]");
+  if(ud){ const em=ud.dataset.uDel; if(!confirm(`Delete the account for ${em}? They will no longer be able to sign in.`)) return;
+    const r=await api("DELETE",`/api/users/${encodeURIComponent(em)}`); toast(r.ok?"Account deleted.":apiMsg(r)); if(r.ok) reloadUsers(); return; }
+  if(ev.target.closest("[data-u-bulk]")){
+    const r=await api("POST","/api/users/bulk"); toast(r.ok?`${r.data.created} account${r.data.created===1?"":"s"} created.`:apiMsg(r)); if(r.ok) reloadUsers(); return; }
+});
+document.addEventListener("change",async ev=>{
+  const sel=ev.target.closest&&ev.target.closest("[data-u-role]"); if(!sel) return;
+  const r=await api("PUT",`/api/users/${encodeURIComponent(sel.dataset.uRole)}/role`,{role:sel.value});
+  toast(r.ok?"Role updated.":apiMsg(r)); if(!r.ok) reloadUsers();
+});
+document.addEventListener("submit",async ev=>{
+  const id=ev.target.id;
+  if(id==="ucf"){
+    ev.preventDefault();
+    const email=$("#uc-email").value.trim();
+    if(!email){ $("#uc-email").focus(); toast("Enter the work email first."); return; }
+    const r=await api("POST","/api/users",{email,role:$("#uc-role").value});
+    toast(r.ok?`Account created for ${email}.`:apiMsg(r)); if(r.ok) reloadUsers(); return;
+  }
+  if(id==="dpf"){
+    ev.preventDefault();
+    const r=await api("PUT","/api/users/default-password",{value:$("#dp-val").value});
+    toast(r.ok?"Default password changed. It applies to new accounts and resets.":apiMsg(r)); if(r.ok) reloadUsers(); return;
+  }
+  if(id==="pwf"){
+    ev.preventDefault();
+    const next=$("#pw-new").value;
+    if(next!==$("#pw-new2").value){ toast("The two new passwords do not match."); return; }
+    const r=await api("POST","/api/password",{current:$("#pw-cur").value,next});
+    toast(r.ok?"Password changed.":apiMsg(r)); if(r.ok) ev.target.reset(); return;
+  }
+});
+
 document.addEventListener("click",ev=>{
   const md=ev.target.closest("[data-mydoc-rm]");
-  if(md){ const [k,i]=md.dataset.mydocRm.split(":"); const e=S.emps.find(x=>x.id===S.myId); const arr=S.docs[S.myId]&&S.docs[S.myId][k]; if(e&&arr){ const [gone]=arr.splice(Number(i),1); logAs(`${e.name} (employee)`,`Removed ${DOCS.find(x=>x.k===k).name}: ${gone.name}`,e); S.docErr={}; render(); } return; }
+  if(md){ const [k,i]=md.dataset.mydocRm.split(":"); const e=S.emps.find(x=>x.id===S.myId); const arr=S.docs[S.myId]&&S.docs[S.myId][k]; if(e&&arr){ const [gone]=arr.splice(Number(i),1); if(gone.id) api("DELETE","/api/documents/"+gone.id).catch(()=>{}); logAs(`${e.name} (employee)`,`Removed ${DOCS.find(x=>x.k===k).name}: ${gone.name}`,e); S.docErr={}; render(); } return; }
   const t=ev.target.closest("[data-ob-next],[data-ob-back],[data-ob-goto],[data-ob-draft],[data-ob-cancel],[data-ob-ocr],[data-ob-fetch],[data-ob-unfetch]"); if(!t||!S.ob) return;
   const ob=S.ob;
   if(t.hasAttribute("data-ob-next")){ obNext(); return; }
@@ -950,7 +1157,7 @@ document.addEventListener("click",ev=>{
   if(t.hasAttribute("data-ob-fetch")){ const id=Number($("#ob-pick")&&$("#ob-pick").value); if(!id){ toast("Choose a person from the list first."); return; } obFetch(ob,id); ob.errors={}; render(); return; }
   if(t.hasAttribute("data-ob-unfetch")){ ob.empId=null; ob.d=newOb().d; ob.ids=newOb().ids; ob.src={}; ob.apps=null; render(); return; }
 });
-document.addEventListener("change",ev=>{
+document.addEventListener("change",async ev=>{
   const t=ev.target;
   if(t.id==="md-pick"){ S.myId=Number(t.value)||null; S.docErr={}; render(); return; }
   if(t.matches&&t.matches("input[type=file][data-mydoc]")){
@@ -958,9 +1165,18 @@ document.addEventListener("change",ev=>{
     const k=t.dataset.mydoc, def=DOCS.find(x=>x.k===k), map=S.docs[e.id]||(S.docs[e.id]={}), cur=map[k]||(map[k]=[]), probs=[]; let added=0;
     for(const f of [...t.files]){
       const p=fileProblem(f); if(p){probs.push(p);continue}
+      if(def.multi&&cur.length>=def.max){probs.push(`${def.name}: at most ${def.max} files.`);continue}
+      // Upload to the server. If there is no backend, the file is only listed here and stays in the browser.
+      let rec={name:f.name,size:f.size};
+      try{
+        const r=await fetch(`/api/documents/${k}?name=${encodeURIComponent(f.name)}`,{method:"PUT",headers:{"Content-Type":f.type||"application/octet-stream"},body:f});
+        if(r.status===401){ location.href="/login"; return; }
+        const data=await r.json().catch(()=>null);
+        if(!r.ok){ probs.push(`${f.name}: ${(data&&data.error)||"the server could not save this file."}`); continue; }
+        rec={id:data.id,name:data.name,size:data.size};
+      }catch(err){ /* no backend */ }
       if(!def.multi) cur.length=0;
-      else if(cur.length>=def.max){probs.push(`${def.name}: at most ${def.max} files.`);continue}
-      cur.push({name:f.name,size:f.size}); added++;
+      cur.push(rec); added++;
     }
     S.docErr={}; if(probs.length) S.docErr[k]=probs.join(" ");
     if(added){ logAs(`${e.name} (employee)`,`Uploaded ${def.name}: ${added} file${added===1?"":"s"}`,e); toast(`${def.name} uploaded. HR can see it.`); }
@@ -1004,7 +1220,7 @@ function recordCard(e){
   const i=e.ids||{};
   return `<div class="card"><div class="card-h"><h3>Onboarding record</h3><span class="muted">ID numbers are masked</span></div><div class="card-b" style="display:flex;flex-direction:column;gap:18px">
     ${kv([["Personal email",esc(e.personalEmail)],["Phone",esc(e.phone)],["Address",esc(e.address)],["Date of birth",esc(i.dob?fdate(i.dob):"")],["Aadhaar",esc(i.aadhaar)],["PAN",esc(i.pan)],["Bank account",esc(i.acct)],["IFSC",esc(i.ifsc)]])}
-    <div><div class="muted" style="margin-bottom:6px">Documents uploaded by the employee</div>${n?DOCS.filter(d=>(dm[d.k]||[]).length).map(d=>`<div style="font-size:14px"><b>${esc(d.name)}</b> · ${dm[d.k].map(f=>esc(f.name)).join(", ")}</div>`).join(""):`<div class="muted">None uploaded yet.</div>`}</div>
+    <div><div class="muted" style="margin-bottom:6px">Documents uploaded by the employee</div>${n?DOCS.filter(d=>(dm[d.k]||[]).length).map(d=>`<div style="font-size:14px"><b>${esc(d.name)}</b> · ${dm[d.k].map(f=>f.id?`<a href="/api/documents/${f.id}/file" target="_blank" rel="noopener">${esc(f.name)}</a>`:esc(f.name)).join(", ")}</div>`).join(""):`<div class="muted">None uploaded yet.</div>`}</div>
   </div></div>`;
 }
 
@@ -1149,6 +1365,7 @@ function lvSample(){
 async function lvLoad(){
   try{
     const r=await api("GET","/api/leave");
+    if(r.status===401||r.status===403){ render(); return; }   // signed out or not allowed: no sample data either
     if(!r.ok||!r.data) throw 0;
     const d=r.data;
     S.lv={online:true,today:d.today,requests:d.requests,compOffs:d.compOffs,holidays:d.holidays,pay:Object.fromEntries(d.pay.map(p=>[lc(p.email),p]))};
@@ -1394,14 +1611,16 @@ function lvPolicyModal(){
 /* ---------- My leave: the employee's own page ---------- */
 const ME_KEY="hr_me";
 S.me=(()=>{try{return localStorage.getItem(ME_KEY)||""}catch(e){return ""}})();
+/* Signed in: always the signed-in person. Only the offline prototype (no sign-in) lets you pick a name. */
+const myEmail=()=>S.user?S.user.email:S.me;
 const ring=(pct,color,label,sub="Available")=>`<div class="ring" style="background:conic-gradient(${color} ${Math.max(0,Math.min(100,pct))}%,var(--paper-2) 0)"><div><b>${label}</b><span>${sub}</span></div></div>`;
 function vMyLeave(){
-  const me=empBy(S.me);
-  const picker=`<select class="input" id="me-pick" aria-label="Viewing as" style="width:auto;min-width:220px"><option value="">Choose your name</option>${empOptions(S.me)}</select>`;
+  const me=empBy(myEmail());
+  const picker=S.user?"":`<select class="input" id="me-pick" aria-label="Viewing as" style="width:auto;min-width:220px"><option value="">Choose your name</option>${empOptions(S.me)}</select>`;
   const top=head("Me","My <span class=\"grad\">leave.</span>","Your balances, your requests and your history. Request leave or a comp-off credit here.",picker,true);
-  const note=`<p class="muted" style="margin:-8px 0 0;font-size:12.5px">Prototype: there is no sign-in yet, so pick your name once. This browser remembers it. With sign-in it comes from your login.</p>`;
+  const note=S.user?"":`<p class="muted" style="margin:-8px 0 0;font-size:12.5px">Prototype without the server: pick your name once. This browser remembers it. When signed in, it is always you.</p>`;
   if(!R) return `<section class="section">${top}<div class="empty">Leave rules didn't load. Keep leave-rules.js next to this page.</div></section>`;
-  if(!me) return `<section class="section">${top}${note}<div class="card"><div class="empty">Choose your name above to see your leave.</div></div></section>`;
+  if(!me) return `<section class="section">${top}${note}<div class="card"><div class="empty">${S.user?"Your employee record wasn't found, so leave can't be shown. Ask HR to check your work email.":"Choose your name above to see your leave."}</div></div></section>`;
   const year=Number(lvToday().slice(0,4)), b=lvBal(me,year);
   const mine=reqsOf(me.email).sort((a,c)=>a.from<c.from?1:-1);
   const pend=mine.filter(r=>r.status==="pending"), compPend=compsOf(me.email).filter(c=>c.status==="pending");
@@ -1469,8 +1688,8 @@ function lvPayModal(email){
 async function lvAction(a){
   if(a==="new") return lvRequestModal(S.route==="employee"?(S.emps.find(x=>x.id===S.sel)||{}).email:"");
   if(a==="comp") return lvCompModal();
-  if(a==="me-new") return lvRequestModal(S.me,true);
-  if(a==="me-comp") return lvCompRequestModal(S.me);
+  if(a==="me-new") return lvRequestModal(myEmail(),true);
+  if(a==="me-comp") return lvCompRequestModal(myEmail());
   if(a==="policy") return lvPolicyModal();
   const [kind,x,y]=a.split(":");
   if(kind==="pay") return lvPayModal(a.slice(4));
@@ -1547,8 +1766,10 @@ const activationNote=start=>!start?"":start>todayIso()
   :`The joining date (${fdate(start)}) has already passed, so the account is activated as soon as it is created.`;
 function render(){
   if(activateDue()) toast("A work email was activated on its joining date.");
+  if(!routeAllowed(S.route)) S.route=isEmployee()?"docs":"dashboard";
+  if(S.route==="users"&&!S.users&&!S.usersBusy) loadUsers();
   renderNav();
-  const v={dashboard:vDashboard,employees:vEmployees,employee:vEmployee,onboard:vOnboard,docs:vDocs,offboard:vOffboard,myleave:vMyLeave,leave:vLeave,templates:vTemplates,audit:vAudit}[S.route]||vDashboard;
+  const v={dashboard:vDashboard,employees:vEmployees,employee:vEmployee,onboard:vOnboard,docs:vDocs,offboard:vOffboard,myleave:vMyLeave,leave:vLeave,templates:vTemplates,audit:vAudit,users:vUsers,account:vAccount}[S.route]||vDashboard;
   $("#view").innerHTML=v();
 }
 function soft(){ if(S.route!=="onboard") render(); else renderNav(); }
@@ -1686,9 +1907,9 @@ document.addEventListener("submit",ev=>{
 });
 
 const h=location.hash.slice(1); if(NAV.some(n=>n[0]===h)) S.route=h;
-render();
-loadFromServer();
-lvLoad();
-offLoad();
+document.addEventListener("click",ev=>{ if(ev.target.closest("#theme")) toggleTheme(); });
+try{ matchMedia("(prefers-color-scheme: dark)").addEventListener("change",()=>{ let t=null; try{t=localStorage.getItem(THEME_KEY)}catch(e){} if(!t) applyTheme(theme()); }); }catch(e){}
+applyTheme(theme());
+boot().then(()=>{ lvLoad(); if(!isEmployee()) offLoad(); });
 })();
 </script>

@@ -88,5 +88,80 @@ CREATE TABLE IF NOT EXISTS settings (
   value TEXT NOT NULL
 );
 
-ALTER TABLE employees ADD COLUMN IF NOT EXISTS google_status TEXT;  -- pending, active, simulated, existing, failed
-ALTER TABLE employees ADD COLUMN IF NOT EXISTS google_error TEXT;
+-- Leave management. Rules (quotas, carry-over, salary cut) live in leave-rules.js at the repo root.
+ALTER TABLE employees ADD COLUMN IF NOT EXISTS monthly_gross  NUMERIC(12,2);
+ALTER TABLE employees ADD COLUMN IF NOT EXISTS casual_opening NUMERIC(5,1) NOT NULL DEFAULT 0;
+
+CREATE TABLE IF NOT EXISTS leave_requests (
+  id         SERIAL PRIMARY KEY,
+  work_email TEXT NOT NULL,
+  type       TEXT NOT NULL,
+  from_date  DATE NOT NULL,
+  to_date    DATE NOT NULL,
+  days       NUMERIC(5,1) NOT NULL,
+  reason     TEXT NOT NULL,
+  status     TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','approved','declined')),
+  paid_days  NUMERIC(5,1),
+  lop_days   NUMERIC(5,1),
+  decided_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  CHECK (to_date >= from_date)
+);
+-- Allowed leave types and half days. Re-applied on every start so existing databases pick up new types.
+ALTER TABLE leave_requests ADD COLUMN IF NOT EXISTS half TEXT;
+ALTER TABLE leave_requests ADD COLUMN IF NOT EXISTS notify JSONB NOT NULL DEFAULT '[]';
+ALTER TABLE leave_requests DROP CONSTRAINT IF EXISTS leave_requests_status_check;
+ALTER TABLE leave_requests ADD CONSTRAINT leave_requests_status_check CHECK (status IN ('pending','approved','declined','cancelled'));
+ALTER TABLE leave_requests DROP CONSTRAINT IF EXISTS leave_requests_type_check;
+ALTER TABLE leave_requests ADD CONSTRAINT leave_requests_type_check CHECK (type IN ('casual','sick','compoff','unpaid'));
+ALTER TABLE leave_requests DROP CONSTRAINT IF EXISTS leave_requests_half_check;
+ALTER TABLE leave_requests ADD CONSTRAINT leave_requests_half_check CHECK (half IS NULL OR (half IN ('first','second') AND to_date = from_date));
+CREATE INDEX IF NOT EXISTS leave_requests_email ON leave_requests (lower(work_email), from_date);
+
+CREATE TABLE IF NOT EXISTS comp_off_credits (
+  id         SERIAL PRIMARY KEY,
+  work_email TEXT NOT NULL,
+  worked_on  DATE NOT NULL,
+  days       NUMERIC(3,1) NOT NULL DEFAULT 1,
+  reason     TEXT NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+-- Employees ask for comp-off credit (pending) and HR approves it; credits HR records directly are approved straight away.
+ALTER TABLE comp_off_credits ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'approved';
+ALTER TABLE comp_off_credits ADD COLUMN IF NOT EXISTS decided_at TIMESTAMPTZ;
+ALTER TABLE comp_off_credits DROP CONSTRAINT IF EXISTS comp_off_credits_status_check;
+ALTER TABLE comp_off_credits ADD CONSTRAINT comp_off_credits_status_check CHECK (status IN ('pending','approved','declined'));
+DROP INDEX IF EXISTS comp_off_once_per_day;
+CREATE UNIQUE INDEX IF NOT EXISTS comp_off_once_per_day ON comp_off_credits (lower(work_email), worked_on) WHERE status <> 'declined';
+
+CREATE TABLE IF NOT EXISTS holidays (
+  day  DATE PRIMARY KEY,
+  name TEXT NOT NULL
+);
+
+-- Offboarding. One active offboarding per person; each tool to remove and each manual task is a step.
+CREATE TABLE IF NOT EXISTS offboardings (
+  id           SERIAL PRIMARY KEY,
+  work_email   TEXT NOT NULL,
+  last_day     DATE NOT NULL,
+  transfer_to  TEXT,
+  status       TEXT NOT NULL CHECK (status IN ('scheduled','in_progress','access_removed','completed','cancelled')),
+  run_at       TIMESTAMPTZ NOT NULL,
+  running      BOOLEAN NOT NULL DEFAULT false,
+  started_at   TIMESTAMPTZ,
+  completed_at TIMESTAMPTZ,
+  created_at   TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE UNIQUE INDEX IF NOT EXISTS offboardings_one_active ON offboardings (lower(work_email)) WHERE status <> 'cancelled';
+
+CREATE TABLE IF NOT EXISTS offboarding_steps (
+  id             SERIAL PRIMARY KEY,
+  offboarding_id INTEGER NOT NULL REFERENCES offboardings(id),
+  kind           TEXT NOT NULL CHECK (kind IN ('tool','task')),
+  key            TEXT NOT NULL,
+  label          TEXT NOT NULL,
+  status         TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','done','failed')),
+  detail         TEXT,
+  done_at        TIMESTAMPTZ,
+  UNIQUE (offboarding_id, key)
+);

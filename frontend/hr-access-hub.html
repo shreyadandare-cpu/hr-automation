@@ -218,6 +218,7 @@ tr.click:hover td{background:rgba(66,84,212,.04)}
 .tiles{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:12px}
 .tile{display:flex;align-items:center;gap:12px;border-radius:16px;padding:12px 14px;cursor:pointer;background:var(--surface-2);box-shadow:inset 0 0 0 1px var(--line);transition:box-shadow .2s,background .2s}
 .tile input{accent-color:var(--purple);width:17px;height:17px;flex:none}
+.tile.off{opacity:.5;cursor:not-allowed}
 .tile:has(input:checked){background:var(--tint-2);box-shadow:inset 0 0 0 1.5px var(--purple)}
 .tile .t b{display:block;font-size:14px;font-weight:600}
 .tile .t span{display:block;font-size:12px;color:var(--ink-faint)}
@@ -272,6 +273,21 @@ textarea.input{resize:vertical;font-family:var(--body)}
 @media (max-width:720px){.rv{grid-template-columns:minmax(0,1fr)}.doc-row{padding-inline:16px}.stp{font-size:13px}}
 .foot{display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap;padding-block:28px 40px;border-top:1px solid var(--line);color:var(--ink-faint);font-size:13px}
 .foot .logo{font-size:22px}
+/* Leave */
+.settle{display:flex;flex-direction:column;border-radius:14px;box-shadow:inset 0 0 0 1px var(--line);background:#fff}
+.settle>div{display:flex;justify-content:space-between;gap:12px;align-items:baseline;padding:10px 14px;border-top:1px solid var(--line);font-size:14px}
+.settle>div:first-child{border-top:0}.settle small{display:block;font-size:12px;color:var(--ink-faint)}
+.settle b{white-space:nowrap}.settle .neg{color:var(--bad)}.settle .tot{background:var(--paper-2);border-radius:0 0 14px 14px}
+.lv-dates{display:grid;grid-template-columns:minmax(0,1fr) auto minmax(0,1fr);gap:12px;align-items:end}
+.lv-dates>[hidden]{display:none}
+.lv-days{align-self:center;margin-top:20px;padding:8px 12px;border-radius:12px;box-shadow:inset 0 0 0 1px var(--line-2);font-size:13px;font-weight:600;white-space:nowrap;background:#fff}
+.ring{width:132px;height:132px;border-radius:50%;display:grid;place-items:center;margin:4px auto 18px}
+.ring>div{width:104px;height:104px;border-radius:50%;background:#fff;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center}
+.ring b{font:600 17px/1.2 var(--display)}.ring span{font-size:12px;color:var(--ink-faint)}
+.lv-cells{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px 16px;margin:0;padding-top:14px;border-top:1px solid var(--line)}
+.lv-cells dt{font:600 10.5px/1.2 var(--body);color:var(--ink-faint);text-transform:uppercase;letter-spacing:.14em}
+.lv-cells dd{margin:4px 0 0;font-weight:500}
+@media (max-width:460px){.lv-dates{grid-template-columns:minmax(0,1fr)}.lv-days{margin-top:0;justify-self:start}}
 
 /* Modal + toast */
 .scrim{position:fixed;inset:0;background:rgba(14,10,56,.35);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);display:grid;place-items:center;padding:16px;z-index:50}
@@ -315,6 +331,7 @@ body.ro [data-retry],body.ro [data-provision],body.ro [data-offboard],body.ro [d
 <footer class="wrap"><div class="foot"><a class="logo" href="#dashboard" style="text-decoration:none">w<span class="o" aria-hidden="true"></span>hlig</a><span>HR Access Hub · People Ops · Prototype · roster from HR sheet, 8 Oct 2026</span><span id="who">Signed in as <b style="color:var(--ink)">Shreya Dandare</b>, HR Admin</span></div></footer>
 <div id="layer"></div>
 
+<script src="leave-rules.js"></script>
 <script>
 (function(){
 let ACTOR = "Shreya Dandare";
@@ -493,7 +510,7 @@ const ICONS = {
   info:'<circle cx="12" cy="12" r="9"/><path d="M12 8v5M12 16h.01"/>',
   bundle:'<rect x="4" y="4" width="7" height="7" rx="2"/><rect x="13" y="4" width="7" height="7" rx="2"/><rect x="4" y="13" width="7" height="7" rx="2"/><rect x="13" y="13" width="7" height="7" rx="2"/>',
 };
-const NAV = [["dashboard","Dashboard"],["employees","Employees"],["onboard","Onboarding"],["offboard","Offboarding"],["leave","Leave"],["templates","Access bundles"],["audit","Audit log"]];
+const NAV = [["dashboard","Dashboard"],["employees","Employees"],["onboard","Onboarding"],["offboard","Offboarding"],["leave","Leave"],["myleave","My leave"],["templates","Access bundles"],["audit","Audit log"]];
 const svg = k=>`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${ICONS[k]}</svg>`;
 /* ---------- Light / dark theme ---------- */
 const THEME_KEY="hr_theme";
@@ -512,15 +529,16 @@ function toggleTheme(){ const t=theme()==="dark"?"light":"dark"; try{localStorag
    Without a backend S.user stays null and the page behaves as the old prototype. */
 const isEmployee = ()=>!!S.user&&S.user.role==="employee";
 /* Everyone signed in can look at the site. Employees see Onboarding as their own documents page and Offboarding as a read-only list. Users, Access bundles and Audit log are HR's. */
-const HR_ONLY=["users","templates","audit"];
-function navItems(){ return isEmployee()?NAV.filter(n=>!HR_ONLY.includes(n[0])):NAV; }
+const HR_ONLY=["users","templates","audit","leave"];
+function navItems(){ return isEmployee()?[...NAV.filter(n=>!HR_ONLY.includes(n[0])),["myleave","My leave"]]:NAV; }
 function routeAllowed(r){
   if(!S.user) return r!=="account"&&r!=="users";
-  return isEmployee()?!HR_ONLY.includes(r):true;
+  if(r==="account") return true;
+  return isEmployee()?(!HR_ONLY.includes(r)||r==="myleave"||(r==="leaveapply"&&!!S.lw&&S.lw.self)):true;
 }
 function renderNav(){
   const attn = S.emps.filter(e=>failedOf(e).length).length;
-  const active = S.route==="employee"?"employees":S.route==="docs"?"onboard":S.route;
+  const active = S.route==="employee"?"employees":S.route==="docs"&&!isEmployee()?"onboard":S.route==="leaveapply"?(S.lw&&S.lw.self?"myleave":"leave"):S.route;
   $("#links").innerHTML = navItems().map(([k,l])=>`<a href="#${k}" class="${active===k?"on":""}">${l}${k==="dashboard"&&attn?`<span class="count">${attn}</span>`:""}</a>`).join("");
 }
 function go(r,sel){S.route=r; if(sel!==undefined)S.sel=sel; const h="#"+(r==="employee"?"employees":r); if(location.hash!==h){try{history.replaceState(null,"",h)}catch(e){}} render(); window.scrollTo(0,0)}
@@ -594,7 +612,7 @@ function vEmployees(){
 function vEmployee(){
   const e=S.emps.find(x=>x.id===S.sel); if(!e) return vEmployees();
   const c=checklist(e); const pct=Math.round(c.done/c.total*100);
-  const canOff = e.status==="active"||e.status==="onboarding";
+  const canOff = (e.status==="active"||e.status==="onboarding")&&!isScheduled(e);
   const pending = Object.keys(e.grants).filter(k=>e.grants[k]==="none");
   const acts = S.audit.filter(a=>a.empId!==undefined?a.empId===e.id:a.emp===e.name);
   return `<section class="section" style="gap:22px"><button class="back" data-go="employees">← All employees</button>
@@ -619,6 +637,8 @@ function vEmployee(){
     </div>
   </div>
   ${laptopCard(e)}${recordCard(e)}
+  ${offCard(e)}
+  ${leaveCard(e)}
   ${isEmployee()?"":`<div class="card"><div class="card-h"><h3>History</h3><button class="btn link" data-go="audit">Full audit log</button></div>
     <div style="padding-bottom:12px">${acts.length?acts.map(tl).join(""):`<div class="empty">No recorded actions yet.</div>`}</div></div>`}
   </section>`;
@@ -1249,71 +1269,633 @@ function vOffboardView(){
     ${list.length?list.map(c=>`<div class="radio-li" style="cursor:pointer" data-emp="${c.id}">${person(c,c.title+" · "+c.dept)}<span style="margin-left:auto">${epill(c)}</span></div>`).join(""):`<div class="card-b muted">No one is leaving right now.</div>`}</div>
   </section>`;
 }
-function vOffboard(){
-  if(isEmployee()) return vOffboardView();
-  const cands=S.emps.filter(e=>e.status==="active"||e.status==="onboarding");
-  const busy=S.emps.filter(e=>e.status==="offboarding");
-  const e=S.emps.find(x=>x.id===S.offSel)||null;
-  const live = e?Object.keys(e.grants).filter(k=>["active","failed","created"].includes(e.grants[k])):[];
-  const mgrs=S.emps.filter(m=>m.status==="active"&&(!e||m.id!==e.id));
-  return `<section class="section">
-  ${head("Offboarding","Remove access in <span class=\"grad\">one click.</span>","Pick who is leaving. Their Google account is suspended first, which also blocks sign-in to every tool that uses Google login. Then each tool is removed and recorded.","",true)}
-  ${busy.length?`<div class="callout">${svg("info")}<div>${busy.map(b=>`<b>${esc(b.name)}</b>`).join(", ")} ${busy.length>1?"are":"is"} still being offboarded. <button class="btn link" data-emp="${busy[0].id}">Open checklist</button></div></div>`:""}
-  <div class="grid g-main">
-    <div class="card"><div class="card-h"><h3>1. Who is leaving?</h3></div>
-      ${cands.map(c=>`<label class="radio-li"><input type="radio" name="offsel" id="off-${c.id}" value="${c.id}" ${e&&e.id===c.id?"checked":""}>${person(c,c.title+" · "+c.dept)}<span style="margin-left:auto">${epill(c)}</span></label>`).join("")}</div>
-    <div class="card" style="align-self:start"><div class="card-h"><h3>2. Review &amp; run</h3></div>
-      ${e?`<div class="card-b" style="display:flex;flex-direction:column;gap:18px">
-        <div class="field"><span class="lab">Access that will be removed (${live.length})</span><div style="display:flex;flex-direction:column;gap:8px">${live.map(id=>`<div class="revoke-item">${appIc(id)}<div class="grow"><b>${esc(APP[id].name)}</b><span>${esc(id==="gws"?"Suspend, sign out everywhere, reset password":id==="gemini"?"Remove licence":id==="gcp"?"Remove IAM roles from all projects":"Remove from workspace")}</span></div></div>`).join("")}</div></div>
-        <div class="field"><label for="o-to">Move Drive files and email to</label><select class="input" id="o-to">${mgrs.map(m=>`<option ${m.name===e.manager?"selected":""}>${esc(m.name)}</option>`).join("")}</select></div>
-        <div class="field"><label for="o-day">Last working day</label><input class="input" type="date" id="o-day" value="${e.lastDay||"2026-10-13"}"></div>
-        <div class="field"><span class="lab">When</span><div class="seg"><label><input type="radio" name="when" id="o-now" value="now" checked>Now</label><label><input type="radio" name="when" id="o-later" value="later">On last working day</label></div></div>
-        <button class="btn danger" data-confirmoff="${e.id}">Offboard ${esc(e.name.split(" ")[0])}</button>
-      </div>`:`<div class="empty">Choose an employee on the left to see exactly what will be removed.</div>`}
-    </div>
-  </div></section>`;
+/* ---------- leave ---------- */
+/* Rules come from leave-rules.js (shared with the server). With the backend running, every change goes through the API and
+   is saved in Postgres. Without it (file opened directly, or the claude.ai copy) the page uses sample data in memory. */
+const R = window.LeaveRules;
+const LTYPE = R ? Object.fromEntries(Object.entries(R.TYPES).map(([k,v])=>[k,v.name])) : {};
+const LSTAT = {pending:["Waiting","p-warn"], approved:["Approved","p-ok"], declined:["Declined","p-mute"], cancelled:["Cancelled","p-mute"]};
+S.lv = {online:false, today:todayIso(), requests:[], compOffs:[], holidays:[], pay:{}};
+S.lvUi = {month:todayIso().slice(0,7), q:""};
+let lvNext = 1;
+const lc = s=>String(s||"").toLowerCase();
+const empBy = email=>S.emps.find(e=>lc(e.email)===lc(email));
+const lvToday = ()=>S.lv.online?S.lv.today:todayIso();
+const lrange = l=>l.half?`${fdate(l.from)} (${R.HALVES[l.half]})`:l.from===l.to?fdate(l.from):`${fdate(l.from)} – ${fdate(l.to)}`;
+const dd = n=>`${n} day${n===1?"":"s"}`;
+const inr = n=>"₹"+Number(n).toLocaleString("en-IN");
+const reqsOf = email=>S.lv.requests.filter(r=>lc(r.email)===lc(email));
+const compsOf = email=>S.lv.compOffs.filter(c=>lc(c.email)===lc(email));
+const payOf = email=>S.lv.pay[lc(email)]||{monthlyGross:null,casualOpening:0};
+const holDays = ()=>S.lv.holidays.map(h=>h.day);
+function lvBal(e,year){ return R.balances(year,{start:e.start,casualOpening:payOf(e.email).casualOpening},reqsOf(e.email),compsOf(e.email)); }
+function lvPreview(r){ const e=empBy(r.email); const days=R.requestDays(r.from,r.to,r.half,holDays()); return e?R.allocate(r.type,days,lvBal(e,Number(r.from.slice(0,4)))):{paid:0,lop:days}; }
+function lopDaysIn(month,email){
+  return S.lv.requests.filter(r=>r.status==="approved"&&r.lopDays&&(!email||lc(r.email)===lc(email)))
+    .reduce((n,r)=>n+(R.lopByMonth(r,holDays())[month]||0),0);
 }
 
-/* Leave: sample requests for the prototype. Approving or declining writes one audit row. */
-const LEAVE_TYPES = {casual:"Casual leave", sick:"Sick leave", earned:"Earned leave", wfh:"Work from home"};
-const byName = n=>S.emps.find(e=>e.name===n);
-let lid = 0;
-S.leave = [
-  ["Rajvee Gala","earned","2026-10-19","2026-10-23",5,"Family wedding","pending"],
-  ["Jainam Nisar","sick","2026-10-13","2026-10-13",1,"Fever","pending"],
-  ["Shreyas Nair","casual","2026-10-16","2026-10-16",1,"Personal work","pending"],
-  ["Akash Pawar","wfh","2026-10-14","2026-10-15",2,"Home repairs","approved"],
-  ["Parth Gala","earned","2026-11-02","2026-11-06",5,"Diwali at home","approved"],
-  ["Rahul Matai","casual","2026-10-09","2026-10-09",1,"Bank visit","declined"],
-].filter(r=>byName(r[0])).map(([n,type,from,to,days,reason,status])=>({id:++lid,emp:byName(n),type,from,to,days,reason,status}));
-const LSTAT = {pending:["Waiting","p-warn"], approved:["Approved","p-ok"], declined:["Declined","p-mute"]};
-const lrange = l=>l.from===l.to?fdate(l.from):`${fdate(l.from)} – ${fdate(l.to)}`;
+/* ---------- Offboarding: backend ----------
+   With the server running, offboardings are saved in Postgres and the server removes access (Google Workspace first) and
+   runs scheduled ones at 6 pm on the last working day. Without it, the page simulates the same flow in memory. */
+S.off={online:false};
+const transferEmail=name=>(S.emps.find(x=>x.name===name)||{}).email||"";
+function applyOff(rec){
+  const e=empBy(rec.email); if(!e) return;
+  e.offId=rec.id; e.offRec=rec; e.lastDay=rec.lastDay;
+  if(rec.status==="in_progress"||rec.status==="access_removed") e.status="offboarding";
+  if(rec.status==="completed"){ e.status="offboarded"; e.end=rec.lastDay; }
+  for(const s of rec.steps.filter(s=>s.kind==="tool")){
+    if(s.status==="done"){ e.grants[s.key]="revoked"; delete e.errors[s.key]; }
+    else if(s.status==="failed"){ e.grants[s.key]="failed"; e.errors[s.key]=s.detail; }
+  }
+  e.offTasks=rec.steps.filter(s=>s.kind==="task").map(s=>({t:s.label,done:s.status==="done",key:s.key}));
+}
+async function offLoad(){
+  try{ const r=await api("GET","/api/offboarding"); if(!r.ok||!Array.isArray(r.data)) throw 0; S.off.online=true; r.data.forEach(applyOff); }catch(e){ /* no backend */ }
+  render();
+}
+async function offCall(method,url,body){
+  try{
+    const r=await api(method,url,body);
+    if(!r.ok) return {ok:false,error:(r.data&&(r.data.error||Object.values(r.data.errors||{})[0]))||"Could not save. Try again."};
+    if(r.data&&r.data.steps) applyOff(r.data);
+    lvLoad();   // leave after the last day may have been cancelled
+    return {ok:true,data:r.data};
+  }catch(e){ return {ok:false,error:"The server can't be reached. Check it is running, then try again."}; }
+}
+const isScheduled=e=>S.off.online?!!(e.offRec&&e.offRec.status==="scheduled"):!!e.offSched;
+/* Leave that falls after the last working day will never be taken (the server cancels it; this mirrors that offline). */
+const leaveAfter=(e,day)=>reqsOf(e.email).filter(r=>(r.status==="pending"||r.status==="approved")&&r.from>day);
+
+/* Final settlement leave figures: unused casual leave is paid out, loss-of-pay days in the leaving month are deducted. */
+function settlementFor(e,lastDay){
+  if(!R||!R.validDate(lastDay||"")) return null;
+  if(S.off.online&&e.offRec&&e.offRec.lastDay===lastDay&&e.offRec.settlement) return e.offRec.settlement;
+  const p=payOf(e.email);
+  return R.exitSettlement({emp:{start:e.start,casualOpening:p.casualOpening},lastDay,requests:reqsOf(e.email),compOffs:compsOf(e.email),monthlyGross:p.monthlyGross,holidays:holDays()});
+}
+function settlementHtml(e,lastDay,open){
+  const s=settlementFor(e,lastDay); if(!s) return "";
+  const after=open?leaveAfter(e,lastDay).length:0, mon=fdate(s.month+"-01").replace(/^1 /,"");
+  const amt=v=>s.monthlyGross?inr(v):"—";
+  return `<div class="field"><span class="lab">Final settlement: leave</span><div class="settle">
+    <div><span>Unused casual leave paid out<small>${s.carried} carried + ${s.quota} for months worked − ${s.used} used</small></span><b>${dd(s.casualLeft)} · ${amt(s.encashment)}</b></div>
+    <div><span>Loss of pay in ${esc(mon)}</span><b class="neg">${dd(s.lopDays)} · ${s.monthlyGross?"−"+inr(s.deduction):"—"}</b></div>
+    <div class="tot"><span>Leave adjustment</span><b>${s.monthlyGross?inr(s.net):`<button type="button" class="btn link" data-lv="pay:${esc(e.email)}">Add monthly salary to see amounts</button>`}</b></div>
+  </div>${after?`<span class="hint">${after} leave request${after===1?"":"s"} after the last working day will be cancelled.</span>`:""}</div>`;
+}
+/* Offboarding status on the employee page: scheduled (run now or call off), or the final settlement once it has started. */
+function offCard(e){
+  const sched=isScheduled(e);
+  if(!sched&&e.status!=="offboarding"&&e.status!=="offboarded") return "";
+  const rec=e.offRec, to=rec&&rec.transferTo?(empBy(rec.transferTo)||{name:rec.transferTo}).name:(e.offSched&&e.offSched.to)||"";
+  return `<div class="card"><div class="card-h"><h3>Offboarding</h3>${sched?`<span class="pill p-warn">Scheduled</span>`:e.status==="offboarded"?`<span class="pill p-mute">Completed</span>`:`<span class="pill p-warn">In progress</span>`}</div>
+    <div class="card-b" style="display:flex;flex-direction:column;gap:16px">
+    ${sched?`<div class="callout">${svg("info")}<div>Access is removed automatically on <b>${esc(fdate(e.lastDay))} at 6:00 pm</b>${to?`. Drive files and email go to <b>${esc(to)}</b>`:""}.</div></div>
+      <div class="row"><button class="btn danger sm" data-offrun="${e.id}">Remove access now</button><button class="btn glass sm" data-offcancel="${e.id}">Call off offboarding</button></div>`
+      :to?`<div class="muted">Drive files and email moved to <b style="color:var(--ink)">${esc(to)}</b>.</div>`:""}
+    ${settlementHtml(e,e.lastDay,false)}</div></div>`;
+}
+
+/* Sample data for when there is no backend, so the page can still be tried out. */
+function lvSample(){
+  const add=(name,type,from,to,reason,status,half=null)=>{const e=S.emps.find(x=>x.name===name);if(!e)return;
+    const r={id:lvNext++,email:e.email,type,from,to,half,reason,status,days:R.requestDays(from,to,half,[]),paidDays:null,lopDays:null};
+    if(status==="approved"){const a=lvPreview(r);r.paidDays=a.paid;r.lopDays=a.lop;}
+    S.lv.requests.push(r);};
+  S.lv.compOffs.push({id:lvNext++,email:"akash.pawar@wohlig.com",workedOn:"2026-10-10",days:1,reason:"Weekend production release",status:"approved"},
+    {id:lvNext++,email:"rajvee.gala@wohlig.com",workedOn:"2026-10-11",days:1,reason:"Sunday data migration",status:"pending"});
+  S.lv.pay["rahul.matai@wohlig.com"]={monthlyGross:90000,casualOpening:0};
+  add("Rahul Matai","casual","2026-03-02","2026-03-13","Family trip","approved");
+  add("Rahul Matai","unpaid","2026-10-05","2026-10-06","Extended travel","approved");
+  add("Parth Gala","casual","2026-11-02","2026-11-06","Diwali at home","approved");
+  add("Rajvee Gala","casual","2026-10-19","2026-10-23","Family wedding","pending");
+  add("Akash Pawar","compoff","2026-10-19","2026-10-19","Using the comp off from 10 Oct","pending");
+  add("Shreyas Nair","unpaid","2026-10-26","2026-10-28","Personal work","pending");
+  add("Jainam Nisar","sick","2026-10-12","2026-10-12","Fever","approved");
+  add("Pratik Sawant","sick","2026-10-20","2026-10-20","Doctor's appointment","pending","second");
+}
+async function lvLoad(){
+  try{
+    const r=await api("GET","/api/leave");
+    if(r.status===401||r.status===403){ render(); return; }   // signed out or not allowed: no sample data either
+    if(!r.ok||!r.data) throw 0;
+    const d=r.data;
+    S.lv={online:true,today:d.today,requests:d.requests,compOffs:d.compOffs,holidays:d.holidays,pay:Object.fromEntries(d.pay.map(p=>[lc(p.email),p]))};
+  }catch(e){ if(!S.lv.online&&!S.lv.requests.length) lvSample(); }
+  render();
+}
+/* One write: the API when online (then reload), otherwise the same rules applied locally. Returns {ok, errors, error}. */
+async function lvWrite(method,url,body,local){
+  if(S.lv.online){
+    try{ const r=await api(method,url,body); if(!r.ok) return {ok:false,errors:r.data&&r.data.errors,error:r.data&&r.data.error||"Could not save. Try again."}; await lvLoad(); return {ok:true,data:r.data}; }
+    catch(e){ return {ok:false,error:"The server can't be reached. Check it is running, then try again."}; }
+  }
+  return local();
+}
+const lvApi = {
+  request:(b)=>lvWrite("POST","/api/leave/requests",b,()=>{
+    const e=empBy(b.email);
+    const half=b.half||null, to=half?b.from:b.to;
+    const bal=e&&R.validDate(b.from)?lvBal(e,Number(b.from.slice(0,4))):null;
+    const errors=R.requestProblems({emp:e,type:b.type,from:b.from,to,half,reason:b.reason,holidays:holDays(),existing:e?reqsOf(e.email):[],bal});
+    if(Object.keys(errors).length) return {ok:false,errors};
+    const r={id:lvNext++,email:e.email,type:b.type,from:b.from,to,half,reason:b.reason.trim(),notify:(b.notify||[]).filter(x=>empBy(x)&&lc(x)!==lc(e.email)),status:"pending",days:R.requestDays(b.from,to,half,holDays()),paidDays:null,lopDays:null};
+    S.lv.requests.push(r); return {ok:true,data:r};
+  }),
+  decide:(id,decision)=>lvWrite("POST",`/api/leave/requests/${id}/decision`,{decision},()=>{
+    const r=S.lv.requests.find(x=>x.id===id);
+    if(!r||r.status!=="pending") return {ok:false,error:"This request was already decided."};
+    if(decision==="approved"){const a=lvPreview(r);r.days=a.paid+a.lop;r.paidDays=a.paid;r.lopDays=a.lop;}
+    r.status=decision; return {ok:true,data:r};
+  }),
+  compOff:(b)=>lvWrite("POST","/api/leave/comp-offs",b,()=>{
+    const e=empBy(b.email);
+    const errors=R.compOffProblems({emp:e,workedOn:b.workedOn,reason:b.reason,holidays:holDays(),today:lvToday(),existing:e?compsOf(e.email):[]});
+    if(Object.keys(errors).length) return {ok:false,errors};
+    S.lv.compOffs.push({id:lvNext++,email:e.email,workedOn:b.workedOn,days:1,reason:b.reason.trim(),status:"approved"}); return {ok:true};
+  }),
+  compOffRequest:(b)=>lvWrite("POST","/api/leave/comp-off-requests",b,()=>{
+    const e=empBy(b.email);
+    const errors=R.compOffProblems({emp:e,workedOn:b.workedOn,reason:b.reason,holidays:holDays(),today:lvToday(),existing:e?compsOf(e.email):[]});
+    if(Object.keys(errors).length) return {ok:false,errors};
+    S.lv.compOffs.push({id:lvNext++,email:e.email,workedOn:b.workedOn,days:1,reason:b.reason.trim(),status:"pending"}); return {ok:true};
+  }),
+  decideComp:(id,decision)=>lvWrite("POST",`/api/leave/comp-offs/${id}/decision`,{decision},()=>{
+    const c=S.lv.compOffs.find(x=>x.id===id); if(!c||c.status!=="pending") return {ok:false,error:"This comp off was already decided."};
+    c.status=decision; return {ok:true,data:c};
+  }),
+  cancel:(id)=>lvWrite("POST",`/api/leave/requests/${id}/cancel`,{},()=>{
+    const r=S.lv.requests.find(x=>x.id===id); if(!r||r.status!=="pending") return {ok:false,error:"This request was already decided, so it can't be cancelled."};
+    r.status="cancelled"; return {ok:true,data:r};
+  }),
+  pay:(email,b)=>lvWrite("PUT",`/api/employees/${encodeURIComponent(email)}/pay`,b,()=>{
+    const g=b.monthlyGross===""?null:Number(b.monthlyGross), o=Number(b.casualOpening||0), errors={};
+    if(g!==null&&!(g>0&&g<1e8)) errors.monthlyGross="Enter the monthly gross salary in rupees.";
+    if(!(o>=0&&o<=365&&Number.isInteger(o*2))) errors.casualOpening="Enter whole or half days, 0 to 365.";
+    if(Object.keys(errors).length) return {ok:false,errors};
+    S.lv.pay[lc(email)]={monthlyGross:g,casualOpening:o}; return {ok:true};
+  }),
+  addHoliday:(b)=>lvWrite("POST","/api/leave/holidays",b,()=>{
+    if(!R.validDate(b.day)||!b.name.trim()) return {ok:false,error:"Enter a date and a name for the holiday."};
+    if(S.lv.holidays.some(h=>h.day===b.day)) return {ok:false,error:"That date is already a holiday."};
+    S.lv.holidays.push({day:b.day,name:b.name.trim()}); S.lv.holidays.sort((a,c)=>a.day<c.day?-1:1); return {ok:true};
+  }),
+  delHoliday:(day)=>lvWrite("DELETE",`/api/leave/holidays/${day}`,null,()=>{ S.lv.holidays=S.lv.holidays.filter(h=>h.day!==day); return {ok:true}; }),
+};
+
 function vLeave(){
-  const pend=S.leave.filter(l=>l.status==="pending");
-  const today="2026-10-13";
-  const away=S.leave.filter(l=>l.status==="approved"&&l.to>=today).sort((a,b)=>a.from<b.from?-1:1);
-  const done=S.leave.filter(l=>l.status!=="pending");
+  if(!R) return `<section class="section"><div class="empty">Leave rules didn't load. Keep leave-rules.js next to this page.</div></section>`;
+  const today=lvToday(), year=Number(today.slice(0,4)), month=S.lvUi.month;
+  const named=r=>({...r,emp:empBy(r.email)});
+  const all=S.lv.requests.map(named).filter(r=>r.emp);
+  const pend=all.filter(r=>r.status==="pending").sort((a,b)=>a.from<b.from?-1:1);
+  const compPend=S.lv.compOffs.filter(c=>c.status==="pending").map(c=>({...c,emp:empBy(c.email)})).filter(c=>c.emp);
+  const away=all.filter(r=>r.status==="approved"&&r.to>=today).sort((a,b)=>a.from<b.from?-1:1);
+  const done=all.filter(r=>r.status!=="pending").sort((a,b)=>a.from<b.from?1:-1);
+  const people=S.emps.filter(e=>e.status!=="offboarded"&&(!S.lvUi.q||lc(e.name+e.email).includes(lc(S.lvUi.q))));
+  const cuts=S.emps.map(e=>({e,lop:lopDaysIn(month,e.email),g:payOf(e.email).monthlyGross})).filter(x=>x.lop);
+  const typeOpt=`<span class="muted">${esc(LTYPE.casual)} ${R.POLICY.casualPerYear} days a year, unused days carry over · ${esc(LTYPE.sick)} ${R.POLICY.sickPerYear} days a year, lapses on 31 Dec · ${esc(LTYPE.compoff)} earned by working a weekend or holiday, lapses on 31 Dec · ${esc(LTYPE.unpaid)} is always a salary cut · Half days count as 0.5</span>`;
   return `<section class="section">
-  ${head("Time off","Leave <span class=\"grad\">management.</span>","Approve or decline leave requests. Every decision is written to the audit log.",`<button class="btn glass" data-proto="Applying for leave">New leave request</button>`,true)}
-  <div class="grid g3">
-    <div class="card stat"><span class="num">${pend.length}</span><span class="lbl">Waiting for you</span></div>
-    <div class="card stat"><span class="num">${away.filter(l=>l.from<=today).length}</span><span class="lbl">Away today</span></div>
-    <div class="card stat"><span class="num">${away.filter(l=>l.from>today).length}</span><span class="lbl">Upcoming leave</span></div>
+  ${head("Time off","Leave <span class=\"grad\">management.</span>","Days beyond someone's balance, and all unpaid leave, are loss of pay. The salary cut is monthly gross ÷ 30 for each loss-of-pay day. Saturdays, Sundays and holidays are never counted.",
+    `<button class="btn glass" data-lv="comp">Record comp off</button><button class="btn glass" data-lv="new">Add leave for someone</button>`,true)}
+  ${S.lv.online?"":`<div class="callout">${svg("info")}<div><b>Sample data.</b> The backend isn't connected, so changes here last until you reload. Start the server to save them.</div></div>`}
+  <div class="grid g4">
+    <div class="card stat"><span class="num">${pend.length+compPend.length}</span><span class="lbl">Waiting for you</span></div>
+    <div class="card stat"><span class="num">${away.filter(r=>r.from<=today).length}</span><span class="lbl">Away today</span></div>
+    <div class="card stat"><span class="num">${away.filter(r=>r.from>today).length}</span><span class="lbl">Upcoming leave</span></div>
+    <div class="card stat ${lopDaysIn(today.slice(0,7))?"alert":""}"><span class="num">${lopDaysIn(today.slice(0,7))}</span><span class="lbl">Loss-of-pay days this month</span></div>
   </div>
   <div class="grid g-main">
-    <div class="card"><div class="card-h"><h3>Requests waiting</h3><span class="muted">${pend.length} open</span></div>
-      ${pend.length?pend.map(l=>`<div class="li wrap"><div class="grow">${person(l.emp,`${LEAVE_TYPES[l.type]} · ${lrange(l)} · ${l.days} day${l.days>1?"s":""}`)}<div class="meta" style="margin:6px 0 0 48px">“${esc(l.reason)}”</div></div>
-        <div class="row" style="gap:8px"><button class="btn glass sm" data-leave="${l.id}:declined">Decline</button><button class="btn primary sm" data-leave="${l.id}:approved">Approve</button></div></div>`).join(""):`<div class="empty">No requests waiting. New ones show up here.</div>`}
+    <div class="card"><div class="card-h"><h3>Requests waiting</h3><span class="muted">${pend.length+compPend.length} open</span></div>
+      ${compPend.map(c=>`<div class="li wrap"><div class="grow">${person(c.emp,`Comp off credit · worked on ${fdate(c.workedOn)}`)}<div class="meta" style="margin:6px 0 0 48px">“${esc(c.reason)}”</div></div>
+        <div class="row" style="gap:8px"><button class="btn glass sm" data-lv="comp-decide:${c.id}:declined">Decline</button><button class="btn primary sm" data-lv="comp-decide:${c.id}:approved">Approve</button></div></div>`).join("")}
+      ${pend.length?pend.map(r=>{const a=lvPreview(r);return `<div class="li wrap"><div class="grow">${person(r.emp,`${LTYPE[r.type]} · ${lrange(r)} · ${dd(a.paid+a.lop)}`)}
+        <div class="meta" style="margin:6px 0 0 48px">“${esc(r.reason)}”</div>
+        <div class="meta" style="margin:4px 0 0 48px">If approved now: <b style="color:var(--ink)">${dd(a.paid)} paid</b>${a.lop?` · <b style="color:var(--bad)">${dd(a.lop)} loss of pay</b>`:""}</div></div>
+        <div class="row" style="gap:8px"><button class="btn glass sm" data-lv="decide:${r.id}:declined">Decline</button><button class="btn primary sm" data-lv="decide:${r.id}:approved">Approve</button></div></div>`}).join(""):(compPend.length?"":`<div class="empty">No requests waiting. New ones show up here.</div>`)}
     </div>
     <div class="card"><div class="card-h"><h3>Away now &amp; coming up</h3></div>
-      ${away.length?away.map(l=>`<div class="li">${person(l.emp,`${LEAVE_TYPES[l.type]} · ${lrange(l)}`)}</div>`).join(""):`<div class="empty">No one is on approved leave.</div>`}
+      ${away.length?away.map(r=>`<div class="li">${person(r.emp,`${LTYPE[r.type]} · ${lrange(r)}`)}</div>`).join(""):`<div class="empty">No one is on approved leave.</div>`}
     </div>
   </div>
-  <div class="card"><div class="card-h"><h3>Decided</h3></div><div class="tbl-wrap"><table><thead><tr><th>Employee</th><th>Type</th><th class="hide-sm">Dates</th><th>Days</th><th>Status</th></tr></thead><tbody>
-    ${done.length?done.map(l=>`<tr class="click" data-emp="${l.emp.id}"><td>${person(l.emp,l.emp.title)}</td><td>${esc(LEAVE_TYPES[l.type])}</td><td class="num-cell hide-sm">${esc(lrange(l))}</td><td class="num-cell">${l.days}</td><td><span class="pill ${LSTAT[l.status][1]}">${LSTAT[l.status][0]}</span></td></tr>`).join(""):`<tr><td colspan="5"><div class="empty">Nothing decided yet.</div></td></tr>`}
+  <div class="card"><div class="card-h"><h3>Salary cuts</h3><input class="input" type="month" id="lv-month" value="${esc(month)}" aria-label="Month" style="width:auto;padding:8px 12px"></div>
+    <div class="tbl-wrap"><table><thead><tr><th>Employee</th><th>Loss-of-pay days</th><th class="hide-sm">Monthly gross</th><th>Salary cut</th></tr></thead><tbody>
+    ${cuts.length?cuts.map(x=>`<tr><td>${person(x.e,x.e.title)}</td><td class="num-cell">${x.lop}</td><td class="num-cell hide-sm">${x.g?inr(x.g):"—"}</td>
+      <td class="num-cell">${x.g?`<b>${inr(R.salaryCut(x.g,x.lop))}</b>`:`<button class="btn link" data-lv="pay:${esc(x.e.email)}">Add salary</button>`}</td></tr>`).join("")
+      :`<tr><td colspan="4"><div class="empty">No loss-of-pay days in ${esc(fdate(month+"-01").replace(/^1 /,""))}.</div></td></tr>`}
+    </tbody></table></div></div>
+  <div class="card"><div class="card-h"><h3>Balances ${year}</h3><input class="input" id="lv-q" placeholder="Search people" aria-label="Search balances" value="${esc(S.lvUi.q)}" style="width:220px;border-radius:999px;padding:8px 14px"></div>
+    <div style="padding:0 24px 12px">${typeOpt}</div>
+    <div class="tbl-wrap"><table><thead><tr><th>Employee</th><th>Casual left</th><th class="hide-sm">Carried + quota − used</th><th>Sick left</th><th>Comp off left</th><th>Loss of pay (${year})</th><th></th></tr></thead><tbody>
+    ${people.length?people.map(e=>{const b=lvBal(e,year);return `<tr><td>${person(e,e.title)}</td><td class="num-cell"><b>${b.casual.left}</b></td>
+      <td class="num-cell hide-sm muted">${b.casual.carried} + ${b.casual.quota} − ${b.casual.used}</td><td class="num-cell">${b.sick.left}</td><td class="num-cell">${b.compoff.left}</td><td class="num-cell">${b.lopDays||"—"}</td>
+      <td><button class="btn glass sm" data-lv="pay:${esc(e.email)}">Pay &amp; balance</button></td></tr>`}).join("")
+      :`<tr><td colspan="7"><div class="empty">No one matches “${esc(S.lvUi.q)}”.</div></td></tr>`}
+    </tbody></table></div></div>
+  <div class="grid g-main">
+    <div class="card"><div class="card-h"><h3>Decided</h3></div><div class="tbl-wrap"><table><thead><tr><th>Employee</th><th>Type</th><th class="hide-sm">Dates</th><th>Paid</th><th>Loss of pay</th><th>Status</th></tr></thead><tbody>
+      ${done.length?done.map(r=>`<tr class="click" data-emp="${r.emp.id}"><td>${person(r.emp,r.emp.title)}</td><td>${esc(LTYPE[r.type])}</td><td class="num-cell hide-sm">${esc(lrange(r))}</td>
+        <td class="num-cell">${r.status==="approved"?r.paidDays:"—"}</td><td class="num-cell">${r.status==="approved"?(r.lopDays||"—"):"—"}</td><td><span class="pill ${LSTAT[r.status][1]}">${LSTAT[r.status][0]}</span></td></tr>`).join("")
+        :`<tr><td colspan="6"><div class="empty">Nothing decided yet.</div></td></tr>`}
+    </tbody></table></div></div>
+    <div class="card"><div class="card-h"><h3>Holidays</h3><span class="muted">Not counted as leave</span></div>
+      ${S.lv.holidays.map(h=>`<div class="li"><div class="grow"><b style="font-weight:600">${esc(h.name)}</b><div class="meta">${esc(fdate(h.day))}</div></div><button class="btn glass sm" data-lv="hol-del:${h.day}" aria-label="Remove ${esc(h.name)}">Remove</button></div>`).join("")||`<div class="empty">No holidays added yet.</div>`}
+      <form id="lvf-hol" class="li wrap" novalidate><input class="input" type="date" id="lh-day" aria-label="Holiday date" style="width:auto"><input class="input grow" id="lh-name" placeholder="Holiday name" aria-label="Holiday name" style="min-width:140px"><button class="btn primary sm" type="submit">Add</button></form>
+    </div>
+  </div>
+  </section>`;
+}
+
+/* The leave card on an employee's page. */
+function leaveCard(e){
+  if(!R) return "";
+  const year=Number(lvToday().slice(0,4)), b=lvBal(e,year), p=payOf(e.email);
+  const mine=reqsOf(e.email).sort((a,c)=>a.from<c.from?1:-1).slice(0,5);
+  return `<div class="card"><div class="card-h"><h3>Leave ${year}</h3><button class="btn glass sm" data-lv="pay:${esc(e.email)}">Pay &amp; balance</button></div>
+    <dl class="facts" style="border-top:0;padding-top:0">
+      <div><dt>Casual left</dt><dd>${b.casual.left} <span class="muted">(${b.casual.carried} carried + ${b.casual.quota} − ${b.casual.used})</span></dd></div>
+      <div><dt>Sick left</dt><dd>${b.sick.left} <span class="muted">of ${b.sick.quota}</span></dd></div>
+      <div><dt>Comp off left</dt><dd>${b.compoff.left}</dd></div>
+      <div><dt>Loss of pay</dt><dd>${dd(b.lopDays)}</dd></div>
+      <div><dt>Monthly gross</dt><dd>${p.monthlyGross?inr(p.monthlyGross):"Not set"}</dd></div>
+    </dl>
+    ${mine.map(r=>`<div class="li"><div class="grow"><b style="font-weight:600">${esc(LTYPE[r.type])}</b> · ${esc(lrange(r))}<div class="meta">${r.status==="approved"?`${dd(r.paidDays)} paid${r.lopDays?`, ${dd(r.lopDays)} loss of pay`:""}`:dd(r.days)}</div></div><span class="pill ${LSTAT[r.status][1]}">${LSTAT[r.status][0]}</span></div>`).join("")}
+  </div>`;
+}
+
+/* Modals */
+const lvErr=(id,msg)=>{const n=$("#"+id+"-err");if(n){n.textContent=msg||"";n.hidden=!msg;}const i=$("#"+id);if(i)i.setAttribute("aria-invalid",msg?"true":"false");};
+const lvField=(id,label,ctl,hint="")=>`<div class="field"><label for="${id}">${label}</label>${ctl}${hint?`<span class="hint">${hint}</span>`:""}<span class="ferr" id="${id}-err" role="alert" hidden></span></div>`;
+const empOptions=sel=>S.emps.filter(e=>e.status!=="offboarded").sort((a,b)=>a.name<b.name?-1:1).map(e=>`<option value="${esc(e.email)}" ${lc(e.email)===lc(sel)?"selected":""}>${esc(e.name)}</option>`).join("");
+function lvShowErrors(res,map){
+  Object.values(map).forEach(id=>lvErr(id,""));
+  for(const [k,msg] of Object.entries(res.errors||{})) lvErr(map[k]||map._,msg);
+  if(res.error) toast(res.error);
+  const first=Object.keys(res.errors||{})[0]; if(first&&map[first]) $("#"+map[first])?.focus();
+}
+/* ---------- Steppers for offboarding and leave requests: same pattern as the onboarding wizard ---------- */
+const stepper=(steps,cur)=>`<div class="stepper" role="list">${steps.map((s,i)=>`<div class="stp ${cur===i+1?"on":cur>i+1?"done":""}" role="listitem"><b>${cur>i+1?"✓":i+1}</b>${esc(s)}</div>`).join("")}</div>`;
+const wf=(id,label,ctl,err="",hint="")=>`<div class="field"><label for="${id}">${label}</label>${ctl}${hint?`<span class="hint">${hint}</span>`:""}${err?`<span class="ferr" role="alert">${esc(err)}</span>`:""}</div>`;
+const rsec=(title,attr,step,body)=>`<div class="card"><div class="card-h"><h3>${title}</h3><button type="button" class="btn link" ${attr}="${step}">Edit</button></div><div class="card-b">${body}</div></div>`;
+const rkv=pairs=>`<dl class="rv">${pairs.map(([k,v])=>`<div><dt>${k}</dt><dd>${v||"—"}</dd></div>`).join("")}</dl>`;
+const wizFoot=(prefix,step,last,reviewed,fromReview,submitLabel,danger)=>`<div class="row" style="justify-content:space-between">
+  <div class="row">${step>1?`<button type="button" class="btn glass" data-${prefix}-back>Back</button>`:`<button type="button" class="btn glass" data-${prefix}-cancel>Cancel</button>`}</div>
+  ${last?`<button type="submit" class="btn ${danger?"danger":"primary"}" id="${prefix}-submit" ${reviewed?"":"disabled"}>${submitLabel}</button>`
+        :`<button type="button" class="btn primary" data-${prefix}-next>${fromReview?"Back to review":"Continue"}</button>`}</div>`;
+
+/* Offboarding: who is leaving → which access goes and who gets their files → last day and settlement → review. */
+const OW_STEPS=["Who is leaving","Access & handover","Last day & settlement","Review"];
+const liveTools=e=>Object.keys(e.grants).filter(k=>["active","failed","created"].includes(e.grants[k]));
+const TOOL_DO={gws:"Suspend, sign out everywhere, reset password, move Drive and email",gemini:"Remove the Gemini licence",claude:"Remove from the Claude Team workspace",github:"Remove from the wohlig org and teams",gcp:"Remove IAM roles from all projects"};
+function newOw(empId){
+  const e=S.emps.find(x=>x.id===empId);
+  return {step:e?2:1,empId:e?e.id:null,tools:e?liveTools(e):null,to:e?((S.emps.find(m=>m.name===e.manager&&m.id!==e.id)||{}).email||""):"",
+    lastDay:lvToday(),when:"now",reviewed:false,fromReview:false,errors:{}};
+}
+function owErrors(w){
+  const er={}, e=S.emps.find(x=>x.id===w.empId);
+  if(w.step===1&&!e) er.emp="Choose who is leaving.";
+  if(w.step===2&&(w.tools||[]).includes("gws")){ if(!w.to) er.to="Pick who receives their Drive files and email."; else if(e&&lc(w.to)===lc(e.email)) er.to="Pick someone other than the person leaving."; }
+  if(w.step===3){ if(!R.validDate(w.lastDay||"")) er.lastDay="Enter the last working day."; else if(w.when==="later"&&w.lastDay<lvToday()) er.lastDay="That day has passed. Choose Now instead."; }
+  return er;
+}
+function vOffboard(){
+  if(isEmployee()) return vOffboardView();
+  if(!S.ow) S.ow=newOw(S.offSel);
+  const w=S.ow, er=w.errors, e=S.emps.find(x=>x.id===w.empId)||null;
+  if(e&&!w.tools) w.tools=liveTools(e);
+  const cands=S.emps.filter(x=>(x.status==="active"||x.status==="onboarding")&&!isScheduled(x));
+  const busy=S.emps.filter(x=>x.status==="offboarding"), sched=S.emps.filter(isScheduled);
+  const mgrs=S.emps.filter(m=>m.status==="active"&&(!e||m.id!==e.id)).sort((a,b)=>a.name<b.name?-1:1);
+  const toName=(empBy(w.to)||{}).name||"";
+  let body="";
+  if(w.step===1) body=`<div class="card"><div class="card-h"><h3>Who is leaving?</h3><span class="muted">${cands.length} people</span></div>
+      ${er.emp?`<div class="card-b" style="padding-bottom:0"><span class="ferr" role="alert">${esc(er.emp)}</span></div>`:""}
+      ${cands.map(c=>`<label class="radio-li"><input type="radio" name="ow-emp" value="${c.id}" ${e&&e.id===c.id?"checked":""}>${person(c,c.title+" · "+c.dept)}<span style="margin-left:auto">${epill(c)}</span></label>`).join("")}</div>`;
+  if(w.step===2){
+    const live=liveTools(e);
+    body=`<div class="card"><div class="card-h"><h3>Access to remove</h3><span class="muted">Google Workspace goes first. It also blocks sign-in to every tool that uses Google login.</span></div><div class="card-b">
+      ${live.length?`<div class="tiles">${live.map(id=>`<label class="tile"><input type="checkbox" id="ow-tool-${id}" value="${id}" ${(w.tools||[]).includes(id)?"checked":""}>${appIc(id)}<span class="t"><b>${esc(APP[id].name)}</b><span>${esc(TOOL_DO[id])}</span></span></label>`).join("")}</div>`
+        :`<p class="muted" style="margin:0">${esc(e.name)} has no tool access to remove.</p>`}</div></div>
+    <div class="card"><div class="card-h"><h3>Handover</h3></div><div class="card-b form">
+      ${wf("ow-to","Move Drive files and email to",`<select class="input" id="ow-to"><option value="">Choose…</option>${mgrs.map(m=>`<option value="${esc(m.email)}" ${lc(m.email)===lc(w.to)?"selected":""}>${esc(m.name)}</option>`).join("")}</select>`,er.to,(w.tools||[]).includes("gws")?"Needed because Google Workspace is being removed.":"Only needed when Google Workspace is removed.")}
+    </div></div>`;
+  }
+  if(w.step===3) body=`<div class="card"><div class="card-h"><h3>Last working day</h3></div><div class="card-b" style="display:flex;flex-direction:column;gap:18px">
+      <div class="form">${wf("ow-day","Last working day",`<input class="input" type="date" id="ow-day" value="${esc(w.lastDay)}">`,er.lastDay)}
+      <div class="field"><span class="lab">When to remove access</span><div class="seg"><label><input type="radio" name="ow-when" value="now" ${w.when==="now"?"checked":""}>Now</label><label><input type="radio" name="ow-when" value="later" ${w.when==="later"?"checked":""}>On the last working day</label></div></div></div>
+      <div class="callout">${svg("info")}<div>${w.when==="later"?`Access is removed automatically at <b>6:00 pm</b> on the last working day. Until then HR can remove it early or call the offboarding off.`:"Access is removed as soon as you submit."}</div></div>
+    </div></div>
+    <div class="card"><div class="card-h"><h3>Final settlement</h3><span class="muted">Leave only</span></div><div class="card-b" id="ow-settle">${settlementHtml(e,w.lastDay,true)}</div></div>`;
+  if(w.step===4) body=`${rsec("Who is leaving","data-ow-goto",1,rkv([["Name",esc(e.name)],["Job title",esc(e.title)],["Department",esc(e.dept)],["Work email",`<span class="mono">${esc(e.email)}</span>`]]))}
+    ${rsec("Access & handover","data-ow-goto",2,`<div class="chips" style="margin-bottom:14px">${(w.tools||[]).map(id=>`<span class="chip">${appIc(id)}${esc(APP[id].name)}</span>`).join("")||`<span class="muted">No tool access to remove</span>`}</div>${rkv([["Drive files and email go to",esc(toName||"—")]])}`)}
+    ${rsec("Last working day","data-ow-goto",3,rkv([["Last working day",esc(fdate(w.lastDay))],["Access removed",w.when==="later"?`On ${esc(fdate(w.lastDay))} at 6:00 pm`:"Right away, when you submit"]]))}
+    ${rsec("Final settlement","data-ow-goto",3,settlementHtml(e,w.lastDay,true))}
+    <div class="callout bad">${svg("alert")}<div>${esc(e.name.split(" ")[0])} will lose access to <b>${(w.tools||[]).length} tool${(w.tools||[]).length===1?"":"s"}</b>${w.when==="later"?` on ${esc(fdate(w.lastDay))} at 6:00 pm`:" right away"}, and their HR Access Hub login is removed. Every step is written to the audit log.</div></div>
+    <label class="check" style="border:0;padding:0"><input type="checkbox" id="ow-reviewed" ${w.reviewed?"checked":""}><div class="grow"><div class="lbl">I have reviewed all the details above</div></div></label>`;
+  return `<section class="section">
+  ${head("Offboarding","Remove access, <span class=\"grad\">step by step.</span>","Pick who is leaving, choose what to remove and who gets their files, set the last day, then review. Nothing happens until you submit.","",true)}
+  ${S.off.online?"":`<div class="callout">${svg("info")}<div><b>Simulated.</b> The backend isn't connected, so offboarding here is not saved and no access is removed.</div></div>`}
+  ${busy.length?`<div class="callout">${svg("info")}<div>${busy.map(b=>`<b>${esc(b.name)}</b>`).join(", ")} ${busy.length>1?"are":"is"} still being offboarded. <button type="button" class="btn link" data-emp="${busy[0].id}">Open checklist</button></div></div>`:""}
+  ${sched.length?`<div class="callout">${svg("info")}<div>Scheduled: ${sched.map(b=>`<button type="button" class="btn link" data-emp="${b.id}">${esc(b.name)}, ${esc(fdate(b.lastDay))}</button>`).join(" · ")}</div></div>`:""}
+  ${stepper(OW_STEPS,w.step)}
+  <form id="owf" class="grid" style="gap:22px" novalidate>${body}
+  ${wizFoot("ow",w.step,w.step===4,w.reviewed,w.fromReview,w.when==="later"?"Schedule offboarding":"Offboard now",true)}</form></section>`;
+}
+function owNext(){
+  const w=S.ow; w.errors=owErrors(w);
+  if(Object.keys(w.errors).length){ render(); obFocusError(); toast("Please fix the highlighted fields."); return; }
+  w.step=w.fromReview?4:w.step+1; w.fromReview=false; render(); window.scrollTo(0,0);
+}
+async function owSubmit(){
+  const w=S.ow, e=S.emps.find(x=>x.id===w.empId); if(!e) return;
+  if(!w.reviewed){ toast("Tick the review box before submitting."); return; }
+  const later=w.when==="later", day=w.lastDay, tools=(w.tools||[]).slice(), toName=(empBy(w.to)||{}).name||"";
+  if(S.off.online){
+    const res=await offCall("POST","/api/offboarding",{email:e.email,lastDay:day,transferTo:w.to,when:w.when,tools});
+    if(!res.ok){toast(res.error);return}
+    log(later?`Offboarding scheduled for ${fdate(day)}, 6:00 pm`:"Offboarding started",e,null,later?"info":"ok");
+    S.ow=null; S.offSel=null; toast(later?`Offboarding for ${e.name} scheduled for ${fdate(day)}.`:`Access removed for ${e.name}. Finish the manual tasks to close it out.`);
+    go("employee",e.id); return;
+  }
+  leaveAfter(e,day).forEach(r=>{r.status="cancelled"});
+  for(const id of liveTools(e)) if(!tools.includes(id)) e.grants[id]="none";   // tools HR chose to keep are left out of the checklist
+  S.ow=null; S.offSel=null; e.lastDay=day;
+  if(later){e.offSched={to:toName};log(`Offboarding scheduled for ${fdate(day)}`,e,null,"info");toast(`Offboarding for ${e.name} scheduled for ${fdate(day)}`);go("employee",e.id)}
+  else{go("employee",e.id);revoke(e,toName)}
+}
+
+/* Leave request: dates → type → note → review. The employee applies for themselves; HR can apply for someone. */
+const LW_STEPS=["Dates","Leave type","Note","Review"];
+const newLw=(self,email)=>({step:1,self,email:email||"",dur:"full",from:lvToday(),to:lvToday(),half:"first",type:"",reason:"",notify:[],reviewed:false,fromReview:false,errors:{}});
+const lwVal=w=>({email:w.email,type:w.type,from:w.from,to:w.dur==="half"?w.from:w.to,half:w.dur==="half"?w.half:null,reason:w.reason,notify:w.notify.slice()});
+const lwDays=w=>{const v=lwVal(w);return R.validDate(v.from)&&R.validDate(v.to)&&v.to>=v.from?R.requestDays(v.from,v.to,v.half,holDays()):0};
+function lwErrors(w){
+  const v=lwVal(w), e=empBy(v.email), bal=e&&R.validDate(v.from)?lvBal(e,Number(v.from.slice(0,4))):null;
+  const all=R.requestProblems({emp:e,type:v.type||"unpaid",from:v.from,to:v.to,half:v.half,reason:v.reason||"x",holidays:holDays(),existing:e?reqsOf(e.email):[],bal});
+  const pick=ks=>Object.fromEntries(Object.entries(all).filter(([k])=>ks.includes(k)));
+  if(w.step===1) return pick(["email","from","to","half"]);
+  if(w.step===2) return w.type?pick(["type"]):{type:"Pick a leave type."};
+  if(w.step===3) return w.reason.trim()?{}:{reason:"Note is required."};
+  return {};
+}
+function lwPreview(w){
+  const v=lwVal(w), e=empBy(v.email), days=lwDays(w);
+  if(!e||!days||!v.type) return "";
+  const b=lvBal(e,Number(v.from.slice(0,4))), a=R.allocate(v.type,days,b);
+  return `<div class="callout" id="lw-preview">${svg("info")}<div><b>${dd(days)}</b>. If approved: <b>${dd(a.paid)} paid</b>${a.lop?`, <b style="color:var(--bad)">${dd(a.lop)} loss of pay</b>`:""}.</div></div>`;
+}
+function vLeaveApply(){
+  const w=S.lw, er=w.errors, e=empBy(w.email), y=Number((w.from||lvToday()).slice(0,4)), b=e?lvBal(e,y):null;
+  let body="";
+  if(w.step===1) body=`<div class="card"><div class="card-h"><h3>When are you away?</h3></div><div class="card-b" style="display:flex;flex-direction:column;gap:18px">
+      ${w.self?"":wf("lw-email","Employee",`<select class="input" id="lw-email"><option value="">Choose…</option>${empOptions(w.email)}</select>`,er.email)}
+      <div class="field"><span class="lab">Duration</span><div class="seg"><label><input type="radio" name="lw-dur" value="full" ${w.dur==="full"?"checked":""}>Full day(s)</label><label><input type="radio" name="lw-dur" value="half" ${w.dur==="half"?"checked":""}>Half day</label></div></div>
+      <div class="lv-dates">${wf("lw-from",w.dur==="half"?"Date":"From",`<input class="input" type="date" id="lw-from" value="${esc(w.from)}">`,er.from)}
+        <span class="lv-days" id="lw-days">${dd(lwDays(w))}</span>
+        ${w.dur==="half"?wf("lw-half","Which half",`<select class="input" id="lw-half"><option value="first" ${w.half==="first"?"selected":""}>First half (morning)</option><option value="second" ${w.half==="second"?"selected":""}>Second half (afternoon)</option></select>`,er.half)
+          :wf("lw-to","To",`<input class="input" type="date" id="lw-to" value="${esc(w.to)}">`,er.to)}</div>
+      <p class="muted" style="margin:0">Saturdays, Sundays and company holidays are not counted.</p></div></div>`;
+  if(w.step===2){
+    const info={casual:[`${b.casual.left} days available`,"For planned time off. Unused days carry over."],sick:[`${b.sick.left} days available`,"When you are unwell."],
+      compoff:[b.compoff.left>0?`${b.compoff.left} day${b.compoff.left===1?"":"s"} available`:"Not available","Uses a day earned by working a weekend or holiday."],unpaid:["","When your other leave has run out."]};
+    body=`<div class="card"><div class="card-h"><h3>Type of leave</h3><span class="muted">${dd(lwDays(w))} requested</span></div><div class="card-b" style="display:flex;flex-direction:column;gap:16px">
+      ${er.type?`<span class="ferr" role="alert">${esc(er.type)}</span>`:""}
+      <div class="tiles">${Object.entries(LTYPE).map(([k,name])=>{const off=k==="compoff"&&b.compoff.left<=0;
+        return `<label class="tile${off?" off":""}"><input type="radio" name="lw-type" value="${k}" ${w.type===k?"checked":""} ${off?"disabled":""}><span class="t"><b>${esc(name)}${info[k][0]?` · ${esc(info[k][0])}`:""}</b><span>${esc(info[k][1])}</span></span></label>`}).join("")}</div>
+      ${lwPreview(w)}</div></div>`;
+  }
+  if(w.step===3) body=`<div class="card"><div class="card-h"><h3>Note</h3></div><div class="card-b form">
+      <div style="grid-column:1/-1">${wf("lw-reason","Note",`<textarea class="input" id="lw-reason" rows="3" placeholder="Type here">${esc(w.reason)}</textarea>`,er.reason)}</div>
+      <div class="field" style="grid-column:1/-1"><label for="lw-notify">Notify <span class="muted">(optional)</span></label>
+        <input class="input" id="lw-notify" list="lw-people" placeholder="Search employee" autocomplete="off">
+        <datalist id="lw-people">${S.emps.filter(x=>x.status!=="offboarded"&&lc(x.email)!==lc(w.email)).map(x=>`<option value="${esc(x.name)}"></option>`).join("")}</datalist>
+        <div>${w.notify.map((x,i)=>`<span class="fchip">${esc((empBy(x)||{name:x}).name)}<button type="button" data-lw-rmn="${i}" aria-label="Remove">×</button></span>`).join("")}</div></div></div></div>`;
+  if(w.step===4){
+    const v=lwVal(w);
+    body=`${w.self?"":rsec("Employee","data-lw-goto",1,rkv([["Name",esc(e.name)],["Work email",`<span class="mono">${esc(e.email)}</span>`]]))}
+    ${rsec("Dates","data-lw-goto",1,rkv([["Dates",esc(lrange(v))],["Days",esc(dd(lwDays(w)))]]))}
+    ${rsec("Leave type","data-lw-goto",2,rkv([["Type",esc(LTYPE[v.type])]])+lwPreview(w))}
+    ${rsec("Note","data-lw-goto",3,rkv([["Note",esc(v.reason)],["Notify",esc(v.notify.map(x=>(empBy(x)||{name:x}).name).join(", ")||"Nobody")]]))}
+    <label class="check" style="border:0;padding:0"><input type="checkbox" id="lw-reviewed" ${w.reviewed?"checked":""}><div class="grow"><div class="lbl">I have reviewed all the details above</div></div></label>`;
+  }
+  return `<section class="section">
+  ${head(w.self?"Me":"Time off",w.self?"Request <span class=\"grad\">leave.</span>":"Add leave for <span class=\"grad\">someone.</span>",w.self?"Pick your dates and the type of leave, add a note, then review. Your manager approves it.":"For when HR enters leave on an employee's behalf. It still goes to the approval list.","",true)}
+  ${stepper(LW_STEPS,w.step)}
+  <form id="lwf" class="grid" style="gap:22px" novalidate>${body}
+  ${wizFoot("lw",w.step,w.step===4,w.reviewed,w.fromReview,"Request leave",false)}</form></section>`;
+}
+function lwNext(){
+  const w=S.lw; w.errors=lwErrors(w);
+  if(Object.keys(w.errors).length){ render(); obFocusError(); toast("Please fix the highlighted fields."); return; }
+  w.step=w.fromReview?4:w.step+1; w.fromReview=false; render(); window.scrollTo(0,0);
+}
+async function lwSubmit(){
+  const w=S.lw; if(!w.reviewed){ toast("Tick the review box before submitting."); return; }
+  const v=lwVal(w), res=await lvApi.request(v);
+  if(!res.ok){
+    const errs=res.errors||{}, k=Object.keys(errs)[0];
+    if(!k){ toast(res.error||"Could not save. Try again."); return; }
+    w.errors=errs; w.step=["email","from","to","half"].includes(k)?1:k==="type"?2:3; w.reviewed=false; render(); toast(errs[k]); return;
+  }
+  const e=empBy(v.email); log(`${LTYPE[v.type]} requested: ${lrange(v)}${v.notify.length?` (notify ${v.notify.map(x=>empBy(x).name).join(", ")})`:""}`,e,null,"info");
+  const back=w.self?"myleave":"leave"; S.lw=null; toast(w.self?"Leave requested. Your manager will review it.":`Leave request for ${e.name} sent for approval.`); go(back);
+}
+const lwAddNotify=()=>{const w=S.lw,n=$("#lw-notify"); if(!w||!n) return; const hit=S.emps.find(x=>lc(x.name)===lc(n.value.trim()));
+  if(hit&&!w.notify.includes(hit.email)&&lc(hit.email)!==lc(w.email)){ w.notify.push(hit.email); render(); $("#lw-notify")&&$("#lw-notify").focus(); }};
+
+document.addEventListener("click",ev=>{
+  const t=ev.target.closest("[data-ow-next],[data-ow-back],[data-ow-cancel],[data-ow-goto],[data-lw-next],[data-lw-back],[data-lw-cancel],[data-lw-goto],[data-lw-rmn]"); if(!t) return;
+  const ow=S.ow, lw=S.lw;
+  if(t.hasAttribute("data-ow-next")) return owNext();
+  if(t.hasAttribute("data-ow-back")&&ow){ ow.errors={}; ow.step=Math.max(1,ow.step-1); ow.fromReview=false; render(); window.scrollTo(0,0); return; }
+  if(t.hasAttribute("data-ow-cancel")){ S.ow=null; S.offSel=null; render(); window.scrollTo(0,0); return; }
+  if(t.dataset.owGoto&&ow){ ow.fromReview=ow.step===4; ow.errors={}; ow.step=Number(t.dataset.owGoto); render(); window.scrollTo(0,0); return; }
+  if(t.hasAttribute("data-lw-next")) return lwNext();
+  if(t.hasAttribute("data-lw-back")&&lw){ lw.errors={}; lw.step=Math.max(1,lw.step-1); lw.fromReview=false; render(); window.scrollTo(0,0); return; }
+  if(t.hasAttribute("data-lw-cancel")){ const back=lw&&lw.self?"myleave":"leave"; S.lw=null; go(back); return; }
+  if(t.dataset.lwGoto&&lw){ lw.fromReview=lw.step===4; lw.errors={}; lw.step=Number(t.dataset.lwGoto); render(); window.scrollTo(0,0); return; }
+  if(t.dataset.lwRmn!==undefined&&lw){ lw.notify.splice(Number(t.dataset.lwRmn),1); render(); }
+});
+document.addEventListener("change",ev=>{
+  const t=ev.target, w=S.ow, l=S.lw;
+  if(w&&t.name==="ow-emp"){ const n=newOw(Number(t.value)); n.step=1; S.ow=n; render(); return; }
+  if(w&&t.id&&t.id.startsWith("ow-tool-")){ w.tools=[...document.querySelectorAll('[id^="ow-tool-"]:checked')].map(x=>x.value); return; }
+  if(w&&t.id==="ow-to"){ w.to=t.value; return; }
+  if(w&&t.id==="ow-day"){ w.lastDay=t.value; const e=S.emps.find(x=>x.id===w.empId); if(e&&$("#ow-settle")) $("#ow-settle").innerHTML=settlementHtml(e,w.lastDay,true); return; }
+  if(w&&t.name==="ow-when"){ w.when=t.value; render(); return; }
+  if(w&&t.id==="ow-reviewed"){ w.reviewed=t.checked; const s=$("#ow-submit"); if(s) s.disabled=!t.checked; return; }
+  if(l&&t.id==="lw-email"){ l.email=t.value; l.type=""; render(); return; }
+  if(l&&t.name==="lw-dur"){ l.dur=t.value; render(); return; }
+  if(l&&(t.id==="lw-from"||t.id==="lw-to"||t.id==="lw-half")){ l[t.id.slice(3)]=t.value; if(t.id==="lw-from"&&l.to<l.from) { l.to=l.from; const x=$("#lw-to"); if(x) x.value=l.to; } $("#lw-days").textContent=dd(lwDays(l)); return; }
+  if(l&&t.name==="lw-type"){ l.type=t.value; render(); return; }
+  if(l&&t.id==="lw-notify"){ lwAddNotify(); return; }
+  if(l&&t.id==="lw-reviewed"){ l.reviewed=t.checked; const s=$("#lw-submit"); if(s) s.disabled=!t.checked; }
+});
+document.addEventListener("input",ev=>{ const t=ev.target; if(S.lw&&t.id==="lw-reason") S.lw.reason=t.value; });
+document.addEventListener("keydown",ev=>{ if(ev.key==="Enter"&&ev.target.id==="lw-notify"){ ev.preventDefault(); lwAddNotify(); } });
+document.addEventListener("submit",ev=>{
+  if(ev.target.id==="owf"){ ev.preventDefault(); if(S.ow&&S.ow.step===4) owSubmit(); else owNext(); }
+  if(ev.target.id==="lwf"){ ev.preventDefault(); if(S.lw&&S.lw.step===4) lwSubmit(); else lwNext(); }
+});
+
+/* The employee asks HR to credit a comp off for a weekend or holiday they worked. */
+function lvCompRequestModal(email){
+  const e=empBy(email); if(!e) return;
+  const m=modal(`<form id="lvf-compreq" novalidate><div class="card-h" style="padding-top:24px"><h3>Request credit for comp off</h3></div><div class="card-b">
+    <div class="muted" style="font-size:13px">Worked on a Saturday, Sunday or holiday? Ask for one comp-off day. Once your reporting manager approves it, you can use it until 31 December.</div>
+    ${lvField("lq-day","Date you worked",`<input class="input" type="date" id="lq-day" max="${lvToday()}">`,`<span id="lq-what">Pick a Saturday, Sunday or company holiday.</span>`)}
+    ${lvField("lq-reason","Note",`<textarea class="input" id="lq-reason" rows="3" placeholder="What did you work on?"></textarea>`)}</div>
+    <div class="modal-f"><button type="button" class="btn glass" data-close>Cancel</button><button type="submit" class="btn primary" data-ok>Request credit</button></div></form>`);
+  // Say straight away what the picked day is, so a working day (or a wrongly added holiday) is obvious before sending.
+  m.querySelector("#lq-day").addEventListener("change",ev=>{
+    const d=ev.target.value, box=$("#lq-what"); if(!R.validDate(d)){box.textContent="Pick a Saturday, Sunday or company holiday.";lvErr("lq-day","");return}
+    const day=new Date(d+"T00:00:00").toLocaleDateString("en-IN",{weekday:"long"}), hol=S.lv.holidays.find(h=>h.day===d);
+    if(d>lvToday()){box.textContent="";lvErr("lq-day","That date hasn't happened yet.");return}
+    if(hol){box.textContent=`${day}, company holiday: ${hol.name}.`;lvErr("lq-day","");return}
+    if(R.isWeekend(d)){box.textContent=`${day}. This counts for a comp off.`;lvErr("lq-day","");return}
+    box.textContent=""; lvErr("lq-day",`${day} is a working day, so it doesn't earn a comp off.`);
+  });
+  m.querySelector("form").addEventListener("submit",async ev=>{ev.preventDefault();
+    const v={email:e.email,workedOn:$("#lq-day").value,reason:$("#lq-reason").value}, res=await lvApi.compOffRequest(v);
+    if(!res.ok) return lvShowErrors(res,{workedOn:"lq-day",reason:"lq-reason",email:"lq-day"});
+    log(`Comp off credit requested for working on ${fdate(v.workedOn)}`,e,null,"info");
+    m.remove(); toast("Comp off credit requested. Your reporting manager will review it."); render();});
+}
+function lvPolicyModal(){
+  const P=R.POLICY;
+  modal(`<div class="card-h" style="padding-top:24px"><h3>Leave policy</h3></div><div class="card-b" style="font-size:14px">
+    <div><b>Casual leave</b>: ${P.casualPerYear} days a year (January to December). Unused days carry over to next year. Joiners get a share for the months left in their first year.</div>
+    <div><b>Sick leave</b>: ${P.sickPerYear} days a year. Unused days lapse on 31 December.</div>
+    <div><b>Comp off</b>: one day for working on a Saturday, Sunday or holiday, once your reporting manager approves it. Use it by 31 December that year.</div>
+    <div><b>Unpaid leave</b>: always a salary cut.</div>
+    <div><b>Half day</b>: counts as 0.5 days. Pick the first or second half.</div>
+    <div><b>Over your balance</b>: extra days are loss of pay. The cut is monthly gross ÷ ${P.lopDivisor} for each loss-of-pay day.</div>
+    <div class="muted">Saturdays, Sundays and company holidays are never counted as leave.</div></div>
+    <div class="modal-f"><button type="button" class="btn primary" data-close data-ok>Got it</button></div>`);
+}
+
+/* ---------- My leave: the employee's own page ---------- */
+const ME_KEY="hr_me";
+S.me=(()=>{try{return localStorage.getItem(ME_KEY)||""}catch(e){return ""}})();
+/* Signed in: always the signed-in person. Only the offline prototype (no sign-in) lets you pick a name. */
+const myEmail=()=>S.user?S.user.email:S.me;
+const ring=(pct,color,label,sub="Available")=>`<div class="ring" style="background:conic-gradient(${color} ${Math.max(0,Math.min(100,pct))}%,var(--paper-2) 0)"><div><b>${label}</b><span>${sub}</span></div></div>`;
+function vMyLeave(){
+  const me=empBy(myEmail());
+  const picker=S.user?"":`<select class="input" id="me-pick" aria-label="Viewing as" style="width:auto;min-width:220px"><option value="">Choose your name</option>${empOptions(S.me)}</select>`;
+  const top=head("Me","My <span class=\"grad\">leave.</span>","Your balances, your requests and your history. Request leave or a comp-off credit here.",picker,true);
+  const note=S.user?"":`<p class="muted" style="margin:-8px 0 0;font-size:12.5px">Prototype without the server: pick your name once. This browser remembers it. When signed in, it is always you.</p>`;
+  if(!R) return `<section class="section">${top}<div class="empty">Leave rules didn't load. Keep leave-rules.js next to this page.</div></section>`;
+  if(!me) return `<section class="section">${top}${note}<div class="card"><div class="empty">${S.user?"Your employee record wasn't found, so leave can't be shown. Ask HR to check your work email.":"Choose your name above to see your leave."}</div></div></section>`;
+  const thisYear=Number(lvToday().slice(0,4)), year=S.lvUi.year||thisYear, b=lvBal(me,year), future=year>thisYear;
+  const inYear=r=>Number(r.from.slice(0,4))===year;
+  const mine=reqsOf(me.email).filter(inYear).sort((a,c)=>a.from<c.from?1:-1);
+  const pend=mine.filter(r=>r.status==="pending"), compPend=compsOf(me.email).filter(c=>c.status==="pending"&&Number(c.workedOn.slice(0,4))===year);
+  const hist=mine.filter(r=>r.status!=="pending");
+  const pendOf=t=>pend.filter(r=>r.type===t).reduce((n,r)=>n+Number(r.days||0),0);
+  const years=[]; for(let y=R.POLICY.startYear;y<=thisYear+1;y++) years.push(y);
+  const yearPick=`<select class="input" id="me-year" aria-label="Year" style="width:auto">${years.map(y=>`<option value="${y}" ${y===year?"selected":""}>Jan ${y} - Dec ${y}</option>`).join("")}</select>`;
+  const card=(title,pct,color,label,cells,sub)=>`<div class="card lv-bal"><div class="card-h"><h3>${title}</h3></div><div class="card-b">${ring(pct,color,label,sub)}
+    <dl class="lv-cells">${cells.map(([k,v])=>`<div><dt>${k}</dt><dd>${v}</dd></div>`).join("")}</dl></div></div>`;
+  const cTot=b.casual.carried+b.casual.quota;
+  return `<section class="section">${top}${note}
+  ${S.lv.online?"":`<div class="callout">${svg("info")}<div><b>Sample data.</b> The backend isn't connected, so changes here last until you reload.</div></div>`}
+  <div class="row" style="justify-content:flex-end;margin-bottom:-8px">${yearPick}</div>
+  ${future?`<div class="callout">${svg("info")}<div><b>Looking ahead to ${year}.</b> Casual leave carried over assumes you take no more casual leave before 31 Dec ${thisYear}. Requests still waiting for approval are not deducted until they are approved.</div></div>`:""}
+  <div class="grid g-main">
+    <div class="card"><div class="card-h"><h3>Pending leave requests</h3><span class="muted">${pend.length+compPend.length} waiting</span></div>
+      ${pend.length||compPend.length?pend.map(r=>`<div class="li wrap"><div class="grow"><b style="font-weight:600">${esc(LTYPE[r.type])}</b> · ${esc(lrange(r))} · ${dd(r.days)}<div class="meta">“${esc(r.reason)}”${r.notify&&r.notify.length?` · Notify: ${esc(r.notify.map(x=>(empBy(x)||{name:x}).name).join(", "))}`:""}</div></div>
+          <span class="pill p-warn">Waiting for manager</span><button class="btn glass sm" data-lv="cancel:${r.id}">Cancel</button></div>`).join("")
+        +compPend.map(c=>`<div class="li"><div class="grow"><b style="font-weight:600">Comp off credit</b> · worked on ${esc(fdate(c.workedOn))}<div class="meta">“${esc(c.reason)}”</div></div><span class="pill p-warn">Waiting for reporting manager</span></div>`).join("")
+        :`<div class="empty">No pending leave requests. Request leave on the right.</div>`}
+    </div>
+    <div class="card" style="align-self:start"><div class="card-b" style="display:flex;flex-direction:column;gap:12px;align-items:flex-start;padding-top:22px">
+      <button class="btn primary" data-lv="me-new">Request leave</button>
+      <button class="btn link" data-lv="me-comp">Request credit for comp off</button>
+      <button class="btn link" data-lv="policy">Leave policy explanation</button>
+    </div></div>
+  </div>
+  <div class="section" style="gap:16px"><h3 style="font-size:22px">Leave balances ${year}${future?" (projected)":""}</h3>
+  <div class="grid g4">
+    ${card(LTYPE.casual,cTot?b.casual.left/cTot*100:0,"var(--purple-soft)",dd(b.casual.left),[["Available",dd(b.casual.left)],["Consumed",dd(b.consumed.casual)],["Pending approval",dd(pendOf("casual"))],["Annual quota",dd(b.casual.quota)],["Carried over",dd(b.casual.carried)]])}
+    ${card(LTYPE.compoff,b.compoff.earned?b.compoff.left/b.compoff.earned*100:0,"#0e7c86",b.compoff.earned?dd(b.compoff.left):"None",[["Available",dd(b.compoff.left)],["Consumed",dd(b.consumed.compoff)],["Pending approval",dd(pendOf("compoff"))],["Earned",dd(b.compoff.earned)],["Lapses","31 Dec"]])}
+    ${card(LTYPE.sick,b.sick.quota?b.sick.left/b.sick.quota*100:0,"#8fae3e",dd(b.sick.left),[["Available",dd(b.sick.left)],["Consumed",dd(b.consumed.sick)],["Pending approval",dd(pendOf("sick"))],["Annual quota",dd(b.sick.quota)],["Lapses","31 Dec"]])}
+    ${card(LTYPE.unpaid,b.consumed.unpaid?100:0,"var(--bad)",dd(b.consumed.unpaid),[["Consumed",dd(b.consumed.unpaid)],["Pending approval",dd(pendOf("unpaid"))],["Annual quota","No limit"]],future?`Taken in ${year}`:"Taken this year")}
+  </div></div>
+  <div class="card"><div class="card-h"><h3>Leave history</h3></div><div class="tbl-wrap"><table><thead><tr><th>Type</th><th>Dates</th><th>Days</th><th class="hide-sm">Note</th><th>Status</th></tr></thead><tbody>
+    ${hist.length?hist.map(r=>`<tr><td>${esc(LTYPE[r.type])}</td><td class="num-cell">${esc(lrange(r))}</td><td class="num-cell">${r.status==="approved"?`${r.paidDays} paid${r.lopDays?` · <span style="color:var(--bad)">${r.lopDays} loss of pay</span>`:""}`:dd(r.days)}</td><td class="hide-sm">${esc(r.reason)}</td><td><span class="pill ${LSTAT[r.status][1]}">${LSTAT[r.status][0]}</span></td></tr>`).join("")
+      :`<tr><td colspan="5"><div class="empty">No leave history to show.</div></td></tr>`}
   </tbody></table></div></div>
   </section>`;
 }
+function lvCompModal(){
+  const m=modal(`<form id="lvf-comp" novalidate><div class="card-h" style="padding-top:24px"><h3>Record comp off</h3></div><div class="card-b">
+    <div class="muted" style="font-size:13px">One comp-off day for working on a Saturday, Sunday or holiday. It can be used until 31 December that year.</div>
+    ${lvField("lc-email","Employee",`<select class="input" id="lc-email"><option value="">Choose…</option>${empOptions("")}</select>`)}
+    ${lvField("lc-day","Date they worked",`<input class="input" type="date" id="lc-day" max="${lvToday()}">`)}
+    ${lvField("lc-reason","What they worked on",`<input class="input" id="lc-reason" placeholder="For example: weekend release">`)}</div>
+    <div class="modal-f"><button type="button" class="btn glass" data-close>Cancel</button><button type="submit" class="btn primary" data-ok>Add comp off</button></div></form>`);
+  m.querySelector("form").addEventListener("submit",async ev=>{ev.preventDefault();
+    const v={email:$("#lc-email").value,workedOn:$("#lc-day").value,reason:$("#lc-reason").value}, res=await lvApi.compOff(v);
+    if(!res.ok) return lvShowErrors(res,{email:"lc-email",workedOn:"lc-day",reason:"lc-reason"});
+    const e=empBy(v.email); log(`Comp off earned for working on ${fdate(v.workedOn)}`,e,null,"ok");
+    m.remove(); toast(`Comp off added for ${e.name}.`); render();});
+}
+function lvPayModal(email){
+  const e=empBy(email), p=payOf(email); if(!e) return;
+  const m=modal(`<form id="lvf-pay" novalidate><div class="card-h" style="padding-top:24px"><h3>Pay &amp; balance: ${esc(e.name)}</h3></div><div class="card-b">
+    ${lvField("lp-gross","Monthly gross salary (₹)",`<input class="input" type="number" min="1" step="1" inputmode="numeric" id="lp-gross" value="${p.monthlyGross??""}">`,"Used only to work out the salary cut for loss-of-pay days.")}
+    ${lvField("lp-open",`Casual leave carried into ${R.POLICY.startYear}`,`<input class="input" type="number" min="0" max="365" step="0.5" id="lp-open" value="${p.casualOpening||0}">`,"Unused casual days from before this system started. They carry over like any other casual days.")}</div>
+    <div class="modal-f"><button type="button" class="btn glass" data-close>Cancel</button><button type="submit" class="btn primary" data-ok>Save</button></div></form>`);
+  m.querySelector("form").addEventListener("submit",async ev=>{ev.preventDefault();
+    const v={monthlyGross:$("#lp-gross").value,casualOpening:$("#lp-open").value||0};
+    const before=payOf(email), res=await lvApi.pay(e.email,v);
+    if(!res.ok) return lvShowErrors(res,{monthlyGross:"lp-gross",casualOpening:"lp-open"});
+    const after=payOf(email), changed=[];
+    if((before.monthlyGross??null)!==(after.monthlyGross??null)) changed.push("monthly salary");
+    if(Number(before.casualOpening||0)!==Number(after.casualOpening||0)) changed.push("opening casual balance");
+    if(changed.length) log(`Updated ${changed.join(" and ")}`,e,null,"ok");
+    m.remove(); toast(changed.length?`Saved for ${e.name}.`:"No changes to save."); render();});
+}
+async function lvAction(a){
+  if(a==="new"){ S.lw=newLw(false,S.route==="employee"?(S.emps.find(x=>x.id===S.sel)||{}).email:""); return go("leaveapply"); }
+  if(a==="comp") return lvCompModal();
+  if(a==="me-new"){ S.lw=newLw(true,myEmail()); return go("leaveapply"); }
+  if(a==="me-comp") return lvCompRequestModal(myEmail());
+  if(a==="policy") return lvPolicyModal();
+  const [kind,x,y]=a.split(":");
+  if(kind==="pay") return lvPayModal(a.slice(4));
+  if(kind==="decide"){
+    const r=S.lv.requests.find(q=>q.id===Number(x)); if(!r) return;
+    const res=await lvApi.decide(r.id,y); if(!res.ok){toast(res.error||"Could not save.");return}
+    const done=S.lv.requests.find(q=>q.id===r.id)||r, e=empBy(done.email);
+    log(`${LTYPE[done.type]} ${y}: ${lrange(done)}${y==="approved"?` (${dd(done.paidDays)} paid${done.lopDays?`, ${dd(done.lopDays)} loss of pay`:""})`:""}`,e,null,y==="approved"?"ok":"info");
+    toast(`${LTYPE[done.type]} for ${e.name} ${y}${y==="approved"&&done.lopDays?`, ${dd(done.lopDays)} loss of pay`:""}.`); render(); return;
+  }
+  if(kind==="cancel"){
+    const r=S.lv.requests.find(q=>q.id===Number(x)); if(!r) return;
+    const res=await lvApi.cancel(r.id); if(!res.ok){toast(res.error||"Could not cancel.");return}
+    log(`${LTYPE[r.type]} cancelled by the employee: ${lrange(r)}`,empBy(r.email),null,"info"); toast("Leave request cancelled."); render(); return;
+  }
+  if(kind==="comp-decide"){
+    const c=S.lv.compOffs.find(q=>q.id===Number(x)); if(!c) return;
+    const res=await lvApi.decideComp(c.id,y); if(!res.ok){toast(res.error||"Could not save.");return}
+    const e=empBy(c.email); log(`Comp off credit ${y} for working on ${fdate(c.workedOn)}`,e,null,y==="approved"?"ok":"info");
+    toast(`Comp off for ${e.name} ${y}.`); render(); return;
+  }
+  if(kind==="hol-del"){ const h=S.lv.holidays.find(q=>q.day===x); const res=await lvApi.delHoliday(x); if(!res.ok){toast(res.error||"Could not remove.");return}
+    if(h) S.audit.unshift({ts:nowSim(),actor:ACTOR,action:`Holiday removed: ${h.name} on ${fdate(h.day)}`,emp:"All employees",app:null,result:"ok"}); render(); }
+}
+document.addEventListener("submit",async ev=>{
+  if(ev.target.id!=="lvf-hol") return; ev.preventDefault();
+  const b={day:$("#lh-day").value,name:$("#lh-name").value}, res=await lvApi.addHoliday(b);
+  if(!res.ok){toast(res.error||"Could not add the holiday.");return}
+  S.audit.unshift({ts:nowSim(),actor:ACTOR,action:`Holiday added: ${b.name.trim()} on ${fdate(b.day)}`,emp:"All employees",app:null,result:"ok"});
+  toast(`${b.name.trim()} added as a holiday.`); render();
+});
 
 function vTemplates(){
   return `<section class="section">
@@ -1356,11 +1938,12 @@ function activateDue(){
 }
 function render(){
   if(activateDue()) toast("A work email was activated on its joining date.");
+  if(S.route==="leaveapply"&&!S.lw) S.route=isEmployee()?"myleave":"leave";
   if(!routeAllowed(S.route)) S.route=isEmployee()?"docs":"dashboard";
   if(S.route==="users"&&!S.users&&!S.usersBusy) loadUsers();
   if(S.user&&!isEmployee()&&["onboard","docs","employee"].includes(S.route)) refreshDocs();
   renderNav();
-  const v={dashboard:vDashboard,employees:vEmployees,employee:vEmployee,onboard:isEmployee()?vDocs:vOnboard,docs:vDocs,offboard:vOffboard,leave:vLeave,templates:vTemplates,audit:vAudit,users:vUsers,account:vAccount}[S.route]||vDashboard;
+  const v={dashboard:vDashboard,employees:vEmployees,employee:vEmployee,onboard:isEmployee()?vDocs:vOnboard,docs:vDocs,offboard:vOffboard,myleave:vMyLeave,leaveapply:vLeaveApply,leave:vLeave,templates:vTemplates,audit:vAudit,users:vUsers,account:vAccount}[S.route]||vDashboard;
   $("#view").innerHTML=v();
   if(isEmployee()) document.querySelectorAll("#view #laptopf input,#view #laptopf button").forEach(x=>x.disabled=true);
 }
@@ -1418,39 +2001,38 @@ function editEmployee(e){
 }
 
 document.addEventListener("click",ev=>{
-  const t=ev.target.closest("[data-go],[data-emp],[data-retry],[data-provision],[data-offboard],[data-confirmoff],[data-proto],[data-edit],[data-leave],[data-activate]"); if(!t) return;
-  if(isEmployee()&&t.matches("[data-retry],[data-provision],[data-offboard],[data-confirmoff],[data-proto],[data-edit],[data-leave],[data-activate]")){ toast("Only HR can do this."); return; }
+  const t=ev.target.closest("[data-go],[data-emp],[data-retry],[data-provision],[data-offboard],[data-proto],[data-edit],[data-lv],[data-activate],[data-offrun],[data-offcancel]"); if(!t) return;
+  if(isEmployee()&&t.matches("[data-retry],[data-provision],[data-offboard],[data-proto],[data-edit],[data-activate],[data-offrun],[data-offcancel]")){ toast("Only HR can do this."); return; }
   if(t.dataset.activate){const e=S.emps.find(x=>x.id==t.dataset.activate);if(e&&e.grants.gws==="created"){e.grants.gws="active";log("Work email activated early by HR",e,"gws","ok");settle(e);toast(`${e.email} is now active.`);render()}return}
-  if(t.dataset.leave){const [lidS,st]=t.dataset.leave.split(":");const l=S.leave.find(x=>x.id==lidS);if(!l||l.status!=="pending")return;l.status=st;log(`${LEAVE_TYPES[l.type]} ${st} (${lrange(l)}, ${l.days} day${l.days>1?"s":""})`,l.emp,null,"ok");toast(`${LEAVE_TYPES[l.type]} for ${l.emp.name} ${st}.`);render();return}
+  if(t.dataset.lv){lvAction(t.dataset.lv);return}
   if(t.dataset.edit){editEmployee(S.emps.find(x=>x.id==t.dataset.edit));return}
   if(t.dataset.go){ev.preventDefault();go(t.dataset.go);return}
   if(t.dataset.emp){go("employee",Number(t.dataset.emp));return}
-  if(t.dataset.retry){const [eid,app]=t.dataset.retry.split(":");const e=S.emps.find(x=>x.id==eid);log("Retry requested",e,app,"info");provision(e,[app]);return}
+  if(t.dataset.retry){const [eid,app]=t.dataset.retry.split(":");const e=S.emps.find(x=>x.id==eid);log("Retry requested",e,app,"info");
+    if(e.status==="offboarding"){ if(S.off.online&&e.offId){offCall("POST",`/api/offboarding/${e.offId}/steps/${app}/retry`).then(r=>{toast(r.ok?(e.grants[app]==="revoked"?`${APP[app].name} access removed.`:`${APP[app].name} failed again.`):r.error);render()})}
+      else{e.grants[app]="revoked";delete e.errors[app];log("Access removed",e,app,"ok");settle(e);render()} return}
+    provision(e,[app]);return}
+  if(t.dataset.offrun){const e=S.emps.find(x=>x.id==t.dataset.offrun);
+    if(S.off.online){offCall("POST",`/api/offboarding/${e.offId}/run`).then(r=>{if(!r.ok)return toast(r.error);log("Access removed early by HR",e,null,"ok");toast(`Access removed for ${e.name}.`);render()})}
+    else{const to=e.offSched.to;e.offSched=null;revoke(e,to)} return}
+  if(t.dataset.offcancel){const e=S.emps.find(x=>x.id==t.dataset.offcancel);
+    const done=()=>{e.offId=null;e.offRec=null;e.offSched=null;e.lastDay=undefined;e.offTasks=null;log("Scheduled offboarding called off",e,null,"info");toast(`Offboarding for ${e.name} called off.`);render()};
+    if(S.off.online){offCall("POST",`/api/offboarding/${e.offId}/cancel`).then(r=>r.ok?done():toast(r.error))}else done(); return}
   if(t.dataset.provision){const e=S.emps.find(x=>x.id==t.dataset.provision);provision(e,Object.keys(e.grants).filter(k=>e.grants[k]==="none"));return}
-  if(t.dataset.offboard){S.offSel=Number(t.dataset.offboard);go("offboard");return}
+  if(t.dataset.offboard){S.offSel=Number(t.dataset.offboard);S.ow=newOw(S.offSel);go("offboard");return}
   if(t.dataset.proto){toast(`${t.dataset.proto} is part of the full build. This prototype shows the flow only.`);return}
-  if(t.dataset.confirmoff){
-    const e=S.emps.find(x=>x.id==t.dataset.confirmoff);
-    const to=$("#o-to")?.value||e.manager; const day=$("#o-day")?.value; const later=$("#o-later")?.checked;
-    const live=Object.keys(e.grants).filter(k=>["active","failed","created"].includes(e.grants[k]));
-    const m=modal(`<div class="card-h" style="padding-top:24px"><h3>${later?"Schedule":"Offboard"} ${esc(e.name)}?</h3></div><div class="card-b">
-      <div class="callout bad">${svg("alert")}<div>${later?`On <b>${esc(fdate(day))}</b> at 6:00 pm, `:""}${esc(e.name.split(" ")[0])} will lose access to <b>${live.length} tools</b>${later?"":" right away"}. Their Drive files and email go to <b>${esc(to)}</b>.</div></div>
-      <div class="chips">${live.map(id=>`<span class="chip">${appIc(id)}${esc(APP[id].name)}</span>`).join("")}</div>
-      <div class="muted" style="font-size:13px">Every step is written to the audit log. A suspended Google account can be restored for 20 days.</div></div>
-      <div class="modal-f"><button class="btn glass" data-close>Cancel</button><button class="btn danger" data-ok>${later?"Schedule offboarding":"Yes, remove all access"}</button></div>`);
-    m.querySelector("[data-ok]").addEventListener("click",()=>{
-      m.remove();
-      if(later){e.lastDay=day;log(`Offboarding scheduled for ${fdate(day)}`,e,null,"info");toast(`Offboarding for ${e.name} scheduled for ${fdate(day)}`);go("employee",e.id)}
-      else{e.lastDay=day;S.offSel=null;go("employee",e.id);revoke(e,to)}
-    });
-  }
 });
 
 document.addEventListener("change",ev=>{
   const t=ev.target;
-  if(t.dataset.task){ if(isEmployee()){ t.checked=!t.checked; toast("Only HR can do this."); return; } const [eid,ph,i]=t.dataset.task.split(":");const e=S.emps.find(x=>x.id==eid);const list=ph==="on"?e.onTasks:e.offTasks;list[i].done=t.checked;log(`Checklist: ${list[i].t}${t.checked?"":" (unticked)"}`,e,null,"ok");settle(e);render();return}
-  if(t.name==="offsel"){S.offSel=Number(t.value);render();return}
+  if(t.dataset.task&&isEmployee()){ t.checked=!t.checked; toast("Only HR can do this."); return; }
+  if(t.dataset.task&&t.dataset.task.split(":")[1]==="off"&&S.off.online){const [eid,,i]=t.dataset.task.split(":");const e=S.emps.find(x=>x.id==eid);const k=e.offTasks[i];
+    offCall("POST",`/api/offboarding/${e.offId}/steps/${k.key}`,{done:t.checked}).then(r=>{if(!r.ok)toast(r.error);else{log(`Checklist: ${k.t}${t.checked?"":" (unticked)"}`,e,null,"ok");if(e.status==="offboarded")toast(`${e.name} is fully offboarded`)}render()});return}
+  if(t.dataset.task){const [eid,ph,i]=t.dataset.task.split(":");const e=S.emps.find(x=>x.id==eid);const list=ph==="on"?e.onTasks:e.offTasks;list[i].done=t.checked;log(`Checklist: ${list[i].t}${t.checked?"":" (unticked)"}`,e,null,"ok");settle(e);render();return}
   if(t.id==="f-dept"){const tid=DEPT_TPL[t.value];$("#tpl-name").textContent="Bundle: "+TEMPLATES.find(x=>x.id===tid).name;APPS.forEach(a=>{$("#app-"+a.id).checked=T(tid).includes(a.id)});return}
+  if(t.id==="me-year"){S.lvUi.year=Number(t.value);render();return}
+  if(t.id==="me-pick"){S.me=t.value;try{localStorage.setItem(ME_KEY,t.value)}catch(e){}render();return}
+  if(t.id==="lv-month"){S.lvUi.month=t.value||lvToday().slice(0,7);render();return}
   if(t.id==="af-app"||t.id==="af-res"){S.af={q:$("#af-q").value,app:$("#af-app").value,res:$("#af-res").value};render();return}
 });
 function keepFocus(id){const n=$("#"+id);const pos=n.selectionStart;return()=>{const m=$("#"+id);if(m){m.focus();m.setSelectionRange(pos,pos)}}}
@@ -1461,6 +2043,7 @@ document.addEventListener("input",ev=>{
   if(t.id==="e-email"){showEmailError("e-email",emailTaken(t.value,Number(t.dataset.id))?emailProblem(t.value,Number(t.dataset.id)):"")}
   if(t.id==="af-q"){S.af={q:t.value,app:$("#af-app").value,res:$("#af-res").value};const r=keepFocus("af-q");render();r()}
   if(t.id==="q"){S.q=t.value;const r=keepFocus("q");render();r()}
+  if(t.id==="lv-q"){S.lvUi.q=t.value;const r=keepFocus("lv-q");render();r()}
 });
 document.addEventListener("submit",ev=>{
   if(ev.target.id!=="onf") return; ev.preventDefault();
@@ -1480,6 +2063,6 @@ const h=location.hash.slice(1); if(NAV.some(n=>n[0]===h)) S.route=h;
 document.addEventListener("click",ev=>{ if(ev.target.closest("#theme")) toggleTheme(); });
 try{ matchMedia("(prefers-color-scheme: dark)").addEventListener("change",()=>{ let t=null; try{t=localStorage.getItem(THEME_KEY)}catch(e){} if(!t) applyTheme(theme()); }); }catch(e){}
 applyTheme(theme());
-boot();
+boot().then(()=>{ lvLoad(); if(!isEmployee()) offLoad(); });
 })();
 </script>

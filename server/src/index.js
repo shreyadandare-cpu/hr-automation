@@ -4,6 +4,8 @@ import { fileURLToPath } from "node:url";
 import express from "express";
 import { pool, initDb } from "./db.js";
 import { onboardingErrors, maskAadhaar, maskPan, maskAcct } from "./validate.js";
+import { leaveRouter } from "./leave.js";
+import { offboardingRouter, runDue } from "./offboarding.js";
 
 const DOMAIN = "wohlig.com";
 const DRAFT_ID = "default"; // no sign-in yet, so there is one shared draft
@@ -118,9 +120,17 @@ app.post("/api/onboarding", wrap(async (req, res) => {
   }
 }));
 
+app.use(leaveRouter(wrap));
+app.use(offboardingRouter(wrap));
+
 // The page itself, so one command serves everything on the same origin.
 app.get("/", (_req, res) => res.sendFile(path.join(root, "hr-access-hub.html")));
+app.get("/leave-rules.js", (_req, res) => res.sendFile(path.join(root, "leave-rules.js")));
 
 await initDb();
+// Scheduled offboardings run at 6 pm India time on the last working day; check every minute.
+const checkDue = () => runDue().catch((err) => console.error("Scheduled offboarding check failed:", err));
+checkDue();
+setInterval(checkDue, 60_000);
 const port = process.env.PORT || 3000;
 app.listen(port, () => console.log(`HR Access Hub on http://localhost:${port}`));

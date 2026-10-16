@@ -21,3 +21,5 @@ hr-automation/backups/
 .venv/
 venv/
 __pycache__/
+server/.env
+server/.env

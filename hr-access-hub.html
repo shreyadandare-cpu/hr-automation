@@ -673,13 +673,45 @@ function obFetch(ob,id){
   return true;
 }
 
+/* Backend: the Express + Postgres server. When it is not reachable (for example the file is opened directly), the page
+   keeps working with browser storage and in-memory data only. */
+const api=async(method,url,body)=>{
+  const r=await fetch(url,{method,headers:body?{"Content-Type":"application/json"}:undefined,body:body?JSON.stringify(body):undefined});
+  const data=await r.json().catch(()=>null);
+  return {ok:r.ok,status:r.status,data};
+};
+S.serverDraft=null;
+function applyServerRecord(rec){
+  let e=S.emps.find(x=>(x.email||"").toLowerCase()===rec.email.toLowerCase());
+  if(!e){ e=mk({name:rec.name,email:rec.email,status:"onboarding",grants:{},onTasks:ON_TASKS.map(t=>({t,done:false}))}); e.color=AV[S.emps.length%AV.length]; S.emps.push(e); }
+  Object.assign(e,{name:rec.name,dept:rec.dept,title:rec.title||"—",manager:rec.manager||"—",start:rec.start,personalEmail:rec.personalEmail,phone:rec.phone,address:rec.address,ids:rec.ids});
+  for(const a of rec.apps) if(!e.grants[a]||e.grants[a]==="revoked") e.grants[a]="none";
+  e.laptop=e.laptop||{received:false,serial:"",date:""};
+  return e;
+}
+async function loadFromServer(){
+  try{
+    const [recs,draft]=await Promise.all([api("GET","/api/onboarding"),api("GET","/api/onboarding/draft")]);
+    if(recs.ok) recs.data.forEach(applyServerRecord);
+    if(draft.ok) S.serverDraft=draft.data;
+    render();
+  }catch(e){ /* no backend: carry on locally */ }
+}
+
 function obRestoreDraft(ob){
-  try{ const raw=localStorage.getItem(OB_DRAFT_KEY); if(!raw) return false; Object.assign(ob.d,JSON.parse(raw)); return true; }catch(e){ return false; }
+  try{ const raw=S.serverDraft?JSON.stringify(S.serverDraft):localStorage.getItem(OB_DRAFT_KEY); if(!raw) return false; Object.assign(ob.d,JSON.parse(raw)); return true; }catch(e){ return false; }
 }
-function obSaveDraft(ob){
-  try{ localStorage.setItem(OB_DRAFT_KEY,JSON.stringify(ob.d)); return true; }catch(e){ return false; }
+async function obSaveDraft(ob){
+  let saved=false;
+  try{ localStorage.setItem(OB_DRAFT_KEY,JSON.stringify(ob.d)); saved=true; }catch(e){}
+  try{ const r=await api("PUT","/api/onboarding/draft",ob.d); if(r.ok){ S.serverDraft={...ob.d}; saved=true; } }catch(e){}
+  return saved;
 }
-function obClearDraft(){ try{ localStorage.removeItem(OB_DRAFT_KEY); }catch(e){} }
+function obClearDraft(){
+  S.serverDraft=null;
+  try{ localStorage.removeItem(OB_DRAFT_KEY); }catch(e){}
+  api("DELETE","/api/onboarding/draft").catch(()=>{});
+}
 
 const obField=(lab,id,val,o={})=>{
   const {type="text",hint="",err="",ph="",rows=0,mono=false,full=false,badge=""}=o;
@@ -819,14 +851,21 @@ function obNext(){
   render(); window.scrollTo(0,0);
 }
 
-function obSubmit(){
+async function obSubmit(){
   const ob=S.ob; obCollect(ob);
   if(!ob.reviewed){ toast("Tick the review box before submitting."); return; }
   const apps=(ob.apps||[]).slice().sort((a,b)=>(a==="gws"?-1:b==="gws"?1:0));
   if(!apps.length){ toast("Pick at least one tool to give."); return; }
   let e=ob.empId?S.emps.find(x=>x.id===ob.empId):null;
   const existing=!!e;
-  const email=existing&&e.email?e.email:makeWorkEmail(ob.d.first,ob.d.last,x=>!!emailTaken(x));
+  let email=existing&&e.email?e.email:makeWorkEmail(ob.d.first,ob.d.last,x=>!!emailTaken(x));
+  let saved=null;
+  try{
+    const r=await api("POST","/api/onboarding",{d:ob.d,ids:ob.ids,apps,existingEmail:existing?e.email:undefined});
+    if(r.status===400){ ob.errors=r.data.errors||{}; toast(Object.values(ob.errors)[0]||"The server rejected the details."); render(); return; }
+    if(!r.ok){ toast("The server could not save this onboarding. Try again."); return; }
+    saved=r.data; email=saved.email;
+  }catch(err){ /* no backend: fall back to the local prototype behaviour below */ }
   if(!email){ toast("Add a first name and surname first."); return; }
   const full=(ob.d.first+" "+ob.d.last).trim();
   if(!existing){
@@ -887,7 +926,7 @@ document.addEventListener("click",ev=>{
   obCollect(ob);
   if(t.hasAttribute("data-ob-back")){ ob.errors={}; ob.step=Math.max(1,ob.step-1); ob.fromReview=false; render(); window.scrollTo(0,0); return; }
   if(t.dataset.obGoto){ ob.fromReview=ob.step===4; ob.errors={}; ob.step=Number(t.dataset.obGoto); render(); window.scrollTo(0,0); return; }
-  if(t.hasAttribute("data-ob-draft")){ toast(obSaveDraft(ob)?"Draft saved: name, contact and job details only.":"Could not save the draft in this browser."); return; }
+  if(t.hasAttribute("data-ob-draft")){ obSaveDraft(ob).then(ok=>toast(ok?"Draft saved: name, contact and job details only.":"Could not save the draft.")); return; }
   if(t.hasAttribute("data-ob-cancel")){ obClearDraft(); S.ob=null; S.obRestored=false; render(); window.scrollTo(0,0); return; }
   if(t.hasAttribute("data-ob-ocr")){ const r=ocrRead(ob); ob.ocrMsg=r.msg; render(); return; }
   if(t.hasAttribute("data-ob-fetch")){ const id=Number($("#ob-pick")&&$("#ob-pick").value); if(!id){ toast("Choose a person from the list first."); return; } obFetch(ob,id); ob.errors={}; render(); return; }
@@ -1180,5 +1219,6 @@ document.addEventListener("submit",ev=>{
 
 const h=location.hash.slice(1); if(NAV.some(n=>n[0]===h)) S.route=h;
 render();
+loadFromServer();
 })();
 </script>

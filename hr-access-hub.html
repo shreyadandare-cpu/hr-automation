@@ -282,8 +282,10 @@ textarea.input{resize:vertical;font-family:var(--body)}
 .row{display:flex;gap:12px;align-items:center;flex-wrap:wrap}
 
 @media (max-width:1080px){.g4{grid-template-columns:repeat(2,minmax(0,1fr))}.g-main,.g3{grid-template-columns:minmax(0,1fr)}.facts{grid-template-columns:repeat(2,minmax(0,1fr))}}
+/* on wide screens let the nav bar run wider than the 1180px page column so all eight links fit on one row */
+@media (min-width:1341px){.wrap.navbar{max-width:1340px}}
 /* eight nav links no longer fit beside the logo and button on mid-size screens, so wrap the links onto their own row */
-@media (max-width:1380px){
+@media (max-width:1340px){
   .pill-nav{flex-wrap:wrap;border-radius:28px;padding:12px 12px 10px 22px}.links{order:3;width:100%;overflow-x:auto;margin:4px -12px 0 -22px;padding:0 12px 0 16px}.cta{margin-left:auto}}
 @media (max-width:720px){
   .wrap{padding-inline:16px}
@@ -741,8 +743,15 @@ function applyServerRecord(rec){
 }
 async function loadFromServer(){
   try{
-    const [recs,draft]=await Promise.all([api("GET","/api/onboarding"),api("GET","/api/onboarding/draft")]);
+    const [recs,draft,docs]=await Promise.all([api("GET","/api/onboarding"),api("GET","/api/onboarding/draft"),api("GET","/api/documents")]);
     if(recs.ok) recs.data.forEach(applyServerRecord);
+    if(docs.ok){
+      S.docs={};
+      for(const d of docs.data){
+        const e=S.emps.find(x=>(x.email||"").toLowerCase()===d.email);
+        if(e) ((S.docs[e.id]=S.docs[e.id]||{})[d.key]=(S.docs[e.id][d.key]||[])).push({id:d.id,name:d.name,size:d.size});
+      }
+    }
     if(draft.ok) S.serverDraft=draft.data;
     render();
   }catch(e){ /* no backend: carry on locally */ }
@@ -963,13 +972,13 @@ function vDocs(){
       :`<p class="muted" style="margin:0">No one is waiting for onboarding right now.</p>`}
     <p class="muted" style="margin:12px 0 0;font-size:12.5px">Prototype: there is no employee sign-in yet, so any name can be chosen. With sign-in, each employee would see only their own page.</p>
   </div></div>
-  ${me?`<div class="card"><div class="card-h"><h3>Your documents</h3><span class="muted">${docCount(m)} file${docCount(m)===1?"":"s"} uploaded · files stay in your browser in this prototype</span></div>${rows}</div>`:""}
+  ${me?`<div class="card"><div class="card-h"><h3>Your documents</h3><span class="muted">${docCount(m)} file${docCount(m)===1?"":"s"} uploaded</span></div>${rows}</div>`:""}
   </section>`;
 }
 
 document.addEventListener("click",ev=>{
   const md=ev.target.closest("[data-mydoc-rm]");
-  if(md){ const [k,i]=md.dataset.mydocRm.split(":"); const e=S.emps.find(x=>x.id===S.myId); const arr=S.docs[S.myId]&&S.docs[S.myId][k]; if(e&&arr){ const [gone]=arr.splice(Number(i),1); logAs(`${e.name} (employee)`,`Removed ${DOCS.find(x=>x.k===k).name}: ${gone.name}`,e); S.docErr={}; render(); } return; }
+  if(md){ const [k,i]=md.dataset.mydocRm.split(":"); const e=S.emps.find(x=>x.id===S.myId); const arr=S.docs[S.myId]&&S.docs[S.myId][k]; if(e&&arr){ const [gone]=arr.splice(Number(i),1); if(gone.id) api("DELETE","/api/documents/"+gone.id).catch(()=>{}); logAs(`${e.name} (employee)`,`Removed ${DOCS.find(x=>x.k===k).name}: ${gone.name}`,e); S.docErr={}; render(); } return; }
   const t=ev.target.closest("[data-ob-next],[data-ob-back],[data-ob-goto],[data-ob-draft],[data-ob-cancel],[data-ob-ocr],[data-ob-fetch],[data-ob-unfetch]"); if(!t||!S.ob) return;
   const ob=S.ob;
   if(t.hasAttribute("data-ob-next")){ obNext(); return; }
@@ -982,7 +991,7 @@ document.addEventListener("click",ev=>{
   if(t.hasAttribute("data-ob-fetch")){ const id=Number($("#ob-pick")&&$("#ob-pick").value); if(!id){ toast("Choose a person from the list first."); return; } obFetch(ob,id); ob.errors={}; render(); return; }
   if(t.hasAttribute("data-ob-unfetch")){ ob.empId=null; ob.d=newOb().d; ob.ids=newOb().ids; ob.src={}; ob.apps=null; render(); return; }
 });
-document.addEventListener("change",ev=>{
+document.addEventListener("change",async ev=>{
   const t=ev.target;
   if(t.id==="md-pick"){ S.myId=Number(t.value)||null; S.docErr={}; render(); return; }
   if(t.matches&&t.matches("input[type=file][data-mydoc]")){
@@ -990,9 +999,17 @@ document.addEventListener("change",ev=>{
     const k=t.dataset.mydoc, def=DOCS.find(x=>x.k===k), map=S.docs[e.id]||(S.docs[e.id]={}), cur=map[k]||(map[k]=[]), probs=[]; let added=0;
     for(const f of [...t.files]){
       const p=fileProblem(f); if(p){probs.push(p);continue}
+      if(def.multi&&cur.length>=def.max){probs.push(`${def.name}: at most ${def.max} files.`);continue}
+      // Upload to the server. If there is no backend, the file is only listed here and stays in the browser.
+      let rec={name:f.name,size:f.size};
+      try{
+        const r=await fetch(`/api/documents/${k}?email=${encodeURIComponent(e.email)}&name=${encodeURIComponent(f.name)}`,{method:"PUT",headers:{"Content-Type":f.type||"application/octet-stream"},body:f});
+        const data=await r.json().catch(()=>null);
+        if(!r.ok){ probs.push(`${f.name}: ${(data&&data.error)||"the server could not save this file."}`); continue; }
+        rec={id:data.id,name:data.name,size:data.size};
+      }catch(err){ /* no backend */ }
       if(!def.multi) cur.length=0;
-      else if(cur.length>=def.max){probs.push(`${def.name}: at most ${def.max} files.`);continue}
-      cur.push({name:f.name,size:f.size}); added++;
+      cur.push(rec); added++;
     }
     S.docErr={}; if(probs.length) S.docErr[k]=probs.join(" ");
     if(added){ logAs(`${e.name} (employee)`,`Uploaded ${def.name}: ${added} file${added===1?"":"s"}`,e); toast(`${def.name} uploaded. HR can see it.`); }
@@ -1036,7 +1053,7 @@ function recordCard(e){
   const i=e.ids||{};
   return `<div class="card"><div class="card-h"><h3>Onboarding record</h3><span class="muted">ID numbers are masked</span></div><div class="card-b" style="display:flex;flex-direction:column;gap:18px">
     ${kv([["Personal email",esc(e.personalEmail)],["Phone",esc(e.phone)],["Address",esc(e.address)],["Date of birth",esc(i.dob?fdate(i.dob):"")],["Aadhaar",esc(i.aadhaar)],["PAN",esc(i.pan)],["Bank account",esc(i.acct)],["IFSC",esc(i.ifsc)]])}
-    <div><div class="muted" style="margin-bottom:6px">Documents uploaded by the employee</div>${n?DOCS.filter(d=>(dm[d.k]||[]).length).map(d=>`<div style="font-size:14px"><b>${esc(d.name)}</b> · ${dm[d.k].map(f=>esc(f.name)).join(", ")}</div>`).join(""):`<div class="muted">None uploaded yet.</div>`}</div>
+    <div><div class="muted" style="margin-bottom:6px">Documents uploaded by the employee</div>${n?DOCS.filter(d=>(dm[d.k]||[]).length).map(d=>`<div style="font-size:14px"><b>${esc(d.name)}</b> · ${dm[d.k].map(f=>f.id?`<a href="/api/documents/${f.id}/file" target="_blank" rel="noopener">${esc(f.name)}</a>`:esc(f.name)).join(", ")}</div>`).join(""):`<div class="muted">None uploaded yet.</div>`}</div>
   </div></div>`;
 }
 

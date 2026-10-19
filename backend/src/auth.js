@@ -65,6 +65,8 @@ export async function bootstrapAuth() {
 }
 
 /* ---------- sessions ---------- */
+// Behind https the session cookie must not travel over plain http.
+const cookieSecure = () => ((process.env.PUBLIC_URL || "").startsWith("https://") ? "; Secure" : "");
 const sha = (s) => crypto.createHash("sha256").update(s).digest("hex");
 
 export async function startSession(res, email) {
@@ -72,7 +74,7 @@ export async function startSession(res, email) {
   await pool.query("INSERT INTO sessions (token_hash,email,expires_at) VALUES ($1,$2, now() + $3 * interval '1 hour')",
     [sha(token), email, SESSION_HOURS]);
   await pool.query("DELETE FROM sessions WHERE expires_at < now()");
-  res.append("Set-Cookie", `${COOKIE}=${token}; HttpOnly; SameSite=Lax; Path=/; Max-Age=${SESSION_HOURS * 3600}`);
+  res.append("Set-Cookie", `${COOKIE}=${token}; HttpOnly; SameSite=Lax; Path=/; Max-Age=${SESSION_HOURS * 3600}${cookieSecure()}`);
 }
 
 const tokenOf = (req) => /(?:^|;\s*)sid=([a-f0-9]{64})/.exec(req.headers.cookie || "")?.[1];

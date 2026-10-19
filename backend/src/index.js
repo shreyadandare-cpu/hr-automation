@@ -7,6 +7,8 @@ import { documentsRouter } from "./documents.js";
 import { bootstrapAuth, loadSession, requireAuth, requireHr, getDefaultPassword } from "./auth.js";
 import { sessionRouter, accountRouter, usersRouter } from "./users.js";
 import { profileRouter } from "./profile.js";
+import { googleRouter } from "./google-signin.js";
+import { inviteRouter, expireInvites } from "./invites.js";
 import { leaveRouter } from "./leave.js";
 import { offboardingRouter, runDue } from "./offboarding.js";
 import { onboardingErrors, detailsErrors, maskAadhaar, maskPan, maskAcct } from "./validate.js";
@@ -256,6 +258,8 @@ app.use(leaveRouter(wrap));
 app.use(offboardingRouter(wrap));
 
 // The page itself, so one command serves everything on the same origin.
+app.use("/auth", googleRouter);       // "Continue with Google" (public: it is how people sign in)
+app.use("/invite", inviteRouter);     // the link in the invite email
 app.get("/favicon.ico", (_req, res) => res.status(204).end());
 app.get("/login", (req, res) => (req.user ? res.redirect("/") : res.sendFile(path.join(frontendDir, "public/login.html"))));
 app.get("/", (req, res) => (req.user ? res.sendFile(path.join(frontendDir, "hr-access-hub.html")) : res.redirect("/login")));
@@ -274,5 +278,9 @@ await setupTeams();
 const checkDue = () => runDue().catch((err) => console.error("Scheduled offboarding check failed:", err));
 checkDue();
 setInterval(checkDue, 60_000);
+// Invites nobody accepted within 30 minutes are cancelled.
+const sweepInvites = () => expireInvites().catch((err) => console.error("Invite cleanup failed:", err));
+sweepInvites();
+setInterval(sweepInvites, 60_000);
 const port = process.env.PORT || 3000;
 app.listen(port, () => console.log(`HR Access Hub on http://localhost:${port}`));

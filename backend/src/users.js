@@ -5,6 +5,9 @@ import {
   getDefaultPassword, setDefaultPassword, createUser, lockedFor, noteFailure, clearFailures,
 } from "./auth.js";
 import { V, isCompanyEmail, COMPANY_EMAIL_MESSAGE } from "./validate.js";
+import { sendInvite } from "./invites.js";
+import { mailConfigured } from "./mail.js";
+import { googleEnabled } from "./google-signin.js";
 
 const wrap = (fn) => (req, res, next) => fn(req, res, next).catch(next);
 const ROLES = ["hr", "manager", "employee"];
@@ -27,6 +30,9 @@ sessionRouter.post("/login", wrap(async (req, res) => {
   await startSession(res, rows[0].email);
   res.json({ ok: true });
 }));
+
+// What the sign-in page can offer.
+sessionRouter.get("/login-options", (_req, res) => res.json({ google: googleEnabled() }));
 
 sessionRouter.post("/logout", wrap(async (req, res) => {
   await endSession(req, res);
@@ -57,15 +63,17 @@ accountRouter.post("/password", wrap(async (req, res) => {
 export const usersRouter = express.Router();
 usersRouter.use(requireHr);
 
-const toApi = (r) => ({ email: r.email, role: r.role, name: r.name || "", lastLogin: r.last_login, createdAt: r.created_at });
+const toApi = (r) => ({ email: r.email, role: r.role, name: r.name || "", lastLogin: r.last_login, createdAt: r.created_at, inviteExpires: r.invite_expires });
 
 usersRouter.get("/", wrap(async (_req, res) => {
   const { rows } = await pool.query(
-    `SELECT u.*, e.name FROM users u LEFT JOIN employees e ON lower(e.work_email)=lower(u.email) ORDER BY u.role, u.email`);
+    `SELECT u.*, e.name,
+       (SELECT max(i.expires_at) FROM invites i WHERE lower(i.email)=lower(u.email) AND i.used_at IS NULL AND i.expires_at > now()) AS invite_expires
+     FROM users u LEFT JOIN employees e ON lower(e.work_email)=lower(u.email) ORDER BY u.role, u.email`);
   const { rows: miss } = await pool.query(
     `SELECT count(*)::int AS n FROM employees e WHERE e.last_day IS NULL AND e.status <> 'offboarded'
      AND NOT EXISTS (SELECT 1 FROM users u WHERE lower(u.email)=lower(e.work_email))`);
-  res.json({ users: rows.map(toApi), withoutAccount: miss[0].n, defaultPassword: await getDefaultPassword() });
+  res.json({ users: rows.map(toApi), withoutAccount: miss[0].n, defaultPassword: await getDefaultPassword(), mailConfigured: mailConfigured() });
 }));
 
 usersRouter.post("/", wrap(async (req, res) => {
@@ -75,7 +83,10 @@ usersRouter.post("/", wrap(async (req, res) => {
   if (!isCompanyEmail(email)) return res.status(400).json({ error: COMPANY_EMAIL_MESSAGE });
   if (!ROLES.includes(role)) return res.status(400).json({ error: "Pick a role." });
   if (!(await createUser(pool, email, role))) return res.status(409).json({ error: `${email} already has an account.` });
-  res.status(201).json({ ok: true, defaultPassword: await getDefaultPassword() });
+  await pool.query("INSERT INTO audit_log (action, work_email) VALUES ($1,$2)", [`Login created with the ${role === "hr" ? "HR (full rights)" : role} role by ${req.user.email}`, email]);
+  // Optional: send them a one-time link that opens the app.
+  const invite = req.body?.sendInvite === true ? await sendInvite(email, req.user.email) : null;
+  res.status(201).json({ ok: true, defaultPassword: await getDefaultPassword(), invite });
 }));
 
 // One login for every current employee who does not have one yet.
@@ -86,6 +97,14 @@ usersRouter.post("/bulk", wrap(async (_req, res) => {
   let made = 0;
   for (const r of rows) if (isCompanyEmail(r.work_email) && await createUser(pool, r.work_email, "employee")) made++;
   res.json({ created: made });
+}));
+
+// Send a fresh invite link (the old one stops working).
+usersRouter.post("/:email/invite", wrap(async (req, res) => {
+  const email = req.params.email.toLowerCase();
+  const u = (await pool.query("SELECT email FROM users WHERE lower(email)=$1", [email])).rows[0];
+  if (!u) return res.status(404).json({ error: "No such account." });
+  res.json({ invite: await sendInvite(u.email, req.user.email) });
 }));
 
 usersRouter.put("/default-password", wrap(async (req, res) => {
@@ -113,6 +132,7 @@ usersRouter.put("/:email/role", wrap(async (req, res) => {
   }
   const r = await pool.query("UPDATE users SET role=$1 WHERE lower(email)=$2", [req.body.role, email]);
   if (!r.rowCount) return res.status(404).json({ error: "No such account." });
+  await pool.query("INSERT INTO audit_log (action, work_email) VALUES ($1,$2)", [`Role changed to ${req.body.role === "hr" ? "HR (full rights)" : req.body.role} by ${req.user.email}`, email]);
   res.json({ ok: true });
 }));
 

@@ -334,21 +334,19 @@ textarea.input{resize:vertical;font-family:var(--body)}
 @media (max-width:460px){.stat .num{font-size:34px}.facts{grid-template-columns:minmax(0,1fr)}.btn{padding:11px 18px}}
 body.ro [data-retry],body.ro [data-provision],body.ro [data-offboard],body.ro [data-confirmoff],body.ro [data-proto],body.ro [data-edit],body.ro [data-leave],body.ro [data-activate],body.ro [data-go="onboard"],body.ro [data-go="offboard"],body.ro [data-go="users"]{display:none!important}
 /* Dashboard */
-.db-hero{position:relative;overflow:hidden;display:flex;align-items:center;gap:26px;flex-wrap:wrap;padding:34px 36px;border-radius:var(--radius);color:#fff;box-shadow:var(--glass-shadow);background:var(--db-bg,linear-gradient(120deg,#3242b2,#4254d4 55%,#7d8cee))}
-.db-hero::before,.db-hero::after{content:"";position:absolute;border-radius:50%;border:1.5px solid rgba(255,255,255,.16);pointer-events:none}
+.db-hero{position:relative;overflow:hidden;display:flex;align-items:center;gap:26px;flex-wrap:wrap;padding:32px 36px;border-radius:var(--radius);color:var(--ink);border:1px solid var(--card-edge);box-shadow:var(--glass-shadow);
+  background:linear-gradient(120deg,var(--db-a,rgba(125,140,238,.14)),var(--db-b,rgba(189,238,226,.12))),var(--surface)}
+.db-hero::before,.db-hero::after{content:"";position:absolute;border-radius:50%;border:1.5px solid var(--line);pointer-events:none}
 .db-hero::before{width:360px;height:360px;right:-90px;top:-150px}
 .db-hero::after{width:560px;height:560px;right:-190px;top:-250px}
-.db-sky{position:absolute;right:42px;top:30px;width:74px;height:74px;color:rgba(255,255,255,.85);pointer-events:none}
-.db-avatar{width:92px;height:92px;border-radius:50%;display:grid;place-items:center;overflow:hidden;flex:none;font:600 32px/1 var(--body);color:#fff;box-shadow:0 0 0 4px rgba(255,255,255,.35);text-decoration:none}
+.db-sky{position:absolute;right:42px;top:30px;width:70px;height:70px;color:var(--purple);opacity:.42;pointer-events:none}
+.db-avatar{width:92px;height:92px;border-radius:50%;display:grid;place-items:center;overflow:hidden;flex:none;font:600 32px/1 var(--body);color:#fff;box-shadow:0 0 0 4px var(--tint);text-decoration:none}
 .db-avatar img{width:100%;height:100%;object-fit:cover;display:block}
-.db-hero .eyebrow{color:rgba(255,255,255,.8)}
-.db-hero h1{color:#fff;font-weight:300;font-size:clamp(32px,4.4vw,52px);line-height:1.06;letter-spacing:-.02em;margin-top:6px}
-.db-hero h1 em{font-style:italic;font-weight:400}
-.db-hero p{margin:10px 0 0;color:rgba(255,255,255,.88);max-width:62ch}
-.db-hero .pill{background:rgba(255,255,255,.2);color:#fff}
+.db-hero .eyebrow{color:var(--purple)}
+.db-hero h1{color:var(--ink);font-weight:300;font-size:clamp(32px,4.4vw,52px);line-height:1.06;letter-spacing:-.02em;margin-top:6px}
+.db-hero h1 em{font-style:italic;font-weight:400;color:var(--purple)}
+.db-hero p{margin:10px 0 0;color:var(--ink-dim);max-width:62ch}
 .db-hero .row{margin-top:18px}
-.db-hero .btn.glass{background:rgba(255,255,255,.16);color:#fff;box-shadow:inset 0 0 0 1px rgba(255,255,255,.4)}
-.db-hero .btn.primary{background:#fff;color:#3242b2;box-shadow:0 10px 26px rgba(14,10,56,.25)}
 .db-masonry{column-count:2;column-gap:22px}
 .db-masonry>.card{break-inside:avoid;margin-bottom:22px}
 .q-item{display:flex;align-items:center;gap:14px;padding:14px 24px;border-top:1px solid var(--line)}
@@ -836,10 +834,11 @@ function dbSky(){
   const h=new Date().getHours();
   const sun='<circle cx="32" cy="32" r="12"/><path d="M32 6v8M32 50v8M6 32h8M50 32h8M13.6 13.6l5.6 5.6M44.8 44.8l5.6 5.6M13.6 50.4l5.6-5.6M44.8 19.2l5.6-5.6"/>';
   const moon='<path d="M50 38A20 20 0 1 1 26 14a16 16 0 0 0 24 24z"/>';
-  const [word,bg,icon]=h<12?["Good morning","linear-gradient(120deg,#d9694f -15%,#7d6ee8 52%,#4254d4)",sun]
-    :h<18?["Good afternoon","linear-gradient(120deg,#3242b2,#4254d4 55%,#7d8cee)",sun]
-    :["Good evening","linear-gradient(120deg,#181733,#3a3f7a 50%,#6f7fee)",moon];
-  return {word,bg,svg:`<svg class="db-sky" viewBox="0 0 64 64" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" aria-hidden="true">${icon}</svg>`};
+  // Only a faint tint changes through the day: a hint of warmth in the morning, calm lavender, then a touch deeper at night.
+  const [word,a,b,icon]=h<12?["Good morning","rgba(255,176,140,.18)","rgba(169,187,255,.12)",sun]
+    :h<18?["Good afternoon","rgba(125,140,238,.14)","rgba(189,238,226,.12)",sun]
+    :["Good evening","rgba(98,84,200,.16)","rgba(111,127,238,.10)",moon];
+  return {word,a,b,svg:`<svg class="db-sky" viewBox="0 0 64 64" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true">${icon}</svg>`};
 }
 const dbAvatar=(e,src)=>`<a class="db-avatar" href="#profile" style="background:${src?"transparent":(e.color||"#4254d4")}" aria-label="My profile">${avatarInner(e.name,src)}</a>`;
 /* A donut with a number in the middle. parts: [{label,value,color}] */
@@ -882,7 +881,7 @@ function vDashboardHr(){
   const summary=q.length?`${q.length} thing${q.length===1?"":"s"} need${q.length===1?"s":""} you today.`:"You're all caught up.";
   const src=photoSrc();
   return `
-  <section class="db-hero" style="--db-bg:${sky.bg}">${sky.svg}
+  <section class="db-hero" style="--db-a:${sky.a};--db-b:${sky.b}">${sky.svg}
     ${dbAvatar(me,src)}
     <div style="min-width:0;flex:1">
       <div class="eyebrow">${esc(new Date(today+"T00:00:00").toLocaleDateString("en-IN",{weekday:"long",day:"numeric",month:"long"}))}</div>
@@ -938,7 +937,7 @@ function vDashboardEmployee(){
   const tools=Object.keys(e.grants||{}).filter(k=>e.grants[k]==="active");
   const chip=(x,txt)=>`<span class="chip">${avatar(x)}${esc(x.name)}${txt?` <small>${txt}</small>`:""}</span>`;
   return `
-  <section class="db-hero" style="--db-bg:${sky.bg}">${sky.svg}
+  <section class="db-hero" style="--db-a:${sky.a};--db-b:${sky.b}">${sky.svg}
     ${dbAvatar(e,src)}
     <div style="min-width:0;flex:1">
       <div class="eyebrow">${esc(new Date(today+"T00:00:00").toLocaleDateString("en-IN",{weekday:"long",day:"numeric",month:"long"}))}</div>
@@ -1079,6 +1078,7 @@ function vEmployee(){
       ${c.manual.map(x=>`<label class="check ${x.done?"done":""}"><input type="checkbox" id="chk-${e.id}-${c.phase}-${x.i}" data-task="${e.id}:${c.phase}:${x.i}" ${x.done?"checked":""} ${e.status==="offboarded"?"disabled":""}><div class="grow"><div class="lbl">${esc(x.t)}</div><div class="tag">Manual · ${c.phase==="on"?"IT / Admin":"HR / Admin"}</div></div></label>`).join("")}
     </div>
   </div>
+  ${appAccessCard(e)}
   ${laptopCard(e)}${recordCard(e)}
   ${offCard(e)}
   ${leaveCard(e)}
@@ -1375,11 +1375,12 @@ function obWorkEmailCard(ob){
 
 /* Step 2: HR creates the app login for the new joiner. Employees cannot do this. */
 function obStep2(ob){
-  const w=ob.work, l=ob.login;
+  const w=ob.work, l=ob.login, role=ob.role||(ob.d.dept==="HR"?"hr":"employee");
   return `<div class="card"><div class="card-h"><h3>Login for the app</h3><span class="muted">Only HR can create it</span></div><div class="card-b" style="display:flex;flex-direction:column;gap:14px">
-      <dl class="rv"><div><dt>Signs in with</dt><dd><span class="mono">${esc(w.email)}</span></dd></div><div><dt>Role</dt><dd>Employee</dd></div></dl>
+      <dl class="rv"><div><dt>Signs in with</dt><dd><span class="mono">${esc(w.email)}</span></dd></div><div><dt>App access</dt><dd>${esc(ACCESS_LABEL[l&&l.role||role]||"Employee")}</dd></div></dl>
+      ${l?"":`<div class="field"><label for="ob-role">App access level</label><select class="input" id="ob-role" style="max-width:320px">${accessOptions(role)}</select><span class="hint" id="ob-role-help">${esc(ACCESS_HELP[role])}${ob.d.dept==="HR"?" This person is joining HR, so HR rights are preselected.":""}</span></div>`}
       <p style="margin:0;color:var(--ink-dim)">The employee signs in with their work email and the default password, then uploads their own documents. Details from their resume will be added later.</p>
-      ${l?`<div class="callout">${svg("info")}<div>${l.existing?"This person already has a login.":`Login created. Password: <b class="mono">${esc(l.password||"the default password")}</b>. Tell the employee to change it on their Account page.`}</div></div>`
+      ${l?`<div class="callout">${svg("info")}<div>${l.existing?"This person already has a login.":`Login created${l.role==="hr"?" with <b>HR rights</b>":""}. Password: <b class="mono">${esc(l.password||"the default password")}</b>. Tell them to change it on their Account page.`}</div></div>`
          :`<div class="row"><button type="button" class="btn primary" data-ob-mklogin ${ob.busy?"disabled":""}>${ob.busy?"Creating…":"Create login"}</button></div>`}
     </div></div>`;
 }
@@ -1392,7 +1393,7 @@ function obStep3(ob){
   const gstat={active:"Active in Google Workspace",simulated:"Active (simulated)",existing:"Already in the employee list",local:"Created (prototype)"}[w.google]||w.google;
   return `${sec("Personal details",1,kv([["Name",esc(d.first+" "+d.last)],["Personal email",esc(d.pemail)],["Phone",esc(d.phone)],["Address",esc(d.address)]]))}
     ${sec("Job details",1,kv([["Department",esc(d.dept)],["Job title",esc(d.title)],["Reporting manager",esc(d.mgr)],["Start date",esc(fdate(d.start))]]))}
-    <div class="card"><div class="card-h"><h3>Work email and login</h3></div><div class="card-b">${kv([["Work email",`<span class="mono">${esc(w.email)}</span>`],["Google",esc(gstat)],["App login","Created, employee role"]])}</div></div>
+    <div class="card"><div class="card-h"><h3>Work email and login</h3></div><div class="card-b">${kv([["Work email",`<span class="mono">${esc(w.email)}</span>`],["Google",esc(gstat)],["App login",(ob.login&&ob.login.role==="hr")?"Created with HR rights":`Created, ${esc((ACCESS_LABEL[ob.login&&ob.login.role]||"employee").toLowerCase())} role`]])}</div></div>
     ${obDocsCard(ob)}
     <div class="card"><div class="card-h"><h3>Tools to give</h3><span class="pill p-info">Bundle: ${esc(TEMPLATES.find(x=>x.id===DEPT_TPL[d.dept]).name)}</span></div><div class="card-b" style="display:flex;flex-direction:column;gap:16px">
       <div class="tiles" id="ob-apps">${APPS.map(a=>`<label class="tile"><input type="checkbox" value="${a.id}" ${a.id==="gws"||sel.includes(a.id)?"checked":""} ${a.id==="gws"?"disabled":""}>${appIc(a.id)}<span class="t"><b>${esc(a.name)}</b><span>${a.id==="gws"?"Created in step 1":esc(a.sub)}</span></span></label>`).join("")}</div>
@@ -1468,10 +1469,12 @@ async function obMakeEmail(){
 /* Step 2: HR creates the app login with the default password. */
 async function obMakeLogin(){
   const ob=S.ob; if(!ob.work) return;
+  const role=($("#ob-role")&&$("#ob-role").value)||ob.role||"employee";
+  if(role==="hr"&&!hrConfirm((ob.d.first+" "+ob.d.last).trim()||ob.work.email)) return;
   ob.busy=true; render();
   try{
-    const r=await api("POST","/api/users",{email:ob.work.email,role:"employee"});
-    if(r.ok) ob.login={created:true,password:r.data.defaultPassword};
+    const r=await api("POST","/api/users",{email:ob.work.email,role});
+    if(r.ok) ob.login={created:true,password:r.data.defaultPassword,role};
     else if(r.status===409) ob.login={created:true,existing:true};
     else toast(apiMsg(r));
   }catch(err){ ob.login={created:true,existing:true}; }   // no backend: nothing to create
@@ -1568,10 +1571,86 @@ async function loadUsers(){
   S.usersBusy=true;
   try{ const r=await api("GET","/api/users"); if(r.ok) S.users=r.data; else { toast(apiMsg(r)); S.users={users:[],withoutAccount:0,defaultPassword:"",failed:true}; } }
   catch(e){ toast("Could not reach the server."); S.users={users:[],withoutAccount:0,defaultPassword:"",failed:true}; }
-  S.usersBusy=false; if(S.route==="users") render();
+  S.usersBusy=false; if(S.route==="users"||S.route==="employee") render();
 }
 const reloadUsers=()=>{ S.users=null; loadUsers(); };
 
+/* What happened to an invite: emailed, or (when the server has no mail set up) a link for HR to share. */
+/* On a person's page, HR can give them a login and email them a one-time link that opens the app. */
+function appAccessCard(e){
+  if(!S.user||isEmployee()||e.status==="offboarded") return "";
+  const d=S.users;
+  const wrap=body=>`<div class="card"><div class="card-h"><h3>App login</h3><span class="muted">Who can sign in to this app</span></div><div class="card-b" style="display:flex;flex-direction:column;gap:14px">${body}</div></div>`;
+  if(!d) return wrap(`<span class="muted">Loading…</span>`);
+  if(d.failed) return "";   // no server, so no logins to manage
+  const u=d.users.find(x=>lc(x.email)===lc(e.email)), busy=S.appBusy===e.email;
+  const note=S.inviteNote&&lc(S.inviteNote.email)===lc(e.email)?inviteBox(S.inviteNote,"inv-link"):"";
+  const dis=busy?"disabled":"";
+  const where=`The invite goes to ${e.personalEmail?`<b>${esc(maskMail(e.personalEmail))}</b> (their personal email)`:"their personal email if HR has one on record, otherwise their work email"}. It holds a one-time link that opens the app, works once and is cancelled if it is not opened within 30 minutes.`;
+  const dept=(e.dept||"")==="HR"?"hr":"employee";
+  const hint=d.mailConfigured?"":`<span class="muted" style="font-size:12.5px">Email isn't set up on the server yet, so you'll get the link to share instead.</span>`;
+  return wrap(u
+    ?`<dl class="rv"><div><dt>Signs in with</dt><dd><span class="mono">${esc(u.email)}</span></dd></div><div><dt>Last signed in</dt><dd>${u.lastLogin?esc(new Date(u.lastLogin).toLocaleString()):"Never"}</dd></div>
+      <div style="grid-column:1/-1"><dt>App access</dt><dd><select class="input" data-app-role="${esc(e.email)}" style="max-width:260px" aria-label="App access for ${esc(e.name)}">${accessOptions(u.role)}</select><div class="muted" style="margin-top:6px;font-size:12.5px">${esc(ACCESS_HELP[u.role]||"")}</div></dd></div>${u.inviteExpires?`<div><dt>Invite waiting</dt><dd>Open until ${esc(new Date(u.inviteExpires).toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"}))}</dd></div>`:""}</dl>
+      <p style="margin:0;color:var(--ink-dim)">${where}</p>
+      <div class="row"><button type="button" class="btn primary sm" data-app-invite="${esc(e.email)}" ${dis}>${busy?"Sending…":u.lastLogin?"Send invite again":"Send invite email"}</button></div>${hint}${note}`
+    :`<p style="margin:0;color:var(--ink-dim)">${esc(e.name)} has no login yet. ${where}</p>
+      <div class="field"><label for="app-role-new">App access level</label><select class="input" id="app-role-new" style="max-width:320px">${accessOptions(dept)}</select><span class="hint">${esc(ACCESS_HELP[dept])}${dept==="hr"?" This person is in HR, so HR rights are preselected.":""}</span></div>
+      <div class="row"><button type="button" class="btn primary sm" data-app-invite="${esc(e.email)}" data-create="1" ${dis}>${busy?"Working…":"Create login and send invite"}</button>
+        <button type="button" class="btn glass sm" data-app-invite="${esc(e.email)}" data-create="1" data-send="0" ${dis}>Create login only</button></div>${hint}${note}`);
+}
+/* Change what an existing login can do. */
+async function appRole(sel){
+  const email=sel.dataset.appRole, role=sel.value, e=S.emps.find(x=>lc(x.email)===lc(email))||{};
+  const u=S.users&&S.users.users.find(x=>lc(x.email)===lc(email)), prev=u?u.role:"employee";
+  if(role===prev) return;
+  if(role==="hr"&&!hrConfirm(e.name||email)){ sel.value=prev; return; }
+  const r=await api("PUT",`/api/users/${encodeURIComponent(email)}/role`,{role});
+  if(!r.ok){ toast(apiMsg(r)); sel.value=prev; return; }
+  toast(role==="hr"?`${e.name||email} now has full HR rights.`:`${e.name||email} is now ${ACCESS_LABEL[role].toLowerCase()}.`);
+  S.users=null; loadUsers();
+}
+document.addEventListener("change",ev=>{
+  const t=ev.target;
+  if(t.id==="ob-role"&&S.ob){ S.ob.role=t.value; const h=$("#ob-role-help"); if(h) h.textContent=ACCESS_HELP[t.value]; return; }
+  if(t.matches&&t.matches("[data-app-role]")) appRole(t);
+});
+async function appInvite(email,create,send){
+  const role=($("#app-role-new")&&$("#app-role-new").value)||"employee";
+  if(create&&role==="hr"&&!hrConfirm((S.emps.find(x=>lc(x.email)===lc(email))||{}).name||email)) return;
+  S.appBusy=email; S.inviteNote=null; render();
+  try{
+    if(create){
+      const r=await api("POST","/api/users",{email,role,sendInvite:send});
+      if(!r.ok&&r.status!==409){ toast(apiMsg(r)); }
+      else if(r.ok&&r.data.invite) S.inviteNote={...r.data.invite,email};
+      if(r.ok){ toast(!send?`Login created for ${email}.`:r.data.invite&&r.data.invite.mode==="email"?`Login created. Invite sent to ${r.data.invite.to}.`:"Login created. Copy the invite link below."); }
+    }else{
+      const r=await api("POST",`/api/users/${encodeURIComponent(email)}/invite`);
+      if(!r.ok) toast(apiMsg(r));
+      else{ S.inviteNote={...r.data.invite,email}; toast(r.data.invite.mode==="email"?`Invite sent to ${r.data.invite.to}.`:"Copy the invite link below."); }
+    }
+  }catch(err){ toast("The server can't be reached. Try again."); }
+  S.appBusy=null; S.users=null; loadUsers();   // fresh list, and the card redraws
+}
+/* What each app role can do. HR is "all rights": everything in the app. */
+const ACCESS_LABEL={employee:"Employee",manager:"Manager",hr:"HR (full rights)"};
+const ACCESS_HELP={
+  employee:"Sees the site and uses their own pages: documents, profile and leave.",
+  manager:"Like an employee, and also approves leave for the people who report to them.",
+  hr:"Full rights: can see and change everything, including onboarding, offboarding, leave, access bundles, the audit log and everyone's logins."};
+const accessOptions=sel=>["employee","manager","hr"].map(r=>`<option value="${r}" ${r===sel?"selected":""}>${ACCESS_LABEL[r]}</option>`).join("");
+/* Handing out HR rights is a big step, so it always asks first. */
+const hrConfirm=name=>confirm(`Give ${name} full HR rights?\n\nHR can see and change everything in the app: onboarding, offboarding, leave, access bundles, the audit log and everyone's logins. Only do this for someone who works in HR.`);
+function inviteBox(n,copyId){
+  if(!n) return "";
+  const noMail=typeof DEMO!=="undefined"&&DEMO;
+  if(noMail) return "";
+  return `<div class="callout">${svg("info")}<div style="min-width:0;flex:1">${n.mode==="email"
+    ?`Invite emailed to <b>${esc(n.to)}</b>. The link works once and is cancelled if it is not opened within 30 minutes.`
+    :`${esc(n.error||"Email isn't set up on the server yet, so no email was sent.")} Share this invite link with ${esc(n.email||"them")}:`}
+    ${n.link?`<div class="row" style="margin-top:8px;flex-wrap:nowrap"><input class="input mono" id="${copyId}" readonly value="${esc(n.link)}" aria-label="Invite link" style="min-width:0"><button type="button" class="btn glass sm" data-copy="${copyId}">Copy</button></div>`:""}</div></div>`;
+}
 function vUsers(){
   const d=S.users, me=S.user.email.toLowerCase();
   const top=head("People","Logins and <span class=\"grad\">roles.</span>","HR creates every account. New accounts start with the default password, and people can change it on their Account page.");
@@ -1807,6 +1886,10 @@ function vAccount(){
 document.addEventListener("click",async ev=>{
   const so=ev.target.closest("[data-signout]");
   if(so){ ev.preventDefault(); if(DEMO){ await demoSignOut(); return; } try{ await fetch("/api/logout",{method:"POST"}); }catch(e){} location.href="/login"; return; }
+  const cp=ev.target.closest("[data-copy]");
+  if(cp){ const el=document.getElementById(cp.dataset.copy); if(el){ el.select(); try{ await navigator.clipboard.writeText(el.value); toast("Link copied."); }catch(e){ toast("Press Ctrl+C to copy the link."); } } return; }
+  const ai=ev.target.closest("[data-app-invite]");
+  if(ai){ await appInvite(ai.dataset.appInvite,ai.dataset.create==="1",ai.dataset.send!=="0"); return; }
   const ur=ev.target.closest("[data-u-reset]");
   if(ur){ const em=ur.dataset.uReset; if(!confirm(`Reset ${em} to the default password? They will be signed out.`)) return;
     const r=await api("POST",`/api/users/${encodeURIComponent(em)}/reset`); toast(r.ok?`${em} was reset to the default password.`:apiMsg(r)); return; }
@@ -2654,7 +2737,7 @@ function render(){
   if(activateDue()) toast("A work email was activated on its joining date.");
   if(S.route==="leaveapply"&&!S.lw) S.route=isEmployee()?"myleave":"leave";
   if(!routeAllowed(S.route)) S.route="dashboard";
-  if(S.route==="users"&&!S.users&&!S.usersBusy) loadUsers();
+  if((S.route==="users"||(S.route==="employee"&&S.user&&!isEmployee()))&&!S.users&&!S.usersBusy) loadUsers();
   if(S.user&&!isEmployee()&&["onboard","docs","employee"].includes(S.route)) refreshDocs();
   if(S.user&&["profile","employees","employee","dashboard"].includes(S.route)) refreshManagers();
   renderNav();

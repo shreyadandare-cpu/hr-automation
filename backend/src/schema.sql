@@ -206,3 +206,15 @@ END $$;
 ALTER TABLE users DROP CONSTRAINT IF EXISTS users_role_check;
 ALTER TABLE users ADD CONSTRAINT users_role_check CHECK (role IN ('hr','manager','employee'));
 ALTER TABLE employees ADD COLUMN IF NOT EXISTS reporting_manager TEXT;
+
+-- One-time links that open the app for a new account. Only a hash of the link's secret is stored.
+CREATE TABLE IF NOT EXISTS invites (
+  id         SERIAL PRIMARY KEY,
+  email      TEXT NOT NULL,
+  token_hash TEXT NOT NULL UNIQUE,
+  created_by TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  expires_at TIMESTAMPTZ NOT NULL,
+  used_at    TIMESTAMPTZ
+);
+CREATE INDEX IF NOT EXISTS invites_email_idx ON invites (lower(email));

@@ -4,7 +4,7 @@ import {
   verifyPassword, hashPassword, startSession, endSession, requireAuth, requireHr,
   getDefaultPassword, setDefaultPassword, createUser, lockedFor, noteFailure, clearFailures,
 } from "./auth.js";
-import { V } from "./validate.js";
+import { V, isCompanyEmail, COMPANY_EMAIL_MESSAGE } from "./validate.js";
 
 const wrap = (fn) => (req, res, next) => fn(req, res, next).catch(next);
 const ROLES = ["hr", "employee"];
@@ -15,6 +15,7 @@ export const sessionRouter = express.Router();
 sessionRouter.post("/login", wrap(async (req, res) => {
   const email = String(req.body?.email || "").trim().toLowerCase();
   const password = String(req.body?.password || "");
+  if (email && !isCompanyEmail(email)) return res.status(403).json({ error: COMPANY_EMAIL_MESSAGE.replace("have an account", "sign in") });
   const key = email || req.ip;
   const mins = lockedFor(key);
   if (mins) return res.status(429).json({ error: `Too many wrong passwords. Try again in ${mins} minute${mins === 1 ? "" : "s"}.` });
@@ -71,6 +72,7 @@ usersRouter.post("/", wrap(async (req, res) => {
   const email = String(req.body?.email || "").trim().toLowerCase();
   const role = req.body?.role;
   if (!V.email(email)) return res.status(400).json({ error: "Enter a valid email." });
+  if (!isCompanyEmail(email)) return res.status(400).json({ error: COMPANY_EMAIL_MESSAGE });
   if (!ROLES.includes(role)) return res.status(400).json({ error: "Pick a role." });
   if (!(await createUser(pool, email, role))) return res.status(409).json({ error: `${email} already has an account.` });
   res.status(201).json({ ok: true, defaultPassword: await getDefaultPassword() });
@@ -82,7 +84,7 @@ usersRouter.post("/bulk", wrap(async (_req, res) => {
     `SELECT work_email FROM employees e WHERE e.last_day IS NULL AND e.status <> 'offboarded'
      AND NOT EXISTS (SELECT 1 FROM users u WHERE lower(u.email)=lower(e.work_email))`);
   let made = 0;
-  for (const r of rows) if (await createUser(pool, r.work_email, "employee")) made++;
+  for (const r of rows) if (isCompanyEmail(r.work_email) && await createUser(pool, r.work_email, "employee")) made++;
   res.json({ created: made });
 }));
 

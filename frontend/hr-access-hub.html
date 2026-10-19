@@ -317,6 +317,67 @@ textarea.input{resize:vertical;font-family:var(--body)}
 }
 @media (max-width:460px){.stat .num{font-size:34px}.facts{grid-template-columns:minmax(0,1fr)}.btn{padding:11px 18px}}
 body.ro [data-retry],body.ro [data-provision],body.ro [data-offboard],body.ro [data-confirmoff],body.ro [data-proto],body.ro [data-edit],body.ro [data-leave],body.ro [data-activate],body.ro [data-go="onboard"],body.ro [data-go="offboard"],body.ro [data-go="users"]{display:none!important}
+/* Dashboard */
+.db-hero{position:relative;overflow:hidden;display:flex;align-items:center;gap:26px;flex-wrap:wrap;padding:34px 36px;border-radius:var(--radius);color:#fff;box-shadow:var(--glass-shadow);background:var(--db-bg,linear-gradient(120deg,#3242b2,#4254d4 55%,#7d8cee))}
+.db-hero::before,.db-hero::after{content:"";position:absolute;border-radius:50%;border:1.5px solid rgba(255,255,255,.16);pointer-events:none}
+.db-hero::before{width:360px;height:360px;right:-90px;top:-150px}
+.db-hero::after{width:560px;height:560px;right:-190px;top:-250px}
+.db-sky{position:absolute;right:42px;top:30px;width:74px;height:74px;color:rgba(255,255,255,.85);pointer-events:none}
+.db-avatar{width:92px;height:92px;border-radius:50%;display:grid;place-items:center;overflow:hidden;flex:none;font:600 32px/1 var(--body);color:#fff;box-shadow:0 0 0 4px rgba(255,255,255,.35);text-decoration:none}
+.db-avatar img{width:100%;height:100%;object-fit:cover;display:block}
+.db-hero .eyebrow{color:rgba(255,255,255,.8)}
+.db-hero h1{color:#fff;font-weight:300;font-size:clamp(32px,4.4vw,52px);line-height:1.06;letter-spacing:-.02em;margin-top:6px}
+.db-hero h1 em{font-style:italic;font-weight:400}
+.db-hero p{margin:10px 0 0;color:rgba(255,255,255,.88);max-width:62ch}
+.db-hero .pill{background:rgba(255,255,255,.2);color:#fff}
+.db-hero .row{margin-top:18px}
+.db-hero .btn.glass{background:rgba(255,255,255,.16);color:#fff;box-shadow:inset 0 0 0 1px rgba(255,255,255,.4)}
+.db-hero .btn.primary{background:#fff;color:#3242b2;box-shadow:0 10px 26px rgba(14,10,56,.25)}
+.db-masonry{column-count:2;column-gap:22px}
+.db-masonry>.card{break-inside:avoid;margin-bottom:22px}
+.q-item{display:flex;align-items:center;gap:14px;padding:14px 24px;border-top:1px solid var(--line)}
+.q-item .grow{flex:1;min-width:0}
+.q-item b{display:block;font-weight:600}
+.q-ic{width:38px;height:38px;border-radius:12px;display:grid;place-items:center;flex:none}
+.q-ic svg{width:18px;height:18px}
+.q-bad{background:var(--bad-soft);color:var(--bad)}.q-warn{background:var(--warn-soft);color:var(--warn)}.q-info{background:var(--tint);color:var(--purple)}.q-ok{background:var(--ok-soft);color:var(--ok)}
+.q-clear{display:flex;align-items:center;gap:16px;padding:26px 24px;color:var(--ink-dim)}
+.q-clear .q-ic{width:46px;height:46px;border-radius:50%}
+.db-donut{display:flex;align-items:center;gap:22px;flex-wrap:wrap;padding:6px 24px 24px;justify-content:center}
+.db-legend{display:flex;flex-direction:column;gap:8px;min-width:150px;flex:1}
+.db-legend div{display:flex;align-items:center;gap:10px;font-size:13.5px}
+.db-legend i{width:10px;height:10px;border-radius:3px;flex:none}
+.db-legend span{margin-left:auto;font-variant-numeric:tabular-nums;color:var(--ink-dim)}
+.mv-group{padding:4px 24px 14px}
+.mv-group h4{margin:14px 0 6px;font:600 11px/1.2 var(--body);letter-spacing:.16em;text-transform:uppercase;color:var(--ink-faint)}
+.mv{display:flex;align-items:center;gap:12px;padding:8px 0;cursor:pointer}
+.mv .grow{flex:1;min-width:0}
+.mv .grow b{display:block;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mv .grow span{display:block;font-size:12.5px;color:var(--ink-faint)}
+.mv .avatar{width:34px;height:34px;font-size:12px}
+.mv .progress{width:70px}
+.mv-empty{padding:6px 0;color:var(--ink-faint);font-size:13.5px}
+.dtile{width:58px;flex:none;text-align:center;border-radius:14px;padding:8px 0 9px;background:var(--tile-grad);box-shadow:inset 0 0 0 1px rgba(66,84,212,.12)}
+.dtile b{display:block;font:600 24px/1 var(--display)}
+.dtile span{display:block;margin-top:3px;font:600 10.5px/1 var(--body);letter-spacing:.14em;text-transform:uppercase;color:var(--purple)}
+.db-bal{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:14px;padding:4px 24px 24px;text-align:center}
+.db-bal div{display:flex;flex-direction:column;align-items:center;gap:6px}
+.db-bal small{font-size:12.5px;color:var(--ink-dim)}
+.step{display:flex;align-items:center;gap:12px;padding:10px 24px;border-top:1px solid var(--line);color:var(--ink);text-decoration:none}
+.step:hover{background:rgba(66,84,212,.05)}
+.step .tick{width:22px;height:22px;border-radius:50%;display:grid;place-items:center;flex:none;box-shadow:inset 0 0 0 1.5px var(--line-2);color:transparent}
+.step .tick svg{width:13px;height:13px}
+.step.done .tick{background:var(--purple);color:#fff;box-shadow:none}
+.step.done span{color:var(--ink-faint);text-decoration:line-through}
+.step span{flex:1;min-width:0}
+.step em{font-style:normal;font-size:12.5px;color:var(--purple);font-weight:600}
+.cel{display:flex;flex-wrap:wrap;gap:10px;padding:2px 24px 20px}
+.cel .chip{padding-right:14px}
+.cel .chip .avatar{width:24px;height:24px;font-size:9.5px;box-shadow:none}
+.cel .chip small{color:var(--purple);font-weight:600;margin-left:2px}
+@media (max-width:1080px){.db-masonry{column-count:1}}
+@media (max-width:720px){.db-hero{padding:26px 20px}.db-avatar{width:72px;height:72px;font-size:26px}.db-sky{display:none}.q-item,.step{padding-inline:16px}.mv-group,.cel,.db-bal,.db-donut{padding-inline:16px}}
+.ring>div{background:var(--surface)}
 /* Round avatar in the bar, and its menu */
 .avatar-btn{display:inline-grid;place-items:center;width:38px;height:38px;padding:0;border:0;border-radius:50%;overflow:hidden;flex:none;cursor:pointer;color:#fff;font:600 13px/1 var(--body);background:var(--purple);box-shadow:0 0 0 2px var(--surface-2),0 4px 12px rgba(77,73,221,.25)}
 .avatar-btn:hover,.avatar-btn.on{box-shadow:0 0 0 2px var(--purple),0 4px 12px rgba(77,73,221,.3)}
@@ -349,30 +410,71 @@ tr.former td{opacity:.6}
 .pg:disabled{opacity:.4;cursor:not-allowed}
 .pg-gap{min-width:20px;text-align:center;color:var(--ink-faint)}
 @media (max-width:720px){.pager{padding-inline:16px}}
-/* My profile */
-.pf-avatar-wrap{position:relative;flex:none}
-.pf-avatar{overflow:hidden}
-.pf-cam{position:absolute;right:2px;bottom:2px;width:34px;height:34px;display:grid;place-items:center;border-radius:50%;background:var(--surface);color:var(--ink);box-shadow:0 2px 10px rgba(14,10,56,.35);cursor:pointer}
+/* My profile: an identity rail on the left, the person's story on the right */
+.pf2{display:grid;grid-template-columns:310px minmax(0,1fr);gap:24px;align-items:start}
+.pf2-rail{position:sticky;top:96px;display:flex;flex-direction:column;gap:18px;min-width:0}
+.pf2-id{padding:30px 24px 24px;text-align:center}
+.pf2-photo{position:relative;width:156px;height:156px;margin:0 auto 16px}
+.pf2-photo>svg{position:absolute;inset:0;width:100%;height:100%}
+.pf2-face{position:absolute;inset:14px;border-radius:50%;display:grid;place-items:center;overflow:hidden;font:600 44px/1 var(--body);color:#fff}
+.pf2-face img{width:100%;height:100%;object-fit:cover;display:block}
+.pf2-id h2{font:400 28px/1.1 var(--display);letter-spacing:-.02em;text-wrap:balance}
+.pf2-role{margin:8px 0 12px;color:var(--ink-dim)}
+.pf2-since{margin:14px 0 0;font-size:13px;color:var(--ink-faint)}
+.pf-cam{position:absolute;right:6px;bottom:6px;width:36px;height:36px;display:grid;place-items:center;border-radius:50%;background:var(--surface);color:var(--ink);box-shadow:0 2px 10px rgba(14,10,56,.35),inset 0 0 0 1px var(--line);cursor:pointer}
 .pf-cam:hover{background:var(--tint)}
-.pf-cam:focus-within{outline:2px solid #fff;outline-offset:2px}
+.pf-cam:focus-within{outline:2px solid var(--purple);outline-offset:2px}
 .pf-cam svg{width:18px;height:18px}
-.pf-rm{margin-top:6px;padding:0;border:0;background:none;color:#fff;opacity:.9;font:600 13px/1 var(--body);text-decoration:underline;cursor:pointer}
-.pf-banner{position:relative;min-height:190px;padding:28px;display:flex;align-items:center;gap:22px;flex-wrap:wrap;color:#fff;border-radius:var(--radius) var(--radius) 0 0;
-  background:radial-gradient(60% 120% at 88% 0%,rgba(169,187,255,.55),transparent 60%),radial-gradient(50% 100% at 8% 115%,rgba(189,238,226,.35),transparent 60%),linear-gradient(120deg,#2b3aa8,#4254d4 55%,#6f7fee)}
-.pf-avatar{width:112px;height:112px;border-radius:50%;display:grid;place-items:center;font:600 40px/1 var(--body);color:#fff;flex:none;box-shadow:0 0 0 4px rgba(255,255,255,.35)}
-.pf-banner h2{color:#fff;font-weight:400;font-size:clamp(28px,3.6vw,42px);letter-spacing:-.02em;line-height:1.1}
-.pf-title{display:flex;align-items:center;gap:8px;margin-top:8px;opacity:.95}
-.pf-title svg{width:16px;height:16px}
-.pf-banner .pill{background:rgba(255,255,255,.2);color:#fff}
-.pf-facts{display:flex;flex-wrap:wrap;gap:12px 36px;padding:20px 28px;border-bottom:1px solid var(--line)}
-.pf-fact{display:flex;align-items:center;gap:10px;min-width:0;overflow-wrap:anywhere}
-.pf-fact svg{width:18px;height:18px;color:var(--ink-faint);flex:none}
-.pf-org{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:16px 24px;padding:18px 28px 22px}
-.pf-org dt{font:600 11px/1.2 var(--body);color:var(--ink-faint);text-transform:uppercase;letter-spacing:.14em}
-.pf-org dd{margin:6px 0 0;font-weight:500}
-.pf-q{margin:0 0 4px;font:600 15px/1.3 var(--display)}
-.pf-a{margin:0 0 18px;color:var(--ink-dim);white-space:pre-wrap;overflow-wrap:anywhere}
-@media (max-width:720px){.pf-banner{padding:22px 18px}.pf-avatar{width:84px;height:84px;font-size:30px}.pf-facts,.pf-org{padding-inline:18px}}
+.pf-rm{margin-top:10px;padding:0;border:0;background:none;color:var(--ink-faint);font:600 12.5px/1 var(--body);text-decoration:underline;cursor:pointer}
+.pf2-facts{list-style:none;margin:18px 0 0;padding:16px 0 0;border-top:1px solid var(--line);display:flex;flex-direction:column;gap:11px;text-align:left}
+.pf2-facts li{display:flex;align-items:center;gap:11px;min-width:0;overflow-wrap:anywhere;font-size:14px}
+.pf2-facts svg{width:17px;height:17px;color:var(--ink-faint);flex:none}
+.pf2-nav{padding:10px}
+.pf2-nav h3{font:600 11px/1 var(--body);letter-spacing:.16em;text-transform:uppercase;color:var(--ink-faint);padding:10px 12px 8px}
+.pf2-nav button{display:flex;align-items:center;gap:10px;width:100%;text-align:left;padding:9px 12px;border:0;border-radius:12px;background:none;color:var(--ink-dim);font:500 14.5px/1.2 var(--display);cursor:pointer}
+.pf2-nav button::before{content:"";width:6px;height:6px;border-radius:50%;background:var(--line-2);flex:none;transition:background .2s}
+.pf2-nav button:hover{background:var(--tint);color:var(--ink)}
+.pf2-nav button:hover::before{background:var(--purple)}
+.pf2-main{display:flex;flex-direction:column;gap:22px;min-width:0}
+.pf2-main>*{scroll-margin-top:100px}
+.pf2-pair{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:22px}
+.q-tiles{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;padding:4px 24px 24px}
+.q-tile{display:flex;flex-direction:column;gap:8px;min-height:132px;padding:16px 18px;border-radius:18px;background:var(--surface-2);box-shadow:inset 0 0 0 1px var(--line)}
+.q-tile h4{margin:0;font:600 11px/1.3 var(--body);letter-spacing:.14em;text-transform:uppercase;color:var(--purple)}
+.q-tile p{margin:0;color:var(--ink);white-space:pre-wrap;overflow-wrap:anywhere}
+.q-tile.is-empty{background:transparent;box-shadow:none;border:1.5px dashed var(--line-2);justify-content:space-between}
+.q-tile.is-empty p{color:var(--ink-faint);font-size:13.5px}
+.rl{padding:4px 24px 22px}
+.rl-step{position:relative;display:flex;align-items:center;gap:12px;padding:9px 0}
+.rl-step+.rl-step::before{content:"";position:absolute;left:17px;top:-13px;height:22px;width:2px;background:var(--line-2)}
+.rl-step.me{margin:4px 0;padding:10px 14px;border-radius:16px;background:var(--tint);box-shadow:inset 0 0 0 1.5px var(--purple)}
+.rl-step.me+.rl-step::before,.rl-step+.rl-step.me::before{display:none}
+.rl-step[data-emp]{cursor:pointer}
+.rl-tag{margin-left:auto;font:600 11px/1 var(--body);letter-spacing:.12em;text-transform:uppercase;color:var(--ink-faint);white-space:nowrap}
+.rl-team{padding:2px 24px 22px}
+.rl-team h4{margin:2px 0 10px;font:600 11px/1 var(--body);letter-spacing:.16em;text-transform:uppercase;color:var(--ink-faint)}
+.edu-line{position:relative;margin:4px 24px 20px 14px;padding-left:28px;border-left:2px solid var(--line-2)}
+.edu-item{position:relative;padding:4px 0 20px}
+.edu-item:last-child{padding-bottom:4px}
+.edu-item::before{content:"";position:absolute;left:-36px;top:8px;width:12px;height:12px;border-radius:50%;background:var(--purple);box-shadow:0 0 0 4px var(--tint)}
+.edu-item b{display:block;font:600 17px/1.3 var(--display)}
+.edu-item span{display:block;color:var(--ink-dim);font-size:14px}
+.edu-item small{display:block;margin-top:2px;color:var(--ink-faint);font-size:12.5px}
+@media (max-width:1000px){.pf2{grid-template-columns:minmax(0,1fr)}.pf2-rail{position:static}.pf2-nav{display:none}}
+@media (max-width:720px){.q-tiles{grid-template-columns:minmax(0,1fr);padding-inline:16px}.pf2-pair{grid-template-columns:minmax(0,1fr)}.rl,.rl-team{padding-inline:16px}}
+.demo-login{position:fixed;inset:0;z-index:100;display:grid;place-items:center;padding:24px 16px;overflow:auto;background:var(--paper);
+  background-image:radial-gradient(60% 50% at 15% 10%,var(--blob1),transparent),radial-gradient(50% 45% at 90% 85%,var(--blob3),transparent)}
+.demo-login[hidden]{display:none}
+.dl-card{width:100%;max-width:400px;background:var(--glass);border-radius:24px;padding:36px 32px;border:1px solid var(--card-edge);box-shadow:var(--glass-shadow)}
+.dl-card h1{font:400 26px/1.2 var(--display);margin:28px 0 6px}
+.dl-card .sub{margin:0 0 20px;color:var(--ink-dim)}
+.dl-card .field{margin-bottom:16px}
+.dl-card label{font-weight:500}
+.dl-card .btn{width:100%;margin-top:4px;padding:14px;font-size:16px}
+.dl-err{background:var(--bad-soft);color:var(--bad);border-radius:12px;padding:10px 14px;margin-bottom:16px;font-size:14px}
+.dl-demo{margin:0 0 20px;padding:12px 14px;border-radius:14px;background:var(--callout);font-size:13px;color:var(--ink-dim)}
+.dl-demo b{color:var(--ink);font-weight:600}
+.dl-hint{margin:20px 0 0;font-size:13px;color:var(--ink-dim)}
 @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
 </style>
 
@@ -388,6 +490,22 @@ tr.former td{opacity:.6}
 </div>
 <main class="wrap view" id="view"></main>
 <footer class="wrap"><div class="foot"><a class="logo" href="#dashboard" style="text-decoration:none">w<span class="o" aria-hidden="true"></span>hlig</a><span>HR Access Hub · People Ops · Prototype · roster from HR sheet, 8 Oct 2026</span><span id="who">Signed in as <b style="color:var(--ink)">Shreya Dandare</b>, HR Admin</span></div></footer>
+<div id="demo-login" class="demo-login" hidden>
+  <main class="dl-card">
+    <div class="logo" style="font-size:28px">w<span class="o" aria-hidden="true"></span>hlig</div>
+    <div class="eyebrow" style="margin-top:10px;color:var(--ink-dim)">HR Access Hub</div>
+    <h1>Sign in</h1>
+    <p class="sub">Use your work email and the password HR gave you.</p>
+    <p class="dl-demo"><b>Demo sign-in.</b> This copy of the app has no server, so the password is checked inside this page and nothing is sent anywhere. HR: <b>priyal.makwana@wohlig.com</b>. Employee: any other work email in the roster, like <b>akshay.ahuja@wohlig.com</b>. Password: <b>wohlig-demo</b>.</p>
+    <form id="dl-form" novalidate>
+      <div class="dl-err" id="dl-err" role="alert" hidden></div>
+      <div class="field"><label for="dl-email">Work email</label><input class="input" id="dl-email" type="email" autocomplete="username" placeholder="name.surname@wohlig.com"></div>
+      <div class="field"><label for="dl-pw">Password</label><input class="input" id="dl-pw" type="password" autocomplete="current-password"></div>
+      <button type="submit" class="btn primary">Sign in</button>
+    </form>
+    <p class="dl-hint">No account or forgot your password? Ask HR.</p>
+  </main>
+</div>
 <div id="layer"></div>
 
 <script src="leave-rules.js"></script>
@@ -563,6 +681,10 @@ function toast(msg){const l=$("#layer");const t=document.createElement("div");t.
 
 /* ---------- navigation ---------- */
 const ICONS = {
+  calendar:'<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/>',
+  check:'<path d="m5 12.5 4.5 4.5L19 7.5"/>',
+  filedoc:'<path d="M7 3h7l5 5v13H7z"/><path d="M14 3v5h5"/>',
+  clock:'<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
   camera:'<path d="M4 8h3l2-2h6l2 2h3v11H4z"/><circle cx="12" cy="13" r="3.5"/>',
   mail:'<rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/>',
   phone:'<path d="M5 4h4l2 5-2.5 1.5a11 11 0 0 0 5 5L15 13l5 2v4a2 2 0 0 1-2 2A16 16 0 0 1 3 6a2 2 0 0 1 2-2z"/>',
@@ -599,6 +721,7 @@ const HR_ONLY=["users","templates","audit","leave"];
 const pageKnown=h=>navItems().some(n=>n[0]===h)||h==="profile"||h==="account"||h==="docs";
 function navItems(){ return isEmployee()?NAV.filter(n=>!HR_ONLY.includes(n[0])):NAV; }
 function routeAllowed(r){
+  if(DEMO&&r==="users") return false;   // logins live on the real server
   if(!S.user) return r!=="account"&&r!=="users"&&r!=="profile";
   if(r==="account") return true;
   return isEmployee()?(!HR_ONLY.includes(r)||r==="myleave"||(r==="leaveapply"&&!!S.lw&&S.lw.self)):true;
@@ -641,53 +764,151 @@ function go(r,sel){S.route=r; if(sel!==undefined)S.sel=sel; const h="#"+(r==="em
 window.addEventListener("hashchange",()=>{const h=location.hash.slice(1);if(pageKnown(h)||(h==="users"&&S.user&&!isEmployee())){S.route=h;render();window.scrollTo(0,0)}});
 
 /* ---------- views ---------- */
-function vDashboard(){
+/* ---------- Dashboard: one for HR, one for each employee ---------- */
+const dbDiff=(a,b)=>Math.round((Date.parse(b+"T00:00:00Z")-Date.parse(a+"T00:00:00Z"))/86400000);
+function dbRel(iso){ const n=dbDiff(lvToday(),iso); return n===0?"today":n===1?"tomorrow":n===-1?"yesterday":n>1?`in ${n} days`:`${-n} days ago`; }
+const dbFirst=n=>String(n||"").trim().split(/\s+/)[0]||"there";
+/* The hero changes with the hour: warm in the morning, brand blue by day, deep indigo at night. */
+function dbSky(){
+  const h=new Date().getHours();
+  const sun='<circle cx="32" cy="32" r="12"/><path d="M32 6v8M32 50v8M6 32h8M50 32h8M13.6 13.6l5.6 5.6M44.8 44.8l5.6 5.6M13.6 50.4l5.6-5.6M44.8 19.2l5.6-5.6"/>';
+  const moon='<path d="M50 38A20 20 0 1 1 26 14a16 16 0 0 0 24 24z"/>';
+  const [word,bg,icon]=h<12?["Good morning","linear-gradient(120deg,#d9694f -15%,#7d6ee8 52%,#4254d4)",sun]
+    :h<18?["Good afternoon","linear-gradient(120deg,#3242b2,#4254d4 55%,#7d8cee)",sun]
+    :["Good evening","linear-gradient(120deg,#181733,#3a3f7a 50%,#6f7fee)",moon];
+  return {word,bg,svg:`<svg class="db-sky" viewBox="0 0 64 64" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" aria-hidden="true">${icon}</svg>`};
+}
+const dbAvatar=(e,src)=>`<a class="db-avatar" href="#profile" style="background:${src?"transparent":(e.color||"#4254d4")}" aria-label="My profile">${avatarInner(e.name,src)}</a>`;
+/* A donut with a number in the middle. parts: [{label,value,color}] */
+function dbDonut(parts,label){
+  const total=parts.reduce((n,p)=>n+p.value,0)||1, r=70, C=2*Math.PI*r, gap=parts.length>1?3:0; let off=0;
+  const arcs=parts.map(p=>{ const part=p.value/total*C, len=Math.max(0.5,part-gap);
+    const c=`<circle cx="100" cy="100" r="${r}" fill="none" stroke="${p.color}" stroke-width="22" stroke-dasharray="${len} ${C-len}" stroke-dashoffset="${-off}" transform="rotate(-90 100 100)"><title>${esc(p.label)}: ${p.value}</title></circle>`; off+=part; return c; }).join("");
+  return `<svg viewBox="0 0 200 200" width="180" height="180" role="img" aria-label="${esc(label)}"><circle cx="100" cy="100" r="${r}" fill="none" stroke="var(--paper-2)" stroke-width="22"/>${arcs}<text x="100" y="100" text-anchor="middle" style="font:600 42px var(--display);fill:var(--ink)">${parts.reduce((n,p)=>n+p.value,0)}</text><text x="100" y="124" text-anchor="middle" style="font:500 12px var(--body);fill:var(--ink-faint)">${esc(label)}</text></svg>`;
+}
+/* A progress ring with a label in the middle. */
+function dbRing(pct,color,label,sub,size=104){
+  const r=44, C=2*Math.PI*r, d=C*Math.max(0,Math.min(100,pct))/100;
+  return `<svg viewBox="0 0 100 100" width="${size}" height="${size}" role="img" aria-label="${esc(label+" "+sub)}"><circle cx="50" cy="50" r="${r}" fill="none" stroke="var(--paper-2)" stroke-width="9"/>${d>0.5?`<circle cx="50" cy="50" r="${r}" fill="none" stroke="${color}" stroke-width="9" stroke-linecap="round" stroke-dasharray="${d} ${C-d}" transform="rotate(-90 50 50)"/>`:""}<text x="50" y="52" text-anchor="middle" style="font:600 20px var(--display);fill:var(--ink)">${esc(label)}</text><text x="50" y="66" text-anchor="middle" style="font:500 8.5px var(--body);fill:var(--ink-faint)">${esc(sub)}</text></svg>`;
+}
+const dbMove=(e,sub,right="")=>`<div class="mv" data-emp="${e.id}">${avatar(e)}<div class="grow"><b>${esc(e.name)}</b><span>${esc(sub)}</span></div>${right}</div>`;
+
+function vDashboardHr(){
+  const me=S.user?myRecord():{name:ACTOR,color:"#4254d4"}, sky=dbSky(), today=lvToday();
+  const here=S.emps.filter(e=>e.status!=="offboarded");
   const act=S.emps.filter(e=>e.status==="active").length;
   const onb=S.emps.filter(e=>e.status==="onboarding");
-  const leaving=S.emps.filter(e=>e.status==="offboarding"||e.lastDay&&e.status==="active");
-  const attn=S.emps.filter(e=>failedOf(e).length);
-  const seats = APPS.map(a=>({a,n:S.emps.filter(e=>e.grants[a.id]==="active").length}));
-  const max = Math.max(...seats.map(s=>s.n),1);
+  const off=S.emps.filter(e=>e.status==="offboarding"||(e.lastDay&&e.status==="active"&&e.lastDay>=today));
+  // The queue: what HR should do, most urgent first.
+  const q=[];
+  for(const e of S.emps) for(const id of failedOf(e)) q.push({t:"bad",ic:"alert",title:`${APP[id].name} access failed for ${e.name}`,meta:e.errors[id]||"The service rejected the request",btn:`<button class="btn glass sm" data-retry="${e.id}:${id}">Retry</button>`});
+  const pend=(S.lv.requests||[]).filter(r=>r.status==="pending"), pendC=(S.lv.compOffs||[]).filter(c=>c.status==="pending");
+  if(pend.length+pendC.length){ const names=[...new Set([...pend,...pendC].map(r=>(empBy(r.email)||{}).name).filter(Boolean))];
+    q.push({t:"warn",ic:"calendar",title:`${pend.length+pendC.length} leave request${pend.length+pendC.length===1?"":"s"} waiting for approval`,meta:names.slice(0,3).join(", ")+(names.length>3?` and ${names.length-3} more`:""),btn:`<button class="btn glass sm" data-go="leave">Review</button>`}); }
+  const noDocs=onb.filter(e=>!docCount(S.docs[e.id]));
+  if(noDocs.length) q.push({t:"warn",ic:"filedoc",title:`${noDocs.length} new joiner${noDocs.length===1?" hasn't":"s haven't"} uploaded documents`,meta:noDocs.slice(0,3).map(e=>e.name).join(", ")+(noDocs.length>3?` and ${noDocs.length-3} more`:""),btn:`<button class="btn glass sm" data-go="docs">See documents</button>`});
+  for(const e of S.emps.filter(e=>e.status==="onboarding"&&e.start>=today&&dbDiff(today,e.start)<=7)) q.push({t:"info",ic:"onboard",title:`${e.name} joins ${dbRel(e.start)}`,meta:`${e.title} · ${fdate(e.start)}`,btn:`<button class="btn glass sm" data-emp="${e.id}">Open</button>`});
+  for(const e of off.filter(e=>e.lastDay&&dbDiff(today,e.lastDay)>=0&&dbDiff(today,e.lastDay)<=7)) q.push({t:"info",ic:"offboard",title:`${e.name} leaves ${dbRel(e.lastDay)}`,meta:`Last working day ${fdate(e.lastDay)}`,btn:`<button class="btn glass sm" data-emp="${e.id}">Open</button>`});
+  const rank={bad:0,warn:1,info:2}; q.sort((x,y)=>rank[x.t]-rank[y.t]);
+  const soon=S.emps.filter(e=>e.status==="onboarding"&&e.start>today).sort((x,y)=>x.start<y.start?-1:1);
+  const settling=onb.filter(e=>e.start<=today).sort((x,y)=>x.start<y.start?1:-1);
+  // People by department
+  const byDept={}; for(const e of here) byDept[e.dept||"Other"]=(byDept[e.dept||"Other"]||0)+1;
+  const depts=Object.entries(byDept).sort((x,y)=>y[1]-x[1]).map(([label,value],i)=>({label,value,color:AV[i%AV.length]}));
+  const seats=APPS.map(a=>({a,n:S.emps.filter(e=>e.grants[a.id]==="active").length})), max=Math.max(...seats.map(x=>x.n),1);
+  const summary=q.length?`${q.length} thing${q.length===1?"":"s"} need${q.length===1?"s":""} you today.`:"You're all caught up.";
+  const src=photoSrc();
   return `
-  <section class="hero">
-    <div class="eyebrow">HR Access Hub · Tuesday, 13 October</div>
-    <h1>People ops that<br>feels <span class="grad">wohlig.</span></h1>
-    <p>Give every joiner the right tools on day one, take every tool back in one click when they leave, and keep a record of all of it.</p>
-    <div class="row"><button class="btn primary" data-go="onboard">New onboarding</button><button class="btn glass" data-go="offboard">${svg("offboard")}Offboard someone</button></div>
-    <div class="grid g4 stats">
-      <div class="card stat"><span class="num">${act}</span><span class="lbl">Active employees</span></div>
-      <div class="card stat"><span class="num">${onb.length}</span><span class="lbl">Onboarding in progress</span></div>
-      <div class="card stat"><span class="num">${leaving.length}</span><span class="lbl">Leaving soon</span></div>
-      <div class="card stat ${attn.length?"alert":""}"><span class="num">${attn.length}</span><span class="lbl">Need your attention</span></div>
+  <section class="db-hero" style="--db-bg:${sky.bg}">${sky.svg}
+    ${dbAvatar(me,src)}
+    <div style="min-width:0;flex:1">
+      <div class="eyebrow">${esc(new Date(today+"T00:00:00").toLocaleDateString("en-IN",{weekday:"long",day:"numeric",month:"long"}))}</div>
+      <h1>${sky.word}, <em>${esc(dbFirst(me.name))}.</em></h1>
+      <p>${summary} ${act} active ${act===1?"person":"people"}${soon.length?`, ${soon.length} joining soon`:""}${off.length?`, ${off.length} leaving`:""}.</p>
+      <div class="row"><button class="btn primary" data-go="onboard">+ New onboarding</button><button class="btn glass" data-go="offboard">${svg("offboard")}Offboard someone</button></div>
     </div>
-    <span class="tag-proto">Prototype · roster from HR sheet, 8 Oct 2026 · tool access assumed from bundles</span>
   </section>
 
-  <section class="section">
-    ${head("Today","What needs you, <span class=\"grad\">first.</span>","",`<button class="btn link" data-go="employees">All employees</button>`)}
-    <div class="grid g-main">
-      <div class="card"><div class="card-h"><h3>Needs attention</h3></div>
-        ${attn.length?attn.map(e=>failedOf(e).map(id=>`
-          <div class="li"><span class="dot" style="background:var(--bad)"></span><div class="grow"><b>${esc(APP[id].name)} access failed for ${esc(e.name)}</b><div class="meta">${esc(e.errors[id]||"The service rejected the request")}</div></div>
-          <button class="btn glass sm" data-retry="${e.id}:${id}">Retry</button></div>`).join("")).join(""):`<div class="empty">Nothing needs you right now. Failed access changes show up here.</div>`}
-      </div>
+  <div class="db-masonry">
+    <div class="card"><div class="card-h"><h3>Needs you</h3><span class="muted">${q.length?`${q.length} item${q.length===1?"":"s"}`:"Nothing waiting"}</span></div>
+      ${q.length?q.map(i=>`<div class="q-item"><span class="q-ic q-${i.t}">${svg(i.ic)}</span><div class="grow"><b>${esc(i.title)}</b><div class="meta" style="font-size:13px;color:var(--ink-faint)">${esc(i.meta)}</div></div>${i.btn}</div>`).join("")
+        :`<div class="q-clear"><span class="q-ic q-ok">${svg("check")}</span><div><b style="color:var(--ink)">All clear.</b><div class="meta" style="font-size:13px">Failed access, leave to approve and new joiners waiting on you show up here.</div></div></div>`}
+    </div>
+    <div class="card"><div class="card-h"><h3>People on the move</h3><span class="muted">Joining, settling in, leaving</span></div>
+      <div class="mv-group"><h4>Starting soon</h4>${soon.length?soon.slice(0,4).map(e=>dbMove(e,`${e.title} · ${fdate(e.start)}`,`<span class="pill p-info">${esc(dbRel(e.start))}</span>`)).join(""):`<div class="mv-empty">No one is due to start.</div>`}
+      <h4>Settling in</h4>${settling.length?settling.slice(0,5).map(e=>{const c=checklist(e);return dbMove(e,`Joined ${fdate(e.start)}`,`<div class="progress" title="${c.done} of ${c.total} done"><i style="width:${Math.round(c.done/c.total*100)}%"></i></div>`)}).join(""):`<div class="mv-empty">No one is onboarding.</div>`}
+      <h4>Leaving</h4>${off.length?off.slice(0,4).map(e=>dbMove(e,`Last day ${e.lastDay?fdate(e.lastDay):"not set"}`,`${epill(e)}`)).join(""):`<div class="mv-empty">No one is leaving.</div>`}</div>
+    </div>
+    <div class="card"><div class="card-h"><h3>People by department</h3><button class="btn link" data-go="employees">Everyone</button></div>
+      <div class="db-donut">${dbDonut(depts,"people")}<div class="db-legend">${depts.map(d=>`<div><i style="background:${d.color}"></i>${esc(d.label)}<span>${d.value}</span></div>`).join("")}</div></div>
+    </div>
       <div class="card"><div class="card-h"><h3>Seats in use</h3></div><div class="card-b" style="display:flex;flex-direction:column;gap:14px">
-        ${seats.map(s=>`<div style="display:grid;grid-template-columns:28px minmax(0,1fr) 28px;gap:12px;align-items:center">${appIc(s.a.id)}<div><div style="font-size:13.5px;font-weight:600">${esc(s.a.name)}</div><div class="progress" style="margin-top:5px"><i style="width:${s.n/max*100}%"></i></div></div><span class="num-cell" style="text-align:right;font:600 18px/1 var(--display)">${s.n}</span></div>`).join("")}
+        ${seats.map(x=>`<div style="display:grid;grid-template-columns:28px minmax(0,1fr) 28px;gap:12px;align-items:center">${appIc(x.a.id)}<div><div style="font-size:13.5px;font-weight:600">${esc(x.a.name)}</div><div class="progress" style="margin-top:5px"><i style="width:${x.n/max*100}%"></i></div></div><span class="num-cell" style="text-align:right;font:600 18px/1 var(--display)">${x.n}</span></div>`).join("")}
       </div></div>
+      <div class="card"><div class="card-h"><h3>Recent activity</h3><button class="btn link" data-go="audit">Audit log</button></div>
+        <div style="padding-bottom:12px">${S.audit.slice(0,5).map(tl).join("")}</div></div>
+  </div>`;
+}
+
+/* The parts of a profile that help colleagues and HR: [what to do, done?, where]. */
+const pfSteps=(e,d)=>[
+  ["Add a profile photo",!!photoSrc(),"#profile"],["Tell us about yourself",!!d.about,"#profile"],
+  ["Add your date of birth",!!d.primary.dob,"#profile"],["Add your address",!!d.addresses.current.line,"#profile"],
+  ["Add your education",d.education.length>0,"#profile"],["Upload your documents",docCount(S.docs[e.id])>0,"#onboard"],
+];
+function vDashboardEmployee(){
+  const e=myRecord(), d=pfData(e), sky=dbSky(), today=lvToday(), src=photoSrc();
+  const mgr=mgrOf(e);
+  // "Finish setting up": the parts of a profile that help colleagues and HR, each a link to where it is done.
+  const steps=pfSteps(e,d), done=steps.filter(x=>x[1]).length, pct=Math.round(done/steps.length*100);
+  // leave balances, when the leave rules and the leave data are there
+  let bal="";
+  if(R&&S.lv&&e){ try{ const b=lvBal(e,Number(today.slice(0,4))), cT=b.casual.carried+b.casual.quota;
+    bal=`<div class="db-bal">
+      <div>${dbRing(cT?b.casual.left/cT*100:0,"var(--purple-soft)",String(b.casual.left),"days left")}<small>${esc(LTYPE.casual||"Casual")}</small></div>
+      <div>${dbRing(b.sick.quota?b.sick.left/b.sick.quota*100:0,"#8fae3e",String(b.sick.left),"days left")}<small>${esc(LTYPE.sick||"Sick")}</small></div>
+      <div>${dbRing(b.compoff.earned?b.compoff.left/b.compoff.earned*100:0,"#0e7c86",String(b.compoff.left),"days left")}<small>${esc(LTYPE.compoff||"Comp off")}</small></div></div>`; }catch(err){ bal=""; } }
+  const hols=(S.lv.holidays||[]).filter(h=>h.day>=today).sort((x,y)=>x.day<y.day?-1:1).slice(0,3);
+  const mo=today.slice(5,7), yr=Number(today.slice(0,4));
+  const anniv=S.emps.filter(x=>x.status!=="offboarded"&&x.start&&x.start.slice(5,7)===mo&&Number(x.start.slice(0,4))<yr).sort((x,y)=>x.start.slice(8)<y.start.slice(8)?-1:1);
+  const fresh=S.emps.filter(x=>x.status!=="offboarded"&&x.start&&x.start<=today&&dbDiff(x.start,today)<=30&&x.id!==e.id);
+  const tools=Object.keys(e.grants||{}).filter(k=>e.grants[k]==="active");
+  const chip=(x,txt)=>`<span class="chip">${avatar(x)}${esc(x.name)}${txt?` <small>${txt}</small>`:""}</span>`;
+  return `
+  <section class="db-hero" style="--db-bg:${sky.bg}">${sky.svg}
+    ${dbAvatar(e,src)}
+    <div style="min-width:0;flex:1">
+      <div class="eyebrow">${esc(new Date(today+"T00:00:00").toLocaleDateString("en-IN",{weekday:"long",day:"numeric",month:"long"}))}</div>
+      <h1>${sky.word}, <em>${esc(dbFirst(e.name))}.</em></h1>
+      <p>${esc(e.title&&e.title!=="—"?e.title:"Welcome")}${e.dept&&e.dept!=="—"&&!String(e.title||"").toLowerCase().includes(e.dept.toLowerCase())?` · ${esc(e.dept)}`:""}${mgr?` · Reports to ${esc(mgr)}`:""}</p>
+      <div class="row"><a class="btn primary" href="#myleave">Request leave</a><a class="btn glass" href="#profile">My profile</a><a class="btn glass" href="#onboard">Upload documents</a></div>
     </div>
   </section>
 
-  <section class="section">
-    ${head("Joining &amp; leaving","Every move, <span class=\"grad\">on track.</span>")}
-    <div class="grid g-main">
-      <div class="card"><div class="tbl-wrap"><table><thead><tr><th>Employee</th><th>Status</th><th class="hide-sm">Date</th><th>Checklist</th></tr></thead><tbody>
-        ${[...onb,...leaving].map(e=>{const c=checklist(e);const pct=Math.round(c.done/c.total*100);return `<tr class="click" data-emp="${e.id}"><td>${person(e,e.title)}</td><td>${epill(e)}</td><td class="num-cell hide-sm">${esc(fdate(e.status==="onboarding"?e.start:e.lastDay))}</td><td style="min-width:130px"><div class="progress"><i style="width:${pct}%"></i></div><div class="muted" style="margin-top:5px">${c.done} of ${c.total} done</div></td></tr>`}).join("")}
-      </tbody></table></div></div>
-      ${isEmployee()?"":`<div class="card"><div class="card-h"><h3>Recent activity</h3><button class="btn link" data-go="audit">Audit log</button></div>
-        <div style="padding-bottom:12px">${S.audit.slice(0,6).map(tl).join("")}</div></div>`}
+  <div class="db-masonry">
+    <div class="card"><div class="card-h"><h3>My leave</h3><a class="btn link" href="#myleave">Details</a></div>
+      ${bal||`<div class="card-b muted">Your leave balances show here once the leave data has loaded.</div>`}
     </div>
-  </section>`;
+    <div class="card"><div class="card-h"><h3>${pct===100?"Your profile is complete":"Finish setting up"}</h3><span class="muted">${done} of ${steps.length}</span></div>
+      <div class="db-donut" style="padding-bottom:10px">${dbRing(pct,"var(--purple)",pct+"%","complete",112)}<div class="db-legend"><span style="margin:0;text-align:left;color:var(--ink-dim)">${pct===100?"Everything is in. Nice work.":"A fuller profile helps your team and HR."}</span></div></div>
+      ${steps.map(([t,ok,href])=>`<a class="step ${ok?"done":""}" href="${href}"><span class="tick">${svg("check")}</span><span>${esc(t)}</span>${ok?"":"<em>Do it</em>"}</a>`).join("")}
+    </div>
+      <div class="card"><div class="card-h"><h3>Celebrating this month</h3><span class="muted">Work anniversaries</span></div>
+        ${anniv.length?`<div class="cel">${anniv.slice(0,10).map(x=>chip(x,`${yr-Number(x.start.slice(0,4))} yr${yr-Number(x.start.slice(0,4))===1?"":"s"}`)).join("")}</div>`:`<div class="card-b muted">No anniversaries this month.</div>`}
+      </div>
+      <div class="card"><div class="card-h"><h3>New to the team</h3><span class="muted">Joined in the last 30 days</span></div>
+        ${fresh.length?`<div class="cel">${fresh.slice(0,10).map(x=>chip(x,"")).join("")}</div>`:`<div class="card-b muted">No new joiners lately.</div>`}
+      </div>
+      <div class="card"><div class="card-h"><h3>Coming up</h3><span class="muted">Company holidays</span></div>
+        ${hols.length?hols.map(h=>{const [y,m,dn]=h.day.split("-").map(Number);return `<div class="q-item"><div class="dtile"><b>${dn}</b><span>${MON[m-1]}</span></div><div class="grow"><b>${esc(h.name)}</b><div class="meta" style="font-size:13px;color:var(--ink-faint)">${esc(new Date(h.day+"T00:00:00").toLocaleDateString("en-IN",{weekday:"long"}))} · ${esc(dbRel(h.day))}</div></div></div>`}).join("")
+          :`<div class="card-b muted">No upcoming holidays on the calendar.</div>`}
+      </div>
+      <div class="card"><div class="card-h"><h3>My tools</h3><span class="muted">${tools.length} active</span></div>
+        <div class="card-b">${tools.length?`<div class="chips">${tools.map(id=>`<span class="chip">${appIc(id)}${esc(APP[id].name)}</span>`).join("")}</div>`:`<span class="muted">No tools yet. HR gives access when you join.</span>`}</div>
+      </div>
+  </div>`;
 }
+function vDashboard(){ return isEmployee()?vDashboardEmployee():vDashboardHr(); }
 function tl(a){
   const c=a.result==="fail"?"var(--bad)":a.result==="info"?"var(--warn)":"var(--ok)";
   return `<div class="tl"><span class="dot" style="background:${c}"></span><div style="min-width:0"><div style="font-size:14px"><b style="font-weight:600">${esc(a.emp)}</b> · ${a.app?esc(APP[a.app].name)+": ":""}${esc(a.action)}</div><div class="meta">${fts(a.ts)} · by ${esc(a.actor)}</div></div></div>`;
@@ -901,7 +1122,11 @@ function obFetch(ob,id){
 
 /* Backend: the Express + Postgres server. When it is not reachable (for example the file is opened directly), the page
    keeps working with browser storage and in-memory data only. */
+/* Artifact copy: with no server behind the page, a demo sign-in screen guards the app. */
+let DEMO=false;   // true when there is no backend (for example on an artifact page)
+const DEMO_PASSWORD="wohlig-demo", DEMO_HR=["shreya.dandare@wohlig.com","priyal.makwana@wohlig.com"];
 const api=async(method,url,body)=>{
+  if(DEMO) throw new Error("No backend in the demo");
   const r=await fetch(url,{method,headers:body?{"Content-Type":"application/json"}:undefined,body:body?JSON.stringify(body):undefined});
   const data=await r.json().catch(()=>null);
   if(r.status===401){ location.href="/login"; }
@@ -914,18 +1139,45 @@ async function boot(){
   try{
     const r=await api("GET","/api/me");
     if(r.status===401) return;
-    if(r.ok){
-      S.user=r.data; ACTOR=r.data.name;
-      if(isEmployee()){
-        let e=S.emps.find(x=>(x.email||"").toLowerCase()===r.data.email.toLowerCase());
-        if(!e){ e=mk({name:r.data.name,email:r.data.email,status:"onboarding",dept:"—",title:"—",manager:"—",start:"",grants:{},onTasks:[]}); S.emps.push(e); }
-        S.myId=e.id;
-        // Land on the documents page unless the address already names another page this person may open (a reload keeps its page).
-        if(!(pageKnown(location.hash.slice(1))&&routeAllowed(location.hash.slice(1)))) S.route="docs";
-      }
-    }
-  }catch(e){ /* no backend: prototype mode */ }
+    if(r.ok) adoptUser(r.data);
+    else { DEMO=true; await demoGate(); }
+  }catch(e){ DEMO=true; await demoGate(); }
   applyUser(); render(); loadFromServer();
+}
+/* Make the signed-in person the current user. An employee works on their own record, created here if the roster lacks it. */
+function adoptUser(u){
+  S.user=u; ACTOR=u.name;
+  if(isEmployee()){
+    let e=S.emps.find(x=>(x.email||"").toLowerCase()===u.email.toLowerCase());
+    if(!e){ e=mk({name:u.name,email:u.email,status:"onboarding",dept:"—",title:"—",manager:"—",start:"",grants:{},onTasks:[]}); S.emps.push(e); }
+    S.myId=e.id;
+    // Land on the documents page unless the address already names another page this person may open (a reload keeps its page).
+    if(!(pageKnown(location.hash.slice(1))&&routeAllowed(location.hash.slice(1)))) S.route="docs";
+  }
+}
+/* Demo sign-in screen: waits until someone signs in with a roster email and the demo password. */
+function demoGate(){
+  return new Promise(resolve=>{
+    const box=$("#demo-login"), form=$("#dl-form"), err=$("#dl-err");
+    form.reset(); err.hidden=true; box.hidden=false; setTimeout(()=>$("#dl-email").focus(),50);
+    form.onsubmit=ev=>{
+      ev.preventDefault();
+      const email=$("#dl-email").value.trim().toLowerCase(), pw=$("#dl-pw").value;
+      const emp=S.emps.find(e=>(e.email||"").toLowerCase()===email), hr=DEMO_HR.includes(email);
+      if((!emp&&!hr)||pw!==DEMO_PASSWORD){ err.textContent="Wrong email or password."; err.hidden=false; return; }
+      box.hidden=true;
+      adoptUser({email,role:hr?"hr":"employee",name:emp?emp.name:email});
+      resolve();
+    };
+  });
+}
+async function demoSignOut(){
+  S.user=null; S.myId=null; S.route="dashboard"; ACTOR="Shreya Dandare";
+  document.body.classList.remove("ro"); $("#acct").style.display="none"; closeAcct();
+  const cta=$(".cta"); if(cta) cta.style.display="";
+  $("#who").textContent="Signed out";
+  try{ history.replaceState(null,"","#dashboard"); }catch(e){}
+  await demoGate(); applyUser(); render();
 }
 function applyUser(){
   const u=S.user; if(!u) return;
@@ -1338,60 +1590,78 @@ function pfSection(sec,d){
   if(sec==="about") return `<div class="card"><div class="card-h"><h3>${c.title}</h3>${edit}</div><div class="card-b">${c.fields.map(([k,l])=>{const v=getPath(d,k); return `<p class="pf-q">${l}</p>${v?`<p class="pf-a">${esc(v)}</p>`:`<p class="pf-a"><button type="button" class="btn glass sm" data-pf-edit="about">Add your response</button></p>`}`}).join("")}</div></div>`;
   return `<div class="card"><div class="card-h"><h3>${c.title}</h3>${edit}</div><div class="card-b"><dl class="rv">${c.fields.map(([k,l])=>`<div${c.fields.length===5&&k.endsWith(".line")?` style="grid-column:1/-1"`:""}><dt>${l}</dt><dd>${esc(getPath(d,k)||"—")}</dd></div>`).join("")}</dl></div></div>`;
 }
-function pfEducation(d){
+/* Who is above this person, from the top of the company down to their manager. */
+function pfChain(e){
+  const out=[], seen=new Set([e.id]); let cur=e;
+  for(let i=0;i<6;i++){ const m=mgrOf(cur); if(!m) break; const boss=S.emps.find(x=>x.name===m&&x.status!=="offboarded"); if(!boss||seen.has(boss.id)) break; out.unshift(boss); seen.add(boss.id); cur=boss; }
+  return out;
+}
+function pfAbout(d){
+  const c=PF_SECTIONS.about, er=S.profErr||{};
+  if(S.profEdit==="about") return pfSection("about",d);
+  const tiles=c.fields.map(([k,l])=>{ const v=getPath(d,k); return v
+    ?`<div class="q-tile"><h4>${l}</h4><p>${esc(v)}</p></div>`
+    :`<div class="q-tile is-empty"><h4>${l}</h4><p>Nothing here yet.</p><button type="button" class="btn glass sm" data-pf-edit="about" style="align-self:flex-start">Add your answer</button></div>`; }).join("");
+  return `<div class="card" id="pf-sec-story"><div class="card-h"><h3>Your story</h3><button type="button" class="btn link" data-pf-edit="about">Edit</button></div><div class="q-tiles">${tiles}</div></div>`;
+}
+function pfEducation2(d){
   const er=S.profErr||{}, n=d.education.length, vals=S.profEduVals||{};
-  const list=d.education.map((x,i)=>`<div class="card-b" style="${i?"border-top:1px solid var(--line);padding-top:18px":""}"><dl class="rv">
-    <div><dt>Degree</dt><dd>${esc(x.degree||"—")}</dd></div><div><dt>Branch / specialisation</dt><dd>${esc(x.branch||"—")}</dd></div>
-    <div><dt>University / college</dt><dd>${esc(x.college||"—")}</dd></div><div><dt>CGPA / percentage</dt><dd>${esc(x.cgpa||"—")}</dd></div>
-    <div><dt>Year of joining</dt><dd>${esc(x.joining?fdate(x.joining):"—")}</dd></div><div><dt>Year of completion</dt><dd>${esc(x.completion?fdate(x.completion):"—")}</dd></div></dl>
-    <div style="margin-top:10px"><button type="button" class="btn link" data-pf-rm="${i}">Remove</button></div></div>`).join("");
+  const line=d.education.map((x,i)=>`<div class="edu-item"><b>${esc(x.degree||"Education")}${x.branch?` · ${esc(x.branch)}`:""}</b><span>${esc(x.college||"—")}</span>
+    <small>${[x.joining?fdate(x.joining):"",x.completion?fdate(x.completion):""].filter(Boolean).join(" to ")}${x.cgpa?` · ${esc(x.cgpa)}`:""}</small>
+    <button type="button" class="btn link" data-pf-rm="${i}" style="padding-left:0">Remove</button></div>`).join("");
   const form=S.profEdit==="edu"?`<div class="card-b form" style="border-top:1px solid var(--line);padding-top:18px">${PF_SECTIONS.edu.fields.map(([k,l,t])=>pfField(k,l,t,"",vals[k]||"",er[`education.${n}.${k}`])).join("")}${pfEditBtns("edu")}</div>`:"";
-  return `<div class="card"><div class="card-h"><h3>Education</h3>${S.profEdit==="edu"?"":`<button type="button" class="btn link" data-pf-edit="edu">Add</button>`}</div>
-    ${n||S.profEdit==="edu"?list+form:`<div class="card-b muted">No education added yet.</div>`}</div>`;
+  return `<div class="card" id="pf-sec-education"><div class="card-h"><h3>Education</h3>${S.profEdit==="edu"?"":`<button type="button" class="btn link" data-pf-edit="edu">Add</button>`}</div>
+    ${n?`<div class="edu-line">${line}</div>`:(S.profEdit==="edu"?"":`<div class="card-b muted">No education added yet.</div>`)}${form}</div>`;
 }
 function vProfile(){
-  const e=myRecord(), d=(S.profEdit&&S.profDraft)||pfData(e), tab=S.profTab||"about";
+  const e=myRecord(), d=(S.profEdit&&S.profDraft)||pfData(e), src=photoSrc();
   const ic=k=>`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${ICONS[k]}</svg>`;
+  const steps=pfSteps(e,pfData(e)), pct=Math.round(steps.filter(x=>x[1]).length/steps.length*100);
   const city=[d.addresses.current.city,d.addresses.current.state].filter(Boolean).join(", ");
-  const mgr=e.manager&&e.manager!=="—"?e.manager:"—";
   const phone=d.contact.phone||e.phone||"";
-  const tabs=[["about","About"],["job","Job"],["documents","Documents"],["assets","Assets"]];
-  let body="";
-  if(tab==="about") body=`${pfSection("about",d)}${pfEducation(d)}${pfSection("primary",d)}${pfSection("contact",d)}${pfSection("current",d)}${pfSection("permanent",d)}`;
-  if(tab==="job"){
-    const live=Object.keys(e.grants||{}).filter(k=>e.grants[k]==="active");
-    body=`<div class="card"><div class="card-h"><h3>Job details</h3><span class="muted">Set by HR</span></div><div class="card-b"><dl class="rv">
-      <div><dt>Employee no.</dt><dd class="mono">${esc(e.no||"Not assigned")}</dd></div><div><dt>Work email</dt><dd class="mono">${esc(e.email)}</dd></div>
-      <div><dt>Job title</dt><dd>${esc(e.title||"—")}</dd></div><div><dt>Department</dt><dd>${esc(e.dept||"—")}</dd></div>
-      <div><dt>Reporting manager</dt><dd>${esc(mgr)}</dd></div><div><dt>Date of joining</dt><dd>${esc(e.start?fdate(e.start):"—")}</dd></div></dl></div></div>
-      <div class="card"><div class="card-h"><h3>Tool access</h3><span class="muted">${live.length} active</span></div><div class="card-b">${live.length?`<div class="chips">${live.map(id=>`<span class="chip">${appIc(id)}${esc(APP[id].name)}</span>`).join("")}</div>`:`<span class="muted">No tools yet.</span>`}</div></div>`;
-  }
-  if(tab==="documents"){
-    const m=S.docs[e.id]||{}, n=docCount(m);
-    body=`<div class="card"><div class="card-h"><h3>My documents</h3><a class="btn glass sm" href="#onboard">Upload or replace</a></div>
-      ${n?DOCS.filter(x=>(m[x.k]||[]).length).map(x=>`<div class="doc-row"><div class="grow"><b>${esc(x.name)}</b>${m[x.k].map(f=>`<div class="sub">${docLinks(f)} · ${fmtSize(f.size)}</div>`).join("")}</div></div>`).join("")
-        :`<div class="card-b muted">Nothing uploaded yet. Use Upload or replace to add your documents.</div>`}</div>`;
-  }
-  if(tab==="assets"){
-    const l=e.laptop||{received:false,serial:"",date:""};
-    body=`<div class="card"><div class="card-h"><h3>Laptop</h3><span class="pill ${l.received?"p-ok":"p-mute"}">${l.received?"Received":"Not received"}</span></div><div class="card-b">
-      <dl class="rv"><div><dt>Serial number</dt><dd class="mono">${esc(l.serial||"—")}</dd></div><div><dt>Date received</dt><dd>${esc(l.date?fdate(l.date):"—")}</dd></div></dl>
-      <p class="muted" style="margin:14px 0 0">HR records assets. Ask HR if something here is wrong.</p></div></div>`;
-  }
-  return `<section class="section" style="gap:22px">
-  <div class="card" style="overflow:hidden">
-    <div class="pf-banner"><span class="pf-avatar-wrap"><span class="pf-avatar" style="background:${photoSrc()?"transparent":(e.color||"#4254d4")}">${avatarInner(e.name,photoSrc())}</span>
-        <label class="pf-cam" title="${photoSrc()?"Change photo":"Add your photo"}">${ic("camera")}<span class="sr-only" style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)">${photoSrc()?"Change photo":"Add your photo"}</span><input type="file" id="pf-photo" accept="image/png,image/jpeg" hidden></label></span>
-      <div style="min-width:0"><div class="row" style="gap:12px"><h2>${esc(e.name)}</h2>${epill(e)}</div><div class="pf-title">${ic("briefcase")}${esc(e.title||"—")}</div>${photoSrc()?`<button type="button" class="pf-rm" data-pf-photo-rm>Remove photo</button>`:""}</div></div>
-    <div class="pf-facts">
-      <span class="pf-fact">${ic("mail")}${esc(e.email)}</span>
-      <span class="pf-fact">${ic("phone")}${esc(phone||"—")}</span>
-      <span class="pf-fact">${ic("pin")}${esc(city||"—")}</span>
-      <span class="pf-fact">${ic("idcard")}${esc(e.no||"Not assigned")}</span></div>
-    <dl class="pf-org"><div><dt>Business unit</dt><dd>Wohlig Transformations</dd></div><div><dt>Department</dt><dd>${esc(e.dept||"—")}</dd></div><div><dt>Reporting manager</dt><dd>${esc(mgr)}</dd></div></dl>
-  </div>
-  <div class="subtabs" role="tablist" style="margin-bottom:0;align-self:flex-start">${tabs.map(([k,l])=>`<button type="button" role="tab" class="${tab===k?"on":""}" aria-selected="${tab===k}" data-pf-tab="${k}">${l}</button>`).join("")}</div>
-  ${body}</section>`;
+  const chain=pfChain(e), team=S.emps.filter(x=>x.id!==e.id&&mgrOf(x)===e.name&&x.status!=="offboarded");
+  const r=70, C=2*Math.PI*r, arc=C*pct/100;
+  const years=e.start?Math.floor(dbDiff(e.start,lvToday())/365.25):0;
+  const jump=[["pf-sec-story","Your story"],["pf-sec-line","Reporting line"],["pf-sec-personal","Personal details"],["pf-sec-education","Education"],["pf-sec-contact","Contact and addresses"],["pf-sec-work","Work and documents"]];
+  const m=S.docs[e.id]||{}, nDocs=docCount(m), live=Object.keys(e.grants||{}).filter(k=>e.grants[k]==="active");
+  const step=(x,tag,me)=>`<div class="rl-step${me?" me":""}" ${me?"":`data-emp="${x.id}"`}>${person(x,x.title&&x.title!=="—"?x.title:x.email)}${tag?`<span class="rl-tag">${tag}</span>`:""}</div>`;
+  const line=`<div class="rl">${chain.map((x,i)=>step(x,i===chain.length-1?"Manager":"")).join("")}${step(e,"You",true)}</div>`
+    +(team.length?`<div class="rl-team"><h4>Your team (${team.length})</h4><div class="chips">${team.map(x=>`<span class="chip" data-emp="${x.id}" style="cursor:pointer">${avatar(x)}${esc(x.name)}</span>`).join("")}</div></div>`:"");
+  return `<section class="section" style="gap:18px">
+  <div class="sec-head"><div><div class="eyebrow">Me</div><h2>My <span class="grad">profile.</span></h2>${SMILE}</div></div>
+  <div class="pf2">
+    <aside class="pf2-rail">
+      <div class="card pf2-id">
+        <div class="pf2-photo">
+          <svg viewBox="0 0 156 156" aria-hidden="true"><circle cx="78" cy="78" r="${r}" fill="none" stroke="var(--paper-2)" stroke-width="6"/>${arc>0.5?`<circle cx="78" cy="78" r="${r}" fill="none" stroke="var(--purple)" stroke-width="6" stroke-linecap="round" stroke-dasharray="${arc} ${C-arc}" transform="rotate(-90 78 78)"/>`:""}</svg>
+          <span class="pf2-face" style="background:${src?"transparent":(e.color||"#4254d4")}">${avatarInner(e.name,src)}</span>
+          <label class="pf-cam" title="${src?"Change photo":"Add your photo"}">${ic("camera")}<span style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)">${src?"Change photo":"Add your photo"}</span><input type="file" id="pf-photo" accept="image/png,image/jpeg" hidden></label>
+        </div>
+        <h2>${esc(e.name)}</h2>
+        <p class="pf2-role">${esc(e.title&&e.title!=="—"?e.title:"")}${e.dept&&e.dept!=="—"&&!String(e.title||"").toLowerCase().includes(e.dept.toLowerCase())?` · ${esc(e.dept)}`:""}</p>
+        ${epill(e)}<div><span class="pill ${pct===100?"p-ok":"p-info"}" style="margin-top:8px" title="Parts of your profile that are filled in">Profile ${pct}% complete</span></div>
+        ${src?`<div><button type="button" class="pf-rm" data-pf-photo-rm>Remove photo</button></div>`:""}
+        <ul class="pf2-facts">
+          <li>${ic("mail")}${esc(e.email)}</li><li>${ic("phone")}${esc(phone||"Add a phone number")}</li>
+          <li>${ic("pin")}${esc(city||"Add your city")}</li><li>${ic("idcard")}${esc(e.no||"No employee number yet")}</li></ul>
+        ${e.start?`<p class="pf2-since">${years>=1?`${years} year${years===1?"":"s"} at Wohlig`:`Joined ${esc(fdate(e.start))}`}</p>`:""}
+      </div>
+      <nav class="card pf2-nav" aria-label="On this page"><h3>On this page</h3>${jump.map(([id,l])=>`<button type="button" data-pf-jump="${id}">${l}</button>`).join("")}</nav>
+    </aside>
+    <div class="pf2-main">
+      ${pfAbout(d)}
+      <div class="card" id="pf-sec-line"><div class="card-h"><h3>Reporting line</h3><span class="muted">${mgrOf(e)?`Reports to ${esc(mgrOf(e))}`:"No manager set"}</span></div>${line}</div>
+      <div id="pf-sec-personal">${pfSection("primary",d)}</div>
+      ${pfEducation2(d)}
+      <div id="pf-sec-contact" style="display:flex;flex-direction:column;gap:22px">${pfSection("contact",d)}<div class="pf2-pair">${pfSection("current",d)}${pfSection("permanent",d)}</div></div>
+      <div class="card" id="pf-sec-work"><div class="card-h"><h3>Work</h3><span class="muted">Set by HR</span></div><div class="card-b">
+        <dl class="rv"><div><dt>Employee no.</dt><dd class="mono">${esc(e.no||"Not assigned")}</dd></div><div><dt>Work email</dt><dd class="mono">${esc(e.email)}</dd></div>
+          <div><dt>Department</dt><dd>${esc(e.dept||"—")}</dd></div><div><dt>Date of joining</dt><dd>${esc(e.start?fdate(e.start):"—")}</dd></div></dl>
+        <div style="margin-top:18px"><div class="muted" style="margin-bottom:8px">Tools you have</div>${live.length?`<div class="chips">${live.map(id=>`<span class="chip">${appIc(id)}${esc(APP[id].name)}</span>`).join("")}</div>`:`<span class="muted">No tools yet.</span>`}</div>
+        <div style="margin-top:18px;display:flex;align-items:center;gap:12px;flex-wrap:wrap"><span class="muted">${nDocs?`${nDocs} document${nDocs===1?"":"s"} uploaded`:"No documents uploaded yet"}</span><a class="btn glass sm" href="#onboard">${nDocs?"Manage documents":"Upload documents"}</a></div>
+      </div></div>
+    </div>
+  </div></section>`;
 }
 /* Crops the picture to a square and shrinks it, so what is sent and stored is small. */
 function squareJpeg(file,size){
@@ -1445,9 +1715,9 @@ async function pfSave(sec){
   S.profEdit=null; S.profDraft=null; S.profErr={}; S.profEduVals=null; render();
 }
 document.addEventListener("click",ev=>{
-  const t=ev.target.closest("[data-pf-tab],[data-pf-edit],[data-pf-cancel],[data-pf-save],[data-pf-rm]"); if(!t) return;
+  const t=ev.target.closest("[data-pf-jump],[data-pf-edit],[data-pf-cancel],[data-pf-save],[data-pf-rm]"); if(!t) return;
   const reset=()=>{ S.profEdit=null; S.profDraft=null; S.profErr={}; S.profEduVals=null; };
-  if(t.dataset.pfTab){ reset(); S.profTab=t.dataset.pfTab; render(); return; }
+  if(t.dataset.pfJump){ const el=document.getElementById(t.dataset.pfJump); if(el) el.scrollIntoView({behavior:"smooth",block:"start"}); return; }
   if(t.dataset.pfEdit){ reset(); S.profEdit=t.dataset.pfEdit; render(); const f=document.querySelector("#view .form .input"); if(f) f.focus(); return; }
   if(t.hasAttribute("data-pf-cancel")){ reset(); render(); return; }
   if(t.dataset.pfSave){ pfSave(t.dataset.pfSave); return; }
@@ -1466,14 +1736,14 @@ function vAccount(){
       <div class="row" style="grid-column:1/-1"><button type="submit" class="btn primary sm">Change password</button></div>
     </form>
   </div></div>
-  ${isEmployee()?"":`<div class="card"><div class="card-h"><h3>Logins and roles</h3></div><div class="card-b"><p class="muted" style="margin:0 0 12px">Create accounts, change roles, reset passwords and set the default password.</p><button type="button" class="btn glass" data-go="users">Manage users</button></div></div>`}
+  ${isEmployee()||DEMO?"":`<div class="card"><div class="card-h"><h3>Logins and roles</h3></div><div class="card-b"><p class="muted" style="margin:0 0 12px">Create accounts, change roles, reset passwords and set the default password.</p><button type="button" class="btn glass" data-go="users">Manage users</button></div></div>`}
   <div class="card"><div class="card-b"><button type="button" class="btn glass" data-signout>Sign out</button></div></div>
   </section>`;
 }
 
 document.addEventListener("click",async ev=>{
   const so=ev.target.closest("[data-signout]");
-  if(so){ ev.preventDefault(); try{ await fetch("/api/logout",{method:"POST"}); }catch(e){} location.href="/login"; return; }
+  if(so){ ev.preventDefault(); if(DEMO){ await demoSignOut(); return; } try{ await fetch("/api/logout",{method:"POST"}); }catch(e){} location.href="/login"; return; }
   const ur=ev.target.closest("[data-u-reset]");
   if(ur){ const em=ur.dataset.uReset; if(!confirm(`Reset ${em} to the default password? They will be signed out.`)) return;
     const r=await api("POST",`/api/users/${encodeURIComponent(em)}/reset`); toast(r.ok?`${em} was reset to the default password.`:apiMsg(r)); return; }
@@ -1494,6 +1764,7 @@ document.addEventListener("submit",async ev=>{
     ev.preventDefault();
     const email=$("#uc-email").value.trim();
     if(!email){ $("#uc-email").focus(); toast("Enter the work email first."); return; }
+    if(!/^[^@\s]+@wohlig\.com$/i.test(email)){ $("#uc-email").focus(); toast("Only @wohlig.com addresses can have an account."); return; }
     const r=await api("POST","/api/users",{email,role:$("#uc-role").value});
     toast(r.ok?`Account created for ${email}.`:apiMsg(r)); if(r.ok) reloadUsers(); return;
   }
@@ -1503,7 +1774,7 @@ document.addEventListener("submit",async ev=>{
     toast(r.ok?"Default password changed. It applies to new accounts and resets.":apiMsg(r)); if(r.ok) reloadUsers(); return;
   }
   if(id==="pwf"){
-    ev.preventDefault();
+    ev.preventDefault(); if(DEMO){ toast("Password changes need the real server. They are off in the demo."); return; }
     const next=$("#pw-new").value;
     if(next!==$("#pw-new2").value){ toast("The two new passwords do not match."); return; }
     const r=await api("POST","/api/password",{current:$("#pw-cur").value,next});

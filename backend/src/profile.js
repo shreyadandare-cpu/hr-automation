@@ -68,6 +68,14 @@ profileRouter.get("/", wrap(async (req, res) => {
 
 profileRouter.put("/", wrap(async (req, res) => {
   const { data, errors } = cleanProfile(req.body || {});
+  // A personal email belongs to one person: not a colleague's from onboarding, and not one saved on another profile.
+  const mine = req.user.email.toLowerCase(), pe = data.contact.personalEmail.toLowerCase();
+  if (pe && /@wohlig\.com$/.test(pe)) errors["contact.personalEmail"] = "Use a personal email, not a @wohlig.com address.";
+  else if (pe) {
+    const a = await pool.query("SELECT name FROM employees WHERE lower(personal_email)=$1 AND lower(work_email)<>$2 LIMIT 1", [pe, mine]);
+    const b = await pool.query("SELECT email FROM profiles WHERE lower(data->'contact'->>'personalEmail')=$1 AND lower(email)<>$2 LIMIT 1", [pe, mine]);
+    if (a.rows[0] || b.rows[0]) errors["contact.personalEmail"] = "That email already belongs to someone else. Use a different one.";
+  }
   if (Object.keys(errors).length) return res.status(400).json({ errors });
   await pool.query(
     `INSERT INTO profiles (email, data) VALUES ($1,$2)

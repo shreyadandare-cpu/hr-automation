@@ -7,7 +7,7 @@ import {
 import { V, isCompanyEmail, COMPANY_EMAIL_MESSAGE } from "./validate.js";
 
 const wrap = (fn) => (req, res, next) => fn(req, res, next).catch(next);
-const ROLES = ["hr", "employee"];
+const ROLES = ["hr", "manager", "employee"];
 
 /* Public: sign in and out. */
 export const sessionRouter = express.Router();

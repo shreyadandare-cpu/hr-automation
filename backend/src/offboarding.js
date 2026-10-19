@@ -2,7 +2,10 @@ import express from "express";
 import L from "../../frontend/leave-rules.js";
 import { pool } from "./db.js";
 import { requireHr } from "./auth.js";
-import { TOOLS, TOOL_NAMES, removeAccess } from "./connectors.js";
+import { TOOL_NAMES, removeAccess } from "./connectors.js";
+
+// Tools offboarding removes for now: Claude only. Add ids from connectors.js (gws, gemini, github, gcp) to bring others back.
+const TOOLS = ["claude"];
 
 // Manual tasks HR ticks off; the order matches the checklist on the page.
 const TASKS = [
@@ -152,7 +155,7 @@ export function offboardingRouter(wrap) {
       if (!L.validDate(lastDay)) errors.lastDay = "Enter the last working day.";
       if (!["now", "later"].includes(when)) errors.when = "Choose now or on the last working day.";
       else if (when === "later" && L.validDate(lastDay) && lastDay < todayIso()) errors.lastDay = "That day has passed. Offboard now instead.";
-      if (tools.some((t) => !TOOLS.includes(t))) errors.tools = "Unknown tool in the list.";
+      if (tools.some((t) => !TOOLS.includes(t))) errors.tools = "Offboarding only removes Claude access for now.";
       const { rows: t } = await db.query("SELECT work_email, name, status FROM employees WHERE lower(work_email)=$1", [String(transferTo || "").toLowerCase()]);
       if (tools.includes("gws")) {
         if (!t[0]) errors.transferTo = "Pick who receives their Drive files and email.";

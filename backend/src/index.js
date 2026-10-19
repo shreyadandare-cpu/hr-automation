@@ -11,6 +11,7 @@ import { leaveRouter } from "./leave.js";
 import { offboardingRouter, runDue } from "./offboarding.js";
 import { onboardingErrors, detailsErrors, maskAadhaar, maskPan, maskAcct } from "./validate.js";
 import { createGoogleUser, googleMode } from "./google.js";
+import { setupTeams } from "./teams.js";
 
 const DOMAIN = "wohlig.com";
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -268,6 +269,7 @@ app.use((err, _req, res, _next) => {
 
 await initDb();
 await bootstrapAuth();
+await setupTeams();
 // Scheduled offboardings run at 6 pm India time on the last working day; check every minute.
 const checkDue = () => runDue().catch((err) => console.error("Scheduled offboarding check failed:", err));
 checkDue();

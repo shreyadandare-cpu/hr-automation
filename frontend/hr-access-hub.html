@@ -656,8 +656,11 @@ function deptOf(title){
   if(/devops|network/.test(t)) return "DevOps & Cloud";
   return "Engineering";
 }
-const ON_TASKS = ["Laptop issued","ID card issued","Policy documents signed","Welcome call with manager"];
-const OFF_TASKS = ["Laptop returned","ID card returned","Exit interview done","Final settlement cleared"];
+const ON_TASKS = ["Laptop issued","Policy documents signed"];
+const ON_TOOLS = ["claude"];   // onboarding gives Claude only for now; add tool ids here to bring others back
+const SHOWN_TOOLS = ["claude"];   // tools shown on the employee page, list, dashboard and profile
+const toolIds = e=>Object.keys((e&&e.grants)||{}).filter(k=>SHOWN_TOOLS.includes(k));
+const OFF_TASKS = ["Laptop returned","Final settlement cleared"];
 const AV = ["#4254d4","#7d6ee8","#0e7c86","#b4472a","#2f6f3e","#9a3b72","#555177","#3242b2"];
 
 let nid = 100;
@@ -776,7 +779,7 @@ const failedOf = e=>Object.keys(e.grants).filter(k=>e.grants[k]==="failed");
 
 function checklist(e){
   const phase = (e.status==="offboarding"||e.status==="offboarded")?"off":"on";
-  const auto = Object.keys(e.grants).filter(id=>phase==="on"||OFF_TOOLS.includes(id)).map(id=>{
+  const auto = Object.keys(e.grants).filter(id=>(phase==="on"?ON_TOOLS:OFF_TOOLS).includes(id)).map(id=>{
     const s=e.grants[id];
     const done = phase==="on" ? s==="active" : s==="revoked";
     return {t:(phase==="on"?"Give access: ":"Remove access: ")+APP[id].name, done};
@@ -1032,7 +1035,7 @@ function vDashboardEmployee(){
   const mo=today.slice(5,7), yr=Number(today.slice(0,4));
   const anniv=S.emps.filter(x=>x.status!=="offboarded"&&x.start&&x.start.slice(5,7)===mo&&Number(x.start.slice(0,4))<yr).sort((x,y)=>x.start.slice(8)<y.start.slice(8)?-1:1);
   const fresh=S.emps.filter(x=>x.status!=="offboarded"&&x.start&&x.start<=today&&dbDiff(x.start,today)<=30&&x.id!==e.id);
-  const tools=Object.keys(e.grants||{}).filter(k=>e.grants[k]==="active");
+  const tools=toolIds(e).filter(k=>e.grants[k]==="active");
   const chip=(x,txt)=>`<span class="chip">${avatar(x)}${esc(x.name)}${txt?` <small>${txt}</small>`:""}</span>`;
   return `
   <section class="db-hero" style="--db-a:${sky.a};--db-b:${sky.b}">${sky.svg}
@@ -1139,7 +1142,7 @@ function vEmployees(){
   ${head("People","Everyone, <span class=\"grad\">at a glance.</span>","Everyone with a record here, and which tools they can use right now.",`${!isEmployee()&&former?`<label class="former-toggle"><input type="checkbox" id="emp-former" ${S.showFormer?"checked":""}>Show former employees (${former})</label>`:""}<input class="input" id="q" placeholder="Search by name, team or email" aria-label="Search employees" value="${esc(S.q)}" style="width:280px;border-radius:999px">`,true)}
   <div class="card"><div class="tbl-wrap"><table><thead><tr><th>Employee</th><th class="hide-sm">Department</th><th class="hide-sm">Reporting manager</th><th>Status</th><th>Tool access</th><th class="hide-sm">Start date</th></tr></thead><tbody>
   ${rows.length?rows.map(e=>`<tr class="click${e.status==="offboarded"?" former":""}" data-emp="${e.id}"><td>${person(e)}</td><td class="hide-sm">${esc(e.dept)}<div class="muted">${esc(e.title)}</div></td><td class="hide-sm">${mgrCell(e)}</td><td>${epill(e)}</td>
-    <td><div class="apps-row">${Object.keys(e.grants).map(id=>appIc(id,e.grants[id]==="active"?"":e.grants[id]==="failed"?"fail":"off")).join("")}</div></td><td class="num-cell hide-sm">${esc(fdate(e.start))}</td></tr>`).join("")
+    <td><div class="apps-row">${toolIds(e).map(id=>appIc(id,e.grants[id]==="active"?"":e.grants[id]==="failed"?"fail":"off")).join("")}</div></td><td class="num-cell hide-sm">${esc(fdate(e.start))}</td></tr>`).join("")
   :`<tr><td colspan="6"><div class="empty">No one matches “${esc(S.q)}”.</div></td></tr>`}
   </tbody></table></div>${pager(all.length,page,size)}</div></section>`;
 }
@@ -1153,7 +1156,7 @@ function vEmployee(){
   const e=S.emps.find(x=>x.id===S.sel); if(!e) return vEmployees();
   const c=checklist(e); const pct=Math.round(c.done/c.total*100);
   const canOff = (e.status==="active"||e.status==="onboarding")&&!isScheduled(e);
-  const pending = Object.keys(e.grants).filter(k=>e.grants[k]==="none");
+  const pending = toolIds(e).filter(k=>e.grants[k]==="none");
   const acts = S.audit.filter(a=>a.empId!==undefined?a.empId===e.id:a.emp===e.name);
   return `<section class="section" style="gap:22px"><button class="back" data-go="employees">← All employees</button>
   <div class="card">
@@ -1168,13 +1171,13 @@ function vEmployee(){
     </dl>
   </div>
   <div class="grid g-main">
-    <div class="card"><div class="card-h"><h3>Tool access</h3><span class="muted">${Object.values(e.grants).filter(s=>s==="active").length} of ${Object.keys(e.grants).length} active</span></div>
-      ${Object.keys(e.grants).map(id=>`<div class="access-row">${appIc(id)}<div class="grow"><b>${esc(APP[id].name)}</b><span class="${e.grants[id]==="failed"?"err":""}">${esc(e.grants[id]==="failed"?(e.errors[id]||"Request failed"):e.grants[id]==="created"?`Suspended until ${fdate(e.start)}, then activates automatically`:APP[id].sub)}</span></div>${gpill(e.grants[id])}${e.grants[id]==="failed"?`<button class="btn glass sm" data-retry="${e.id}:${id}">Retry</button>`:""}${e.grants[id]==="created"?`<button class="btn glass sm" data-activate="${e.id}">Activate now</button>`:""}</div>`).join("")}
+    <div class="card"><div class="card-h"><h3>Tool access</h3><span class="muted">${toolIds(e).filter(k=>e.grants[k]==="active").length} of ${toolIds(e).length} active</span></div>
+      ${toolIds(e).length?"":`<div class="card-b muted">No Claude access yet.</div>`}${toolIds(e).map(id=>`<div class="access-row">${appIc(id)}<div class="grow"><b>${esc(APP[id].name)}</b><span class="${e.grants[id]==="failed"?"err":""}">${esc(e.grants[id]==="failed"?(e.errors[id]||"Request failed"):e.grants[id]==="created"?`Suspended until ${fdate(e.start)}, then activates automatically`:APP[id].sub)}</span></div>${gpill(e.grants[id])}${e.grants[id]==="failed"?`<button class="btn glass sm" data-retry="${e.id}:${id}">Retry</button>`:""}${e.grants[id]==="created"?`<button class="btn glass sm" data-activate="${e.id}">Activate now</button>`:""}</div>`).join("")}
     </div>
     <div class="card"><div class="card-h"><h3>${c.phase==="on"?"Onboarding":"Offboarding"} checklist</h3><span class="muted">${c.done} of ${c.total}</span></div>
       <div style="padding:0 24px 14px"><div class="progress"><i style="width:${pct}%"></i></div></div>
       ${c.auto.map(x=>`<div class="check ${x.done?"done":""}" style="cursor:default"><input type="checkbox" disabled ${x.done?"checked":""} aria-label="${esc(x.t)}"><div class="grow"><div class="lbl">${esc(x.t)}</div><div class="tag">Automatic</div></div></div>`).join("")}
-      ${c.manual.map(x=>`<label class="check ${x.done?"done":""}"><input type="checkbox" id="chk-${e.id}-${c.phase}-${x.i}" data-task="${e.id}:${c.phase}:${x.i}" ${x.done?"checked":""} ${e.status==="offboarded"?"disabled":""}><div class="grow"><div class="lbl">${esc(x.t)}</div><div class="tag">Manual · ${c.phase==="on"?"IT / Admin":"HR / Admin"}</div></div></label>`).join("")}
+      ${c.manual.map(x=>`<label class="check ${x.done?"done":""}"><input type="checkbox" id="chk-${e.id}-${c.phase}-${x.i}" data-task="${e.id}:${c.phase}:${x.i}" ${x.done?"checked":""} ${e.status==="offboarded"?"disabled":""}><div class="grow"><div class="lbl">${esc(x.t)}</div>${x.detail&&x.done?`<div class="muted" style="font-size:13px">${esc(x.detail)}</div>`:""}<div class="tag">Manual · ${c.phase==="on"?"IT / Admin":"HR / Admin"}</div></div></label>`).join("")}
     </div>
   </div>
   ${appAccessCard(e)}
@@ -1487,7 +1490,7 @@ function obStep2(ob){
 
 /* Step 3: review, choose the tools, submit. */
 function obStep3(ob){
-  const d=ob.d, w=ob.work, sel=ob.apps||T(DEPT_TPL[d.dept]);
+  const d=ob.d, w=ob.work, sel=ob.apps||ON_TOOLS;
   const sec=(title,step,body)=>`<div class="card"><div class="card-h"><h3>${title}</h3><button type="button" class="btn link" data-ob-goto="${step}">Edit</button></div><div class="card-b">${body}</div></div>`;
   const kv=(pairs)=>`<dl class="rv">${pairs.map(([k,v])=>`<div><dt>${k}</dt><dd>${v||"—"}</dd></div>`).join("")}</dl>`;
   const gstat={active:"Active in Google Workspace",simulated:"Active (simulated)",existing:"Already in the employee list",local:"Created (prototype)"}[w.google]||w.google;
@@ -1495,8 +1498,8 @@ function obStep3(ob){
     ${sec("Job details",1,kv([["Department",esc(d.dept)],["Job title",esc(d.title)],["Reporting manager",esc(d.mgr)],["Start date",esc(fdate(d.start))]]))}
     <div class="card"><div class="card-h"><h3>Work email and login</h3></div><div class="card-b">${kv([["Work email",`<span class="mono">${esc(w.email)}</span>`],["Google",esc(gstat)],["App login",(ob.login&&ob.login.role==="hr")?"Created with HR rights":`Created, ${esc((ACCESS_LABEL[ob.login&&ob.login.role]||"employee").toLowerCase())} role`]])}</div></div>
     ${obDocsCard(ob)}
-    <div class="card"><div class="card-h"><h3>Tools to give</h3><span class="pill p-info">Bundle: ${esc(TEMPLATES.find(x=>x.id===DEPT_TPL[d.dept]).name)}</span></div><div class="card-b" style="display:flex;flex-direction:column;gap:16px">
-      <div class="tiles" id="ob-apps">${APPS.map(a=>`<label class="tile"><input type="checkbox" value="${a.id}" ${a.id==="gws"||sel.includes(a.id)?"checked":""} ${a.id==="gws"?"disabled":""}>${appIc(a.id)}<span class="t"><b>${esc(a.name)}</b><span>${a.id==="gws"?"Created in step 1":esc(a.sub)}</span></span></label>`).join("")}</div>
+    <div class="card"><div class="card-h"><h3>Tools to give</h3><span class="muted">Claude</span></div><div class="card-b" style="display:flex;flex-direction:column;gap:16px">
+      <div class="tiles" id="ob-apps">${APPS.filter(a=>ON_TOOLS.includes(a.id)).map(a=>`<label class="tile"><input type="checkbox" value="${a.id}" ${sel.includes(a.id)?"checked":""}>${appIc(a.id)}<span class="t"><b>${esc(a.name)}</b><span>${esc(a.sub)}</span></span></label>`).join("")}</div>
       <p class="muted" style="margin:0">Saved as this person's tool access, so offboarding can list it later. The employee uploads documents after signing in, and resume details will be added later.</p>
     </div></div>
     <label class="check" style="border:0;padding:0"><input type="checkbox" id="ob-reviewed" ${ob.reviewed?"checked":""}><div class="grow"><div class="lbl">I have reviewed all the details above</div></div></label>`;
@@ -1585,7 +1588,8 @@ async function obSubmit(){
   const ob=S.ob; obCollect(ob);
   if(!ob.reviewed){ toast("Tick the review box before submitting."); return; }
   if(!ob.work||!ob.login){ toast("Create the work email and the login first."); return; }
-  const apps=["gws",...(ob.apps||[]).filter(a=>a!=="gws")];   // the Google account already exists, so it is always included
+  const apps=(ob.apps||ON_TOOLS).filter(a=>ON_TOOLS.includes(a));
+  if(!apps.length){ toast("Tick Claude to give access, or the onboarding can't be saved."); return; }
   let e=ob.empId?S.emps.find(x=>x.id===ob.empId):null;
   const existing=!!e;
   let email=ob.work.email;
@@ -1865,7 +1869,7 @@ function vProfile(){
   const r=70, C=2*Math.PI*r, arc=C*pct/100;
   const years=e.start?Math.floor(dbDiff(e.start,lvToday())/365.25):0;
   const jump=[["pf-sec-story","Your story"],["pf-sec-line","Reporting line"],["pf-sec-personal","Personal details"],["pf-sec-education","Education"],["pf-sec-contact","Contact and addresses"],["pf-sec-work","Work and documents"]];
-  const m=S.docs[e.id]||{}, nDocs=docCount(m), live=Object.keys(e.grants||{}).filter(k=>e.grants[k]==="active");
+  const m=S.docs[e.id]||{}, nDocs=docCount(m), live=toolIds(e).filter(k=>e.grants[k]==="active");
   const step=(x,tag,me)=>`<div class="rl-step${me?" me":""}" ${me?"":`data-emp="${x.id}"`}>${person(x,x.title&&x.title!=="—"?x.title:x.email)}${tag?`<span class="rl-tag">${tag}</span>`:""}</div>`;
   const line=`<div class="rl">${chain.map((x,i)=>step(x,i===chain.length-1?"Manager":"")).join("")}${step(e,"You",true)}</div>`
     +(team.length?`<div class="rl-team"><h4>Your team (${team.length})</h4><div class="chips">${team.map(x=>`<span class="chip" data-emp="${x.id}" style="cursor:pointer">${avatar(x)}${esc(x.name)}</span>`).join("")}</div></div>`:"");
@@ -2087,6 +2091,21 @@ document.addEventListener("submit",ev=>{
   }
 });
 
+/* Ticking "Laptop returned" after the offboarding started: the serial number and return date are recorded with it. */
+function laptopReturnModal(e){
+  const l={serial:(e.laptop&&e.laptop.serial)||"",date:lvToday(),condition:"Good",note:""};
+  const m=modal(`<form novalidate><div class="card-h" style="padding-top:24px"><h3>Laptop returned</h3><span class="muted">${esc(e.name)}</span></div><div class="card-b">${laptopFields(l,{},"lr-")}</div>
+    <div class="modal-f"><button type="button" class="btn glass" data-close>Cancel</button><button type="submit" class="btn primary">Mark as returned</button></div></form>`);
+  m.querySelector("form").addEventListener("submit",async ev=>{ev.preventDefault();
+    const body={serial:$("#lr-serial").value,date:$("#lr-date").value,condition:$("#lr-condition").value,note:$("#lr-note").value};
+    const r=await api("POST",`/api/offboarding/${e.offId}/steps/laptop`,{done:true,laptop:body});
+    if(!r.ok){ const er=(r.data&&r.data.errors)||{}; m.querySelectorAll(".ferr").forEach(x=>x.remove());
+      for(const [k,id] of [["laptopSerial","serial"],["laptopDate","date"],["laptopCondition","condition"],["laptopNote","note"]]) if(er[k]){ const f=$("#lr-"+id).closest(".field"); f.insertAdjacentHTML("beforeend",`<span class="ferr" role="alert">${esc(er[k])}</span>`); }
+      if(!Object.keys(er).length) toast(apiMsg(r)); return; }
+    applyOff(r.data); log(`Checklist: Laptop returned (serial ${body.serial})`,e,null,"ok"); m.remove();
+    toast(e.status==="offboarded"?`${e.name} is fully offboarded`:"Laptop marked as returned."); render(); });
+}
+
 /* Laptop record and the onboarding record, shown on the employee page. */
 function laptopCard(e){
   const l=e.laptop||{received:false,serial:"",date:""}, off=e.status==="offboarded";
@@ -2169,7 +2188,7 @@ function applyOff(rec){
     if(s.status==="done"){ e.grants[s.key]="revoked"; delete e.errors[s.key]; }
     else if(s.status==="failed"){ e.grants[s.key]="failed"; e.errors[s.key]=s.detail; }
   }
-  e.offTasks=rec.steps.filter(s=>s.kind==="task").map(s=>({t:s.label,done:s.status==="done",key:s.key}));
+  e.offTasks=rec.steps.filter(s=>s.kind==="task").map(s=>({t:s.label,done:s.status==="done",key:s.key,detail:s.detail}));
 }
 async function offLoad(){
   try{ const r=await api("GET","/api/offboarding"); if(!r.ok||!Array.isArray(r.data)) throw 0; S.off.online=true; r.data.forEach(applyOff); }catch(e){ /* no backend */ }
@@ -2406,20 +2425,41 @@ const wizFoot=(prefix,step,last,reviewed,fromReview,submitLabel,danger)=>`<div c
         :`<button type="button" class="btn primary" data-${prefix}-next>${fromReview?"Back to review":"Continue"}</button>`}</div>`;
 
 /* Offboarding: who is leaving → which access goes and who gets their files → last day and settlement → review. */
-const OW_STEPS=["Who is leaving","Access","Last day & settlement","Review"];
+const OW_STEPS=["Who is leaving","Access","Last day & settlement","Assets & checklist","Review"];
 const OFF_TOOLS=["claude"];   // offboarding handles Claude only for now; add tool ids here to bring others back
 const liveTools=e=>Object.keys(e.grants).filter(k=>OFF_TOOLS.includes(k)&&["active","failed","created"].includes(e.grants[k]));
 const TOOL_DO={gws:"Suspend, sign out everywhere, reset password, move Drive and email",gemini:"Remove the Gemini licence",claude:"Remove from the Claude Team workspace",github:"Remove from the wohlig org and teams",gcp:"Remove IAM roles from all projects"};
 function newOw(empId){
   const e=S.emps.find(x=>x.id===empId);
   return {step:e?2:1,empId:e?e.id:null,tools:e?liveTools(e):null,to:e?((S.emps.find(m=>m.name===e.manager&&m.id!==e.id)||{}).email||""):"",
-    lastDay:lvToday(),when:"now",reviewed:false,fromReview:false,errors:{}};
+    lastDay:lvToday(),when:"now",reviewed:false,fromReview:false,errors:{},
+    assets:{laptop:{status:"pending",serial:(e&&e.laptop&&e.laptop.serial)||"",date:lvToday(),condition:"Good",note:""},settlement:false}};
+}
+/* Company assets and the exit checklist, as recorded in the offboarding form. */
+const OW_RET={returned:"Returned",pending:"Not returned yet",none:"Not issued"};
+const LP_COND=["Good","Minor wear","Damaged"];
+function owAssetsSummary(a){
+  const l=a.laptop;
+  return [["Laptop",l.status==="returned"?`Returned · <span class="mono">${esc(l.serial)}</span> · ${esc(fdate(l.date))}${l.condition?` · ${esc(l.condition)}`:""}${l.note?`<div class="muted">${esc(l.note)}</div>`:""}`:l.status==="none"?"No laptop was issued":`<span style="color:var(--warn)">Not returned yet</span>`],
+    ["Final settlement",a.settlement?"Cleared":"Not cleared yet"]];
+}
+/* The laptop return fields, used in the offboarding form and when HR ticks "Laptop returned" later. */
+function laptopFields(l,er,pre){
+  return `<div class="form">
+    ${wf(pre+"serial","Serial number",`<input class="input mono" id="${pre}serial" data-ow-a="laptop.serial" maxlength="60" value="${esc(l.serial)}" placeholder="e.g. C02XK1ABJG5H">`,er.laptopSerial)}
+    ${wf(pre+"date","Return date",`<input class="input" type="date" id="${pre}date" data-ow-a="laptop.date" max="${lvToday()}" value="${esc(l.date)}">`,er.laptopDate)}
+    ${wf(pre+"condition","Condition",`<select class="input" id="${pre}condition" data-ow-a="laptop.condition">${LP_COND.map(c=>`<option ${l.condition===c?"selected":""}>${c}</option>`).join("")}</select>`,er.laptopCondition)}
+    ${wf(pre+"note","Note (optional)",`<input class="input" id="${pre}note" data-ow-a="laptop.note" maxlength="300" value="${esc(l.note||"")}" placeholder="Charger returned, scratch on the lid…">`,er.laptopNote)}
+  </div>`;
 }
 function owErrors(w){
   const er={}, e=S.emps.find(x=>x.id===w.empId);
   if(w.step===1&&!e) er.emp="Choose who is leaving.";
   if(w.step===2&&(w.tools||[]).includes("gws")){ if(!w.to) er.to="Pick who receives their Drive files and email."; else if(e&&lc(w.to)===lc(e.email)) er.to="Pick someone other than the person leaving."; }
   if(w.step===3){ if(!R.validDate(w.lastDay||"")) er.lastDay="Enter the last working day."; else if(w.when==="later"&&w.lastDay<lvToday()) er.lastDay="That day has passed. Choose Now instead."; }
+  if(w.step===4&&w.assets.laptop.status==="returned"){ const l=w.assets.laptop;
+    if(!String(l.serial||"").trim()) er.laptopSerial="Enter the laptop serial number.";
+    if(!R.validDate(l.date||"")) er.laptopDate="Enter the date the laptop was returned."; else if(l.date>lvToday()) er.laptopDate="The return date can't be in the future."; }
   return er;
 }
 function vOffboard(){
@@ -2460,10 +2500,21 @@ function vOffboard(){
       <div class="callout">${svg("info")}<div>${w.when==="later"?`Access is removed automatically at <b>6:00 pm</b> on the last working day. Until then HR can remove it early or call the offboarding off.`:"Access is removed as soon as you submit."}</div></div>
     </div></div>
     <div class="card"><div class="card-h"><h3>Final settlement</h3><span class="muted">Leave only</span></div><div class="card-b" id="ow-settle">${settlementHtml(e,w.lastDay,true)}</div></div>`;
-  if(w.step===4) body=`${rsec("Who is leaving","data-ow-goto",1,rkv([["Name",esc(e.name)],["Job title",esc(e.title)],["Department",esc(e.dept)],["Work email",`<span class="mono">${esc(e.email)}</span>`]]))}
+  if(w.step===4){ const a=w.assets, seg=(name,val)=>`<div class="seg" role="radiogroup" style="align-self:flex-start">${Object.entries(OW_RET).map(([k,v])=>`<label><input type="radio" name="${name}" value="${k}" ${val===k?"checked":""}>${v}</label>`).join("")}</div>`;
+    body=`<div class="card"><div class="card-h"><h3>Company laptop</h3><span class="pill ${a.laptop.status==="pending"?"p-warn":"p-ok"}">${OW_RET[a.laptop.status]}</span></div><div class="card-b" style="display:flex;flex-direction:column;gap:18px">
+      <div class="field"><span class="lab">Has ${esc(e.name.split(" ")[0])} returned the laptop?</span>${seg("ow-lp",a.laptop.status)}</div>
+      ${a.laptop.status==="returned"?laptopFields(a.laptop,er,"ow-lp-")
+        :a.laptop.status==="pending"?`<div class="callout">${svg("info")}<div>The offboarding stays open until the laptop is back. Tick <b>Laptop returned</b> on ${esc(e.name.split(" ")[0])}'s checklist when it comes in; you'll be asked for the serial number then.</div></div>`:""}
+    </div></div>
+    <div class="card"><div class="card-h"><h3>Exit checklist</h3><span class="muted">Tick if it's already done</span></div>
+      <label class="check"><input type="checkbox" id="ow-fnf" ${a.settlement?"checked":""}><div class="grow"><div class="lbl">Final settlement cleared</div><div class="tag">Leave payout and dues, see step 3</div></div></label></div>`;
+  }
+  if(w.step===5) body=`${rsec("Who is leaving","data-ow-goto",1,rkv([["Name",esc(e.name)],["Job title",esc(e.title)],["Department",esc(e.dept)],["Work email",`<span class="mono">${esc(e.email)}</span>`]]))}
     ${rsec("Access","data-ow-goto",2,`<div class="chips" style="margin-bottom:14px">${(w.tools||[]).map(id=>`<span class="chip">${appIc(id)}${esc(APP[id].name)}</span>`).join("")||`<span class="muted">No tool access to remove</span>`}</div>${OFF_TOOLS.includes("gws")?rkv([["Drive files and email go to",esc(toName||"—")]]):""}`)}
     ${rsec("Last working day","data-ow-goto",3,rkv([["Last working day",esc(fdate(w.lastDay))],["Access removed",w.when==="later"?`On ${esc(fdate(w.lastDay))} at 6:00 pm`:"Right away, when you submit"]]))}
     ${rsec("Final settlement","data-ow-goto",3,settlementHtml(e,w.lastDay,true))}
+    ${rsec("Assets & checklist","data-ow-goto",4,rkv(owAssetsSummary(w.assets)))}
+    ${(()=>{const open=OFF_TASKS.filter((_,i)=>!owTaskDone(w.assets,i));return open.length?`<div class="callout">${svg("info")}<div>Still open after you submit: <b>${open.map(esc).join(", ")}</b>. The offboarding closes once ${open.length===1?"it is":"they are"} ticked on the employee's checklist.</div></div>`:"";})()}
     <div class="callout bad">${svg("alert")}<div>${esc(e.name.split(" ")[0])} will lose access to <b>${(w.tools||[]).length} tool${(w.tools||[]).length===1?"":"s"}</b>${w.when==="later"?` on ${esc(fdate(w.lastDay))} at 6:00 pm`:" right away"}, and their HR Access Hub login is removed. Every step is written to the audit log.</div></div>
     <label class="check" style="border:0;padding:0"><input type="checkbox" id="ow-reviewed" ${w.reviewed?"checked":""}><div class="grow"><div class="lbl">I have reviewed all the details above</div></div></label>`;
   return `<section class="section">
@@ -2473,19 +2524,23 @@ function vOffboard(){
   ${sched.length?`<div class="callout">${svg("info")}<div>Scheduled: ${sched.map(b=>`<button type="button" class="btn link" data-emp="${b.id}">${esc(b.name)}, ${esc(fdate(b.lastDay))}</button>`).join(" · ")}</div></div>`:""}
   ${stepper(OW_STEPS,w.step)}
   <form id="owf" class="grid" style="gap:22px" novalidate>${body}
-  ${wizFoot("ow",w.step,w.step===4,w.reviewed,w.fromReview,w.when==="later"?"Schedule offboarding":"Offboard now",true)}</form></section>`;
+  ${wizFoot("ow",w.step,w.step===5,w.reviewed,w.fromReview,w.when==="later"?"Schedule offboarding":"Offboard now",true)}</form></section>`;
 }
 function owNext(){
-  const w=S.ow; w.errors=owErrors(w);
+  const w=S.ow;
+  if(w.step===4) document.querySelectorAll('#owf [data-ow-a]').forEach(x=>{ w.assets.laptop[x.dataset.owA.split(".")[1]]=x.value; });
+  w.errors=owErrors(w);
   if(Object.keys(w.errors).length){ render(); obFocusError(); toast("Please fix the highlighted fields."); return; }
-  w.step=w.fromReview?4:w.step+1; w.fromReview=false; render(); window.scrollTo(0,0);
+  w.step=w.fromReview?5:w.step+1; w.fromReview=false; render(); window.scrollTo(0,0);
 }
+// OFF_TASKS order: laptop, final settlement
+const owTaskDone=(a,i)=>[a.laptop.status!=="pending",a.settlement][i];
 async function owSubmit(){
   const w=S.ow, e=S.emps.find(x=>x.id===w.empId); if(!e) return;
   if(!w.reviewed){ toast("Tick the review box before submitting."); return; }
   const later=w.when==="later", day=w.lastDay, tools=(w.tools||[]).slice(), toName=(empBy(w.to)||{}).name||"";
   if(S.off.online){
-    const res=await offCall("POST","/api/offboarding",{email:e.email,lastDay:day,transferTo:w.to,when:w.when,tools});
+    const res=await offCall("POST","/api/offboarding",{email:e.email,lastDay:day,transferTo:w.to,when:w.when,tools,checklist:w.assets});
     if(!res.ok){toast(res.error);return}
     log(later?`Offboarding scheduled for ${fdate(day)}, 6:00 pm`:"Offboarding started",e,null,later?"info":"ok");
     S.ow=null; S.offSel=null; toast(later?`Offboarding for ${e.name} scheduled for ${fdate(day)}.`:`Access removed for ${e.name}. Finish the manual tasks to close it out.`);
@@ -2495,7 +2550,7 @@ async function owSubmit(){
   for(const id of liveTools(e)) if(!tools.includes(id)) e.grants[id]="none";   // tools HR chose to keep are left out of the checklist
   S.ow=null; S.offSel=null; e.lastDay=day;
   if(later){e.offSched={to:toName};log(`Offboarding scheduled for ${fdate(day)}`,e,null,"info");toast(`Offboarding for ${e.name} scheduled for ${fdate(day)}`);go("employee",e.id)}
-  else{go("employee",e.id);revoke(e,toName)}
+  else{go("employee",e.id);revoke(e,toName,w.assets)}
 }
 
 /* Leave request: dates → type → note → review. The employee applies for themselves; HR can apply for someone. */
@@ -2596,7 +2651,7 @@ document.addEventListener("click",ev=>{
   if(t.hasAttribute("data-ow-next")) return owNext();
   if(t.hasAttribute("data-ow-back")&&ow){ ow.errors={}; ow.step=Math.max(1,ow.step-1); ow.fromReview=false; render(); window.scrollTo(0,0); return; }
   if(t.hasAttribute("data-ow-cancel")){ S.ow=null; S.offSel=null; render(); window.scrollTo(0,0); return; }
-  if(t.dataset.owGoto&&ow){ ow.fromReview=ow.step===4; ow.errors={}; ow.step=Number(t.dataset.owGoto); render(); window.scrollTo(0,0); return; }
+  if(t.dataset.owGoto&&ow){ ow.fromReview=ow.step===5; ow.errors={}; ow.step=Number(t.dataset.owGoto); render(); window.scrollTo(0,0); return; }
   if(t.hasAttribute("data-lw-next")) return lwNext();
   if(t.hasAttribute("data-lw-back")&&lw){ lw.errors={}; lw.step=Math.max(1,lw.step-1); lw.fromReview=false; render(); window.scrollTo(0,0); return; }
   if(t.hasAttribute("data-lw-cancel")){ const back=lw&&lw.self?"myleave":"leave"; S.lw=null; go(back); return; }
@@ -2611,6 +2666,9 @@ document.addEventListener("change",ev=>{
   if(w&&t.id==="ow-to"){ w.to=t.value; return; }
   if(w&&t.id==="ow-day"){ w.lastDay=t.value; const e=S.emps.find(x=>x.id===w.empId); if(e&&$("#ow-settle")) $("#ow-settle").innerHTML=settlementHtml(e,w.lastDay,true); return; }
   if(w&&t.name==="ow-when"){ w.when=t.value; render(); return; }
+  if(w&&t.name==="ow-lp"){ w.assets.laptop.status=t.value; w.errors={}; render(); return; }
+  if(w&&t.id==="ow-fnf"){ w.assets.settlement=t.checked; return; }
+  if(w&&t.dataset.owA&&t.id.startsWith("ow-lp-")){ w.assets.laptop[t.dataset.owA.split(".")[1]]=t.value; return; }
   if(w&&t.id==="ow-reviewed"){ w.reviewed=t.checked; const s=$("#ow-submit"); if(s) s.disabled=!t.checked; return; }
   if(l&&t.id==="lw-email"){ l.email=t.value; l.type=""; render(); return; }
   if(l&&t.name==="lw-dur"){ l.dur=t.value; render(); return; }
@@ -2634,7 +2692,7 @@ document.addEventListener("keydown",ev=>{
 document.addEventListener("focusin",ev=>{ if(ev.target.id==="lw-notify") lwMenu(true); });
 document.addEventListener("click",ev=>{ if(!ev.target.closest(".combo")) lwMenu(false); });
 document.addEventListener("submit",ev=>{
-  if(ev.target.id==="owf"){ ev.preventDefault(); if(S.ow&&S.ow.step===4) owSubmit(); else owNext(); }
+  if(ev.target.id==="owf"){ ev.preventDefault(); if(S.ow&&S.ow.step===5) owSubmit(); else owNext(); }
   if(ev.target.id==="lwf"){ ev.preventDefault(); if(S.lw&&S.lw.step===4) lwSubmit(); else lwNext(); }
 });
 
@@ -2858,8 +2916,8 @@ async function provision(e,ids){
   }
   settle(e); soft();
 }
-async function revoke(e,to){
-  e.status="offboarding"; e.offTasks=OFF_TASKS.map(t=>({t,done:false}));
+async function revoke(e,to,assets){
+  e.status="offboarding"; e.offTasks=OFF_TASKS.map((t,i)=>({t,done:!!(assets&&owTaskDone(assets,i))}));
   log("Offboarding started",e,null,"ok");
   const order=Object.keys(e.grants).filter(k=>OFF_TOOLS.includes(k)&&e.grants[k]!=="none"&&e.grants[k]!=="revoked").sort((a,b)=>(a==="gws"?-1:b==="gws"?1:0));
   soft();
@@ -2917,7 +2975,7 @@ document.addEventListener("click",ev=>{
   if(t.dataset.offcancel){const e=S.emps.find(x=>x.id==t.dataset.offcancel);
     const done=()=>{e.offId=null;e.offRec=null;e.offSched=null;e.lastDay=undefined;e.offTasks=null;log("Scheduled offboarding called off",e,null,"info");toast(`Offboarding for ${e.name} called off.`);render()};
     if(S.off.online){offCall("POST",`/api/offboarding/${e.offId}/cancel`).then(r=>r.ok?done():toast(r.error))}else done(); return}
-  if(t.dataset.provision){const e=S.emps.find(x=>x.id==t.dataset.provision);provision(e,Object.keys(e.grants).filter(k=>e.grants[k]==="none"));return}
+  if(t.dataset.provision){const e=S.emps.find(x=>x.id==t.dataset.provision);provision(e,toolIds(e).filter(k=>e.grants[k]==="none"));return}
   if(t.dataset.offboard){S.offSel=Number(t.dataset.offboard);S.ow=newOw(S.offSel);go("offboard");return}
   if(t.dataset.proto){toast(`${t.dataset.proto} is part of the full build. This prototype shows the flow only.`);return}
 });
@@ -2925,6 +2983,8 @@ document.addEventListener("click",ev=>{
 document.addEventListener("change",ev=>{
   const t=ev.target;
   if(t.dataset.task&&isEmployee()){ t.checked=!t.checked; toast("Only HR can do this."); return; }
+  if(t.dataset.task&&t.dataset.task.split(":")[1]==="off"&&S.off.online&&t.checked&&(()=>{const [eid,,i]=t.dataset.task.split(":");const e=S.emps.find(x=>x.id==eid);return e&&e.offTasks[i]&&e.offTasks[i].key==="laptop";})()){
+    t.checked=false; const [eid]=t.dataset.task.split(":"); return laptopReturnModal(S.emps.find(x=>x.id==eid)); }
   if(t.dataset.task&&t.dataset.task.split(":")[1]==="off"&&S.off.online){const [eid,,i]=t.dataset.task.split(":");const e=S.emps.find(x=>x.id==eid);const k=e.offTasks[i];
     offCall("POST",`/api/offboarding/${e.offId}/steps/${k.key}`,{done:t.checked}).then(r=>{if(!r.ok)toast(r.error);else{log(`Checklist: ${k.t}${t.checked?"":" (unticked)"}`,e,null,"ok");if(e.status==="offboarded")toast(`${e.name} is fully offboarded`)}render()});return}
   if(t.dataset.task){const [eid,ph,i]=t.dataset.task.split(":");const e=S.emps.find(x=>x.id==eid);const list=ph==="on"?e.onTasks:e.offTasks;list[i].done=t.checked;log(`Checklist: ${list[i].t}${t.checked?"":" (unticked)"}`,e,null,"ok");settle(e);render();return}

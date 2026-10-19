@@ -10,11 +10,40 @@ const TOOLS = ["claude"];
 // Manual tasks HR ticks off; the order matches the checklist on the page.
 const TASKS = [
   ["laptop", "Laptop returned"],
-  ["idcard", "ID card returned"],
-  ["exit_interview", "Exit interview done"],
   ["settlement", "Final settlement cleared"],
 ];
 const todayIso = () => new Date().toISOString().slice(0, 10);
+const LAPTOP_CONDITION = ["Good", "Minor wear", "Damaged"];
+const fmtDay = (d) => new Date(d + "T00:00:00").toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" });
+
+/** Laptop return details: "returned" needs the serial and return date; the condition is optional. */
+function laptopErrors(l) {
+  const e = {};
+  if (!String(l.serial || "").trim()) e.laptopSerial = "Enter the laptop serial number.";
+  else if (String(l.serial).length > 60) e.laptopSerial = "Keep the serial number under 60 characters.";
+  if (!L.validDate(l.date)) e.laptopDate = "Enter the date the laptop was returned.";
+  else if (l.date > todayIso()) e.laptopDate = "The return date can't be in the future.";
+  if (l.condition && !LAPTOP_CONDITION.includes(l.condition)) e.laptopCondition = "Pick the laptop's condition.";
+  if (String(l.note || "").length > 300) e.laptopNote = "Keep the note under 300 characters.";
+  return e;
+}
+const laptopDetail = (l) => [`Serial ${String(l.serial).trim()}`, `returned ${fmtDay(l.date)}`, l.condition, String(l.note || "").trim()].filter(Boolean).join(" · ");
+
+/**
+ * What HR recorded in the offboarding form for each manual task: [done, detail].
+ * laptop: "returned", "pending" (not yet) or "none" (never issued). settlement: true or false.
+ */
+function readChecklist(c, errors) {
+  c = c && typeof c === "object" ? c : {};
+  const out = {};
+  const lp = c.laptop || {};
+  if (!["returned", "pending", "none"].includes(lp.status || "pending")) errors.laptop = "Choose whether the laptop was returned.";
+  else if (lp.status === "returned") { Object.assign(errors, laptopErrors(lp)); out.laptop = [true, laptopDetail(lp)]; }
+  else if (lp.status === "none") out.laptop = [true, "No laptop was issued"];
+  else out.laptop = [false, null];
+  out.settlement = [!!c.settlement, null];
+  return out;
+}
 const audit = (db, action, email) => db.query("INSERT INTO audit_log (action, work_email) VALUES ($1,$2)", [action, email]);
 
 /** Runs fn inside a transaction; fn returns [status, body]. */
@@ -148,6 +177,7 @@ export function offboardingRouter(wrap) {
     const tools = Array.isArray(req.body && req.body.tools) ? [...new Set(req.body.tools)] : [];
     const [status, body] = await tx(null, async (db) => {
       const errors = {};
+      const checklist = readChecklist(req.body && req.body.checklist, errors);
       const { rows: e } = await db.query("SELECT * FROM employees WHERE lower(work_email)=$1 FOR UPDATE", [String(email || "").toLowerCase()]);
       const emp = e[0];
       if (!emp) errors.email = "Pick the employee who is leaving.";
@@ -174,7 +204,13 @@ export function offboardingRouter(wrap) {
          RETURNING id`, [emp.work_email, lastDay, t[0] ? t[0].work_email : null, when === "later" ? "scheduled" : "in_progress"]);
       const id = o[0].id;
       for (const k of tools) await db.query("INSERT INTO offboarding_steps (offboarding_id, kind, key, label) VALUES ($1,'tool',$2,$3)", [id, k, `Remove access: ${TOOL_NAMES[k]}`]);
-      for (const [k, label] of TASKS) await db.query("INSERT INTO offboarding_steps (offboarding_id, kind, key, label) VALUES ($1,'task',$2,$3)", [id, k, label]);
+      for (const [k, label] of TASKS) {
+        const [done, detail] = checklist[k] || [false, null];
+        await db.query("INSERT INTO offboarding_steps (offboarding_id, kind, key, label, status, detail, done_at) VALUES ($1,'task',$2,$3,$4,$5,$6)",
+          [id, k, label, done ? "done" : "pending", detail, done ? new Date() : null]);
+      }
+      const doneTasks = TASKS.filter(([k]) => checklist[k] && checklist[k][0]);
+      if (doneTasks.length) await audit(db, `Checklist at start: ${doneTasks.map(([k, label]) => label + (checklist[k][1] ? ` (${checklist[k][1]})` : "")).join("; ")}`, emp.work_email);
       await db.query("UPDATE employees SET last_day=$2 WHERE id=$1", [emp.id, lastDay]);
 
       // Leave after the last working day will never be taken, so it is cancelled now.
@@ -215,6 +251,12 @@ export function offboardingRouter(wrap) {
   // Tick or untick a manual task.
   r.post("/api/offboarding/:id/steps/:key", wrap(async (req, res) => {
     const done = !!(req.body && req.body.done);
+    let detail = null;
+    if (done && req.params.key === "laptop") {
+      const lp = (req.body && req.body.laptop) || {};
+      if (lp.status === "none") detail = "No laptop was issued";
+      else { const errors = laptopErrors(lp); if (Object.keys(errors).length) return res.status(400).json({ errors }); detail = laptopDetail(lp); }
+    }
     await tx(null, async (db) => {
       const { rows } = await db.query(
         `SELECT s.*, o.work_email, o.status AS ostatus FROM offboarding_steps s JOIN offboardings o ON o.id=s.offboarding_id
@@ -222,9 +264,9 @@ export function offboardingRouter(wrap) {
       const s = rows[0];
       if (!s) return [404, { error: "Task not found." }];
       if (["completed", "cancelled"].includes(s.ostatus)) return [409, { error: "This offboarding is closed." }];
-      if ((s.status === "done") === done) return [200, {}];
-      await db.query("UPDATE offboarding_steps SET status=$2, done_at=$3 WHERE id=$1", [s.id, done ? "done" : "pending", done ? new Date() : null]);
-      await audit(db, `Checklist: ${s.label}${done ? "" : " (unticked)"}`, s.work_email);
+      if ((s.status === "done") === done && !detail) return [200, {}];
+      await db.query("UPDATE offboarding_steps SET status=$2, done_at=$3, detail=$4 WHERE id=$1", [s.id, done ? "done" : "pending", done ? new Date() : null, done ? detail : null]);
+      await audit(db, `Checklist: ${s.label}${done ? (detail ? ` (${detail})` : "") : " (unticked)"}`, s.work_email);
       await settle(db, s.offboarding_id);
       return [200, {}];
     }).then(async ([status, body]) => res.status(status).json(status < 400 ? await load(pool, Number(req.params.id)) : body));

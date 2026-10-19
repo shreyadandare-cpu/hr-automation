@@ -372,3 +372,6 @@ INSERT INTO reimbursement_documents (reimbursement_id, item_id, name, mime, size
   WHERE r.doc_stored IS NOT NULL AND NOT EXISTS (SELECT 1 FROM reimbursement_documents d WHERE d.reimbursement_id = r.id);
 UPDATE reimbursements r SET doc_stored = NULL
   WHERE r.doc_stored IS NOT NULL AND EXISTS (SELECT 1 FROM reimbursement_documents d WHERE d.reimbursement_id = r.id);
+
+-- The ID card and exit interview items were dropped from the offboarding checklist.
+DELETE FROM offboarding_steps WHERE kind = 'task' AND key IN ('idcard', 'exit_interview');

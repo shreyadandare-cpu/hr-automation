@@ -231,6 +231,102 @@ tr.click:hover td{background:rgba(66,84,212,.04)}
 .pchip{display:inline-flex;align-items:center;gap:8px;padding:4px 6px 4px 4px;border-radius:999px;background:var(--surface);box-shadow:inset 0 0 0 1px var(--line-2);font-size:13.5px;font-weight:500;color:var(--ink)}
 .pchip .avatar{width:24px;height:24px;font-size:10px;box-shadow:none}
 .pchip button{border:0;background:var(--paper-2);color:var(--ink-dim);width:22px;height:22px;border-radius:50%;cursor:pointer;line-height:1;font-size:15px;display:grid;place-items:center}
+/* Reimbursements & payroll */
+.rb-stats{display:grid;gap:14px}.rb-stats.six{grid-template-columns:repeat(6,minmax(0,1fr))}.rb-stats.four{grid-template-columns:repeat(4,minmax(0,1fr))}
+.rb-stat{display:flex;flex-direction:column;gap:4px;padding:16px 18px;border-radius:14px;background:var(--surface);box-shadow:inset 0 0 0 1px var(--line);min-width:0}
+.rb-stat .lbl{font:600 11px/1.3 var(--body);letter-spacing:.12em;text-transform:uppercase;color:var(--ink-faint)}
+.rb-stat b{font:600 26px/1.15 var(--display);color:var(--ink);font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
+.rb-stat .sub{font-size:12.5px;color:var(--ink-faint)}.rb-stat.warn{box-shadow:inset 0 0 0 1px var(--line),inset 3px 0 0 var(--warn)}
+.skel{display:block;height:12px;border-radius:6px;background:linear-gradient(90deg,var(--paper-2),var(--line),var(--paper-2));background-size:200% 100%;animation:skel 1.2s infinite linear;margin:4px 0}
+.skel.big{height:24px;width:50%;margin-top:8px}@keyframes skel{to{background-position:-200% 0}}
+.rb-filters{display:flex;flex-wrap:wrap;gap:10px;align-items:center;padding:16px 20px;border-bottom:1px solid var(--line)}
+.rb-filters .input{width:auto;padding:9px 12px;font-size:14px}.rb-filters .grow{flex:1;min-width:200px}
+.rb-range{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;color:var(--ink-faint)}.rb-range .input{width:130px}
+.rb-table td,.rb-table th{padding:12px 12px}.rb-table td:first-child,.rb-table th:first-child{padding-left:20px}.rb-table td:last-child,.rb-table th:last-child{padding-right:20px}.rb-table td.num,.rb-table th.num,td.num,th.num{text-align:right}
+.rb-desc{max-width:170px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--ink-dim)}
+.rb-st{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.flag{display:inline-flex;align-items:center;gap:4px;font:600 11.5px/1.4 var(--body);color:var(--bad);background:var(--bad-soft);border-radius:6px;padding:2px 6px}
+.flag svg{width:12px;height:12px}.btn svg{flex:none}.btn.nolink::after{content:none}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
+.rb-head{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;flex-wrap:wrap;padding:22px 26px}
+.rb-head h2{font-size:30px;font-weight:500;margin:6px 0 2px}.rb-head-r{display:flex;flex-direction:column;align-items:flex-end;gap:8px}
+.rb-amt{font:600 28px/1 var(--display);font-variant-numeric:tabular-nums}
+.rb-stepcard{padding:20px 24px}
+.rb-steps{list-style:none;margin:0;padding:0;display:flex;gap:0}
+.rb-steps li{flex:1;display:flex;flex-direction:column;align-items:flex-start;gap:8px;position:relative;min-width:0;padding-right:8px}
+.rb-steps li::before{content:"";position:absolute;top:13px;left:28px;right:0;height:2px;background:var(--line-2)}
+.rb-steps li:last-child::before{display:none}.rb-steps li.done::before,.rb-steps li.current::before{background:var(--purple)}
+.rb-steps .dot{width:28px;height:28px;border-radius:50%;display:grid;place-items:center;background:var(--surface);box-shadow:inset 0 0 0 2px var(--line-2);color:#fff;position:relative;z-index:1;flex:none}
+.rb-steps .dot svg{width:15px;height:15px}
+.rb-steps li.done .dot{background:var(--purple);box-shadow:none}
+.rb-steps li.current .dot{background:var(--purple);box-shadow:0 0 0 5px var(--tint)}
+.rb-steps li.bad .dot{background:var(--bad);box-shadow:0 0 0 5px var(--bad-soft)}
+.rb-steps .t b{display:block;font-size:13.5px;font-weight:600;color:var(--ink)}.rb-steps .t span{display:block;font-size:12px;color:var(--ink-faint)}
+.rb-steps li.future .t b{color:var(--ink-faint);font-weight:500}.rb-steps li.bad .t b{color:var(--bad)}
+.rb-grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.15fr);gap:20px;align-items:start}
+.rb-col{display:flex;flex-direction:column;gap:20px;min-width:0}
+.rb-viewer{background:var(--paper-2);border-top:1px solid var(--line);border-bottom:1px solid var(--line)}
+.rb-viewer.pdf iframe{display:block;width:100%;height:620px;border:0;background:#fff}
+.rb-viewer.small iframe{height:420px}.rb-viewer.small{border:1px solid var(--line);border-radius:12px;overflow:hidden}
+.rb-imgwrap{max-height:620px;overflow:auto;padding:16px;text-align:center}.rb-imgwrap img{max-width:none;min-width:40%;border-radius:6px;box-shadow:0 2px 12px rgba(14,10,56,.12)}
+.rb-viewer.small .rb-imgwrap img{width:100%}
+.rb-doctools{display:flex;align-items:center;gap:8px;padding:12px 18px;flex-wrap:wrap}.rb-doctools .grow{flex:1}
+.rb-checks{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:8px}
+.rb-checks li{display:flex;gap:10px;align-items:flex-start;font-size:14px}.rb-checks svg{width:16px;height:16px;flex:none;margin-top:2px}
+.rb-checks li.ok svg{color:var(--ok)}.rb-checks li.bad{color:var(--bad)}.rb-checks li.warn svg{color:var(--warn)}
+.rb-val{display:flex;flex-direction:column;gap:16px}
+.rb-cmp{width:100%;font-size:13.5px;border:1px solid var(--line);border-radius:10px;overflow:hidden;border-collapse:separate;border-spacing:0}
+.rb-cmp th,.rb-cmp td{padding:8px 12px;border-bottom:1px solid var(--line);text-align:left}.rb-cmp tbody tr:last-child>*{border-bottom:0}
+.rb-cmp thead th{font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-faint);background:var(--paper-2)}.rb-cmp tbody th{color:var(--ink-faint);font-weight:500;width:28%}
+.rb-dup{margin-top:4px;font-size:13.5px}
+.rb-total td{background:var(--paper-2);border-top:1px solid var(--line-2)}
+.pay-table td{vertical-align:top}.pay-claims{display:flex;flex-wrap:wrap;justify-content:flex-end;align-items:center;gap:2px 4px;margin-top:4px}
+.pay-claims span{color:var(--ink-faint);font-size:12px}.pay-claims .btn{padding:0 2px;font-size:12.5px}.pay-total{font:600 17px/1.2 var(--display)}
+.rb-descbox{margin-top:16px;padding-top:14px;border-top:1px solid var(--line)}.rb-descbox .lab{font:600 11px/1.2 var(--body);letter-spacing:.14em;text-transform:uppercase;color:var(--ink-faint)}.rb-descbox p{margin:6px 0 0}
+.rb-actions{display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap;padding:18px 24px;box-shadow:var(--glass-shadow),inset 0 0 0 1.5px var(--line-2)}
+.rb-tl{list-style:none;margin:0;padding:4px 24px 20px}
+.rb-tl li{display:grid;grid-template-columns:14px minmax(0,1fr);gap:12px;padding:8px 0;position:relative;font-size:14px}
+.rb-tl li::before{content:"";position:absolute;left:4px;top:22px;bottom:-8px;width:2px;background:var(--line)}.rb-tl li:last-child::before{display:none}
+.rb-tl .dot{width:10px;height:10px;border-radius:50%;background:var(--purple-soft);margin-top:5px}.rb-tl .meta{font-size:12px;color:var(--ink-faint)}
+.rb-drop{display:flex;flex-direction:column;align-items:center;gap:6px;padding:26px;border:1.5px dashed var(--line-2);border-radius:14px;cursor:pointer;text-align:center;background:var(--surface-2)}
+.rb-drop:hover{border-color:var(--purple)}.rb-drop svg{width:26px;height:26px;color:var(--purple)}.rb-drop input{position:absolute;opacity:0;width:1px;height:1px}
+.rb-drop.busy{opacity:.7;cursor:progress}.rb-drop:focus-within{outline:2px solid var(--purple)}
+.cw-line{border:1px solid var(--line);border-radius:14px;padding:16px 18px 18px;display:grid;grid-template-columns:1.2fr .8fr .9fr 1fr;gap:14px 16px;background:var(--surface-2)}
+.cw-line>.span{grid-column:1/-1}.cw-line .field{min-width:0}
+.cw-line-h{grid-column:1/-1;display:flex;align-items:center;gap:10px}.cw-line-h .grow{flex:1}.cw-line-h b{font-size:14px}
+.cw-add{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;padding:13px;border:1.5px dashed var(--line-2);border-radius:14px;background:none;color:var(--purple);font:600 14px/1 var(--body);cursor:pointer}
+.cw-add:hover{border-color:var(--purple);background:var(--tint)}.cw-add svg{width:18px;height:18px}
+.cw-total{display:flex;justify-content:space-between;align-items:baseline;padding:14px 18px;border-radius:12px;background:var(--tint)}.cw-total b{font-size:20px}
+.cw-import{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;padding:18px 22px}
+.cw-import-t{display:flex;flex-direction:column;gap:3px;min-width:0;flex:1 1 280px}
+.cw-file{position:relative;cursor:pointer}.cw-file input{position:absolute;opacity:0;width:1px;height:1px}.cw-file:focus-within{outline:2px solid var(--purple);outline-offset:2px}
+.rc-row{border:1px solid var(--line);border-radius:14px;padding:16px 18px;display:flex;flex-direction:column;gap:12px;background:var(--surface-2)}
+.rc-h{display:flex;justify-content:space-between;align-items:flex-start;gap:12px}.rc-h .muted{font-size:13px;margin-top:2px}
+.rc-doc{display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-size:14px}.rc-doc svg{width:18px;height:18px;color:var(--purple)}.rc-doc .grow{flex:1}
+.rc-nr{display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-size:14px;padding:10px 12px;border-radius:10px;background:var(--surface)}.rc-nr svg{width:16px;height:16px;color:var(--ok)}
+.rc-row .rb-drop{padding:18px}
+.rb-lines td,.rb-lines th{vertical-align:top}.rb-lines .desc{max-width:320px}
+.rb-doctabs{display:flex;gap:6px;flex-wrap:wrap;padding:0 18px 14px}
+.rb-doctabs button{border:1px solid var(--line);background:var(--surface-2);color:var(--ink-dim);border-radius:999px;padding:6px 12px;font:500 13px/1.2 var(--body);cursor:pointer}
+.rb-doctabs button.on{background:var(--tint);border-color:var(--purple);color:var(--purple);font-weight:600}
+.flag.ok{color:var(--ok);background:var(--ok-soft)}
+.imp-table tr.bad td{background:var(--bad-soft)}
+@media(max-width:860px){.cw-line{grid-template-columns:1fr 1fr}}
+@media(max-width:520px){.cw-line{grid-template-columns:1fr}.cw-import{padding:16px}}
+.modal.wide{width:min(1100px,96vw)}.rb-big iframe{display:block;width:100%;height:78vh;border:0;background:#fff}.rb-big .rb-imgwrap{max-height:78vh}
+.bell-btn{position:relative;display:inline-grid;place-items:center;width:38px;height:38px;border:0;border-radius:50%;background:var(--surface-2);box-shadow:inset 0 0 0 1px var(--line);color:var(--ink);cursor:pointer;flex:none}
+.bell-btn svg{width:18px;height:18px}.bell-n{position:absolute;top:-3px;right:-3px;min-width:18px;height:18px;padding:0 5px;border-radius:999px;background:var(--bad);color:#fff;font:600 11px/18px var(--body);text-align:center}
+.bell-panel{position:fixed;z-index:70;width:min(380px,calc(100vw - 24px));max-height:70vh;overflow:auto;background:var(--surface);border-radius:14px;box-shadow:0 20px 50px rgba(14,10,56,.25),inset 0 0 0 1px var(--line-2)}
+.bell-h{display:flex;justify-content:space-between;align-items:center;padding:12px 16px;border-bottom:1px solid var(--line)}
+.bell-i{display:flex;flex-direction:column;gap:2px;width:100%;text-align:left;border:0;border-bottom:1px solid var(--line);background:none;padding:12px 16px;cursor:pointer;color:var(--ink);font:inherit}
+.bell-i:hover{background:var(--tint)}.bell-i b{font-weight:500;font-size:13.5px}.bell-i.unread b{font-weight:600}.bell-i.unread{box-shadow:inset 3px 0 0 var(--purple)}
+.bell-i span{font-size:12.5px;color:var(--ink-faint)}
+@media (max-width:1180px){.rb-stats.six{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media (max-width:1300px){.rb-table .hide-md{display:none}}
+@media (max-width:980px){.rb-grid{grid-template-columns:minmax(0,1fr)}.rb-viewer.pdf iframe{height:520px}
+  .rb-steps{flex-direction:column;gap:14px}.rb-steps li{flex-direction:row;align-items:center;gap:12px;padding:0}
+  .rb-steps li::before{top:28px;left:13px;right:auto;bottom:-14px;width:2px;height:auto}}
+@media (max-width:720px){.rb-stats.six,.rb-stats.four{grid-template-columns:repeat(2,minmax(0,1fr))}.rb-range .input{width:110px}.rb-head-r{align-items:flex-start}}
 .pick-list{max-height:340px;overflow-y:auto;border-radius:16px;box-shadow:inset 0 0 0 1px var(--line)}
 .pick-list .radio-li{padding:10px 16px}.pick-list .radio-li:first-child{border-top:0}.pick-list .radio-li[hidden]{display:none}
 .picked{display:flex;align-items:center;gap:12px;padding:10px 14px;border-radius:14px;background:rgba(66,84,212,.06);box-shadow:inset 0 0 0 1.5px var(--purple)}
@@ -397,6 +493,7 @@ tr.former td{opacity:.6}
     <a class="logo" href="#dashboard" aria-label="wohlig HR Access Hub, dashboard">w<span class="o" aria-hidden="true"></span>hlig<small>HR Access Hub</small></a>
     <div class="links" id="links"></div>
     <button class="avatar-btn" id="acct" type="button" aria-label="Account menu" aria-haspopup="true" aria-expanded="false" style="display:none"></button>
+    <button class="bell-btn" id="bell" type="button" aria-label="Notifications" aria-haspopup="dialog" style="display:none"></button>
     <button class="theme-btn" id="theme" type="button" aria-label="Switch to dark mode" title="Switch theme"></button>
     <button class="btn primary sm cta" data-go="onboard">+ <span class="lbl-long">New onboarding</span><span class="lbl-short" hidden>New</span></button>
   </nav>
@@ -591,7 +688,7 @@ const ICONS = {
   info:'<circle cx="12" cy="12" r="9"/><path d="M12 8v5M12 16h.01"/>',
   bundle:'<rect x="4" y="4" width="7" height="7" rx="2"/><rect x="13" y="4" width="7" height="7" rx="2"/><rect x="4" y="13" width="7" height="7" rx="2"/><rect x="13" y="13" width="7" height="7" rx="2"/>',
 };
-const NAV = [["dashboard","Dashboard"],["employees","Employees"],["onboard","Onboarding"],["offboard","Offboarding"],["leave","Leave"],["templates","Access bundles"],["audit","Audit log"]];
+const NAV = [["dashboard","Dashboard"],["employees","Employees"],["onboard","Onboarding"],["offboard","Offboarding"],["leave","Leave"],["reimb","Reimbursements"],["payroll","Payroll"],["templates","Access bundles"],["audit","Audit log"]];
 const svg = k=>`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${ICONS[k]}</svg>`;
 /* ---------- Light / dark theme ---------- */
 const THEME_KEY="hr_theme";
@@ -612,19 +709,19 @@ const isEmployee = ()=>!!S.user&&S.user.role!=="hr";   // employees and reportin
 /* A reporting manager: has the manager role, or HR has picked them as someone's manager in the Employees list. */
 const isManager = ()=>!!S.user&&(S.user.role==="manager"||Object.values((S.lv&&S.lv.approvers)||{}).includes(String(S.user.email).toLowerCase()));
 /* Everyone signed in can look at the site. Employees see Onboarding as their own documents page and Offboarding as a read-only list. Users, Access bundles, Audit log and Leave are HR's; employees get My leave (and Team leave if people report to them). */
-const HR_ONLY=["users","templates","audit","leave"];
+const HR_ONLY=["users","templates","audit","leave","payroll"];
 /* Pages reachable from the avatar menu and the address bar that are not links in the bar. */
 const pageKnown=h=>navItems().some(n=>n[0]===h)||h==="profile"||h==="account"||h==="docs";
 function navItems(){ return !S.user?[...NAV,["myleave","My leave"]]:isEmployee()?[...NAV.filter(n=>!HR_ONLY.includes(n[0])),["myleave","My leave"],...(isManager()?[["team","Team leave"]]:[])]:NAV; }
 function routeAllowed(r){
   if(!S.user) return r!=="account"&&r!=="users"&&r!=="profile";
   if(r==="account") return true;
-  if(isEmployee()) return (!HR_ONLY.includes(r)&&r!=="team")||r==="myleave"||(r==="team"&&isManager())||(r==="leaveapply"&&!!S.lw&&S.lw.self);
+  if(isEmployee()) return (!HR_ONLY.includes(r)&&r!=="team"&&r!=="claimnew")||(r==="claimnew"&&!!S.cw)||r==="myleave"||(r==="team"&&isManager())||(r==="leaveapply"&&!!S.lw&&S.lw.self);
   return r!=="myleave"&&r!=="team"&&!(r==="leaveapply"&&S.lw&&S.lw.self);   // HR uses Leave; My leave and Team leave are the employee views
 }
 function renderNav(){
   const attn = S.emps.filter(e=>failedOf(e).length).length;
-  const active = S.route==="employee"?"employees":S.route==="docs"&&!isEmployee()?"onboard":S.route==="leaveapply"?(S.lw&&S.lw.self?"myleave":"leave"):S.route;
+  const active = S.route==="employee"?"employees":S.route==="docs"&&!isEmployee()?"onboard":S.route==="leaveapply"?(S.lw&&S.lw.self?"myleave":"leave"):["claim","claimnew"].includes(S.route)?"reimb":S.route;
   renderAcct();
   $("#links").innerHTML = navItems().map(([k,l])=>`<a href="#${k}" class="${active===k?"on":""}">${l}${k==="dashboard"&&attn?`<span class="count">${attn}</span>`:""}</a>`).join("");
   fitNav();
@@ -741,6 +838,7 @@ function vEmpDashboard(){
         ${hols.length?hols.map(h=>`<div class="li"><div class="grow"><b style="font-weight:600">${esc(h.name)}</b><div class="meta">${esc(fdate(h.day))}</div></div></div>`).join(""):`<div class="empty">No upcoming holidays added yet.</div>`}
       </div>
     </div>
+    ${myReimbCard()}
     <div class="card"><div class="card-h"><h3>Your documents</h3><button class="btn link" data-go="docs">My documents</button></div>
       <div class="card-b" style="display:flex;flex-direction:column;gap:10px">
         <div class="progress"><i style="width:${Math.round(got/DOCS.length*100)}%"></i></div>
@@ -906,6 +1004,7 @@ function vEmployee(){
   ${laptopCard(e)}${recordCard(e)}
   ${offCard(e)}
   ${leaveCard(e)}
+  ${empReimbCard(e)}
   ${isEmployee()?"":`<div class="card"><div class="card-h"><h3>History</h3><button class="btn link" data-go="audit">Full audit log</button></div>
     <div style="padding-bottom:12px">${acts.length?acts.map(tl).join(""):`<div class="empty">No recorded actions yet.</div>`}</div></div>`}
   </section>`;
@@ -2345,7 +2444,7 @@ function lvPayModal(email){
     if((before.monthlyGross??null)!==(after.monthlyGross??null)) changed.push("monthly salary");
     if(Number(before.casualOpening||0)!==Number(after.casualOpening||0)) changed.push("opening casual balance");
     if(changed.length) log(`Updated ${changed.join(" and ")}`,e,null,"ok");
-    m.remove(); toast(changed.length?`Saved for ${e.name}.`:"No changes to save."); render();});
+    m.remove(); toast(changed.length?`Saved for ${e.name}.`:"No changes to save."); if(S.route==="payroll") prLoad(); else render();});
 }
 async function lvAction(a){
   if(a==="new"){ S.lw=newLw(false,S.route==="employee"?(S.emps.find(x=>x.id===S.sel)||{}).email:""); return go("leaveapply"); }
@@ -2431,7 +2530,7 @@ function render(){
   if(S.user&&!isEmployee()&&["onboard","docs","employee"].includes(S.route)) refreshDocs();
   if(S.user&&["profile","employees","employee","dashboard"].includes(S.route)) refreshManagers();
   renderNav();
-  const v={dashboard:vDashboard,employees:vEmployees,employee:vEmployee,onboard:isEmployee()?vDocs:vOnboard,docs:vDocs,offboard:vOffboard,myleave:vMyLeave,team:vTeam,leaveapply:vLeaveApply,leave:vLeave,templates:vTemplates,audit:vAudit,users:vUsers,account:vAccount,profile:vProfile}[S.route]||vDashboard;
+  const v={dashboard:vDashboard,employees:vEmployees,employee:vEmployee,onboard:isEmployee()?vDocs:vOnboard,docs:vDocs,offboard:vOffboard,myleave:vMyLeave,team:vTeam,leaveapply:vLeaveApply,reimb:vReimb,claim:vClaim,claimnew:vClaimNew,payroll:vPayroll,leave:vLeave,templates:vTemplates,audit:vAudit,users:vUsers,account:vAccount,profile:vProfile}[S.route]||vDashboard;
   $("#view").innerHTML=v();
   if(isEmployee()) document.querySelectorAll("#view #laptopf input,#view #laptopf button").forEach(x=>x.disabled=true);
 }
@@ -2548,10 +2647,737 @@ document.addEventListener("submit",ev=>{
   go("employee",e.id); provision(e,apps);
 });
 
+/* ---------- Reimbursements ----------
+   Everything here reads from and writes to the server (/api/reimbursements, /api/payroll, /api/notifications); the page
+   never decides a status itself. Employees see and file their own claims; HR reviews, decides and runs payroll. */
+const RB_STATUS={draft:["Draft","p-mute"],submitted:["Pending review","p-warn"],under_review:["Under review","p-info"],
+  changes_requested:["Changes requested","p-warn"],resubmitted:["Resubmitted","p-info"],approved:["Approved","p-ok"],
+  rejected:["Rejected","p-bad"],payroll_pending:["Payroll pending","p-info"],in_payroll:["In payroll","p-info"],paid:["Paid","p-ok"]};
+const rbPill=s=>`<span class="pill ${(RB_STATUS[s]||["",""])[1]}">${esc((RB_STATUS[s]||[s])[0])}</span>`;
+const isHrUser=()=>!!S.user&&!isEmployee();
+const money=n=>n==null?"—":"₹"+Number(n).toLocaleString("en-IN",{minimumFractionDigits:Number(n)%1?2:0,maximumFractionDigits:2});
+const dtShort=s=>s?fts(new Date(s)):"—";
+const monthLabel=p=>p?new Date(p+"-01T00:00:00").toLocaleDateString("en-IN",{month:"long",year:"numeric"}):"—";
+const rbPerson=c=>{const e=empBy(c.email);return {name:c.employee.name,color:e?e.color:"var(--purple)",email:c.email};};
+const rbCat=k=>((S.rb.cats||[]).find(c=>c.key===k)||{name:k}).name;
+const skelRows=(n,cols)=>Array.from({length:n},()=>`<tr>${Array.from({length:cols},(_,i)=>`<td><span class="skel" style="width:${[70,50,80,40,45,30,55,40][i%8]}%"></span></td>`).join("")}</tr>`).join("");
+const rbIcon={doc:'<path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><path d="M14 3v6h6M8 13h8M8 17h5"/>',
+  warn:'<path d="M12 3 2 20h20z"/><path d="M12 10v4M12 17h.01"/>',check:'<path d="m5 12 5 5 9-10"/>',x:'<path d="M6 6l12 12M18 6 6 18"/>',
+  bell:'<path d="M6 8a6 6 0 1 1 12 0c0 7 3 8 3 8H3s3-1 3-8"/><path d="M10 20a2 2 0 0 0 4 0"/>',plus:'<path d="M12 5v14M5 12h14"/>',
+  zin:'<circle cx="11" cy="11" r="7"/><path d="m21 21-5-5M11 8v6M8 11h6"/>',zout:'<circle cx="11" cy="11" r="7"/><path d="m21 21-5-5M8 11h6"/>',
+  open:'<path d="M14 4h6v6M20 4l-8 8M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/>',down:'<path d="M12 4v11M7 10l5 5 5-5M5 20h14"/>'};
+const ico=k=>`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${rbIcon[k]}</svg>`;
+
+S.rb={state:"idle",claims:[],summary:null,cats:null,meta:null,f:{q:"",category:"",status:"",from:"",to:"",min:"",max:""},err:""};
+S.cd={id:null,state:"idle",claim:null,events:[],zoom:1};
+S.pr={period:"",state:"idle",runs:[],preview:null,run:null};
+
+async function rbLoadCats(){ if(S.rb.cats) return; const r=await api("GET","/api/reimbursements/categories"); if(r.ok){ S.rb.cats=r.data.categories; S.rb.meta=r.data; } }
+let rbTimer=null;
+async function rbLoad(){
+  if(!S.user){ S.rb.state="offline"; return render(); }
+  S.rb.state="loading"; render();
+  try{
+    await rbLoadCats();
+    const f=S.rb.f, qs=new URLSearchParams(Object.entries(f).filter(([,v])=>v)).toString();
+    const r=await api("GET","/api/reimbursements"+(qs?"?"+qs:""));
+    if(!r.ok) throw new Error(apiMsg(r));
+    S.rb.claims=r.data.claims; S.rb.summary=r.data.summary; S.rb.state="ready";
+    if(!qs) S.rb.allMine=r.data.claims;
+  }catch(e){ S.rb.state="error"; S.rb.err=e.message; }
+  if(S.route==="reimb") render();
+}
+/* HR search: a dropdown of matching employees. Picking one filters the claims to that person. */
+let rbSugAt=0;
+function rbSug(open){
+  const inp=$("#rbf-q"), menu=$("#rbf-menu"); if(!inp||!menu) return;
+  if(!open){ menu.hidden=true; inp.setAttribute("aria-expanded","false"); return; }
+  const q=lc(inp.value.trim()), withClaims=new Set(S.rb.claims.map(c=>lc(c.email)));
+  const opts=S.emps.filter(e=>e.status!=="offboarded"&&(!q||lc(e.name+" "+e.title+" "+e.email).includes(q)))
+    .sort((a,b)=>(withClaims.has(lc(b.email))-withClaims.has(lc(a.email)))||(a.name<b.name?-1:1)).slice(0,8);
+  rbSugAt=Math.min(rbSugAt,Math.max(0,opts.length-1));
+  menu.innerHTML=opts.length?opts.map((e,i)=>`<button type="button" class="combo-opt${i===rbSugAt?" on":""}" role="option" aria-selected="${i===rbSugAt}" data-rb-pick="${esc(e.name)}">${avatar(e)}<span><b>${esc(e.name)}</b><span class="sub">${esc(e.title||"")}${withClaims.has(lc(e.email))?" · has claims":""}</span></span></button>`).join("")
+    :`<div class="combo-empty">No employee matches. Press Enter to search claims and descriptions.</div>`;
+  menu.hidden=false; inp.setAttribute("aria-expanded","true");
+}
+async function rbPick(name){ S.rb.f.q=name; rbSugAt=0; rbSug(false); await rbLoad(); }
+const rbExp=c=>c.expenses&&c.expenses.length?c.expenses:[{category:c.category,amount:c.amount}];
+const catNames=c=>[...new Set(rbExp(c).map(x=>rbCat(x.category)))].join(", ");
+const catSummary=c=>{const e=rbExp(c),cats=[...new Set(e.map(x=>x.category))];
+  return `${esc(rbCat(cats[0]))}${cats.length>1?` <span class="muted">+${cats.length-1} more</span>`:""}${e.length>1?`<div class="muted" style="font-size:12.5px">${e.length} expenses</div>`:""}`;};
+const rcptCell=c=>{const nr=rbExp(c).filter(x=>x.noReceipt).length,d=c.documentCount||0;
+  return `${d?`<button class="btn link sm nolink" data-claim="${c.id}" data-doc="1">${ico("doc")}View${d>1?` (${d})`:""}</button>`:""}${nr?`<div class="muted" style="font-size:12.5px">${nr} without receipt</div>`:""}${!d&&!nr?`<span class="muted">None</span>`:""}`;};
+const flags=c=>{const v=c.validation||{},out=[];
+  if(c.duplicates&&c.duplicates.length) out.push(`<span class="flag" title="Possible duplicate">${ico("warn")}Duplicate?</span>`);
+  if(v.match&&v.match.status==="mismatch") out.push(`<span class="flag" title="Claimed amount differs from the invoice">${ico("warn")}Mismatch</span>`);
+  if(v.policy&&v.policy.over) out.push(`<span class="flag" title="Above the category limit">${ico("warn")}Over limit</span>`);
+  return out.join("");};
+
+function rbTable(claims,hr){
+  const st=S.rb.state;
+  const headRow=`<tr>${hr?"<th>Employee</th>":"<th>Claim</th>"}<th>Category</th><th class="hide-sm hide-md">Description</th><th class="num">Amount</th><th class="hide-sm">Submitted</th><th>Receipts</th><th>Status</th><th><span class="sr">Action</span></th></tr>`;
+  if(st==="loading"&&!claims.length) return `<div class="tbl-wrap"><table class="rb-table"><thead>${headRow}</thead><tbody>${skelRows(5,8)}</tbody></table></div>`;
+  if(st==="error") return `<div class="empty">${ico("warn")}<div>Unable to load reimbursements. Please try again.</div><button class="btn glass sm" data-rb="reload">Try again</button></div>`;
+  if(!claims.length) return `<div class="empty">${Object.values(S.rb.f).some(Boolean)?"No claims match these filters.":hr?"No reimbursement claims yet.":"You haven't filed any reimbursement claims yet."}</div>`;
+  return `<div class="tbl-wrap"><table class="rb-table"><thead>${headRow}</thead><tbody>
+    ${claims.map(c=>`<tr class="click" data-claim="${c.id}">
+      <td>${hr?person(rbPerson(c),`${c.employee.empNo||"No employee no."} · ${c.claimNo}`):`<b class="mono">${esc(c.claimNo)}</b>`}</td>
+      <td>${catSummary(c)}</td>
+      <td class="hide-sm hide-md rb-desc">${esc(c.description)}</td>
+      <td class="num"><b>${money(c.amount)}</b></td>
+      <td class="hide-sm num-cell">${c.submittedAt?dtShort(c.submittedAt):`<span class="muted">Not sent</span>`}</td>
+      <td>${rcptCell(c)}</td>
+      <td><div class="rb-st">${rbPill(c.status)}${flags(c)}</div></td>
+      <td class="num"><button class="btn ${hr&&["submitted","resubmitted","under_review"].includes(c.status)?"primary":"glass"} sm" data-claim="${c.id}">${hr&&["submitted","resubmitted","under_review"].includes(c.status)?"Review":c.status==="draft"||c.status==="changes_requested"?"Continue":"View"}</button></td>
+    </tr>`).join("")}</tbody></table></div>`;
+}
+
+function vReimb(){
+  const hr=isHrUser(), s=S.rb.summary, f=S.rb.f;
+  if(!S.user) return `<section class="section">${head("Finance","Reimburse<span class=\"grad\">ments.</span>","")}<div class="card"><div class="empty">Reimbursements need the server. Sign in to the app to use them.</div></div></section>`;
+  if(S.rb.state==="idle") setTimeout(rbLoad);
+  const card=(lbl,val,sub,tone="")=>`<div class="rb-stat ${tone}"><span class="lbl">${lbl}</span><b>${val}</b>${sub?`<span class="sub">${sub}</span>`:""}</div>`;
+  const loadingCards=S.rb.state==="loading"&&!s;
+  const cards=hr?(loadingCards?Array.from({length:6},()=>`<div class="rb-stat"><span class="skel" style="width:60%"></span><span class="skel big"></span></div>`).join(""):s?[
+      card("Pending review",s.pendingReview,"Waiting for HR",s.pendingReview?"warn":""),
+      card("Needs changes",s.needsChanges,"With the employee"),
+      card("Approved",s.approved,"All time"),
+      card("Pending payroll",s.pendingPayroll,money(s.pendingPayrollAmount)+" to pay"),
+      card("Paid this month",money(s.paidThisMonth),monthLabel(new Date().toISOString().slice(0,7))),
+      card("Total reimbursed",money(s.totalReimbursed),"All time")].join(""):"")
+    :(()=>{const mine=S.rb.allMine||S.rb.claims,sum=(arr)=>money(arr.reduce((n,c)=>n+c.amount,0));
+      const wait=mine.filter(c=>["submitted","under_review","resubmitted"].includes(c.status)),todo=mine.filter(c=>["draft","changes_requested"].includes(c.status)),
+        pay=mine.filter(c=>["approved","payroll_pending","in_payroll"].includes(c.status)),paid=mine.filter(c=>c.status==="paid");
+      return [card("Waiting for HR",wait.length,sum(wait)),card("Needs your action",todo.length,"Drafts and changes asked",todo.length?"warn":""),
+        card("Coming with payroll",pay.length,sum(pay)),card("Paid to you",sum(paid),`${paid.length} claim${paid.length===1?"":"s"}`)].join("");})();
+  const cats=S.rb.cats||[];
+  return `<section class="section">
+  ${head(hr?"Finance":"Me",hr?"Reimburse<span class=\"grad\">ments.</span>":"My reimburse<span class=\"grad\">ments.</span>",
+    hr?"Review expense claims, check the receipts and send approved amounts to payroll.":"File expense claims with the receipt. HR reviews them and approved amounts are paid with your salary.",
+    `<button class="btn primary" data-rb="new">${ico("plus")}${hr?"File a claim for someone":"New claim"}</button>`,true)}
+  <div class="rb-stats ${hr?"six":"four"}">${cards}</div>
+  <div class="card">
+    <div class="rb-filters">
+      ${hr?`<div class="combo grow"><input class="input" id="rbf-q" type="search" placeholder="Search employee, claim number, description" value="${esc(f.q)}" aria-label="Search employee" role="combobox" aria-expanded="false" aria-controls="rbf-menu" aria-autocomplete="list" autocomplete="off" style="width:100%">
+        <div class="combo-menu" id="rbf-menu" role="listbox" hidden></div></div>`
+      :`<input class="input grow" id="rbf-q" type="search" placeholder="Search claim number or description" value="${esc(f.q)}" aria-label="Search">`}
+      <select class="input" id="rbf-category" aria-label="Category"><option value="">All categories</option>${cats.map(c=>`<option value="${c.key}" ${f.category===c.key?"selected":""}>${esc(c.name)}</option>`).join("")}</select>
+      <select class="input" id="rbf-status" aria-label="Status"><option value="">All statuses</option>${Object.entries(RB_STATUS).filter(([k])=>k!=="approved"&&(hr?k!=="draft":true)).map(([k,v])=>`<option value="${k}" ${f.status===k?"selected":""}>${v[0]}</option>`).join("")}</select>
+      <label class="rb-range"><span>Expense date</span><input class="input" type="date" id="rbf-from" value="${esc(f.from)}" aria-label="From date"><span>–</span><input class="input" type="date" id="rbf-to" value="${esc(f.to)}" aria-label="To date"></label>
+      <label class="rb-range"><span>Amount ₹</span><input class="input" type="number" min="0" step="100" id="rbf-min" value="${esc(f.min)}" placeholder="Min" aria-label="Minimum amount"><span>–</span><input class="input" type="number" min="0" step="100" id="rbf-max" value="${esc(f.max)}" placeholder="Max" aria-label="Maximum amount"></label>
+      ${Object.values(f).some(Boolean)?`<button class="btn link sm" data-rb="clear">Clear filters</button>`:""}
+    </div>
+    ${rbTable(S.rb.claims,hr)}
+  </div>
+  ${hr?monthlyCard():""}
+  ${hr?`<div class="card"><div class="card-h"><h3>Categories</h3><span class="muted">Optional limits flag claims above them for review. Nothing is rejected automatically.</span></div>
+    <div class="tbl-wrap"><table><thead><tr><th>Category</th><th>Limit per claim</th><th>Status</th><th></th></tr></thead><tbody>
+    ${cats.map(c=>`<tr><td>${esc(c.name)}</td><td>${c.maxAmount?money(c.maxAmount):`<span class="muted">No limit</span>`}</td><td>${c.active?`<span class="pill p-ok">On</span>`:`<span class="pill p-mute">Off</span>`}</td><td class="num"><button class="btn glass sm" data-rb="cat:${c.key}">Edit</button></td></tr>`).join("")}
+    </tbody></table></div></div>`:""}
+  </section>`;
+}
+
+/* Monthly totals (HR): each person's claims for the month added up — the amount to add to that month's salary. */
+S.rbm={period:new Date(Date.now()+5.5*3600e3).toISOString().slice(0,7),state:"idle",data:null};
+async function rbmLoad(){
+  S.rbm.state="loading"; if(S.route==="reimb") render();
+  const r=await api("GET","/api/reimbursements/monthly?period="+S.rbm.period);
+  S.rbm.data=r.ok?r.data:null; S.rbm.state=r.ok?"ready":"error"; if(S.route==="reimb") render();
+}
+function monthlyCard(){
+  const m=S.rbm, d=m.data;
+  if(m.state==="idle") setTimeout(rbmLoad);
+  const ps=d&&d.payrollStatus;
+  return `<div class="card"><div class="card-h"><div><h3>Monthly totals</h3><span class="muted">Every claim a person files is added up for the month. The approved total is added to that month's salary.</span></div>
+    <input class="input" type="month" id="rbm-period" value="${esc(m.period)}" aria-label="Month" style="width:auto"></div>
+    ${(m.state==="loading"||m.state==="idle")&&!d?`<div class="tbl-wrap"><table><tbody>${skelRows(3,5)}</tbody></table></div>`:m.state==="error"||!d?`<div class="empty">Unable to load the monthly totals. Please try again.</div>`:
+    d.people.length?`<div class="tbl-wrap"><table><thead><tr><th>Employee</th><th class="num">Approved claims</th><th class="num">Add to salary</th><th class="num hide-sm">Waiting for review</th><th>Payroll</th></tr></thead><tbody>
+      ${d.people.map(p=>{const e=empBy(p.email)||{name:p.name,color:"var(--purple)"};return `<tr class="click" data-rb-emp="${esc(p.email)}"><td>${person(e,p.empNo||p.email)}</td><td class="num">${p.approvedCount||"—"}</td>
+        <td class="num"><b>${p.approvedTotal?money(p.approvedTotal):"—"}</b></td><td class="num hide-sm">${p.waitingCount?`${money(p.waitingTotal)} <span class="muted">(${p.waitingCount})</span>`:"—"}</td>
+        <td>${!p.approvedCount?`<span class="muted">Nothing approved</span>`:p.paidTotal>=p.approvedTotal?`<span class="pill p-ok">Paid</span>`:ps==="processed"||p.inPayrollCount?`<span class="pill p-info">In payroll</span>`:`<span class="pill p-warn">Payroll pending</span>`}</td></tr>`}).join("")}
+      <tr class="rb-total"><td><b>Total for ${esc(monthLabel(d.period))}</b></td><td></td><td class="num"><b>${money(d.totals.approved)}</b></td><td class="num hide-sm">${d.totals.waiting?money(d.totals.waiting):"—"}</td><td>${ps==="paid"?`<span class="pill p-ok">Payroll paid</span>`:ps==="processed"?`<span class="pill p-info">Payroll processed</span>`:`<button class="btn link sm" data-go="payroll">Go to payroll</button>`}</td></tr>
+    </tbody></table></div>`:`<div class="empty">No claims for ${esc(monthLabel(m.period))} yet.</div>`}</div>`;
+}
+
+/* One person's reimbursements on their employee page (HR), with Approve right there. */
+S.erb={};
+async function erbLoad(email){
+  S.erb[email]={state:"loading"};
+  await rbLoadCats();   // category names
+  const [list,mon]=await Promise.all([api("GET","/api/reimbursements?email="+encodeURIComponent(email)),api("GET",`/api/reimbursements/monthly?period=${S.rbm.period}&email=${encodeURIComponent(email)}`)]);
+  S.erb[email]=list.ok?{state:"ready",claims:list.data.claims,month:mon.ok?mon.data:null}:{state:"error"};
+  if(S.route==="employee") render();
+}
+function empReimbCard(e){
+  if(!isHrUser()||!e||!e.email) return "";
+  const k=lc(e.email), st=S.erb[k];
+  if(!st){ setTimeout(()=>erbLoad(k)); }
+  const head=`<div class="card-h"><h3>Reimbursements</h3><button class="btn link sm" data-rb-emp="${esc(e.email)}">All claims</button></div>`;
+  if(!st||st.state==="loading") return `<div class="card">${head}<div class="card-b"><span class="skel" style="width:70%"></span><span class="skel" style="width:50%"></span></div></div>`;
+  if(st.state==="error") return `<div class="card">${head}<div class="empty">Unable to load reimbursements. Please try again.</div></div>`;
+  const p=st.month&&st.month.people[0], waiting=st.claims.filter(c=>["submitted","under_review","resubmitted"].includes(c.status));
+  return `<div class="card">${head}
+    <div class="rb-stats four" style="padding:0 24px 16px">
+      <div class="rb-stat"><span class="lbl">Approved for ${esc(monthLabel(S.rbm.period))}</span><b>${money(p?p.approvedTotal:0)}</b><span class="sub">${p?p.approvedCount:0} claim${p&&p.approvedCount===1?"":"s"}, added to salary</span></div>
+      <div class="rb-stat ${waiting.length?"warn":""}"><span class="lbl">Waiting for review</span><b>${waiting.length}</b><span class="sub">${money(waiting.reduce((n,c)=>n+c.amount,0))}</span></div>
+      <div class="rb-stat"><span class="lbl">Paid to date</span><b>${money(st.claims.filter(c=>c.status==="paid").reduce((n,c)=>n+(c.paidAmount||c.amount),0))}</b></div>
+      <div class="rb-stat"><span class="lbl">Claims filed</span><b>${st.claims.filter(c=>c.status!=="draft").length}</b></div></div>
+    ${st.claims.filter(c=>c.status!=="draft").slice(0,6).map(c=>`<div class="li wrap"><div class="grow"><b style="font-weight:600">${esc(catNames(c))} · ${money(c.amount)}</b> <span class="muted mono">${esc(c.claimNo)}</span>
+        <div class="meta">${esc(fdate(c.expenseDate))} · ${esc(c.description)}</div></div>
+        <div class="row" style="gap:8px">${rbPill(c.status)}${flags(c)}
+        ${["submitted","under_review","resubmitted"].includes(c.status)?`<button class="btn glass sm" data-claim="${c.id}">Review</button><button class="btn primary sm" data-rb-quick="${c.id}">Approve</button>`:`<button class="btn glass sm" data-claim="${c.id}">View</button>`}</div></div>`).join("")
+      ||`<div class="empty">No reimbursement claims yet.</div>`}
+  </div>`;
+}
+async function rbQuickApprove(id){
+  const r0=await api("GET",`/api/reimbursements/${id}`); if(!r0.ok) return toast(apiMsg(r0));
+  const c=r0.data.claim, v=c.validation||{}, risky=(c.duplicates||[]).length||(v.match&&v.match.status==="mismatch")||(v.policy&&v.policy.over);
+  const m=modal(`<div class="card-h" style="padding-top:24px"><h3>Approve ${esc(c.claimNo)}?</h3></div><div class="card-b">
+    <div class="callout">${svg("info")}<div><b>${money(c.amount)}</b> · ${(c.items||[]).length} expense${(c.items||[]).length===1?"":"s"}<div class="muted">It is added to ${esc(c.employee.name)}'s next payroll, on top of salary.</div></div></div>
+    ${linesTable(c,{compact:true})}
+    ${v.noReceipt&&v.noReceipt.count?`<div class="muted">${v.noReceipt.count} small expense${v.noReceipt.count===1?"":"s"} without a receipt (${money(v.noReceipt.total)}), declared by the employee.</div>`:""}
+    ${v.match&&v.match.status==="match"?`<div class="muted">${ico("check")} Amount matches the invoice.</div>`:""}
+    ${risky?`<div class="callout bad">${ico("warn")}<div>This claim has open flags (duplicate, amount mismatch or over the limit). Open it and check the invoice first.</div></div>`:""}</div>
+    <div class="modal-f"><button class="btn glass" data-close>Cancel</button><button class="btn glass" data-claim="${c.id}" data-close>Open claim</button><button class="btn primary" data-ok>Approve</button></div>`);
+  m.querySelector("[data-ok]").addEventListener("click",async ev=>{ev.target.disabled=true;
+    if(["submitted","resubmitted"].includes(c.status)) await api("POST",`/api/reimbursements/${c.id}/open`);   // the review is recorded first
+    const r=await api("POST",`/api/reimbursements/${c.id}/approve`,{note:"Approved from the employee page"}); m.remove();
+    if(!r.ok) return toast(apiMsg(r)); toast(`Approved. ${money(c.amount)} goes with the ${monthLabel(r.data.payrollPeriod)} payroll.`);
+    delete S.erb[lc(c.email)]; S.rb.state="idle"; S.rbm.state="idle"; render();});
+}
+document.addEventListener("click",ev=>{
+  const q=ev.target.closest("[data-rb-quick]"); if(q){ ev.stopPropagation(); return rbQuickApprove(Number(q.dataset.rbQuick)); }
+  const em=ev.target.closest("[data-rb-emp]"); if(em){ ev.stopPropagation(); const e=empBy(em.dataset.rbEmp); S.rb.f={q:e?e.name:em.dataset.rbEmp,category:"",status:"",from:"",to:"",min:"",max:""}; S.rb.state="idle"; go("reimb"); }
+},true);
+document.addEventListener("change",ev=>{ if(ev.target.id==="rbm-period"&&ev.target.value){ S.rbm.period=ev.target.value; rbmLoad(); } });
+
+/* The employee's own dashboard card. */
+S.myrb={state:"idle",claims:[]};
+async function myrbLoad(){ S.myrb.state="loading"; await rbLoadCats(); const r=await api("GET","/api/reimbursements"); S.myrb={state:r.ok?"ready":"error",claims:r.ok?r.data.claims:[]}; if(S.route==="dashboard") render(); }
+function myReimbCard(){
+  if(!S.user) return "";
+  if(S.myrb.state==="idle") setTimeout(myrbLoad);
+  const cl=S.myrb.claims, month=new Date(Date.now()+5.5*3600e3).toISOString().slice(0,7);
+  const wait=cl.filter(c=>["submitted","under_review","resubmitted"].includes(c.status)), todo=cl.filter(c=>["draft","changes_requested"].includes(c.status));
+  const thisMonth=cl.filter(c=>["payroll_pending","in_payroll","paid"].includes(c.status)&&c.payrollPeriod===month);
+  return `<div class="card"><div class="card-h"><h3>Reimbursements</h3><div class="row" style="gap:8px"><button class="btn link sm" data-go="reimb">My claims</button><button class="btn primary sm" data-rb="new">New claim</button></div></div>
+    <div class="rb-stats four" style="padding:0 24px 18px">
+      <div class="rb-stat"><span class="lbl">Added to ${esc(monthLabel(month))} salary</span><b>${money(thisMonth.reduce((n,c)=>n+c.amount,0))}</b><span class="sub">${thisMonth.length} approved claim${thisMonth.length===1?"":"s"}</span></div>
+      <div class="rb-stat"><span class="lbl">Waiting for HR</span><b>${wait.length}</b><span class="sub">${money(wait.reduce((n,c)=>n+c.amount,0))}</span></div>
+      <div class="rb-stat ${todo.length?"warn":""}"><span class="lbl">Needs your action</span><b>${todo.length}</b><span class="sub">Drafts and changes asked</span></div>
+      <div class="rb-stat"><span class="lbl">Paid to you</span><b>${money(cl.filter(c=>c.status==="paid").reduce((n,c)=>n+(c.paidAmount||c.amount),0))}</b></div></div></div>`;
+}
+
+/* ---------- claim detail ---------- */
+async function openClaim(id,{doc=false}={}){
+  S.cd={id:Number(id),state:"loading",claim:null,events:[],zoom:1,scrollDoc:doc,doc:null};
+  S.route="claim"; try{history.replaceState(null,"","#claim-"+id)}catch(e){}
+  render(); window.scrollTo(0,0);
+  await rbLoadCats();
+  let r=await api("GET",`/api/reimbursements/${id}`);
+  if(r.ok&&isHrUser()&&["submitted","resubmitted"].includes(r.data.claim.status)){   // HR opening it starts the review
+    const o=await api("POST",`/api/reimbursements/${id}/open`); if(o.ok&&o.data.changed) r=await api("GET",`/api/reimbursements/${id}`);
+  }
+  if(S.cd.id!==Number(id)) return;
+  if(!r.ok){ S.cd.state=r.status===404?"missing":"error"; return render(); }
+  S.cd.claim=r.data.claim; S.cd.events=r.data.events; S.cd.state="ready"; render();
+  if(doc){ const el=$("#rb-doc"); if(el) el.scrollIntoView({block:"start"}); }
+}
+
+/* The stepper is built from the claim's real event history: every review round shows, and rejection ends it. */
+function claimSteps(c,events){
+  const L={submitted:"Submitted",under_review:"Under review",changes_requested:"Changes requested",resubmitted:"Resubmitted",
+    approved:"Approved",rejected:"Rejected",payroll_pending:"Payroll pending",in_payroll:"Included in payroll",paid:"Paid"};
+  const seen=[];
+  for(const e of events) if(e.status&&e.status!=="draft"&&L[e.status]){ const last=seen[seen.length-1]; if(!last||last.status!==e.status) seen.push({status:e.status,label:L[e.status],at:e.at}); }
+  const steps=seen.map(x=>({...x,state:"done"}));
+  if(c.status==="rejected"){ if(steps.length) steps[steps.length-1].state="bad"; return steps; }
+  const flow=["submitted","under_review","approved","payroll_pending","in_payroll","paid"];
+  const lastFlow=[...seen].reverse().find(x=>flow.includes(x.status));
+  const from=lastFlow?flow.indexOf(lastFlow.status)+1:0;
+  if(c.status==="changes_requested") steps.push({status:"resubmitted",label:"Resubmitted",state:"future"});
+  const rest=c.status==="changes_requested"?flow.slice(1):flow.slice(from);
+  for(const s of rest) steps.push({status:s,label:L[s],state:"future"});
+  if(c.status!=="paid"&&c.status!=="draft"){ const cur=steps.findLastIndex?steps.findLastIndex(x=>x.state==="done"):steps.map(x=>x.state).lastIndexOf("done"); if(cur>=0) steps[cur].state="current"; }
+  if(c.status==="paid") steps[steps.length-1].state="done";
+  return steps;
+}
+const stepIcon=s=>s.state==="bad"?ico("x"):s.state==="future"?"":ico("check");
+function stepperHtml(c,events){
+  const steps=claimSteps(c,events);
+  return `<ol class="rb-steps" aria-label="Claim progress">${steps.map(s=>`<li class="${s.state}" ${s.state==="current"?'aria-current="step"':""}><span class="dot">${stepIcon(s)}</span><span class="t"><b>${esc(s.label)}</b>${s.at?`<span>${dtShort(s.at)}</span>`:""}</span></li>`).join("")}</ol>`;
+}
+
+/* The expenses of a claim as a table. In the claim page a receipt opens in the viewer; elsewhere in a new tab. */
+function linesTable(c,{compact=false,viewer=false}={}){
+  const items=c.items||[], vi=(c.validation&&c.validation.items)||{};
+  const tag=it=>{const m=vi[it.id]&&vi[it.id].match;
+    if(it.document) return m&&m.status==="match"?`<span class="flag ok">${ico("check")}Matches</span>`:m&&m.status==="mismatch"?`<span class="flag" title="Amount on the receipt">${ico("warn")}Receipt ${money(m.invoiceTotal)}</span>`:"";
+    return "";};
+  const rc=it=>it.document?`${viewer?`<button class="btn link sm nolink" data-rb="doc:${it.document.id}">${ico("doc")}View</button>`:`<a class="btn link sm nolink" href="/api/reimbursements/${c.id}/documents/${it.document.id}" target="_blank" rel="noopener">${ico("doc")}View</a>`} ${tag(it)}`
+    :it.noReceipt?`<span class="pill p-mute">No receipt</span>`:`<span class="pill p-warn">Missing</span>`;
+  if(!items.length) return "";
+  return `<div class="tbl-wrap"><table class="rb-lines"><thead><tr><th>#</th><th>Category</th>${compact?"":`<th class="hide-sm">Date</th>`}<th class="${compact?"":"hide-sm"}">What for</th>${compact?"":`<th class="hide-sm hide-md">Paid with</th>`}<th class="num">Amount</th><th>Receipt</th></tr></thead><tbody>
+    ${items.map((it,i)=>`<tr><td class="muted">${i+1}</td><td>${esc(rbCat(it.category))}${it.source==="excel"?`<div class="muted" style="font-size:12px">From expense sheet</div>`:""}</td>
+      ${compact?"":`<td class="hide-sm num-cell">${esc(fdate(it.expenseDate))}</td>`}<td class="desc ${compact?"":"hide-sm"}">${esc(it.description)}</td>${compact?"":`<td class="hide-sm hide-md">${esc(it.paymentMethod||"—")}</td>`}
+      <td class="num"><b>${money(it.amount)}</b></td><td>${rc(it)}</td></tr>`).join("")}
+    ${items.length>1?`<tr class="rb-total"><td></td><td colspan="${compact?2:4}"><b>Total</b></td><td class="num"><b>${money(items.reduce((n,it)=>n+it.amount,0))}</b></td><td></td></tr>`:""}
+  </tbody></table></div>`;
+}
+const curDocItem=c=>{const d=(c.items||[]).filter(it=>it.document);return d.find(it=>it.document.id===S.cd.doc)||d[0]||null;};
+function docViewer(c){
+  const withDoc=(c.items||[]).filter(it=>it.document), nr=(c.items||[]).filter(it=>it.noReceipt&&!it.document);
+  if(!withDoc.length) return `<div class="card" id="rb-doc"><div class="card-h"><h3>Receipts</h3></div><div class="empty">${ico("doc")}<div>${nr.length?"Every expense on this claim is a small expense without a receipt, declared by the employee.":"No receipt uploaded."}</div></div></div>`;
+  const it=curDocItem(c), d=it.document, src=`/api/reimbursements/${c.id}/documents/${d.id}`, isPdf=d.mime==="application/pdf", z=S.cd.zoom||1;
+  return `<div class="card rb-doccard" id="rb-doc"><div class="card-h"><h3>Receipts</h3><span class="muted" title="${esc(d.name)}">${esc(d.name)} · ${Math.max(1,Math.round(d.size/1024))} KB</span></div>
+    ${withDoc.length>1||nr.length?`<div class="rb-doctabs" role="tablist" aria-label="Receipts">${withDoc.map(x=>`<button type="button" role="tab" aria-selected="${x===it}" class="${x===it?"on":""}" data-rb="doc:${x.document.id}">${x.position}. ${esc(rbCat(x.category))} · ${money(x.amount)}</button>`).join("")}${nr.length?`<span class="muted" style="align-self:center;font-size:13px">+ ${nr.length} without receipt</span>`:""}</div>`:""}
+    <div class="rb-viewer ${isPdf?"pdf":"img"}">${isPdf?`<iframe src="${src}#view=FitH" title="Receipt for expense ${it.position}: ${esc(d.name)}"></iframe>`
+      :`<div class="rb-imgwrap"><img src="${src}" alt="Receipt for expense ${it.position}: ${esc(d.name)}" style="width:${Math.round(z*100)}%"></div>`}</div>
+    <div class="rb-doctools">
+      ${isPdf?`<span class="muted">Zoom and page through the PDF with its own toolbar.</span>`:`<button class="btn glass sm" data-rb="zoom:-1" aria-label="Zoom out">${ico("zout")}</button><span class="muted">${Math.round(z*100)}%</span><button class="btn glass sm" data-rb="zoom:1" aria-label="Zoom in">${ico("zin")}</button>`}
+      <span class="grow"></span>
+      <button class="btn glass sm" data-rb="bigdoc">${ico("open")}Open larger</button>
+      <a class="btn glass sm" href="${src}?download=1">${ico("down")}Download</a>
+    </div></div>`;
+}
+
+function validationHtml(c){
+  const v=c.validation||{}, vi=v.items||{}, items=c.items||[];
+  const row=(ok,txt)=>`<li class="${ok===true?"ok":ok===false?"bad":"warn"}">${ok===true?ico("check"):ico("warn")}<span>${txt}</span></li>`;
+  const out=[];
+  for(const it of items){
+    const x=vi[it.id]||{}, m=x.match||{}, lbl=`<b>${it.position}. ${esc(rbCat(it.category))} ${money(it.amount)}</b>`;
+    if(it.document){
+      if(m.status==="match") out.push(row(true,`${lbl}: amount matches the receipt`));
+      else if(m.status==="mismatch") out.push(row(false,`${lbl}: the receipt shows ${money(m.invoiceTotal)}. HR review required.`));
+      else out.push(row(null,`${lbl}: ${x.read&&x.read.readable?"receipt read, but no total found. Compare it by eye.":esc((x.read&&x.read.note)||"the receipt can't be read automatically. Compare it by eye.")}`));
+    } else if(it.noReceipt) out.push(row(null,`${lbl}: no receipt. Small expense declared by the employee${it.source==="excel"?" (from their expense sheet)":""}.`));
+    else out.push(row(false,`${lbl}: receipt missing`));
+  }
+  for(const p of (v.policy&&v.policy.categories)||[]) if(p.limit) out.push(p.over?row(false,`${esc(p.name)}: ${money(p.total)} is above the limit of ${money(p.limit)}`):row(true,`${esc(p.name)}: within the limit of ${money(p.limit)}`));
+  const cur=curDocItem(c), f=cur&&vi[cur.id]&&vi[cur.id].read&&vi[cur.id].read.fields;
+  const cmp=f?`<div class="muted" style="font-size:13px">Expense ${cur.position} compared with its receipt</div><table class="rb-cmp"><thead><tr><th></th><th>Employee entered</th><th>Read from receipt</th></tr></thead><tbody>
+      ${[["Amount",money(cur.amount),f.total!=null?money(f.total):"—"],["Vendor","—",esc(f.vendor||"—")],["Invoice no.","—",esc(f.invoiceNo||"—")],
+        ["Date",esc(fdate(cur.expenseDate)),f.invoiceDate?esc(fdate(f.invoiceDate)):"—"],["Subtotal","—",f.subtotal!=null?money(f.subtotal):"—"],["Tax","—",f.tax!=null?money(f.tax):"—"]]
+        .map(([k,a,b])=>`<tr><th>${k}</th><td>${a}</td><td>${b}</td></tr>`).join("")}</tbody></table>`:"";
+  const dups=(c.duplicates||[]).length?`<div class="callout bad">${ico("warn")}<div><b>Possible duplicate claim.</b> Check before deciding; it is not rejected automatically.
+      ${c.duplicates.map(d=>`<div class="rb-dup"><button class="btn link sm" data-claim="${d.id}">${esc(d.claimNo)}</button> · ${money(d.amount)} · ${esc(fdate(d.expenseDate))} · ${esc((RB_STATUS[d.status]||[d.status])[0])} — ${esc(d.reason)}</div>`).join("")}</div></div>`:"";
+  return `<div class="card"><div class="card-h"><h3>Validation</h3></div><div class="card-b rb-val">${dups}${out.length?`<ul class="rb-checks">${out.join("")}</ul>`:`<div class="muted">Checks run when receipts are uploaded.</div>`}${cmp}</div></div>`;
+}
+
+function timelineHtml(events){
+  return `<div class="card"><div class="card-h"><h3>Audit timeline</h3><span class="muted">${events.length} events</span></div>
+    <ol class="rb-tl">${events.slice().reverse().map(e=>`<li><span class="dot"></span><div><b>${esc(e.kind)}</b>${e.note?`<div class="muted">${esc(e.note)}</div>`:""}<div class="meta">${dtShort(e.at)} · ${esc(e.actor||"")}</div></div></li>`).join("")}</ol></div>`;
+}
+
+function vClaim(){
+  const st=S.cd.state, c=S.cd.claim, hr=isHrUser();
+  const back=`<button class="back" data-go="reimb">← ${hr?"All reimbursements":"My reimbursements"}</button>`;
+  if(st==="loading"||st==="idle") return `<section class="section" style="gap:20px">${back}<div class="card rb-head"><span class="skel" style="width:30%"></span><span class="skel big" style="width:45%"></span><span class="skel" style="width:60%"></span></div><div class="card" style="padding:22px"><span class="skel" style="width:100%;height:40px"></span></div><div class="rb-grid"><div class="card" style="padding:22px"><span class="skel" style="width:80%"></span><span class="skel" style="width:60%"></span></div><div class="card rb-viewer" style="height:420px"></div></div></section>`;
+  if(st==="missing") return `<section class="section">${back}<div class="card"><div class="empty">This claim doesn't exist or isn't yours to see.</div></div></section>`;
+  if(st==="error") return `<section class="section">${back}<div class="card"><div class="empty">${ico("warn")}<div>Unable to load reimbursement details. Please try again.</div><button class="btn glass sm" data-claim="${S.cd.id}">Try again</button></div></div>`;
+  const canDecide=hr&&["submitted","under_review","resubmitted"].includes(c.status);
+  const actions=canDecide?`<div class="card rb-actions"><div><b>Decision</b><div class="muted">Approving sends ${money(c.amount)} to the next payroll. It won't change the salary.</div></div>
+      <div class="row"><button class="btn glass" data-rb="changes">Request changes</button><button class="btn danger" data-rb="reject">Reject</button><button class="btn primary" data-rb="approve">Approve</button></div></div>`:"";
+  const ownBar=["draft","changes_requested"].includes(c.status)&&(!hr||c.status==="draft")?`<div class="card rb-actions"><div><b>${c.status==="draft"?"This claim hasn't been sent yet.":"HR asked for changes."}</b><div class="muted">${c.status==="draft"?"Finish it and submit it for review.":"Update the expenses or receipts, then resubmit."}</div></div>
+      <div class="row">${c.status==="draft"?`<button class="btn glass" data-rb="delete">Delete draft</button>`:""}<button class="btn primary" data-rb="edit">${c.status==="draft"?"Continue":"Edit and resubmit"}</button></div></div>`:"";
+  const decisionNote=c.status==="rejected"?`<div class="callout bad">${ico("x")}<div><b>Rejected: ${esc(c.rejectionReason)}</b>${c.rejectionNote?`<div>${esc(c.rejectionNote)}</div>`:""}</div></div>`
+    :c.changeComment&&["changes_requested","resubmitted","under_review"].includes(c.status)?`<div class="callout">${svg("info")}<div><b>HR's comment</b><div>${esc(c.changeComment)}</div></div></div>`:"";
+  const pay=["payroll_pending","in_payroll","paid"].includes(c.status)?`<div class="card"><div class="card-h"><h3>Payroll</h3></div><div class="card-b">${rkv([
+      ["Payroll month",esc(monthLabel(c.payrollPeriod))],["Approved",`${esc(dtShort(c.approvedAt))}`],["Payroll run",c.payrollRunId?`#${c.payrollRunId}`:"Not processed yet"],
+      ["Paid",c.paidAt?`${money(c.paidAmount)} on ${esc(dtShort(c.paidAt))}`:"Not yet"]])}</div></div>`:"";
+  return `<section class="section" style="gap:20px">${back}
+  <div class="card rb-head">
+    <div class="rb-head-l"><div class="eyebrow">Claim <span class="mono">${esc(c.claimNo)}</span></div>
+      <h2>${esc(c.employee.name)}</h2>
+      <div class="muted">${esc(c.employee.empNo||"No employee number")}${c.employee.title?` · ${esc(c.employee.title)}`:""}${c.submittedAt?` · Submitted ${esc(dtShort(c.submittedAt))}`:""}</div></div>
+    <div class="rb-head-r"><b class="rb-amt">${money(c.amount)}</b>${rbPill(c.status)}</div>
+  </div>
+  <div class="card rb-stepcard">${stepperHtml(c,S.cd.events)}</div>
+  ${decisionNote}${actions}${ownBar}
+  <div class="card"><div class="card-h"><h3>Expenses</h3><span class="muted">${(c.items||[]).length} expense${(c.items||[]).length===1?"":"s"} · ${money(c.amount)}</span></div>${linesTable(c,{viewer:true})}</div>
+  <div class="rb-grid">
+    <div class="rb-col">
+      ${validationHtml(c)}
+      ${pay}
+    </div>
+    <div class="rb-col">${docViewer(c)}</div>
+  </div>
+  ${timelineHtml(S.cd.events)}
+  </section>`;
+}
+
+/* ---------- decisions (each one goes to the server, then the claim is reloaded from it) ---------- */
+async function rbDecide(path,body,okMsg){
+  const id=S.cd.id, r=await api("POST",`/api/reimbursements/${id}/${path}`,body);
+  if(!r.ok){ return r; }
+  toast(okMsg); S.rb.state="idle"; S.rbm.state="idle"; S.erb={}; await openClaim(id); return r;
+}
+function rbConfirm(kind){
+  const c=S.cd.claim; if(!c) return;
+  if(kind==="approve"){
+    const m=modal(`<div class="card-h" style="padding-top:24px"><h3>Approve ${esc(c.claimNo)}?</h3></div><div class="card-b">
+      <div class="callout">${svg("info")}<div><b>${money(c.amount)}</b> will be added to ${esc(c.employee.name)}'s next payroll as a reimbursement, separate from their salary.</div></div>
+      ${(c.duplicates||[]).length||(c.validation&&c.validation.match&&c.validation.match.status==="mismatch")?`<div class="callout bad">${ico("warn")}<div>This claim has open flags (duplicate or amount mismatch). Approve only if you've checked them.</div></div>`:""}
+      ${c.validation&&c.validation.noReceipt&&c.validation.noReceipt.count?`<div class="muted">Includes ${c.validation.noReceipt.count} small expense${c.validation.noReceipt.count===1?"":"s"} without a receipt (${money(c.validation.noReceipt.total)}), declared by the employee.</div>`:""}
+      ${wf("rd-note","Note (optional)",`<input class="input" id="rd-note" placeholder="For the audit trail">`)}</div>
+      <div class="modal-f"><button class="btn glass" data-close>Cancel</button><button class="btn primary" data-ok>Approve</button></div>`);
+    m.querySelector("[data-ok]").addEventListener("click",async ev=>{ev.target.disabled=true;const r=await rbDecide("approve",{note:$("#rd-note").value},"Approved and added to payroll.");if(r.ok)m.remove();else{ev.target.disabled=false;toast(apiMsg(r));}});
+  }
+  if(kind==="reject"){
+    const reasons=(S.rb.meta&&S.rb.meta.rejectReasons)||["Other"];
+    const m=modal(`<form novalidate><div class="card-h" style="padding-top:24px"><h3>Reject ${esc(c.claimNo)}?</h3></div><div class="card-b">
+      <div class="field"><label for="rj-reason">Reason</label><select class="input" id="rj-reason"><option value="">Choose a reason…</option>${reasons.map(x=>`<option>${esc(x)}</option>`).join("")}</select><span class="ferr" id="rj-reason-err" hidden></span></div>
+      <div class="field"><label for="rj-note">Details for the employee</label><textarea class="input" id="rj-note" rows="3" placeholder="Required when the reason is Other"></textarea><span class="ferr" id="rj-note-err" hidden></span></div>
+      <div class="muted" style="font-size:13px">The employee is told the reason. A rejected claim can't be reopened; they can file a new one.</div></div>
+      <div class="modal-f"><button type="button" class="btn glass" data-close>Cancel</button><button type="submit" class="btn danger">Reject claim</button></div></form>`);
+    m.querySelector("form").addEventListener("submit",async ev=>{ev.preventDefault();
+      const r=await rbDecide("reject",{reason:$("#rj-reason").value,note:$("#rj-note").value},"Claim rejected.");
+      if(r.ok) return m.remove();
+      const e=(r.data&&r.data.errors)||{}; for(const k of ["reason","note"]){const n=$("#rj-"+k+"-err"); if(n){n.textContent=e[k]||"";n.hidden=!e[k];}} if(!Object.keys(e).length) toast(apiMsg(r));});
+  }
+  if(kind==="changes"){
+    const m=modal(`<form novalidate><div class="card-h" style="padding-top:24px"><h3>Request changes</h3></div><div class="card-b">
+      <div class="field"><label for="rc-comment">What should ${esc(c.employee.name.split(" ")[0])} change?</label><textarea class="input" id="rc-comment" rows="4" placeholder="For example: Please upload the original hotel invoice."></textarea><span class="ferr" id="rc-err" hidden></span></div></div>
+      <div class="modal-f"><button type="button" class="btn glass" data-close>Cancel</button><button type="submit" class="btn primary">Send to employee</button></div></form>`);
+    m.querySelector("form").addEventListener("submit",async ev=>{ev.preventDefault();
+      const r=await rbDecide("request-changes",{comment:$("#rc-comment").value},"Changes requested.");
+      if(r.ok) return m.remove(); const n=$("#rc-err"); n.textContent=(r.data&&r.data.errors&&r.data.errors.comment)||apiMsg(r); n.hidden=false;});
+  }
+  if(kind==="delete"){
+    const m=modal(`<div class="card-h" style="padding-top:24px"><h3>Delete this draft?</h3></div><div class="card-b"><div class="muted">${esc(c.claimNo)} and its receipts will be removed. This can't be undone.</div></div>
+      <div class="modal-f"><button class="btn glass" data-close>Cancel</button><button class="btn danger" data-ok>Delete draft</button></div>`);
+    m.querySelector("[data-ok]").addEventListener("click",async()=>{const r=await api("DELETE",`/api/reimbursements/${c.id}`);m.remove();if(!r.ok)return toast(apiMsg(r));toast("Draft deleted.");S.rb.state="idle";go("reimb");});
+  }
+}
+
+/* ---------- new claim / edit: Expenses → Receipts → Review ----------
+   A claim has one or more expense lines (+ Add another expense, or rows from an Excel/CSV expense sheet). Each line gets
+   its own receipt, or — for small expenses like autos — is marked as having none and declared on submit. */
+const CW_STEPS=["Expenses","Receipts","Review"], CW_F=["category","amount","expenseDate","paymentMethod","description"];
+let cwKey=0;
+const cwLine=(x={})=>({key:++cwKey,id:x.id||null,category:x.category||"",amount:x.amount!=null&&x.amount!==""?String(x.amount):"",expenseDate:x.expenseDate||"",
+  paymentMethod:x.paymentMethod||"",description:x.description||"",noReceipt:!!x.noReceipt,source:x.source||"form",document:x.document||null});
+const nrMax=()=>(S.rb.meta&&S.rb.meta.noReceiptMax)||2000;
+const cwBlank=it=>!it.id&&!it.category&&!it.amount&&!it.description;
+const cwTotal=w=>w.items.reduce((n,it)=>n+(Number(it.amount)||0),0);
+function newCw(c){
+  return c?{step:1,id:c.id,status:c.status,claimNo:c.claimNo,email:c.email,items:(c.items||[]).map(cwLine),validation:c.validation,duplicates:c.duplicates,comment:c.changeComment,errors:{},busy:false,confirm:false}
+    :{step:1,id:null,status:"draft",email:"",items:[cwLine()],validation:null,duplicates:[],errors:{},busy:false,confirm:false};
+}
+function cwCollect(){
+  const w=S.cw; if(!w||w.step!==1) return;
+  const em=$("#cw-email"); if(em) w.email=em.value;
+  w.items.forEach((it,i)=>CW_F.forEach(k=>{ const el=$(`#cw-${i}-${k}`); if(el) it[k]=el.value; }));
+}
+function cwLineHtml(it,i,w){
+  const er=w.errors, id=k=>`cw-${i}-${k}`, e=k=>er[`${i}-${k}`], cats=(S.rb.cats||[]).filter(c=>c.active||c.key===it.category), pm=(S.rb.meta&&S.rb.meta.paymentMethods)||[];
+  return `<div class="cw-line" data-line="${i}"><div class="cw-line-h"><b>Expense ${i+1}</b>${it.source==="excel"?`<span class="pill p-info">From sheet</span>`:""}<span class="grow"></span>
+      ${w.items.length>1?`<button type="button" class="btn link sm nolink" data-cw="rm:${i}" aria-label="Remove expense ${i+1}">${ico("x")}Remove</button>`:""}</div>
+    ${wf(id("category"),"Category",`<select class="input" id="${id("category")}"><option value="">Choose…</option>${cats.map(c=>`<option value="${c.key}" ${it.category===c.key?"selected":""}>${esc(c.name)}${c.maxAmount?` (limit ${money(c.maxAmount)})`:""}</option>`).join("")}</select>`,e("category"))}
+    ${wf(id("amount"),"Amount (₹)",`<input class="input" id="${id("amount")}" type="number" min="0" step="100" inputmode="decimal" value="${esc(it.amount)}" placeholder="2500">`,e("amount"))}
+    ${wf(id("expenseDate"),"Date",`<input class="input" id="${id("expenseDate")}" type="date" max="${todayIso()}" value="${esc(it.expenseDate)}">`,e("expenseDate"))}
+    ${wf(id("paymentMethod"),"Payment method",`<select class="input" id="${id("paymentMethod")}"><option value="">Choose…</option>${pm.map(p=>`<option ${it.paymentMethod===p?"selected":""}>${esc(p)}</option>`).join("")}</select>`,e("paymentMethod"))}
+    <div class="span">${wf(id("description"),"What was it for?",`<input class="input" id="${id("description")}" maxlength="500" value="${esc(it.description)}" placeholder="${i?"Dinner with the client team":"Hotel during client visit to Pune"}">`,e("description"))}</div>
+  </div>`;
+}
+function cwRcptHtml(it,i,w){
+  const x=((w.validation&&w.validation.items)||{})[it.id]||{}, m=x.match||{}, busy=w.busyItem===it.id, small=Number(it.amount)<=nrMax(), err=w.errors["up-"+it.id];
+  const accept=`accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png"`;
+  const pill=it.document?(m.status==="match"?`<span class="pill p-ok">Matches receipt</span>`:m.status==="mismatch"?`<span class="pill p-warn">Receipt shows ${money(m.invoiceTotal)}</span>`:`<span class="pill p-info">Uploaded</span>`)
+    :it.noReceipt?`<span class="pill p-mute">No receipt</span>`:`<span class="pill p-warn">Receipt needed</span>`;
+  return `<div class="rc-row"><div class="rc-h"><div><b>${i+1}. ${esc(rbCat(it.category))} · ${money(Number(it.amount))}</b><div class="muted">${esc(fdate(it.expenseDate))} · ${esc(it.description)}</div></div>${pill}</div>
+    ${it.document?`<div class="rc-doc">${ico("doc")}<a href="/api/reimbursements/${w.id}/documents/${it.document.id}" target="_blank" rel="noopener">${esc(it.document.name)}</a><span class="grow"></span>
+        <label class="btn glass sm cw-file">${busy?"Uploading…":"Replace"}<input type="file" data-cw-up="${it.id}" ${accept} ${busy?"disabled":""} aria-label="Replace the receipt for expense ${i+1}"></label>
+        <button type="button" class="btn link sm nolink" data-cw="rmdoc:${it.id}">Remove</button></div>
+      <ul class="rb-checks">${x.read&&x.read.readable?`<li class="ok">${ico("check")}<span>Read automatically${x.read.fields&&x.read.fields.total!=null?`: receipt total ${money(x.read.fields.total)}`:""}</span></li>`:`<li class="warn">${ico("warn")}<span>${esc((x.read&&x.read.note)||"Not read automatically. HR will compare it by eye.")}</span></li>`}
+        ${m.status==="mismatch"?`<li class="bad">${ico("warn")}<span>Your amount (${money(m.claimed)}) differs from the receipt (${money(m.invoiceTotal)}). Check it, or explain in the description.</span></li>`:""}</ul>`
+    :it.noReceipt?`<div class="rc-nr">${ico("check")}<span class="grow">Small expense without a receipt. You'll confirm a declaration before submitting.</span><button type="button" class="btn link sm nolink" data-cw="nr:${it.id}:0">Upload a receipt instead</button></div>`
+    :`<label class="rb-drop ${busy?"busy":""}"><input type="file" data-cw-up="${it.id}" ${accept} ${busy?"disabled":""} aria-label="Receipt for expense ${i+1}">${ico("doc")}<b>${busy?"Uploading and checking…":"Choose the receipt"}</b><span class="muted">PDF, JPG or PNG · up to 10 MB</span></label>
+      ${small?`<button type="button" class="btn link sm nolink" style="align-self:flex-start" data-cw="nr:${it.id}:1">No bill for this (auto, bus, parking…)? Mark it as a small expense without a receipt</button>`:`<span class="muted" style="font-size:13px">Expenses over ${money(nrMax())} need a receipt.</span>`}`}
+    ${err?`<div class="callout bad">${ico("warn")}<div><b>Receipt upload failed. Please try again.</b><div>${esc(err)}</div></div></div>`:""}
+  </div>`;
+}
+function vClaimNew(){
+  const w=S.cw; if(!w){ setTimeout(()=>go("reimb")); return ""; }
+  const er=w.errors, hr=isHrUser();
+  if(!S.rb.cats) rbLoadCats().then(render);
+  let body="";
+  if(w.step===1) body=`<div class="card"><div class="card-h"><div><h3>Expenses</h3><span class="muted">Add each expense on its own line. One claim can cover travel, food, hotel and more.</span></div>${w.claimNo?`<span class="muted mono">${esc(w.claimNo)}</span>`:""}</div>
+    <div class="card-b" style="display:flex;flex-direction:column;gap:14px">
+    ${w.comment?`<div class="callout">${svg("info")}<div><b>HR asked for changes</b><div>${esc(w.comment)}</div></div></div>`:""}
+    ${hr&&!w.id?wf("cw-email","Employee",`<select class="input" id="cw-email"><option value="">Choose…</option>${empOptions(w.email)}</select>`,er.email):""}
+    ${w.items.map((it,i)=>cwLineHtml(it,i,w)).join("")}
+    ${er.form?`<div class="callout bad">${ico("warn")}<div>${esc(er.form)}</div></div>`:""}
+    <button type="button" class="cw-add" data-cw="add">${ico("plus")}Add another expense</button>
+    <div class="cw-total"><span>Claim total · ${w.items.length} expense${w.items.length===1?"":"s"}</span><b>${money(cwTotal(w))}</b></div>
+  </div></div>
+  <div class="card cw-import"><div class="cw-import-t"><b>Small expenses without bills?</b><span class="muted">Autos, buses, parking, tea… List them in an Excel sheet and upload it. Up to ${money(nrMax())} each, no receipt needed.</span></div>
+    <div class="row" style="gap:8px;flex-wrap:wrap"><a class="btn glass sm" href="/api/reimbursements/import/template" download>${ico("down")}Download template</a>
+      <label class="btn primary sm cw-file">${ico("doc")}${w.importing?"Reading the sheet…":"Upload Excel or CSV"}<input type="file" id="cw-sheet" accept=".xlsx,.csv,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" ${w.importing?"disabled":""}></label></div></div>`;
+  if(w.step===2){
+    const done=w.items.filter(it=>it.document||it.noReceipt).length;
+    body=`<div class="card"><div class="card-h"><div><h3>Receipts</h3><span class="muted">One receipt per expense. They're shown to HR inside the app.</span></div><span class="muted">${done} of ${w.items.length} ready</span></div>
+      <div class="card-b" style="display:flex;flex-direction:column;gap:14px">
+      ${er.file?`<div class="callout bad">${ico("warn")}<div>${esc(er.file)}</div></div>`:""}
+      ${(w.duplicates||[]).length?`<div class="callout bad">${ico("warn")}<div>Looks like an earlier claim: ${w.duplicates.map(d=>esc(d.claimNo)).join(", ")}. HR will check.</div></div>`:""}
+      ${w.items.map((it,i)=>cwRcptHtml(it,i,w)).join("")}</div></div>`;
+  }
+  if(w.step===3){
+    const v=w.validation||{}, nr=w.items.filter(it=>it.noReceipt&&!it.document), nrSum=nr.reduce((n,it)=>n+Number(it.amount),0), withDoc=w.items.filter(it=>it.document).length;
+    body=`${rsec("Expenses","data-cw-goto",1,`${hr&&w.email?`<div class="muted" style="margin-bottom:10px">For ${esc((empBy(w.email)||{name:w.email}).name)}</div>`:""}${linesTable({id:w.id,items:w.items.map((it,i)=>({...it,position:i+1,amount:Number(it.amount)})),validation:v})}`)}
+    ${rsec("Receipts","data-cw-goto",2,rkv([["Receipts uploaded",`${withDoc} of ${w.items.length}`],["Without a receipt",nr.length?`${nr.length} small expense${nr.length===1?"":"s"}, ${money(nrSum)}`:"None"],
+      ["Amount check",v.match&&v.match.status==="match"?"Matches the receipts":v.match&&v.match.status==="mismatch"?`<span style="color:var(--bad)">${v.match.mismatches} expense${v.match.mismatches===1?"":"s"} differ from the receipt</span>`:"Checked by HR"]]))}
+    <div class="cw-total"><span>Claim total</span><b>${money(cwTotal(w))}</b></div>
+    <label class="check" style="border:0;padding:0"><input type="checkbox" id="cw-confirm" ${w.confirm?"checked":""}><div class="grow"><div class="lbl">These are genuine business expenses${withDoc?` and the receipt${withDoc===1?" is":"s are"} original`:""}.${nr.length?` I declare that the ${nr.length} expense${nr.length===1?"":"s"} without a receipt (${money(nrSum)}) ${nr.length===1?"was":"were"} actually spent for work.`:""}</div></div></label>`;
+  }
+  const last=w.step===3, resub=w.status==="changes_requested";
+  return `<section class="section">
+  ${head(hr&&!resub?"Finance":"Me",resub?"Update and <span class=\"grad\">resubmit.</span>":"New <span class=\"grad\">claim.</span>",resub?"Make the changes HR asked for, check the receipts, then send it back.":"Add your expenses, attach a receipt for each, then review and submit. HR reviews every claim.","",true)}
+  ${stepper(CW_STEPS,w.step)}
+  <form id="cwf" class="grid" style="gap:22px" novalidate>${body}
+  <div class="row" style="justify-content:space-between"><div class="row">${w.step>1?`<button type="button" class="btn glass" data-cw="back">Back</button>`:`<button type="button" class="btn glass" data-cw="cancel">Cancel</button>`}</div>
+    ${last?`<button type="submit" class="btn primary" id="cw-submit" ${w.confirm&&!w.busy?"":"disabled"}>${resub?"Resubmit claim":"Submit claim"}</button>`
+      :`<button type="button" class="btn primary" data-cw="next" ${w.busy||w.busyItem?"disabled":""}>${w.busy?"Saving…":"Continue"}</button>`}</div></form></section>`;
+}
+async function cwReload(){
+  const w=S.cw, g=await api("GET",`/api/reimbursements/${w.id}`);
+  if(g.ok){ const c=g.data.claim; w.items=c.items.map(cwLine); w.validation=c.validation; w.duplicates=c.duplicates; w.claimNo=c.claimNo; }
+}
+async function cwNext(){
+  const w=S.cw; cwCollect(); w.errors={};
+  if(w.step===1){
+    if(w.items.length>1) w.items=w.items.filter(it=>!cwBlank(it));
+    w.busy=true; render();
+    const body={items:w.items.map(it=>({id:it.id,category:it.category,amount:it.amount,expenseDate:it.expenseDate,paymentMethod:it.paymentMethod,description:it.description,noReceipt:it.noReceipt,source:it.source}))};
+    if(isHrUser()&&!w.id) body.email=w.email;
+    const r=w.id?await api("PUT",`/api/reimbursements/${w.id}`,body):await api("POST","/api/reimbursements",body);
+    if(!r.ok){ w.busy=false; w.errors=(r.data&&r.data.errors)||{}; if(!Object.keys(w.errors).length) toast(apiMsg(r)); render(); obFocusError(); return; }
+    if(!w.id){ w.id=r.data.id; S.rb.state="idle"; }
+    await cwReload(); w.busy=false;
+  }
+  if(w.step===2){
+    const gaps=w.items.map((it,i)=>!it.document&&!it.noReceipt?i+1:0).filter(Boolean);
+    if(gaps.length){ w.errors={file:`Add the receipt for expense ${gaps.join(", ")}, or mark ${gaps.length===1?"it":"them"} as a small expense without a receipt.`}; render(); window.scrollTo(0,0); return; }
+  }
+  w.step++; render(); window.scrollTo(0,0);
+}
+async function cwUpload(itemId,file){
+  const w=S.cw; if(!w||!w.id||!file) return;
+  if(file.size>10*1024*1024){ w.errors={["up-"+itemId]:"The file is larger than 10 MB."}; return render(); }
+  w.busyItem=itemId; w.errors={}; render();
+  try{
+    const r=await fetch(`/api/reimbursements/${w.id}/items/${itemId}/document?name=${encodeURIComponent(file.name)}`,{method:"PUT",headers:{"Content-Type":"application/octet-stream"},body:file});
+    const data=await r.json().catch(()=>null);
+    if(!r.ok) w.errors={["up-"+itemId]:(data&&data.error)||"The server refused the file."};
+    else{ const it=w.items.find(x=>x.id===itemId); if(it){ it.document=data.document; it.noReceipt=false; } w.validation=data.validation; w.duplicates=data.duplicates; }
+  }catch(e){ w.errors={["up-"+itemId]:"The server can't be reached."}; }
+  w.busyItem=null; render();
+}
+async function cwItemCall(itemId,method,path,body){
+  const w=S.cw, r=await api(method,`/api/reimbursements/${w.id}/items/${itemId}${path}`,body);
+  if(!r.ok){ w.errors={["up-"+itemId]:apiMsg(r)}; return render(); }
+  w.errors={}; w.validation=r.data.validation; w.duplicates=r.data.duplicates; await cwReload(); render();
+}
+async function cwImport(file){
+  const w=S.cw; if(!w) return;
+  if(file.size>2*1024*1024) return toast("The sheet is larger than 2 MB.");
+  cwCollect(); w.importing=true; render();
+  let r, data;
+  try{ r=await fetch("/api/reimbursements/import?name="+encodeURIComponent(file.name),{method:"POST",headers:{"Content-Type":"application/octet-stream"},body:file}); data=await r.json().catch(()=>null); }
+  catch(e){ w.importing=false; render(); return toast("The server can't be reached."); }
+  w.importing=false; render();
+  if(!r.ok) return modal(`<div class="card-h" style="padding-top:24px"><h3>This sheet can't be imported</h3></div><div class="card-b"><div class="callout bad">${ico("warn")}<div>${esc((data&&data.error)||"The server refused the file.")}</div></div>
+    <div class="muted">Download the template, fill one row per expense, and upload it again.</div></div><div class="modal-f"><a class="btn glass" href="/api/reimbursements/import/template" download>${ico("down")}Download template</a><button class="btn primary" data-close>OK</button></div>`);
+  const rows=data.rows, good=rows.filter(x=>!Object.keys(x.errors).length), bad=rows.length-good.length;
+  const m=modal(`<div class="card-h" style="padding-top:24px"><div><h3>Check the expenses</h3><span class="muted">${esc(file.name)} · ${rows.length} row${rows.length===1?"":"s"}</span></div></div>
+    <div class="tbl-wrap"><table class="imp-table"><thead><tr><th>Row</th><th>Date</th><th>Category</th><th>What for</th><th class="hide-sm">Paid with</th><th class="num">Amount</th><th>Status</th></tr></thead><tbody>
+    ${rows.map(x=>{const e=Object.values(x.errors);return `<tr class="${e.length?"bad":""}"><td class="muted">${x.row}</td><td class="num-cell">${x.errors.expenseDate?esc(x.expenseDate||"—"):esc(fdate(x.expenseDate))}</td><td>${x.category?esc(rbCat(x.category)):"—"}</td>
+      <td>${esc(x.description||"—")}</td><td class="hide-sm">${esc(x.paymentMethod||"—")}</td><td class="num">${x.amount!==""?money(x.amount):"—"}</td>
+      <td>${e.length?`<span class="flag">${ico("warn")}${esc(e[0])}</span>`:x.noReceipt?`<span class="pill p-mute">No receipt</span>`:`<span class="pill p-warn">Needs receipt</span>`}</td></tr>`;}).join("")}
+    </tbody></table></div>
+    <div class="card-b">${bad?`<div class="callout bad">${ico("warn")}<div>${bad} row${bad===1?" has a problem and":"s have problems and"} will be skipped. Fix ${bad===1?"it":"them"} in the sheet and upload again, or add ${bad===1?"it":"them"} by hand.</div></div>`:""}
+      <div class="muted">Rows up to ${money(nrMax())} come in as small expenses without a receipt. Larger ones need their receipt in the next step.</div></div>
+    <div class="modal-f"><button class="btn glass" data-close>Cancel</button><button class="btn primary" data-ok ${good.length?"":"disabled"}>Add ${good.length} expense${good.length===1?"":"s"}</button></div>`);
+  m.querySelector(".modal").classList.add("wide");
+  m.querySelector("[data-ok]").addEventListener("click",()=>{ const w2=S.cw; if(!w2) return m.remove();
+    w2.items=w2.items.filter(it=>!cwBlank(it)); w2.items.push(...good.map(x=>cwLine(x))); w2.errors={}; m.remove(); render();
+    toast(`${good.length} expense${good.length===1?"":"s"} added from the sheet.`); });
+}
+async function cwSubmit(){
+  const w=S.cw; if(!w.confirm) return;
+  w.busy=true; render();
+  const r=await api("POST",`/api/reimbursements/${w.id}/${w.status==="changes_requested"?"resubmit":"submit"}`,{declaration:true});
+  w.busy=false;
+  if(!r.ok){ toast(apiMsg(r)); return render(); }
+  const id=w.id; S.cw=null; S.rb.state="idle"; S.myrb.state="idle";
+  toast(w.status==="changes_requested"?"Claim resubmitted for review.":"Claim submitted. HR has been notified.");
+  openClaim(id);
+}
+
+/* ---------- payroll (HR) ---------- */
+function payTable(lines,editable){
+  const rows=lines.slice().sort((a,b)=>(b.reimbursementTotal-a.reimbursementTotal)||(a.name<b.name?-1:1));
+  if(!rows.length) return `<div class="empty">Nobody has a salary set or a reimbursement for this month. Set salaries under Leave → Pay &amp; balance.</div>`;
+  return `<div class="tbl-wrap"><table class="pay-table"><thead><tr><th>Employee</th><th class="num">Salary</th><th class="num">Reimbursements</th><th class="num">Loss of pay</th><th class="num">Total to pay</th></tr></thead><tbody>
+    ${rows.map(l=>{const e=empBy(l.email)||{name:l.name,color:"var(--purple)"};return `<tr>
+      <td>${person(e,l.empNo||l.email)}</td>
+      <td class="num">${l.baseSalary?money(l.baseSalary):`<span class="muted">Not set</span>${editable?`<div><button class="btn link sm nolink" data-pay-set="${esc(l.email)}">Set salary</button></div>`:""}`}</td>
+      <td class="num">${l.reimbursementTotal?`<b>${money(l.reimbursementTotal)}</b><div class="pay-claims">${l.claims.map(c=>`<button class="btn link sm nolink" data-claim="${c.id}" title="${esc(c.claimNo)}">${money(c.amount)}</button>`).join("<span>+</span>")}</div><div class="muted">${l.claims.length} claim${l.claims.length===1?"":"s"} added up</div>`:"—"}</td>
+      <td class="num">${l.lopDeduction?`−${money(l.lopDeduction)}<div class="muted">${l.lopDays} day${l.lopDays===1?"":"s"}</div>`:"—"}</td>
+      <td class="num"><b class="pay-total">${money(l.payable)}</b><div class="muted">${money(l.baseSalary||0)} + ${money(l.reimbursementTotal)}${l.lopDeduction?` − ${money(l.lopDeduction)}`:""}</div></td></tr>`}).join("")}
+    <tr class="rb-total"><td><b>Total</b></td><td class="num"><b>${money(rows.reduce((n,l)=>n+(l.baseSalary||0),0))}</b></td><td class="num"><b>${money(rows.reduce((n,l)=>n+l.reimbursementTotal,0))}</b></td><td class="num">${money(rows.reduce((n,l)=>n+l.lopDeduction,0))}</td><td class="num"><b>${money(rows.reduce((n,l)=>n+l.payable,0))}</b></td></tr>
+  </tbody></table></div>`;
+}
+async function prViewRun(id){
+  const r=await api("GET","/api/payroll/runs/"+id); if(!r.ok) return toast(apiMsg(r));
+  S.pr.run=r.data; render(); const el=$("#pr-run"); if(el) el.scrollIntoView({block:"start",behavior:"smooth"});
+}
+async function prLoad(){
+  S.pr.state="loading"; render();
+  const runs=await api("GET","/api/payroll/runs");
+  if(!runs.ok){ S.pr.state="error"; return render(); }
+  S.pr.runs=runs.data;
+  if(!S.pr.period){ let p=new Date(Date.now()+5.5*3600e3).toISOString().slice(0,7); const done=new Set(S.pr.runs.map(r=>r.period)); while(done.has(p)){ const [y,m]=p.split("-").map(Number); p=m===12?`${y+1}-01`:`${y}-${String(m+1).padStart(2,"0")}`; } S.pr.period=p; }
+  const pv=await api("GET","/api/payroll/preview?period="+S.pr.period);
+  S.pr.preview=pv.ok?pv.data:null; S.pr.state="ready"; if(S.route==="payroll") render();
+}
+function vPayroll(){
+  const p=S.pr;
+  if(p.state==="idle") setTimeout(prLoad);
+  if(p.state==="error") return `<section class="section">${head("Finance","Pay<span class=\"grad\">roll.</span>","")}<div class="card"><div class="empty">Unable to load payroll. Please try again. <button class="btn glass sm" data-pr="reload">Try again</button></div></div></section>`;
+  const pv=p.preview, t=pv&&pv.totals, done=pv&&pv.existing;
+  const lines=pv?pv.lines.filter(l=>l.baseSalary||l.reimbursementTotal):[];
+  return `<section class="section">
+  ${head("Finance","Pay<span class=\"grad\">roll.</span>","Approved reimbursements are added to the month's payroll on top of salary. Processing the month includes them; marking it paid marks them paid.",
+    `<input class="input" type="month" id="pr-period" value="${esc(p.period)}" aria-label="Payroll month" style="width:auto">`,true)}
+  <div class="card"><div class="card-h"><h3>${esc(monthLabel(p.period))}</h3>${done?`<span class="pill ${done.status==="paid"?"p-ok":"p-info"}">${done.status==="paid"?"Paid":"Processed"}</span>`:`<span class="pill p-mute">Not processed</span>`}</div>
+    ${p.state==="loading"&&!pv?`<div class="card-b"><span class="skel" style="width:60%"></span><span class="skel" style="width:40%"></span></div>`:t?`
+    <div class="rb-stats four" style="padding:0 24px 18px">
+      <div class="rb-stat"><span class="lbl">People</span><b>${t.people}</b><span class="sub">${t.withSalary} with salary set</span></div>
+      <div class="rb-stat"><span class="lbl">Reimbursements</span><b>${money(t.reimbursementTotal)}</b><span class="sub">${t.claims} approved claim${t.claims===1?"":"s"}</span></div>
+      <div class="rb-stat"><span class="lbl">Loss-of-pay deductions</span><b>${money(t.lopTotal)}</b><span class="sub">From approved leave</span></div>
+      <div class="rb-stat"><span class="lbl">Total payable</span><b>${money(t.payableTotal)}</b><span class="sub">Salary − deductions + reimbursements</span></div></div>
+    ${payTable(lines,true)}
+    <div class="card-b row" style="justify-content:flex-end;padding-top:18px">${done?`<span class="muted">Processed. See the run below.</span>`:`<button class="btn primary" data-pr="process">Process payroll for ${esc(monthLabel(p.period))}</button>`}</div>`:""}
+  </div>
+  <div class="card"><div class="card-h"><h3>Payroll runs</h3></div><div class="tbl-wrap"><table><thead><tr><th>Month</th><th>Status</th><th class="num">People</th><th class="num">Reimbursements</th><th class="num">Payable</th><th class="hide-sm">Processed</th><th></th></tr></thead><tbody>
+    ${p.runs.length?p.runs.map(r=>`<tr><td><b>${esc(monthLabel(r.period))}</b></td><td>${r.status==="paid"?`<span class="pill p-ok">Paid</span>`:`<span class="pill p-info">Processed</span>`}</td><td class="num">${r.people}</td><td class="num">${money(r.reimbursementTotal)}</td><td class="num">${money(r.payableTotal)}</td>
+      <td class="hide-sm">${esc(dtShort(r.processedAt))}${r.paidAt?`<div class="muted">Paid ${esc(dtShort(r.paidAt))}</div>`:""}</td>
+      <td class="num"><div class="row" style="gap:8px;justify-content:flex-end"><button class="btn glass sm" data-pr="view:${r.id}">View</button>${r.status==="paid"?"":`<button class="btn primary sm" data-pr="pay:${r.id}">Mark as paid</button>`}</div></td></tr>`).join("")
+      :`<tr><td colspan="7"><div class="empty">No payroll processed yet.</div></td></tr>`}
+  </tbody></table></div></div>
+  ${p.run?`<div class="card" id="pr-run"><div class="card-h"><h3>${esc(monthLabel(p.run.run.period))} payroll · per person</h3><div class="row" style="gap:8px">${p.run.run.status==="paid"?`<span class="pill p-ok">Paid ${esc(dtShort(p.run.run.paidAt))}</span>`:`<span class="pill p-info">Processed</span>`}<button class="btn glass sm" data-pr="closerun">Close</button></div></div>
+    ${payTable(p.run.items.filter(l=>l.baseSalary||l.reimbursementTotal),false)}</div>`:""}
+  </section>`;
+}
+
+/* ---------- notification bell ---------- */
+S.nt={unread:0,items:[],open:false};
+async function ntLoad(){ if(!S.user) return; const r=await api("GET","/api/notifications"); if(r.ok){ S.nt.unread=r.data.unread; S.nt.items=r.data.items; ntPaint(); } }
+function ntPaint(){
+  const b=$("#bell"); if(!b) return;
+  b.style.display=S.user?"":"none";
+  b.innerHTML=`${ico("bell")}${S.nt.unread?`<span class="bell-n">${S.nt.unread>9?"9+":S.nt.unread}</span>`:""}`;
+  b.setAttribute("aria-label",`Notifications${S.nt.unread?`, ${S.nt.unread} unread`:""}`);
+  let p=$("#bell-panel");
+  if(!S.nt.open){ if(p) p.remove(); return; }
+  if(!p){ p=document.createElement("div"); p.id="bell-panel"; p.className="bell-panel"; p.setAttribute("role","dialog"); p.setAttribute("aria-label","Notifications"); document.body.appendChild(p); }
+  const r=b.getBoundingClientRect(); p.style.top=(r.bottom+8)+"px"; p.style.right=Math.max(12,innerWidth-r.right-8)+"px";
+  p.innerHTML=`<div class="bell-h"><b>Notifications</b>${S.nt.unread?`<button class="btn link sm nolink" data-nt="all">Mark all read</button>`:""}</div>
+    ${S.nt.items.length?S.nt.items.map(n=>`<button class="bell-i ${n.read?"":"unread"}" data-nt="${n.id}" data-link="${esc(n.link||"")}"><b>${esc(n.title)}</b>${n.body?`<span>${esc(n.body)}</span>`:""}<span class="meta">${esc(dtShort(n.at))}</span></button>`).join(""):`<div class="empty">You're all caught up.</div>`}`;
+}
+setInterval(ntLoad,60000);
+
+/* ---------- events ---------- */
+document.addEventListener("click",async ev=>{
+  const bell=ev.target.closest("#bell");
+  if(bell){ S.nt.open=!S.nt.open; if(S.nt.open) await ntLoad(); ntPaint(); return; }
+  const nt=ev.target.closest("[data-nt]");
+  if(nt){ const id=nt.dataset.nt; await api("POST","/api/notifications/read",id==="all"?{}:{id:Number(id)});
+    if(id!=="all"){ S.nt.open=false; const link=nt.dataset.link; if(link&&link.startsWith("claim:")) openClaim(Number(link.slice(6))); else if(link) go(link); }
+    await ntLoad(); return; }
+  if(S.nt.open&&!ev.target.closest("#bell-panel")){ S.nt.open=false; ntPaint(); }
+  const pick=ev.target.closest("[data-rb-pick]");
+  if(pick){ ev.stopPropagation(); return rbPick(pick.dataset.rbPick); }
+  if(!ev.target.closest(".combo")) rbSug(false);
+  const ps=ev.target.closest("[data-pay-set]"); if(ps){ ev.stopPropagation(); return lvPayModal(ps.dataset.paySet); }
+  const cl=ev.target.closest("[data-claim]");
+  if(cl){ ev.stopPropagation(); return openClaim(cl.dataset.claim,{doc:!!cl.dataset.doc}); }
+  const t=ev.target.closest("[data-rb],[data-cw],[data-cw-goto],[data-pr]"); if(!t) return;
+  const a=t.dataset.rb;
+  if(a==="new"){ S.cw=newCw(null); return go("claimnew"); }
+  if(a==="reload"){ return rbLoad(); }
+  if(a==="clear"){ S.rb.f={q:"",category:"",status:"",from:"",to:"",min:"",max:""}; return rbLoad(); }
+  if(a==="approve"||a==="reject"||a==="changes"||a==="delete") return rbConfirm(a);
+  if(a==="edit"){ S.cw=newCw(S.cd.claim); return go("claimnew"); }
+  if(a&&a.startsWith("zoom:")){ S.cd.zoom=Math.min(3,Math.max(.5,(S.cd.zoom||1)+Number(a.slice(5))*.25)); return render(); }
+  if(a&&a.startsWith("doc:")){ S.cd.doc=Number(a.slice(4)); render(); const el=$("#rb-doc"); if(el) el.scrollIntoView({block:"start",behavior:"smooth"}); return; }
+  if(a==="bigdoc"){ const c=S.cd.claim, it=curDocItem(c); if(!it) return; const src=`/api/reimbursements/${c.id}/documents/${it.document.id}`;
+    modal(`<div class="rb-big">${it.document.mime==="application/pdf"?`<iframe src="${src}#view=FitH" title="Invoice"></iframe>`:`<div class="rb-imgwrap"><img src="${src}" alt="Receipt"></div>`}</div><div class="modal-f"><a class="btn glass" href="${src}?download=1">${ico("down")}Download</a><button class="btn primary" data-close>Close</button></div>`).querySelector(".modal").classList.add("wide"); return; }
+  if(a&&a.startsWith("cat:")){ const c=S.rb.cats.find(x=>x.key===a.slice(4));
+    const m=modal(`<form novalidate><div class="card-h" style="padding-top:24px"><h3>${esc(c.name)}</h3></div><div class="card-b">
+      ${wf("ct-max","Limit per claim (₹)",`<input class="input" id="ct-max" type="number" min="0" step="100" value="${c.maxAmount||""}" placeholder="No limit">`,"","Claims above it are flagged for HR. Leave empty for no limit.")}
+      <label class="check" style="border:0;padding:0"><input type="checkbox" id="ct-on" ${c.active?"checked":""}><div class="grow"><div class="lbl">Employees can choose this category</div></div></label></div>
+      <div class="modal-f"><button type="button" class="btn glass" data-close>Cancel</button><button type="submit" class="btn primary">Save</button></div></form>`);
+    m.querySelector("form").addEventListener("submit",async e=>{e.preventDefault();const r=await api("PUT",`/api/reimbursements/categories/${c.key}`,{maxAmount:$("#ct-max").value,active:$("#ct-on").checked});
+      if(!r.ok) return toast(apiMsg(r)); m.remove(); S.rb.cats=null; toast("Category saved."); rbLoad();}); return; }
+  const w=t.dataset.cw;
+  if(w==="next") return cwNext();
+  if(w==="add"&&S.cw){ cwCollect(); const last=S.cw.items[S.cw.items.length-1]||{}; S.cw.items.push(cwLine({expenseDate:last.expenseDate,paymentMethod:last.paymentMethod})); render();
+    const n=$(`#cw-${S.cw.items.length-1}-category`); if(n){ n.focus(); n.scrollIntoView({block:"center",behavior:"smooth"}); } return; }
+  if(w&&w.startsWith("rm:")&&S.cw){ cwCollect(); S.cw.items.splice(Number(w.slice(3)),1); S.cw.errors={}; return render(); }
+  if(w&&w.startsWith("rmdoc:")&&S.cw) return cwItemCall(Number(w.slice(6)),"DELETE","/document");
+  if(w&&w.startsWith("nr:")&&S.cw){ const [,id,on]=w.split(":"); return cwItemCall(Number(id),"PATCH","",{noReceipt:on==="1"}); }
+  if(w==="back"&&S.cw){ cwCollect(); S.cw.errors={}; S.cw.step--; return render(); }
+  if(w==="cancel"){ const id=S.cw&&S.cw.id; S.cw=null; return id?openClaim(id):go("reimb"); }
+  if(t.dataset.cwGoto&&S.cw){ S.cw.step=Number(t.dataset.cwGoto); return render(); }
+  const p=t.dataset.pr;
+  if(p==="reload") return prLoad();
+  if(p&&p.startsWith("view:")) return prViewRun(Number(p.slice(5)));
+  if(p==="closerun"){ S.pr.run=null; return render(); }
+  if(p==="process"){ const t2=S.pr.preview.totals;
+    const m=modal(`<div class="card-h" style="padding-top:24px"><h3>Process payroll for ${esc(monthLabel(S.pr.period))}?</h3></div><div class="card-b">
+      <div class="callout">${svg("info")}<div>${t2.people} people · ${t2.claims} reimbursement${t2.claims===1?"":"s"} (${money(t2.reimbursementTotal)}) · total payable ${money(t2.payableTotal)}. The reimbursements move to <b>Included in payroll</b> and employees are told.</div></div>
+      <div class="muted">A month can only be processed once.</div></div>
+      <div class="modal-f"><button class="btn glass" data-close>Cancel</button><button class="btn primary" data-ok>Process payroll</button></div>`);
+    m.querySelector("[data-ok]").addEventListener("click",async e=>{e.target.disabled=true;const r=await api("POST","/api/payroll/runs",{period:S.pr.period});m.remove();if(!r.ok)return toast(apiMsg(r));toast(`Payroll processed. ${r.data.included} reimbursement${r.data.included===1?"":"s"} included.`);S.rb.state="idle";prLoad();}); return; }
+  if(p&&p.startsWith("pay:")){ const run=S.pr.runs.find(x=>x.id===Number(p.slice(4)));
+    const m=modal(`<div class="card-h" style="padding-top:24px"><h3>Mark ${esc(monthLabel(run.period))} payroll as paid?</h3></div><div class="card-b">
+      <div class="callout">${svg("info")}<div>Every reimbursement in this run becomes <b>Paid</b> with today's date, and employees are told. This can't be undone.</div></div></div>
+      <div class="modal-f"><button class="btn glass" data-close>Cancel</button><button class="btn primary" data-ok>Mark as paid</button></div>`);
+    m.querySelector("[data-ok]").addEventListener("click",async e=>{e.target.disabled=true;const r=await api("POST",`/api/payroll/runs/${run.id}/pay`);m.remove();if(!r.ok)return toast(apiMsg(r));toast(`Marked as paid. ${r.data.paid} reimbursement${r.data.paid===1?"":"s"} paid.`);S.rb.state="idle";prLoad();}); return; }
+},true);
+document.addEventListener("input",ev=>{
+  const t=ev.target;
+  if(t.id==="rbf-q"){ S.rb.f.q=t.value; rbSugAt=0; if(isHrUser()) rbSug(true); clearTimeout(rbTimer);
+    rbTimer=setTimeout(async()=>{ const pos=t.selectionStart; await rbLoad(); const n=$("#rbf-q"); if(n){ n.focus(); n.setSelectionRange(pos,pos); if(isHrUser()&&n.value) rbSug(true); } },400); }
+  if(t.id==="rbf-min"||t.id==="rbf-max"){ S.rb.f[t.id.slice(4)]=t.value; clearTimeout(rbTimer); rbTimer=setTimeout(async()=>{ await rbLoad(); const n=$("#"+t.id); if(n){ n.focus(); } },500); }
+});
+document.addEventListener("change",ev=>{
+  const t=ev.target;
+  if(["rbf-category","rbf-status","rbf-from","rbf-to"].includes(t.id)){ S.rb.f[t.id.slice(4)]=t.value; return rbLoad(); }
+  if(t.dataset&&t.dataset.cwUp&&t.files[0]) return cwUpload(Number(t.dataset.cwUp),t.files[0]);
+  if(t.id==="cw-sheet"&&t.files[0]){ const f=t.files[0]; t.value=""; return cwImport(f); }
+  if(t.id==="cw-confirm"&&S.cw){ S.cw.confirm=t.checked; const b=$("#cw-submit"); if(b) b.disabled=!t.checked; }
+  if(t.id==="pr-period"&&t.value){ S.pr.period=t.value; prLoad(); }
+});
+document.addEventListener("keydown",ev=>{
+  if(ev.target.id!=="rbf-q"||!isHrUser()) return;
+  const opts=[...document.querySelectorAll("#rbf-menu .combo-opt")], menu=$("#rbf-menu");
+  if(ev.key==="ArrowDown"||ev.key==="ArrowUp"){ ev.preventDefault(); if(menu.hidden) return rbSug(true); rbSugAt=(rbSugAt+(ev.key==="ArrowDown"?1:-1)+opts.length)%Math.max(1,opts.length); rbSug(true); }
+  else if(ev.key==="Enter"){ ev.preventDefault(); if(!menu.hidden&&opts[rbSugAt]) rbPick(opts[rbSugAt].dataset.rbPick); else { rbSug(false); clearTimeout(rbTimer); rbLoad(); } }
+  else if(ev.key==="Escape") rbSug(false);
+});
+document.addEventListener("focusin",ev=>{ if(ev.target.id==="rbf-q"&&isHrUser()) rbSug(true); });
+document.addEventListener("submit",ev=>{ if(ev.target.id==="cwf"){ ev.preventDefault(); if(S.cw&&S.cw.step===3) cwSubmit(); else cwNext(); } });
+window.addEventListener("hashchange",()=>{ const m=location.hash.match(/^#claim-(\d+)$/); if(m&&Number(m[1])!==S.cd.id) openClaim(m[1]); });
+
 const h=location.hash.slice(1); if(NAV.some(n=>n[0]===h)||["profile","account","myleave","team"].includes(h)) S.route=h;
+const claimHash=h.match(/^claim-(\d+)$/);   // a reload on a claim page stays on that claim
 document.addEventListener("click",ev=>{ if(ev.target.closest("#theme")) toggleTheme(); });
 try{ matchMedia("(prefers-color-scheme: dark)").addEventListener("change",()=>{ let t=null; try{t=localStorage.getItem(THEME_KEY)}catch(e){} if(!t) applyTheme(theme()); }); }catch(e){}
 applyTheme(theme());
-boot().then(()=>{ lvLoad(); if(!isEmployee()) offLoad(); });
+boot().then(()=>{ lvLoad(); if(!isEmployee()) offLoad(); ntLoad(); if(claimHash&&S.user) openClaim(claimHash[1]); });
 })();
 </script>

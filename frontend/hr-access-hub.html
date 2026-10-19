@@ -1776,6 +1776,14 @@ function vUsers(){
       <button type="button" class="btn glass sm" data-u-bulk ${d.withoutAccount?"":"disabled"}>Create for everyone without one (${d.withoutAccount})</button>
     </form>
   </div></div>
+  <div class="card"><div class="card-h"><h3>Send a test email</h3><span class="muted">Check that email works</span></div><div class="card-b">
+    <form id="tef" class="row" novalidate>
+      <input class="input" id="te-to" type="email" placeholder="name@wohlig.com" value="${esc(S.testTo||"")}" style="max-width:300px" aria-label="Send the test email to" autocomplete="off">
+      <button type="submit" class="btn primary sm" ${S.testBusy?"disabled":""}>${S.testBusy?"Sending…":"Send test email"}</button>
+    </form>
+    ${S.testNote?`<div class="callout" style="margin-top:14px">${svg("info")}<div>${esc(S.testNote)}</div></div>`:""}
+    ${d.mailConfigured?"":`<p class="muted" style="margin:12px 0 0;font-size:12.5px">Email isn't set up on the server yet. Add the SMTP settings to <span class="mono">backend/.env</span> and restart, then this will send for real.</p>`}
+  </div></div>
   <div class="card"><div class="card-h"><h3>Accounts</h3><span class="muted">${d.users.length}</span></div><div class="tbl-wrap"><table><thead><tr><th>Person</th><th>Role</th><th class="hide-sm">Last sign-in</th><th></th></tr></thead><tbody>${rows||`<tr><td colspan="4"><div class="empty">No accounts yet.</div></td></tr>`}</tbody></table></div></div>
   </section>`;
 }
@@ -2017,6 +2025,15 @@ document.addEventListener("submit",async ev=>{
     if(!/^[^@\s]+@wohlig\.com$/i.test(email)){ $("#uc-email").focus(); toast("Only @wohlig.com addresses can have an account."); return; }
     const r=await api("POST","/api/users",{email,role:$("#uc-role").value});
     toast(r.ok?`Account created for ${email}.`:apiMsg(r)); if(r.ok) reloadUsers(); return;
+  }
+  if(id==="tef"){
+    ev.preventDefault();
+    const to=$("#te-to").value.trim(); S.testTo=to;
+    if(!to){ $("#te-to").focus(); toast("Enter the address to send the test to."); return; }
+    S.testBusy=true; S.testNote=""; render();
+    try{ const r=await api("POST","/api/users/test-email",{to}); S.testNote=r.ok?`Test email sent to ${to}. Ask them to check their inbox (and spam).`:apiMsg(r); }
+    catch(err){ S.testNote="The server can't be reached. Try again."; }
+    S.testBusy=false; render(); return;
   }
   if(id==="dpf"){
     ev.preventDefault();

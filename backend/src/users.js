@@ -6,7 +6,7 @@ import {
 } from "./auth.js";
 import { V, isCompanyEmail, COMPANY_EMAIL_MESSAGE } from "./validate.js";
 import { sendInvite } from "./invites.js";
-import { mailConfigured } from "./mail.js";
+import { mailConfigured, sendTestEmail } from "./mail.js";
 import { googleEnabled } from "./google-signin.js";
 
 const wrap = (fn) => (req, res, next) => fn(req, res, next).catch(next);
@@ -105,6 +105,26 @@ usersRouter.post("/:email/invite", wrap(async (req, res) => {
   const u = (await pool.query("SELECT email FROM users WHERE lower(email)=$1", [email])).rows[0];
   if (!u) return res.status(404).json({ error: "No such account." });
   res.json({ invite: await sendInvite(u.email, req.user.email) });
+}));
+
+// Send one test message, to prove that email works before invites depend on it.
+const lastTest = new Map();
+usersRouter.post("/test-email", wrap(async (req, res) => {
+  const to = String(req.body?.to || "").trim();
+  if (!V.email(to)) return res.status(400).json({ error: "Enter a valid email address." });
+  if (!mailConfigured()) return res.status(503).json({ error: "Email isn't set up on the server yet. Add the SMTP settings to backend/.env and restart." });
+  const now = Date.now(), prev = lastTest.get(req.user.email) || 0;
+  if (now - prev < 5000) return res.status(429).json({ error: "Wait a few seconds before sending another test." });
+  lastTest.set(req.user.email, now);
+  try {
+    await sendTestEmail(to, req.user.email);
+  } catch (err) {
+    console.error("Test email failed:", err.message);
+    await pool.query("INSERT INTO audit_log (action, work_email) VALUES ($1,$2)", [`Test email to ${to} failed`, to]);
+    return res.status(502).json({ error: `The mail server refused it: ${String(err.message).slice(0, 200)}` });
+  }
+  await pool.query("INSERT INTO audit_log (action, work_email) VALUES ($1,$2)", [`Test email sent by ${req.user.email}`, to]);
+  res.json({ ok: true, to });
 }));
 
 usersRouter.put("/default-password", wrap(async (req, res) => {

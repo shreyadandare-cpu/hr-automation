@@ -60,7 +60,9 @@ button:disabled{opacity:.6;cursor:wait}
 const f=document.getElementById("f"), err=document.getElementById("err"), go=document.getElementById("go");
 f.addEventListener("submit",async e=>{
   e.preventDefault();
-  err.hidden=true; go.disabled=true;
+  err.hidden=true;
+  if(!/^[^@\s]+@wohlig\.com$/i.test(document.getElementById("email").value.trim())){ err.textContent="Use your @wohlig.com work email."; err.hidden=false; return; }
+  go.disabled=true;
   try{
     const r=await fetch("/api/login",{method:"POST",headers:{"Content-Type":"application/json"},
       body:JSON.stringify({email:document.getElementById("email").value,password:document.getElementById("pw").value})});

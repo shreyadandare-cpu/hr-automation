@@ -182,6 +182,29 @@ CREATE TABLE IF NOT EXISTS profile_photos (
   updated_at  TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+-- No duplicate emails: logins compare case-insensitively, and nobody can share a personal email.
+-- Wrapped so a database that already holds duplicates still starts; the app checks them as well.
+DO $$ BEGIN
+  CREATE UNIQUE INDEX IF NOT EXISTS users_email_lower_key ON users (lower(email));
+EXCEPTION WHEN unique_violation THEN RAISE NOTICE 'Duplicate logins exist, so the unique index was not created.';
+END $$;
+DO $$ BEGIN
+  CREATE UNIQUE INDEX IF NOT EXISTS employees_personal_email_key ON employees (lower(personal_email))
+    WHERE personal_email IS NOT NULL AND personal_email <> '';
+EXCEPTION WHEN unique_violation THEN RAISE NOTICE 'Duplicate personal emails exist, so the unique index was not created.';
+END $$;
+
+-- Only @wohlig.com addresses can be a login or an employee work email, even if the app code is bypassed.
+DO $$ BEGIN
+  ALTER TABLE users ADD CONSTRAINT users_company_email CHECK (lower(email) ~ '^[^@[:space:]]+@wohlig\.com$');
+EXCEPTION WHEN duplicate_object THEN NULL;
+          WHEN check_violation THEN RAISE NOTICE 'Some logins are not @wohlig.com, so the check was not added.';
+END $$;
+DO $$ BEGIN
+  ALTER TABLE employees ADD CONSTRAINT employees_company_email CHECK (lower(work_email) ~ '^[^@[:space:]]+@wohlig\.com$');
+EXCEPTION WHEN duplicate_object THEN NULL;
+          WHEN check_violation THEN RAISE NOTICE 'Some work emails are not @wohlig.com, so the check was not added.';
+END $$;
 -- Reporting managers. A 'manager' login approves their team's leave; HR approves the managers' own leave.
 ALTER TABLE users DROP CONSTRAINT IF EXISTS users_role_check;
 ALTER TABLE users ADD CONSTRAINT users_role_check CHECK (role IN ('hr','manager','employee'));

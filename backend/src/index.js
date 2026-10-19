@@ -34,6 +34,15 @@ async function nextWorkEmail(client, first, last) {
   }
 }
 
+/** Returns the name of someone else who already uses this personal email, or null. exceptWorkEmail is the person being saved. */
+async function personalEmailOwner(db, personalEmail, exceptWorkEmail) {
+  const { rows } = await db.query(
+    "SELECT name FROM employees WHERE lower(personal_email)=$1 AND lower(work_email)<>$2 LIMIT 1",
+    [String(personalEmail).trim().toLowerCase(), String(exceptWorkEmail || "").toLowerCase()]);
+  return rows[0]?.name || null;
+}
+const dupEmailError = (email, owner) => ({ pemail: `${email} already belongs to ${owner}. Use a different personal email.` });
+
 const toApi = (r) => ({
   email: r.work_email, name: r.name, personalEmail: r.personal_email, phone: r.phone, address: r.address,
   dept: r.dept, title: r.title, manager: r.manager,
@@ -161,6 +170,8 @@ app.post("/api/onboarding/work-email", wrap(async (req, res) => {
       const r = await client.query("SELECT * FROM employees WHERE lower(work_email)=$1 FOR UPDATE", [String(existingEmail).toLowerCase()]);
       if (!r.rows[0]) { await client.query("ROLLBACK"); return res.status(404).json({ error: "Employee not found" }); }
       email = r.rows[0].work_email;
+      const owner = await personalEmailOwner(client, d.pemail, email);
+      if (owner) { await client.query("ROLLBACK"); return res.status(400).json({ errors: dupEmailError(d.pemail.trim(), owner) }); }
       // Someone from the HR sheet already has a work email, so nothing is created for them in Google.
       status = r.rows[0].google_status || "existing";
       await client.query(
@@ -170,6 +181,8 @@ app.post("/api/onboarding/work-email", wrap(async (req, res) => {
       await client.query("LOCK TABLE employees IN SHARE ROW EXCLUSIVE MODE");
       email = await nextWorkEmail(client, d.first, d.last);
       if (!email) { await client.query("ROLLBACK"); return res.status(400).json({ error: "Add a first name and surname first." }); }
+      const owner = await personalEmailOwner(client, d.pemail, "");
+      if (owner) { await client.query("ROLLBACK"); return res.status(400).json({ errors: dupEmailError(d.pemail.trim(), owner) }); }
       status = "pending";
       await client.query(
         `INSERT INTO employees (name, dept, title, manager, start_date, personal_email, phone, address, work_email, status, google_status)
@@ -224,6 +237,8 @@ app.post("/api/onboarding", wrap(async (req, res) => {
       return res.status(400).json({ error: "The work email is not active in Google yet." });
     }
     if (!row.has_login) { await client.query("ROLLBACK"); return res.status(400).json({ error: "Create the login first." }); }
+    const owner = await personalEmailOwner(client, d.pemail, row.work_email);
+    if (owner) { await client.query("ROLLBACK"); return res.status(400).json({ errors: dupEmailError(d.pemail.trim(), owner) }); }
     await client.query(
       `UPDATE employees SET name=$1, dept=$2, title=$3, manager=$4, start_date=$5, personal_email=$6, phone=$7,
        address=$8, dob=$9, aadhaar_masked=$10, pan_masked=$11, acct_masked=$12, ifsc=$13, apps=$14, onboarded_at=now()

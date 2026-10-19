@@ -1,6 +1,7 @@
 import crypto from "node:crypto";
 import { promisify } from "node:util";
 import { pool } from "./db.js";
+import { isCompanyEmail, COMPANY_EMAIL_MESSAGE } from "./validate.js";
 
 const scrypt = promisify(crypto.scrypt);
 const SESSION_HOURS = 12;
@@ -37,6 +38,7 @@ export async function setDefaultPassword(value) {
 
 /** Creates a login with the current default password. Returns false when the email already has one. */
 export async function createUser(client, email, role) {
+  if (!isCompanyEmail(email)) throw new Error(COMPANY_EMAIL_MESSAGE);
   const pw = await getDefaultPassword();
   const hash = await hashPassword(pw);
   const r = await client.query(
@@ -56,7 +58,10 @@ export async function bootstrapAuth() {
   if (rows.length) return;
   const admins = (process.env.HR_ADMIN_EMAIL || "").split(",").map((s) => s.trim()).filter(Boolean);
   if (!admins.length) throw new Error("Set HR_ADMIN_EMAIL in server/.env so there is a first HR login");
-  for (const a of admins) await createUser(pool, a, "hr");
+  for (const a of admins) {
+    if (!isCompanyEmail(a)) throw new Error(`HR_ADMIN_EMAIL ${a}: ${COMPANY_EMAIL_MESSAGE}`);
+    await createUser(pool, a, "hr");
+  }
 }
 
 /* ---------- sessions ---------- */
@@ -86,7 +91,8 @@ export async function loadSession(req, _res, next) {
       const { rows } = await pool.query(
         `SELECT u.email, u.role FROM sessions s JOIN users u ON lower(u.email)=lower(s.email)
          WHERE s.token_hash=$1 AND s.expires_at > now()`, [sha(t)]);
-      if (rows[0]) req.user = rows[0];
+      // A session only counts for a company address, whatever else is in the table.
+      if (rows[0] && isCompanyEmail(rows[0].email)) req.user = rows[0];
     }
     next();
   } catch (e) { next(e); }

@@ -14,6 +14,9 @@ import { offboardingRouter, runDue } from "./offboarding.js";
 import { onboardingErrors, detailsErrors, maskAadhaar, maskPan, maskAcct } from "./validate.js";
 import { createGoogleUser, googleMode } from "./google.js";
 import { setupTeams } from "./teams.js";
+import { reimbursementsRouter, runReimbursementReminders } from "./reimbursements.js";
+import { payrollRouter } from "./payroll.js";
+import { notificationsRouter, emailMode } from "./notify.js";
 
 const DOMAIN = "wohlig.com";
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -255,6 +258,9 @@ app.post("/api/onboarding", wrap(async (req, res) => {
 }));
 
 app.use(leaveRouter(wrap));
+app.use("/api/reimbursements", requireAuth, reimbursementsRouter);   // own claims for everyone; review actions are HR-only inside
+app.use("/api/payroll", requireHr, payrollRouter);
+app.use("/api/notifications", requireAuth, notificationsRouter);
 app.use(offboardingRouter(wrap));
 
 // The page itself, so one command serves everything on the same origin.
@@ -282,5 +288,11 @@ setInterval(checkDue, 60_000);
 const sweepInvites = () => expireInvites().catch((err) => console.error("Invite cleanup failed:", err));
 sweepInvites();
 setInterval(sweepInvites, 60_000);
+
+// Reimbursements waiting for review too long remind HR (automation 7); checked hourly.
+const checkReminders = () => runReimbursementReminders().catch((err) => console.error("Reimbursement reminder check failed:", err));
+checkReminders();
+setInterval(checkReminders, 60 * 60_000);
+console.log(`Email: ${emailMode() === "smtp" ? "sending through SMTP" : "SMTP not configured, emails are logged and skipped"}`);
 const port = process.env.PORT || 3000;
 app.listen(port, () => console.log(`HR Access Hub on http://localhost:${port}`));

@@ -22,6 +22,9 @@ CREATE TABLE IF NOT EXISTS employees (
   created_at     TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE UNIQUE INDEX IF NOT EXISTS employees_work_email_key ON employees (lower(work_email));
+-- Google Workspace account state for onboarding (used by index.js); were missing from the schema.
+ALTER TABLE employees ADD COLUMN IF NOT EXISTS google_status TEXT;
+ALTER TABLE employees ADD COLUMN IF NOT EXISTS google_error  TEXT;
 
 CREATE TABLE IF NOT EXISTS onboarding_drafts (
   id         TEXT PRIMARY KEY,
@@ -218,3 +221,154 @@ CREATE TABLE IF NOT EXISTS invites (
   used_at    TIMESTAMPTZ
 );
 CREATE INDEX IF NOT EXISTS invites_email_idx ON invites (lower(email));
+
+-- ---------- Reimbursements ----------
+-- Categories are configurable. max_amount is an optional policy limit: claims above it are flagged for HR, never auto-rejected.
+CREATE TABLE IF NOT EXISTS reimbursement_categories (
+  key        TEXT PRIMARY KEY,
+  name       TEXT NOT NULL,
+  max_amount NUMERIC(12,2),
+  active     BOOLEAN NOT NULL DEFAULT true,
+  sort       INTEGER NOT NULL DEFAULT 0
+);
+INSERT INTO reimbursement_categories (key, name, sort) VALUES
+  ('travel','Travel',1), ('food','Food',2), ('accommodation','Accommodation',3), ('internet','Internet',4),
+  ('mobile','Mobile',5), ('office_supplies','Office Supplies',6), ('client_meeting','Client Meeting',7),
+  ('training','Training',8), ('other','Other',9)
+ON CONFLICT (key) DO NOTHING;
+
+-- Payroll: one run per month. Base salary, leave deductions and reimbursements are stored separately per person,
+-- so a reimbursement never changes anyone's salary and stays traceable to the run that paid it.
+CREATE TABLE IF NOT EXISTS payroll_runs (
+  id           SERIAL PRIMARY KEY,
+  period       TEXT NOT NULL UNIQUE CHECK (period ~ '^[0-9]{4}-(0[1-9]|1[0-2])$'),
+  status       TEXT NOT NULL CHECK (status IN ('processed','paid')),
+  processed_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  processed_by TEXT NOT NULL,
+  paid_at      TIMESTAMPTZ,
+  paid_by      TEXT
+);
+CREATE TABLE IF NOT EXISTS payroll_items (
+  id                  SERIAL PRIMARY KEY,
+  run_id              INTEGER NOT NULL REFERENCES payroll_runs(id),
+  work_email          TEXT NOT NULL,
+  base_salary         NUMERIC(12,2),
+  lop_days            NUMERIC(5,1) NOT NULL DEFAULT 0,
+  lop_deduction       NUMERIC(12,2) NOT NULL DEFAULT 0,
+  reimbursement_total NUMERIC(12,2) NOT NULL DEFAULT 0,
+  payable             NUMERIC(12,2) NOT NULL
+);
+CREATE UNIQUE INDEX IF NOT EXISTS payroll_items_once ON payroll_items (run_id, lower(work_email));
+
+CREATE TABLE IF NOT EXISTS reimbursements (
+  id               SERIAL PRIMARY KEY,
+  claim_no         TEXT UNIQUE,
+  work_email       TEXT NOT NULL,
+  category         TEXT NOT NULL REFERENCES reimbursement_categories(key),
+  amount           NUMERIC(12,2) NOT NULL CHECK (amount > 0),
+  currency         TEXT NOT NULL DEFAULT 'INR',
+  expense_date     DATE NOT NULL,
+  description      TEXT NOT NULL,
+  vendor           TEXT,
+  invoice_no       TEXT,
+  payment_method   TEXT,
+  doc_name         TEXT,
+  doc_mime         TEXT,
+  doc_size         INTEGER,
+  doc_stored       TEXT,
+  doc_uploaded_at  TIMESTAMPTZ,
+  validation       JSONB NOT NULL DEFAULT '{}',   -- file checks, fields read from the document, amount comparison, policy
+  duplicates       JSONB NOT NULL DEFAULT '[]',   -- earlier claims that look like the same expense
+  status           TEXT NOT NULL DEFAULT 'draft' CHECK (status IN
+                     ('draft','submitted','under_review','changes_requested','resubmitted','approved','rejected',
+                      'payroll_pending','in_payroll','paid')),
+  rejection_reason TEXT,
+  rejection_note   TEXT,
+  change_comment   TEXT,
+  created_by       TEXT NOT NULL,
+  submitted_at     TIMESTAMPTZ,
+  approved_by      TEXT,
+  approved_at      TIMESTAMPTZ,
+  payroll_period   TEXT,
+  payroll_run_id   INTEGER REFERENCES payroll_runs(id),
+  paid_at          TIMESTAMPTZ,
+  paid_amount      NUMERIC(12,2),
+  last_reminded_at TIMESTAMPTZ,
+  created_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at       TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS reimbursements_email ON reimbursements (lower(work_email));
+CREATE INDEX IF NOT EXISTS reimbursements_status ON reimbursements (status);
+
+-- Every step of a claim, in order. Drives the status stepper and the timeline; the audit log gets a copy too.
+CREATE TABLE IF NOT EXISTS reimbursement_events (
+  id               SERIAL PRIMARY KEY,
+  reimbursement_id INTEGER NOT NULL REFERENCES reimbursements(id),
+  at               TIMESTAMPTZ NOT NULL DEFAULT now(),
+  actor            TEXT,
+  kind             TEXT NOT NULL,
+  status           TEXT,
+  note             TEXT
+);
+CREATE INDEX IF NOT EXISTS reimbursement_events_claim ON reimbursement_events (reimbursement_id, id);
+
+-- In-app notifications (the bell) and a log of every email the system tried to send.
+CREATE TABLE IF NOT EXISTS notifications (
+  id         SERIAL PRIMARY KEY,
+  recipient  TEXT NOT NULL,
+  title      TEXT NOT NULL,
+  body       TEXT,
+  link       TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  read_at    TIMESTAMPTZ
+);
+CREATE INDEX IF NOT EXISTS notifications_recipient ON notifications (lower(recipient), id DESC);
+CREATE TABLE IF NOT EXISTS email_outbox (
+  id         SERIAL PRIMARY KEY,
+  recipient  TEXT NOT NULL,
+  subject    TEXT NOT NULL,
+  body       TEXT NOT NULL,
+  status     TEXT NOT NULL CHECK (status IN ('sent','skipped','failed')),
+  error      TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- A claim holds one or more expenses (travel, food, ...); its amount is always their total. Each expense has its own
+-- receipt, or is marked as having none (small expenses such as auto rides).
+CREATE TABLE IF NOT EXISTS reimbursement_items (
+  id               SERIAL PRIMARY KEY,
+  reimbursement_id INTEGER NOT NULL REFERENCES reimbursements(id) ON DELETE CASCADE,
+  position         INTEGER NOT NULL DEFAULT 1,
+  category         TEXT NOT NULL REFERENCES reimbursement_categories(key),
+  expense_date     DATE NOT NULL,
+  amount           NUMERIC(12,2) NOT NULL CHECK (amount > 0),
+  description      TEXT NOT NULL,
+  payment_method   TEXT,
+  no_receipt       BOOLEAN NOT NULL DEFAULT false,
+  source           TEXT NOT NULL DEFAULT 'form' CHECK (source IN ('form','excel'))
+);
+CREATE INDEX IF NOT EXISTS reimbursement_items_claim ON reimbursement_items (reimbursement_id, position);
+CREATE TABLE IF NOT EXISTS reimbursement_documents (
+  id               SERIAL PRIMARY KEY,
+  reimbursement_id INTEGER NOT NULL REFERENCES reimbursements(id) ON DELETE CASCADE,
+  item_id          INTEGER REFERENCES reimbursement_items(id) ON DELETE SET NULL,
+  name             TEXT NOT NULL,
+  mime             TEXT NOT NULL,
+  size             INTEGER NOT NULL,
+  stored           TEXT NOT NULL,
+  uploaded_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+  validation       JSONB NOT NULL DEFAULT '{}'
+);
+CREATE INDEX IF NOT EXISTS reimbursement_documents_claim ON reimbursement_documents (reimbursement_id);
+-- Claims filed before expenses existed become one expense with their one receipt (runs once per claim).
+INSERT INTO reimbursement_items (reimbursement_id, position, category, expense_date, amount, description, payment_method)
+  SELECT r.id, 1, r.category, r.expense_date, r.amount, r.description, r.payment_method FROM reimbursements r
+  WHERE NOT EXISTS (SELECT 1 FROM reimbursement_items i WHERE i.reimbursement_id = r.id);
+INSERT INTO reimbursement_documents (reimbursement_id, item_id, name, mime, size, stored, uploaded_at, validation)
+  SELECT r.id, (SELECT min(i.id) FROM reimbursement_items i WHERE i.reimbursement_id = r.id), r.doc_name, r.doc_mime,
+         coalesce(r.doc_size, 0), r.doc_stored, coalesce(r.doc_uploaded_at, r.created_at),
+         jsonb_build_object('file', r.validation->'file', 'read', r.validation->'read')
+  FROM reimbursements r
+  WHERE r.doc_stored IS NOT NULL AND NOT EXISTS (SELECT 1 FROM reimbursement_documents d WHERE d.reimbursement_id = r.id);
+UPDATE reimbursements r SET doc_stored = NULL
+  WHERE r.doc_stored IS NOT NULL AND EXISTS (SELECT 1 FROM reimbursement_documents d WHERE d.reimbursement_id = r.id);

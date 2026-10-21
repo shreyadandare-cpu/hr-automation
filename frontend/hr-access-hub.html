@@ -314,6 +314,36 @@ tr.click:hover td{background:rgba(66,84,212,.04)}
 @media(max-width:860px){.cw-line{grid-template-columns:1fr 1fr}}
 @media(max-width:520px){.cw-line{grid-template-columns:1fr}.cw-import{padding:16px}}
 .db-masonry .rb-stats.four{grid-template-columns:repeat(2,minmax(0,1fr))}
+.hol-table tr.past td{color:var(--ink-faint)}.hol-table tr.next td{background:var(--tint)}
+.rb-amounts{display:flex;flex-direction:column;gap:2px}
+.am-row{display:flex;justify-content:space-between;gap:12px;padding:9px 0;border-bottom:1px dashed var(--line);font-size:14.5px}.am-row:last-of-type{border-bottom:0}
+.am-row b{font-variant-numeric:tabular-nums}.am-row.good b{color:var(--ok)}.am-row.bad b{color:var(--bad)}
+.am-row.total{border:1px solid var(--line);border-radius:10px;padding:10px 12px;background:var(--tint);margin:6px 0}.am-row.total b{font-size:17px}
+.am-why{margin:8px 0 0;padding-left:18px;color:var(--ink-dim);font-size:13.5px;display:flex;flex-direction:column;gap:4px}
+.rb-decide{border:1.5px solid var(--purple)}.rb-decide .form .span{grid-column:1/-1}
+.rb-diff{font-size:14px;display:flex;gap:6px;align-items:center}.rb-diff svg{width:16px;height:16px;vertical-align:-3px}
+.rb-decide-f{display:flex;gap:8px;flex-wrap:wrap;align-items:center;padding:14px 24px 22px}.rb-decide-f .grow{flex:1}
+@media(min-width:1000px){.rb-sticky{position:sticky;top:96px;align-self:start}}
+.cw-rev{display:grid;grid-template-columns:minmax(0,1.2fr) minmax(0,1fr);gap:16px;align-items:start}
+.cw-rev .cw-line{grid-template-columns:repeat(2,minmax(0,1fr))}
+.cw-doc{border:1px solid var(--line);border-radius:14px;overflow:hidden;background:var(--surface)}
+.cw-doc-h{display:flex;align-items:center;gap:8px;padding:10px 12px;font-size:13px;border-bottom:1px solid var(--line)}.cw-doc-h span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}.cw-doc-h svg{width:16px;height:16px;flex:none}.cw-doc-h .grow{flex:1}
+.cw-doc .rb-viewer.small{border:0;border-radius:0}.cw-doc .rb-viewer.small iframe{height:460px}
+.xb{display:inline-block;margin-left:8px;font:600 10.5px/1.5 var(--body);padding:0 7px;border-radius:6px;vertical-align:1px}
+.xb.ok{color:var(--ok);background:var(--ok-soft)}.xb.ed{color:var(--warn);background:var(--warn-soft)}
+.cw-x{display:flex;gap:8px;align-items:center;font-size:13.5px;color:var(--ok)}.cw-x.warn{color:var(--warn)}.cw-x svg{width:16px;height:16px;flex:none}
+.callout.warn-c{background:var(--warn-soft);color:var(--ink)}.callout.warn-c svg{color:var(--warn)}
+.rb-drop.big{padding:38px 22px}.rb-drop.big svg{width:34px;height:34px}
+.up-list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:8px}
+.up-list li{display:flex;gap:10px;align-items:flex-start;padding:10px 12px;border-radius:12px;background:var(--surface-2);border:1px solid var(--line);font-size:14px}
+.up-list li .grow{display:flex;flex-direction:column;min-width:0}.up-list li svg{width:18px;height:18px;flex:none;margin-top:1px}
+.up-list li.ok svg{color:var(--ok)}.up-list li.warn svg{color:var(--warn)}.up-list li.bad svg{color:var(--bad)}.up-list li.bad{border-color:var(--bad-soft)}
+.spin{width:16px;height:16px;border-radius:50%;border:2px solid var(--line-2);border-top-color:var(--purple);animation:spin .8s linear infinite;flex:none;margin-top:2px}
+@keyframes spin{to{transform:rotate(360deg)}}
+.cw-sum{display:flex;flex-direction:column;gap:6px}
+.confirm-box{border:1px solid var(--line)!important;border-radius:12px;padding:14px 16px!important;background:var(--surface)}
+@media(max-width:900px){.cw-rev{grid-template-columns:1fr}}
+@media(max-width:520px){.cw-rev .cw-line{grid-template-columns:1fr}}
 .modal.wide{width:min(1100px,96vw)}.rb-big iframe{display:block;width:100%;height:78vh;border:0;background:#fff}.rb-big .rb-imgwrap{max-height:78vh}
 .bell-btn{position:relative;display:inline-grid;place-items:center;width:38px;height:38px;border:0;border-radius:50%;background:var(--surface-2);box-shadow:inset 0 0 0 1px var(--line);color:var(--ink);cursor:pointer;flex:none}
 .bell-btn svg{width:18px;height:18px}.bell-n{position:absolute;top:-3px;right:-3px;min-width:18px;height:18px;padding:0 5px;border-radius:999px;background:var(--bad);color:#fff;font:600 11px/18px var(--body);text-align:center}
@@ -835,7 +865,7 @@ const isManager = ()=>!!S.user&&Object.values((S.lv&&S.lv.approvers)||{}).includ
 /* Everyone signed in can look at the site. Employees see Onboarding as their own documents page and Offboarding as a read-only list. Users, Access bundles, Audit log and Leave are HR's; employees get My leave (and Team leave if people report to them). */
 const HR_ONLY=["users","templates","audit","leave","payroll"];
 /* Pages reachable from the avatar menu and the address bar that are not links in the bar. */
-const pageKnown=h=>navItems().some(n=>n[0]===h)||h==="profile"||h==="account"||h==="docs"||h==="payslips";
+const pageKnown=h=>navItems().some(n=>n[0]===h)||h==="profile"||h==="account"||h==="docs"||h==="payslips"||h==="budgets";
 function navItems(){ return !S.user?[...NAV,["myleave","My leave"]]:isEmployee()?[...NAV.filter(n=>!HR_ONLY.includes(n[0])),["myleave","My leave"],...(isManager()?[["team","Team leave"]]:[])]:NAV; }
 function routeAllowed(r){
   if(DEMO&&r==="users") return false;   // logins live on the real server
@@ -846,7 +876,7 @@ function routeAllowed(r){
 }
 function renderNav(){
   const attn = S.emps.filter(e=>failedOf(e).length).length;
-  const active = S.route==="employee"?"employees":S.route==="docs"&&!isEmployee()?"onboard":S.route==="leaveapply"?(S.lw&&S.lw.self?"myleave":"leave"):["claim","claimnew"].includes(S.route)?"reimb":S.route;
+  const active = S.route==="employee"?"employees":S.route==="docs"&&!isEmployee()?"onboard":S.route==="leaveapply"?(S.lw&&S.lw.self?"myleave":"leave"):["claim","claimnew","budgets","budget","budgetnew"].includes(S.route)?"reimb":S.route;
   renderAcct();
   $("#links").innerHTML = navItems().map(([k,l])=>`<a href="#${k}" class="${active===k?"on":""}">${l}${k==="dashboard"&&attn?`<span class="count">${attn}</span>`:""}</a>`).join("");
   fitNav();
@@ -2353,10 +2383,39 @@ const lvApi = {
   addHoliday:(b)=>lvWrite("POST","/api/leave/holidays",b,()=>{
     if(!R.validDate(b.day)||!b.name.trim()) return {ok:false,error:"Enter a date and a name for the holiday."};
     if(S.lv.holidays.some(h=>h.day===b.day)) return {ok:false,error:"That date is already a holiday."};
-    S.lv.holidays.push({day:b.day,name:b.name.trim()}); S.lv.holidays.sort((a,c)=>a.day<c.day?-1:1); return {ok:true};
+    S.lv.holidays.push({day:b.day,name:b.name.trim(),type:b.type||null,source:"manual"}); S.lv.holidays.sort((a,c)=>a.day<c.day?-1:1); return {ok:true};
+  }),
+  editHoliday:(day,b)=>lvWrite("PUT",`/api/leave/holidays/${day}`,b,()=>{
+    const h=S.lv.holidays.find(x=>x.day===day); if(!h) return {ok:false,error:"Holiday not found."};
+    Object.assign(h,{day:b.day,name:b.name.trim(),type:b.type||null}); S.lv.holidays.sort((a,c)=>a.day<c.day?-1:1); return {ok:true};
   }),
   delHoliday:(day)=>lvWrite("DELETE",`/api/leave/holidays/${day}`,null,()=>{ S.lv.holidays=S.lv.holidays.filter(h=>h.day!==day); return {ok:true}; }),
 };
+
+/* Holiday calendar: the company list (imported from Holiday List 2026 Wohlig.pdf) plus any HR adds. Leave never counts
+   these days, or Saturdays and Sundays. HR can add, edit and remove; everyone else sees it read-only. */
+S.holYear=null;
+function holidayCalendar(editable){
+  const today=lvToday(), all=S.lv.holidays||[];
+  const years=[...new Set([...all.map(h=>Number(h.day.slice(0,4))),Number(today.slice(0,4))])].sort();
+  const y=S.holYear&&years.includes(S.holYear)?S.holYear:Number(today.slice(0,4));
+  const list=all.filter(h=>h.day.startsWith(String(y))).sort((a,b)=>a.day<b.day?-1:1);
+  const wd=d=>new Date(d+"T00:00:00").toLocaleDateString("en-IN",{weekday:"long"});
+  const weekend=d=>[0,6].includes(new Date(d+"T00:00:00").getDay());
+  const next=list.find(h=>h.day>=today);
+  return `<div class="card" id="holiday-calendar"><div class="card-h"><div><h3>Holiday calendar — ${y}</h3><span class="muted">${list.length} holiday${list.length===1?"":"s"} · not counted as leave, like Saturdays and Sundays</span></div>
+    ${years.length>1?`<select class="input" id="hol-year" aria-label="Year" style="width:auto">${years.map(x=>`<option ${x===y?"selected":""}>${x}</option>`).join("")}</select>`:""}</div>
+    ${list.length?`<div class="tbl-wrap"><table class="hol-table"><thead><tr><th>Date</th><th>Day</th><th>Holiday</th><th class="hide-sm">Type</th><th class="hide-sm">Source</th>${editable?`<th><span class="sr">Actions</span></th>`:""}</tr></thead><tbody>
+      ${list.map(h=>`<tr class="${h.day<today?"past":""}${next&&h.day===next.day?" next":""}"><td class="num-cell"><b>${esc(new Date(h.day+"T00:00:00").toLocaleDateString("en-IN",{day:"2-digit",month:"short"}))}</b></td>
+        <td>${esc(wd(h.day))}${weekend(h.day)?` <span class="muted" style="font-size:12px">(weekend)</span>`:""}</td>
+        <td>${esc(h.name)}${next&&h.day===next.day?` <span class="pill p-info">Next</span>`:""}</td><td class="hide-sm">${h.type?esc(h.type):`<span class="muted">—</span>`}</td>
+        <td class="hide-sm">${h.source==="imported"?`<span class="muted">Company list</span>`:`<span class="muted">Added by HR</span>`}</td>
+        ${editable?`<td class="num"><div class="row" style="gap:6px;justify-content:flex-end"><button class="btn glass sm" data-lv="hol-edit:${h.day}" aria-label="Edit ${esc(h.name)}">Edit</button><button class="btn glass sm" data-lv="hol-del:${h.day}" aria-label="Remove ${esc(h.name)}">Remove</button></div></td>`:""}</tr>`).join("")}
+    </tbody></table></div>`:`<div class="empty">No holidays for ${y} yet.</div>`}
+    ${editable?`<form id="lvf-hol" class="li wrap" novalidate><input class="input" type="date" id="lh-day" aria-label="Holiday date" style="width:auto"><input class="input grow" id="lh-name" maxlength="80" placeholder="Holiday name" aria-label="Holiday name" style="min-width:140px"><input class="input" id="lh-type" maxlength="40" placeholder="Type (optional)" aria-label="Holiday type" style="width:150px"><button class="btn primary sm" type="submit">Add holiday</button></form>`:""}
+  </div>`;
+}
+document.addEventListener("change",ev=>{ if(ev.target.id==="hol-year"){ S.holYear=Number(ev.target.value); render(); } });
 
 function vLeave(){
   if(!R) return `<section class="section"><div class="empty">Leave rules didn't load. Keep leave-rules.js next to this page.</div></section>`;
@@ -2413,11 +2472,8 @@ function vLeave(){
         <td class="num-cell">${r.status==="approved"?r.paidDays:"—"}</td><td class="num-cell">${r.status==="approved"?(r.lopDays||"—"):"—"}</td><td><span class="pill ${LSTAT[r.status][1]}">${LSTAT[r.status][0]}</span></td></tr>`).join("")
         :`<tr><td colspan="6"><div class="empty">Nothing decided yet.</div></td></tr>`}
     </tbody></table></div></div>
-    <div class="card"><div class="card-h"><h3>Holidays</h3><span class="muted">Not counted as leave</span></div>
-      ${S.lv.holidays.map(h=>`<div class="li"><div class="grow"><b style="font-weight:600">${esc(h.name)}</b><div class="meta">${esc(fdate(h.day))}</div></div><button class="btn glass sm" data-lv="hol-del:${h.day}" aria-label="Remove ${esc(h.name)}">Remove</button></div>`).join("")||`<div class="empty">No holidays added yet.</div>`}
-      <form id="lvf-hol" class="li wrap" novalidate><input class="input" type="date" id="lh-day" aria-label="Holiday date" style="width:auto"><input class="input grow" id="lh-name" placeholder="Holiday name" aria-label="Holiday name" style="min-width:140px"><button class="btn primary sm" type="submit">Add</button></form>
-    </div>
   </div>
+  ${holidayCalendar(true)}
   </section>`;
 }
 
@@ -2818,6 +2874,7 @@ function vMyLeave(){
     ${hist.length?hist.map(r=>`<tr><td>${esc(LTYPE[r.type])}</td><td class="num-cell">${esc(lrange(r))}</td><td class="num-cell">${r.status==="approved"?`${r.paidDays} paid${r.lopDays?` · <span style="color:var(--bad)">${r.lopDays} loss of pay</span>`:""}`:dd(r.days)}</td><td class="hide-sm">${esc(r.reason)}</td><td><span class="pill ${LSTAT[r.status][1]}">${LSTAT[r.status][0]}</span></td></tr>`).join("")
       :`<tr><td colspan="5"><div class="empty">No leave history to show.</div></td></tr>`}
   </tbody></table></div></div>
+  ${holidayCalendar(false)}
   </section>`;
 }
 function lvCompModal(){
@@ -2875,12 +2932,23 @@ async function lvAction(a){
     const e=empBy(c.email); log(`Comp off credit ${y} for working on ${fdate(c.workedOn)}`,e,null,y==="approved"?"ok":"info");
     toast(`Comp off for ${e.name} ${y}.`); render(); return;
   }
+  if(kind==="hol-edit"){ const h=S.lv.holidays.find(q=>q.day===x); if(!h) return;
+    const m=modal(`<form novalidate><div class="card-h" style="padding-top:24px"><h3>Edit holiday</h3>${h.source==="imported"?`<span class="pill p-info">From the company holiday list</span>`:""}</div><div class="card-b form">
+      ${wf("he-day","Date",`<input class="input" type="date" id="he-day" value="${esc(h.day)}">`)}
+      ${wf("he-name","Holiday",`<input class="input" id="he-name" maxlength="80" value="${esc(h.name)}">`)}
+      ${wf("he-type","Type (optional)",`<input class="input" id="he-type" maxlength="40" value="${esc(h.type||"")}" placeholder="e.g. Optional, Regional">`)}</div>
+      <div class="modal-f"><button type="button" class="btn glass" data-close>Cancel</button><button type="submit" class="btn primary">Save holiday</button></div></form>`);
+    m.querySelector("form").addEventListener("submit",async e=>{e.preventDefault();
+      const b={day:$("#he-day").value,name:$("#he-name").value,type:$("#he-type").value}, res=await lvApi.editHoliday(h.day,b);
+      if(!res.ok){toast(res.error||"Could not save the holiday.");return}
+      m.remove(); S.audit.unshift({ts:nowSim(),actor:ACTOR,action:`Holiday updated: ${b.name.trim()} on ${fdate(b.day)}`,emp:"All employees",app:null,result:"ok"}); toast("Holiday saved."); render();});
+    return; }
   if(kind==="hol-del"){ const h=S.lv.holidays.find(q=>q.day===x); const res=await lvApi.delHoliday(x); if(!res.ok){toast(res.error||"Could not remove.");return}
     if(h) S.audit.unshift({ts:nowSim(),actor:ACTOR,action:`Holiday removed: ${h.name} on ${fdate(h.day)}`,emp:"All employees",app:null,result:"ok"}); render(); }
 }
 document.addEventListener("submit",async ev=>{
   if(ev.target.id!=="lvf-hol") return; ev.preventDefault();
-  const b={day:$("#lh-day").value,name:$("#lh-name").value}, res=await lvApi.addHoliday(b);
+  const b={day:$("#lh-day").value,name:$("#lh-name").value,type:$("#lh-type").value}, res=await lvApi.addHoliday(b);
   if(!res.ok){toast(res.error||"Could not add the holiday.");return}
   S.audit.unshift({ts:nowSim(),actor:ACTOR,action:`Holiday added: ${b.name.trim()} on ${fdate(b.day)}`,emp:"All employees",app:null,result:"ok"});
   toast(`${b.name.trim()} added as a holiday.`); render();
@@ -3053,7 +3121,7 @@ function render(){
   if(S.user&&!isEmployee()&&["onboard","docs","employee"].includes(S.route)) refreshDocs();
   if(S.user&&["profile","employees","employee","dashboard"].includes(S.route)) refreshManagers();
   renderNav();
-  const v={dashboard:vDashboard,employees:vEmployees,employee:vEmployee,onboard:isEmployee()?vDocs:vOnboard,docs:vDocs,offboard:vOffboard,myleave:vMyLeave,team:vTeam,leaveapply:vLeaveApply,reimb:vReimb,attendance:vAttendance,claim:vClaim,claimnew:vClaimNew,payroll:vPayroll,leave:vLeave,templates:vTemplates,audit:vAudit,users:vUsers,account:vAccount,profile:vProfile,payslips:vPayslips}[S.route]||vDashboard;
+  const v={dashboard:vDashboard,employees:vEmployees,employee:vEmployee,onboard:isEmployee()?vDocs:vOnboard,docs:vDocs,offboard:vOffboard,myleave:vMyLeave,team:vTeam,leaveapply:vLeaveApply,reimb:vReimb,budgets:vBudgets,budget:vBudget,budgetnew:vBudgetNew,attendance:vAttendance,claim:vClaim,claimnew:vClaimNew,payroll:vPayroll,leave:vLeave,templates:vTemplates,audit:vAudit,users:vUsers,account:vAccount,profile:vProfile,payslips:vPayslips}[S.route]||vDashboard;
   $("#view").innerHTML=v();
   if(isEmployee()) document.querySelectorAll("#view #laptopf input,#view #laptopf button").forEach(x=>x.disabled=true);
 }
@@ -3226,6 +3294,7 @@ function rbSug(open){
   menu.hidden=false; inp.setAttribute("aria-expanded","true");
 }
 async function rbPick(name){ S.rb.f.q=name; rbSugAt=0; rbSug(false); await rbLoad(); }
+const rbPay=c=>c.approvedAmount!=null?c.approvedAmount:c.amount||0;   // what is (or would be) paid: the approved amount once decided
 const rbExp=c=>c.expenses&&c.expenses.length?c.expenses:[{category:c.category,amount:c.amount}];
 const catNames=c=>[...new Set(rbExp(c).map(x=>rbCat(x.category)))].join(", ");
 const catSummary=c=>{const e=rbExp(c),cats=[...new Set(e.map(x=>x.category))];
@@ -3236,6 +3305,9 @@ const flags=c=>{const v=c.validation||{},out=[];
   if(c.duplicates&&c.duplicates.length) out.push(`<span class="flag" title="Possible duplicate">${ico("warn")}Duplicate?</span>`);
   if(v.match&&v.match.status==="mismatch") out.push(`<span class="flag" title="Claimed amount differs from the invoice">${ico("warn")}Mismatch</span>`);
   if(v.policy&&v.policy.over) out.push(`<span class="flag" title="Above the category limit">${ico("warn")}Over limit</span>`);
+  if(c.partial) out.push(`<span class="flag" title="Approved less than requested">Partly approved</span>`);
+  else if(c.eligibleAmount!=null&&c.approvedAmount==null&&c.eligibleAmount<rbReq(c)) out.push(`<span class="flag" title="Travel policy or budget limits what can be reimbursed">${ico("warn")}Policy cap</span>`);
+  if(c.budget) out.push(`<span class="flag ok" title="Final bill for ${esc(c.budget.requestNo)}">Budget</span>`);
   return out.join("");};
 
 function rbTable(claims,hr){
@@ -3249,7 +3321,7 @@ function rbTable(claims,hr){
       <td>${hr?person(rbPerson(c),`${c.employee.empNo||"No employee no."} · ${c.claimNo}`):`<b class="mono">${esc(c.claimNo)}</b>`}</td>
       <td>${catSummary(c)}</td>
       <td class="hide-sm hide-md rb-desc">${esc(c.description)}</td>
-      <td class="num"><b>${money(c.amount)}</b></td>
+      <td class="num">${c.approvedAmount!=null&&c.partial?`<b>${money(c.approvedAmount)}</b><div class="muted" style="font-size:12px">of ${money(rbReq(c))}</div>`:`<b>${money(c.approvedAmount!=null?c.approvedAmount:rbReq(c))}</b>`}${c.eligibleAmount!=null&&c.approvedAmount==null&&c.eligibleAmount<rbReq(c)?`<div class="muted" style="font-size:12px">eligible ${money(c.eligibleAmount)}</div>`:""}</td>
       <td class="hide-sm num-cell">${c.submittedAt?dtShort(c.submittedAt):`<span class="muted">Not sent</span>`}</td>
       <td>${rcptCell(c)}</td>
       <td><div class="rb-st">${rbPill(c.status)}${flags(c)}</div></td>
@@ -3270,15 +3342,16 @@ function vReimb(){
       card("Pending payroll",s.pendingPayroll,money(s.pendingPayrollAmount)+" to pay"),
       card("Paid this month",money(s.paidThisMonth),monthLabel(new Date().toISOString().slice(0,7))),
       card("Total reimbursed",money(s.totalReimbursed),"All time")].join(""):"")
-    :(()=>{const mine=S.rb.allMine||S.rb.claims,sum=(arr)=>money(arr.reduce((n,c)=>n+c.amount,0));
+    :(()=>{const mine=S.rb.allMine||S.rb.claims,sum=(arr)=>money(arr.reduce((n,c)=>n+rbPay(c),0));
       const wait=mine.filter(c=>["submitted","under_review","resubmitted"].includes(c.status)),todo=mine.filter(c=>["draft","changes_requested"].includes(c.status)),
         pay=mine.filter(c=>["approved","payroll_pending","in_payroll"].includes(c.status)),paid=mine.filter(c=>c.status==="paid");
       return [card("Waiting for HR",wait.length,sum(wait)),card("Needs your action",todo.length,"Drafts and changes asked",todo.length?"warn":""),
         card("Coming with payroll",pay.length,sum(pay)),card("Paid to you",sum(paid),`${paid.length} claim${paid.length===1?"":"s"}`)].join("");})();
   const cats=S.rb.cats||[];
   return `<section class="section">
+  ${rbTabs("reimb")}
   ${head(hr?"Finance":"Me",hr?"Reimburse<span class=\"grad\">ments.</span>":"My reimburse<span class=\"grad\">ments.</span>",
-    hr?"Review expense claims, check the receipts and send approved amounts to payroll.":"File expense claims with the receipt. HR reviews them and approved amounts are paid with your salary.",
+    hr?"Review expense claims against their invoices, approve in full or in part, and send approved amounts to payroll.":"Upload an invoice and the details are filled in for you. HR reviews the claim and the approved amount is paid with your salary.",
     `<button class="btn primary" data-rb="new">${ico("plus")}${hr?"File a claim for someone":"New claim"}</button>`,true)}
   <div class="rb-stats ${hr?"six":"four"}">${cards}</div>
   <div class="card">
@@ -3295,9 +3368,9 @@ function vReimb(){
     ${rbTable(S.rb.claims,hr)}
   </div>
   ${hr?monthlyCard():""}
-  ${hr?`<div class="card"><div class="card-h"><h3>Categories</h3><span class="muted">Optional limits flag claims above them for review. Nothing is rejected automatically.</span></div>
-    <div class="tbl-wrap"><table><thead><tr><th>Category</th><th>Limit per claim</th><th>Status</th><th></th></tr></thead><tbody>
-    ${cats.map(c=>`<tr><td>${esc(c.name)}</td><td>${c.maxAmount?money(c.maxAmount):`<span class="muted">No limit</span>`}</td><td>${c.active?`<span class="pill p-ok">On</span>`:`<span class="pill p-mute">Off</span>`}</td><td class="num"><button class="btn glass sm" data-rb="cat:${c.key}">Edit</button></td></tr>`).join("")}
+  ${hr?`<div class="card"><div class="card-h"><h3>Categories</h3><span class="muted">Limits flag claims above them. A travel class rule reimburses only the allowed class's fare when someone books higher.</span></div>
+    <div class="tbl-wrap"><table><thead><tr><th>Category</th><th>Limit per claim</th><th>Travel class allowed</th><th>Status</th><th></th></tr></thead><tbody>
+    ${cats.map(c=>`<tr><td>${esc(c.name)}</td><td>${c.maxAmount?money(c.maxAmount):`<span class="muted">No limit</span>`}</td><td>${c.allowedClass?`Up to ${esc(c.allowedClass)}`:`<span class="muted">No class rule</span>`}</td><td>${c.active?`<span class="pill p-ok">On</span>`:`<span class="pill p-mute">Off</span>`}</td><td class="num"><button class="btn glass sm" data-rb="cat:${c.key}">Edit</button></td></tr>`).join("")}
     </tbody></table></div></div>`:""}
   </section>`;
 }
@@ -3358,7 +3431,7 @@ async function rbQuickApprove(id){
   const r0=await api("GET",`/api/reimbursements/${id}`); if(!r0.ok) return toast(apiMsg(r0));
   const c=r0.data.claim, v=c.validation||{}, risky=(c.duplicates||[]).length||(v.match&&v.match.status==="mismatch")||(v.policy&&v.policy.over);
   const m=modal(`<div class="card-h" style="padding-top:24px"><h3>Approve ${esc(c.claimNo)}?</h3></div><div class="card-b">
-    <div class="callout">${svg("info")}<div><b>${money(c.amount)}</b> · ${(c.items||[]).length} expense${(c.items||[]).length===1?"":"s"}<div class="muted">It is added to ${esc(c.employee.name)}'s next payroll, on top of salary.</div></div></div>
+    <div class="callout">${svg("info")}<div><b>${money(rbElig(c))}</b>${rbElig(c)<rbReq(c)?` of ${money(rbReq(c))} requested (the eligible amount)`:""} · ${(c.items||[]).length} expense${(c.items||[]).length===1?"":"s"}<div class="muted">It is added to ${esc(c.employee.name)}'s next payroll, on top of salary. To approve a different amount, open the claim.</div></div></div>
     ${linesTable(c,{compact:true})}
     ${v.noReceipt&&v.noReceipt.count?`<div class="muted">${v.noReceipt.count} small expense${v.noReceipt.count===1?"":"s"} without a receipt (${money(v.noReceipt.total)}), declared by the employee.</div>`:""}
     ${v.match&&v.match.status==="match"?`<div class="muted">${ico("check")} Amount matches the invoice.</div>`:""}
@@ -3367,7 +3440,7 @@ async function rbQuickApprove(id){
   m.querySelector("[data-ok]").addEventListener("click",async ev=>{ev.target.disabled=true;
     if(["submitted","resubmitted"].includes(c.status)) await api("POST",`/api/reimbursements/${c.id}/open`);   // the review is recorded first
     const r=await api("POST",`/api/reimbursements/${c.id}/approve`,{note:"Approved from the employee page"}); m.remove();
-    if(!r.ok) return toast(apiMsg(r)); toast(`Approved. ${money(c.amount)} goes with the ${monthLabel(r.data.payrollPeriod)} payroll.`);
+    if(!r.ok) return toast(apiMsg(r)); toast(`Approved. ${money(r.data.approvedAmount)} goes with the ${monthLabel(r.data.payrollPeriod)} payroll.`);
     delete S.erb[lc(c.email)]; S.rb.state="idle"; S.rbm.state="idle"; render();});
 }
 document.addEventListener("click",ev=>{
@@ -3387,7 +3460,7 @@ function myReimbCard(){
   const thisMonth=cl.filter(c=>["payroll_pending","in_payroll","paid"].includes(c.status)&&c.payrollPeriod===month);
   return `<div class="card"><div class="card-h"><h3>Reimbursements</h3><div class="row" style="gap:8px"><button class="btn link sm" data-go="reimb">My claims</button><button class="btn primary sm" data-rb="new">New claim</button></div></div>
     <div class="rb-stats four" style="padding:0 24px 18px">
-      <div class="rb-stat"><span class="lbl">Added to ${esc(monthLabel(month))} salary</span><b>${money(thisMonth.reduce((n,c)=>n+c.amount,0))}</b><span class="sub">${thisMonth.length} approved claim${thisMonth.length===1?"":"s"}</span></div>
+      <div class="rb-stat"><span class="lbl">Added to ${esc(monthLabel(month))} salary</span><b>${money(thisMonth.reduce((n,c)=>n+rbPay(c),0))}</b><span class="sub">${thisMonth.length} approved claim${thisMonth.length===1?"":"s"}</span></div>
       <div class="rb-stat"><span class="lbl">Waiting for HR</span><b>${wait.length}</b><span class="sub">${money(wait.reduce((n,c)=>n+c.amount,0))}</span></div>
       <div class="rb-stat ${todo.length?"warn":""}"><span class="lbl">Needs your action</span><b>${todo.length}</b><span class="sub">Drafts and changes asked</span></div>
       <div class="rb-stat"><span class="lbl">Paid to you</span><b>${money(cl.filter(c=>c.status==="paid").reduce((n,c)=>n+(c.paidAmount||c.amount),0))}</b></div></div></div>`;
@@ -3412,7 +3485,7 @@ async function openClaim(id,{doc=false}={}){
 /* The stepper is built from the claim's real event history: every review round shows, and rejection ends it. */
 function claimSteps(c,events){
   const L={submitted:"Submitted",under_review:"Under review",changes_requested:"Changes requested",resubmitted:"Resubmitted",
-    approved:"Approved",rejected:"Rejected",payroll_pending:"Payroll pending",in_payroll:"Included in payroll",paid:"Paid"};
+    approved:c.partial?"Partially approved":"Approved",rejected:"Rejected",payroll_pending:"Payroll pending",in_payroll:"Included in payroll",paid:"Paid"};
   const seen=[];
   for(const e of events) if(e.status&&e.status!=="draft"&&L[e.status]){ const last=seen[seen.length-1]; if(!last||last.status!==e.status) seen.push({status:e.status,label:L[e.status],at:e.at}); }
   const steps=seen.map(x=>({...x,state:"done"}));
@@ -3435,18 +3508,20 @@ function stepperHtml(c,events){
 
 /* The expenses of a claim as a table. In the claim page a receipt opens in the viewer; elsewhere in a new tab. */
 function linesTable(c,{compact=false,viewer=false}={}){
-  const items=c.items||[], vi=(c.validation&&c.validation.items)||{};
+  const items=c.items||[], vi=(c.validation&&c.validation.items)||{}, ei=(c.eligibility&&c.eligibility.items)||{};
   const tag=it=>{const m=vi[it.id]&&vi[it.id].match;
-    if(it.document) return m&&m.status==="match"?`<span class="flag ok">${ico("check")}Matches</span>`:m&&m.status==="mismatch"?`<span class="flag" title="Amount on the receipt">${ico("warn")}Receipt ${money(m.invoiceTotal)}</span>`:"";
+    if(it.document) return m&&m.status==="match"?`<span class="flag ok">${ico("check")}Matches</span>`:m&&m.status==="mismatch"?`<span class="flag" title="Amount on the invoice">${ico("warn")}Invoice ${money(m.invoiceTotal)}</span>`:"";
     return "";};
   const rc=it=>it.document?`${viewer?`<button class="btn link sm nolink" data-rb="doc:${it.document.id}">${ico("doc")}View</button>`:`<a class="btn link sm nolink" href="/api/reimbursements/${c.id}/documents/${it.document.id}" target="_blank" rel="noopener">${ico("doc")}View</a>`} ${tag(it)}`
     :it.noReceipt?`<span class="pill p-mute">No receipt</span>`:`<span class="pill p-warn">Missing</span>`;
+  const amt=it=>{const x=ei[it.id];return `<b>${money(it.amount)}</b>${x&&x.nonEligible>0?`<div class="muted" style="font-size:12px">eligible ${money(x.eligible)}</div>`:""}`;};
   if(!items.length) return "";
-  return `<div class="tbl-wrap"><table class="rb-lines"><thead><tr><th>#</th><th>Category</th>${compact?"":`<th class="hide-sm">Date</th>`}<th class="${compact?"":"hide-sm"}">What for</th>${compact?"":`<th class="hide-sm hide-md">Paid with</th>`}<th class="num">Amount</th><th>Receipt</th></tr></thead><tbody>
-    ${items.map((it,i)=>`<tr><td class="muted">${i+1}</td><td>${esc(rbCat(it.category))}${it.source==="excel"?`<div class="muted" style="font-size:12px">From expense sheet</div>`:""}</td>
-      ${compact?"":`<td class="hide-sm num-cell">${esc(fdate(it.expenseDate))}</td>`}<td class="desc ${compact?"":"hide-sm"}">${esc(it.description)}</td>${compact?"":`<td class="hide-sm hide-md">${esc(it.paymentMethod||"—")}</td>`}
-      <td class="num"><b>${money(it.amount)}</b></td><td>${rc(it)}</td></tr>`).join("")}
-    ${items.length>1?`<tr class="rb-total"><td></td><td colspan="${compact?2:4}"><b>Total</b></td><td class="num"><b>${money(items.reduce((n,it)=>n+it.amount,0))}</b></td><td></td></tr>`:""}
+  return `<div class="tbl-wrap"><table class="rb-lines"><thead><tr><th>#</th><th>Category</th>${compact?"":`<th class="hide-sm">Vendor · invoice</th><th class="hide-sm">Date</th>`}<th class="${compact?"":"hide-sm hide-md"}">What for</th>${compact?"":`<th class="hide-sm hide-md">Paid with</th>`}<th class="num">Amount</th><th>Receipt</th></tr></thead><tbody>
+    ${items.map((it,i)=>`<tr><td class="muted">${i+1}</td><td>${esc(rbCat(it.category))}${it.travelClass?`<div class="muted" style="font-size:12px">${esc(it.travelClass)} class</div>`:""}${it.source==="excel"?`<div class="muted" style="font-size:12px">From expense sheet</div>`:it.source==="document"?`<div class="muted" style="font-size:12px">Read from invoice</div>`:""}</td>
+      ${compact?"":`<td class="hide-sm">${it.vendor?esc(it.vendor):`<span class="muted">—</span>`}${it.invoiceNo?`<div class="muted mono" style="font-size:12px">${esc(it.invoiceNo)}</div>`:""}</td><td class="hide-sm num-cell">${esc(fdate(it.expenseDate))}</td>`}
+      <td class="desc ${compact?"":"hide-sm hide-md"}">${esc(it.description||"")}</td>${compact?"":`<td class="hide-sm hide-md">${esc(it.paymentMethod||"—")}</td>`}
+      <td class="num">${amt(it)}</td><td>${rc(it)}</td></tr>`).join("")}
+    ${items.length>1?`<tr class="rb-total"><td></td><td colspan="${compact?2:5}"><b>Total</b></td><td class="num"><b>${money(items.reduce((n,it)=>n+(it.amount||0),0))}</b></td><td></td></tr>`:""}
   </tbody></table></div>`;
 }
 const curDocItem=c=>{const d=(c.items||[]).filter(it=>it.document);return d.find(it=>it.document.id===S.cd.doc)||d[0]||null;};
@@ -3481,8 +3556,8 @@ function validationHtml(c){
   }
   for(const p of (v.policy&&v.policy.categories)||[]) if(p.limit) out.push(p.over?row(false,`${esc(p.name)}: ${money(p.total)} is above the limit of ${money(p.limit)}`):row(true,`${esc(p.name)}: within the limit of ${money(p.limit)}`));
   const cur=curDocItem(c), f=cur&&vi[cur.id]&&vi[cur.id].read&&vi[cur.id].read.fields;
-  const cmp=f?`<div class="muted" style="font-size:13px">Expense ${cur.position} compared with its receipt</div><table class="rb-cmp"><thead><tr><th></th><th>Employee entered</th><th>Read from receipt</th></tr></thead><tbody>
-      ${[["Amount",money(cur.amount),f.total!=null?money(f.total):"—"],["Vendor","—",esc(f.vendor||"—")],["Invoice no.","—",esc(f.invoiceNo||"—")],
+  const cmp=f?`<div class="muted" style="font-size:13px">Expense ${cur.position} compared with its receipt</div><table class="rb-cmp"><thead><tr><th></th><th>Employee entered</th><th>Read from invoice</th></tr></thead><tbody>
+      ${[["Amount",money(cur.amount),f.total!=null?money(f.total):"—"],["Vendor",esc(cur.vendor||"—"),esc(f.vendor||"—")],["Invoice no.",esc(cur.invoiceNo||"—"),esc(f.invoiceNo||"—")],
         ["Date",esc(fdate(cur.expenseDate)),f.invoiceDate?esc(fdate(f.invoiceDate)):"—"],["Subtotal","—",f.subtotal!=null?money(f.subtotal):"—"],["Tax","—",f.tax!=null?money(f.tax):"—"]]
         .map(([k,a,b])=>`<tr><th>${k}</th><td>${a}</td><td>${b}</td></tr>`).join("")}</tbody></table>`:"";
   const dups=(c.duplicates||[]).length?`<div class="callout bad">${ico("warn")}<div><b>Possible duplicate claim.</b> Check before deciding; it is not rejected automatically.
@@ -3495,6 +3570,41 @@ function timelineHtml(events){
     <ol class="rb-tl">${events.slice().reverse().map(e=>`<li><span class="dot"></span><div><b>${esc(e.kind)}</b>${e.note?`<div class="muted">${esc(e.note)}</div>`:""}<div class="meta">${dtShort(e.at)} · ${esc(e.actor||"")}</div></div></li>`).join("")}</ol></div>`;
 }
 
+/* Requested, eligible (after travel policy / budget), approved: kept side by side, never overwritten. */
+const rbReq=c=>c.requestedAmount!=null?c.requestedAmount:c.amount;
+const rbElig=c=>c.eligibleAmount!=null?c.eligibleAmount:rbReq(c);
+function amountsCard(c){
+  const el=c.eligibility||{}, b=el.budget, req=rbReq(c), elig=rbElig(c);
+  const row=(k,v,cls="")=>`<div class="am-row ${cls}"><span>${k}</span><b>${v}</b></div>`;
+  return `<div class="card"><div class="card-h"><h3>Amount breakdown</h3>${c.partial?`<span class="pill p-warn">Partly approved</span>`:""}</div><div class="card-b rb-amounts">
+    ${row("Requested amount",money(req))}
+    ${b?row(`Approved budget <span class="muted mono">${esc(b.requestNo)}</span>`,money(b.approvedBudget))+row("Actual expense",money(b.actual))+row("Company covers",money(b.covered),"good")+row("Employee excess",b.excess?money(b.excess):"—",b.excess?"bad":""):""}
+    ${row("Eligible amount",money(elig),!b&&elig<req?"good":"")}
+    ${!b&&elig<req?row("Not eligible",money(req-elig),"bad"):""}
+    ${c.approvedAmount!=null?row("Approved amount",money(c.approvedAmount),"total")+row("Not approved",c.unapprovedAmount?money(c.unapprovedAmount):"—",c.unapprovedAmount?"bad":""):""}
+    ${c.paidAmount!=null?row("Paid",money(c.paidAmount)):""}
+    ${(el.reasons||[]).length?`<ul class="am-why">${el.reasons.map(r=>`<li>${esc(r)}</li>`).join("")}</ul>`:""}
+    ${b?`<div class="muted" style="font-size:12.5px">Company covers the lower of the actual expense and the approved budget. The excess isn't reimbursed.</div>`:""}
+    ${c.approvalReason?`<div class="callout">${svg("info")}<div><b>HR's reason</b><div>${esc(c.approvalReason)}</div></div></div>`:""}
+  </div></div>`;
+}
+function decisionCard(c){
+  const req=rbReq(c), elig=rbElig(c);
+  return `<div class="card rb-decide" id="rb-decide"><div class="card-h"><div><h3>HR decision</h3><span class="muted">Requested ${money(req)} · Eligible ${money(elig)}</span></div></div>
+    <div class="card-b form">
+      ${wf("rd-amt","Approved amount (₹)",`<input class="input" id="rd-amt" type="number" min="1" max="${req}" step="0.01" inputmode="decimal" value="${elig}">`,"",`Maximum ${money(req)}.${elig<req?" Pre-filled with the eligible amount.":""}`)}
+      ${wf("rd-reason","Reason",`<input class="input" id="rd-reason" maxlength="500" placeholder="${elig<req?"e.g. Business class exceeds company travel policy":"e.g. Approved according to the team event budget"}">`,"","Needed when you approve less than requested, unless it's the eligible amount.")}
+      <div class="span rb-diff" id="rd-diff">${rdDiff(req,elig)}</div>
+    </div>
+    <div class="rb-decide-f"><button class="btn glass" data-rb="changes">Request changes</button><button class="btn danger" data-rb="reject">Reject</button><span class="grow"></span>
+      ${elig<req?`<button class="btn glass" data-rb="approve-full">Approve full ${money(req)}</button>`:""}<button class="btn primary" data-rb="approve" id="rd-go">Approve ${money(elig)}</button></div></div>`;
+}
+const rdDiff=(req,v)=>!(v>0)?`<span class="ferr">Enter an amount more than zero.</span>`:v>req?`<span class="ferr">That's more than the ${money(req)} requested. HR can approve up to the requested amount.</span>`
+  :v<req?`<span>${ico("warn")} <b>${money(req-v)}</b> of the ${money(req)} requested won't be approved. Only ${money(v)} goes to payroll.</span>`:`<span>${ico("check")} The full amount goes to payroll.</span>`;
+document.addEventListener("input",ev=>{ if(ev.target.id!=="rd-amt"||!S.cd.claim) return;
+  const req=rbReq(S.cd.claim), v=Number(ev.target.value), b=$("#rd-go"), d=$("#rd-diff");
+  if(d) d.innerHTML=rdDiff(req,v); if(b){ b.textContent=`Approve ${v>0?money(v):"—"}`; b.disabled=!(v>0&&v<=req); } });
+
 function vClaim(){
   const st=S.cd.state, c=S.cd.claim, hr=isHrUser();
   const back=`<button class="back" data-go="reimb">← ${hr?"All reimbursements":"My reimbursements"}</button>`;
@@ -3502,31 +3612,32 @@ function vClaim(){
   if(st==="missing") return `<section class="section">${back}<div class="card"><div class="empty">This claim doesn't exist or isn't yours to see.</div></div></section>`;
   if(st==="error") return `<section class="section">${back}<div class="card"><div class="empty">${ico("warn")}<div>Unable to load reimbursement details. Please try again.</div><button class="btn glass sm" data-claim="${S.cd.id}">Try again</button></div></div>`;
   const canDecide=hr&&["submitted","under_review","resubmitted"].includes(c.status);
-  const actions=canDecide?`<div class="card rb-actions"><div><b>Decision</b><div class="muted">Approving sends ${money(c.amount)} to the next payroll. It won't change the salary.</div></div>
-      <div class="row"><button class="btn glass" data-rb="changes">Request changes</button><button class="btn danger" data-rb="reject">Reject</button><button class="btn primary" data-rb="approve">Approve</button></div></div>`:"";
-  const ownBar=["draft","changes_requested"].includes(c.status)&&(!hr||c.status==="draft")?`<div class="card rb-actions"><div><b>${c.status==="draft"?"This claim hasn't been sent yet.":"HR asked for changes."}</b><div class="muted">${c.status==="draft"?"Finish it and submit it for review.":"Update the expenses or receipts, then resubmit."}</div></div>
+  const ownBar=["draft","changes_requested"].includes(c.status)&&(!hr||c.status==="draft")?`<div class="card rb-actions"><div><b>${c.status==="draft"?"This claim hasn't been sent yet.":"HR asked for changes."}</b><div class="muted">${c.status==="draft"?"Finish it and submit it for review.":"Update the expenses or invoices, then resubmit."}</div></div>
       <div class="row">${c.status==="draft"?`<button class="btn glass" data-rb="delete">Delete draft</button>`:""}<button class="btn primary" data-rb="edit">${c.status==="draft"?"Continue":"Edit and resubmit"}</button></div></div>`:"";
   const decisionNote=c.status==="rejected"?`<div class="callout bad">${ico("x")}<div><b>Rejected: ${esc(c.rejectionReason)}</b>${c.rejectionNote?`<div>${esc(c.rejectionNote)}</div>`:""}</div></div>`
     :c.changeComment&&["changes_requested","resubmitted","under_review"].includes(c.status)?`<div class="callout">${svg("info")}<div><b>HR's comment</b><div>${esc(c.changeComment)}</div></div></div>`:"";
   const pay=["payroll_pending","in_payroll","paid"].includes(c.status)?`<div class="card"><div class="card-h"><h3>Payroll</h3></div><div class="card-b">${rkv([
-      ["Payroll month",esc(monthLabel(c.payrollPeriod))],["Approved",`${esc(dtShort(c.approvedAt))}`],["Payroll run",c.payrollRunId?`#${c.payrollRunId}`:"Not processed yet"],
+      ["Payroll month",esc(monthLabel(c.payrollPeriod))],["Approved",`${money(c.approvedAmount!=null?c.approvedAmount:c.amount)} on ${esc(dtShort(c.approvedAt))}`],["Payroll run",c.payrollRunId?`#${c.payrollRunId}`:"Not processed yet"],
       ["Paid",c.paidAt?`${money(c.paidAmount)} on ${esc(dtShort(c.paidAt))}`:"Not yet"]])}</div></div>`:"";
+  const budgetBar=c.budget?`<div class="callout">${svg("info")}<div>Final bill for budget request <button class="btn link nolink" data-budget="${c.budget.id}">${esc(c.budget.requestNo)}</button> · ${esc(c.budget.purpose||"")} · approved budget <b>${money(c.budget.approvedBudget)}</b></div></div>`:"";
   return `<section class="section" style="gap:20px">${back}
   <div class="card rb-head">
-    <div class="rb-head-l"><div class="eyebrow">Claim <span class="mono">${esc(c.claimNo)}</span></div>
+    <div class="rb-head-l"><div class="eyebrow">Reimbursement <span class="mono">${esc(c.claimNo)}</span></div>
       <h2>${esc(c.employee.name)}</h2>
       <div class="muted">${esc(c.employee.empNo||"No employee number")}${c.employee.title?` · ${esc(c.employee.title)}`:""}${c.submittedAt?` · Submitted ${esc(dtShort(c.submittedAt))}`:""}</div></div>
-    <div class="rb-head-r"><b class="rb-amt">${money(c.amount)}</b>${rbPill(c.status)}</div>
+    <div class="rb-head-r"><b class="rb-amt">${money(c.approvedAmount!=null?c.approvedAmount:rbReq(c))}</b>${c.approvedAmount!=null&&c.partial?`<span class="muted">approved of ${money(rbReq(c))}</span>`:""}<div class="row" style="gap:6px">${rbPill(c.status)}${c.partial?`<span class="pill p-warn">Partly approved</span>`:""}</div></div>
   </div>
   <div class="card rb-stepcard">${stepperHtml(c,S.cd.events)}</div>
-  ${decisionNote}${actions}${ownBar}
-  <div class="card"><div class="card-h"><h3>Expenses</h3><span class="muted">${(c.items||[]).length} expense${(c.items||[]).length===1?"":"s"} · ${money(c.amount)}</span></div>${linesTable(c,{viewer:true})}</div>
+  ${decisionNote}${budgetBar}${ownBar}
+  <div class="card"><div class="card-h"><h3>Expense details</h3><span class="muted">${(c.items||[]).length} expense${(c.items||[]).length===1?"":"s"} · ${money(rbReq(c))} requested</span></div>${linesTable(c,{viewer:true})}</div>
   <div class="rb-grid">
     <div class="rb-col">
+      ${amountsCard(c)}
+      ${canDecide?decisionCard(c):""}
       ${validationHtml(c)}
       ${pay}
     </div>
-    <div class="rb-col">${docViewer(c)}</div>
+    <div class="rb-col rb-sticky">${docViewer(c)}</div>
   </div>
   ${timelineHtml(S.cd.events)}
   </section>`;
@@ -3540,14 +3651,23 @@ async function rbDecide(path,body,okMsg){
 }
 function rbConfirm(kind){
   const c=S.cd.claim; if(!c) return;
-  if(kind==="approve"){
-    const m=modal(`<div class="card-h" style="padding-top:24px"><h3>Approve ${esc(c.claimNo)}?</h3></div><div class="card-b">
-      <div class="callout">${svg("info")}<div><b>${money(c.amount)}</b> will be added to ${esc(c.employee.name)}'s next payroll as a reimbursement, separate from their salary.</div></div>
-      ${(c.duplicates||[]).length||(c.validation&&c.validation.match&&c.validation.match.status==="mismatch")?`<div class="callout bad">${ico("warn")}<div>This claim has open flags (duplicate or amount mismatch). Approve only if you've checked them.</div></div>`:""}
-      ${c.validation&&c.validation.noReceipt&&c.validation.noReceipt.count?`<div class="muted">Includes ${c.validation.noReceipt.count} small expense${c.validation.noReceipt.count===1?"":"s"} without a receipt (${money(c.validation.noReceipt.total)}), declared by the employee.</div>`:""}
-      ${wf("rd-note","Note (optional)",`<input class="input" id="rd-note" placeholder="For the audit trail">`)}</div>
-      <div class="modal-f"><button class="btn glass" data-close>Cancel</button><button class="btn primary" data-ok>Approve</button></div>`);
-    m.querySelector("[data-ok]").addEventListener("click",async ev=>{ev.target.disabled=true;const r=await rbDecide("approve",{note:$("#rd-note").value},"Approved and added to payroll.");if(r.ok)m.remove();else{ev.target.disabled=false;toast(apiMsg(r));}});
+  if(kind==="approve"||kind==="approve-full"){
+    const req=rbReq(c), elig=rbElig(c), inp=$("#rd-amt");
+    if(kind==="approve-full"&&inp){ inp.value=req; inp.dispatchEvent(new Event("input",{bubbles:true})); }
+    const v=inp?Number(inp.value):elig, reason=($("#rd-reason")||{}).value||"";
+    if(!(v>0)||v>req) return toast(v>req?`HR can approve up to the ${money(req)} requested.`:"Enter the approved amount.");
+    if(v<req&&v!==elig&&!reason.trim()){ toast("Give a reason for approving less than requested."); const r=$("#rd-reason"); if(r) r.focus(); return; }
+    const flagged=(c.duplicates||[]).length||(c.validation&&c.validation.match&&c.validation.match.status==="mismatch");
+    const m=modal(`<div class="card-h" style="padding-top:24px"><h3>${v<req?"Partly approve":"Approve"} ${esc(c.claimNo)}?</h3></div><div class="card-b">
+      <div class="rb-amounts">${[["Requested",money(req)],["Approved",money(v)],["Not approved",v<req?money(req-v):"—"]].map(([k,x],i)=>`<div class="am-row ${i===1?"total":i===2&&v<req?"bad":""}"><span>${k}</span><b>${x}</b></div>`).join("")}</div>
+      <div class="callout">${svg("info")}<div><b>${money(v)}</b> is added to ${esc(c.employee.name)}'s next payroll, separate from their salary.${reason.trim()?`<div class="muted">Reason: ${esc(reason.trim())}</div>`:""}</div></div>
+      ${flagged?`<div class="callout bad">${ico("warn")}<div>This claim has open flags (duplicate or amount mismatch). Approve only if you've checked them.</div></div>`:""}
+      ${c.validation&&c.validation.noReceipt&&c.validation.noReceipt.count?`<div class="muted">Includes ${c.validation.noReceipt.count} small expense${c.validation.noReceipt.count===1?"":"s"} without a receipt (${money(c.validation.noReceipt.total)}), declared by the employee.</div>`:""}</div>
+      <div class="modal-f"><button class="btn glass" data-close>Cancel</button><button class="btn primary" data-ok>Approve ${money(v)}</button></div>`);
+    m.querySelector("[data-ok]").addEventListener("click",async ev=>{ev.target.disabled=true;
+      const r=await rbDecide("approve",{approvedAmount:v,reason},v<req?`Partly approved: ${money(v)} of ${money(req)}.`:"Approved and added to payroll.");
+      if(r.ok) return m.remove(); ev.target.disabled=false; const e=(r.data&&r.data.errors)||{}; toast(e.approvedAmount||e.reason||apiMsg(r));});
+    return;
   }
   if(kind==="reject"){
     const reasons=(S.rb.meta&&S.rb.meta.rejectReasons)||["Other"];
@@ -3576,121 +3696,194 @@ function rbConfirm(kind){
   }
 }
 
-/* ---------- new claim / edit: Expenses → Receipts → Review ----------
-   A claim has one or more expense lines (+ Add another expense, or rows from an Excel/CSV expense sheet). Each line gets
-   its own receipt, or — for small expenses like autos — is marked as having none and declared on submit. */
-const CW_STEPS=["Expenses","Receipts","Review"], CW_F=["category","amount","expenseDate","paymentMethod","description"];
+/* ---------- new claim / edit: Upload invoices → Review details → Submit ----------
+   Invoice first: each uploaded invoice becomes an expense line pre-filled from what was read off it (server-side), and
+   the employee reviews and edits every value. Small expenses without a bill can be added by hand or from an Excel
+   sheet. A claim can also be the final bill for an approved budget request (w.budget). */
+const CW_STEPS=["Upload invoices","Review details","Submit"], CW_F=["vendor","invoiceNo","expenseDate","category","amount","paymentMethod","description","travelClass","policyFare"];
 let cwKey=0;
 const cwLine=(x={})=>({key:++cwKey,id:x.id||null,category:x.category||"",amount:x.amount!=null&&x.amount!==""?String(x.amount):"",expenseDate:x.expenseDate||"",
-  paymentMethod:x.paymentMethod||"",description:x.description||"",noReceipt:!!x.noReceipt,source:x.source||"form",document:x.document||null});
+  paymentMethod:x.paymentMethod||"",description:x.description||"",noReceipt:!!x.noReceipt,source:x.source||"form",document:x.document||null,
+  vendor:x.vendor||"",invoiceNo:x.invoiceNo||"",extracted:x.extracted||null,travelClass:x.travelClass||"",policyFare:x.policyFare!=null?String(x.policyFare):""});
 const nrMax=()=>(S.rb.meta&&S.rb.meta.noReceiptMax)||2000;
-const cwBlank=it=>!it.id&&!it.category&&!it.amount&&!it.description;
+const cwBlank=it=>!it.id&&!it.category&&!it.amount&&!it.description&&!it.vendor;
 const cwTotal=w=>w.items.reduce((n,it)=>n+(Number(it.amount)||0),0);
-function newCw(c){
-  return c?{step:1,id:c.id,status:c.status,claimNo:c.claimNo,email:c.email,items:(c.items||[]).map(cwLine),validation:c.validation,duplicates:c.duplicates,comment:c.changeComment,errors:{},busy:false,confirm:false}
-    :{step:1,id:null,status:"draft",email:"",items:[cwLine()],validation:null,duplicates:[],errors:{},busy:false,confirm:false};
+const catOf=k=>(S.rb.cats||[]).find(c=>c.key===k)||null;
+const CLS=()=>(S.rb.meta&&S.rb.meta.travelClasses)||["Economy","Premium economy","Business","First"];
+const overPolicy=it=>{const c=catOf(it.category);return !!(c&&c.allowedClass&&it.travelClass&&CLS().indexOf(it.travelClass)>CLS().indexOf(c.allowedClass));};
+function newCw(c,opts={}){
+  if(c) return {step:2,id:c.id,status:c.status,claimNo:c.claimNo,email:c.email,budget:c.budget,items:(c.items||[]).map(cwLine),validation:c.validation,duplicates:c.duplicates,
+    eligibility:c.eligibility,comment:c.changeComment,errors:{},busy:false,uploads:[],confirm:false,confirmAmounts:false};
+  return {step:1,id:null,status:"draft",email:"",budget:opts.budget||null,items:[],validation:null,duplicates:[],eligibility:null,errors:{},busy:false,uploads:[],confirm:false,confirmAmounts:false};
 }
 function cwCollect(){
-  const w=S.cw; if(!w||w.step!==1) return;
+  const w=S.cw; if(!w) return;
   const em=$("#cw-email"); if(em) w.email=em.value;
+  if(w.step!==2) return;
   w.items.forEach((it,i)=>CW_F.forEach(k=>{ const el=$(`#cw-${i}-${k}`); if(el) it[k]=el.value; }));
+}
+/* "From invoice" while a value is what was read off the invoice, "Edited" once the employee changes it. */
+const xSame=(it,k)=>{const x=it.extracted&&it.extracted[k]; if(x==null) return null; return k==="amount"?Number(it.amount)===Number(x):String(it[k]||"")===String(x);};
+const xb=(it,i,k)=>{const s=xSame(it,k); return s===null?"":`<span class="xb ${s?"ok":"ed"}" id="xb-${i}-${k}">${s?"From invoice":"Edited"}</span>`;};
+const mmNote=(it)=>{const x=it.extracted&&it.extracted.amount; if(x==null||xSame(it,"amount")) return "";
+  return `<div class="callout warn-c">${ico("warn")}<div>The invoice shows <b>${money(x)}</b>, you entered <b>${money(Number(it.amount)||0)}</b>. You'll be asked to confirm this before submitting.</div></div>`;};
+function docPreview(w,it){
+  const d=it.document; if(!d||!w.id) return "";
+  const src=`/api/reimbursements/${w.id}/documents/${d.id}`;
+  return `<div class="cw-doc"><div class="cw-doc-h">${ico("doc")}<span title="${esc(d.name)}">${esc(d.name)}</span><span class="grow"></span><a class="btn link sm nolink" href="${src}" target="_blank" rel="noopener">${ico("open")}Open</a><a class="btn link sm nolink" href="${src}?download=1">${ico("down")}Download</a></div>
+    <div class="rb-viewer ${d.mime==="application/pdf"?"pdf":"img"} small">${d.mime==="application/pdf"?`<iframe src="${src}#view=FitH" title="Invoice for expense ${it.position||""}: ${esc(d.name)}"></iframe>`:`<div class="rb-imgwrap"><img src="${src}" alt="Invoice: ${esc(d.name)}"></div>`}</div></div>`;
+}
+function cwRcpt(it,i,w){
+  const busy=w.busyItem===it.id, small=Number(it.amount)<=nrMax(), err=w.errors["up-"+it.id];
+  const accept=`accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png"`;
+  if(it.document) return `<div class="rc-doc">${ico("doc")}<span>Invoice attached</span><span class="grow"></span>
+      <label class="btn glass sm cw-file">${busy?"Uploading…":"Replace"}<input type="file" data-cw-up="${it.id}" ${accept} ${busy?"disabled":""} aria-label="Replace the invoice for expense ${i+1}"></label>
+      <button type="button" class="btn link sm nolink" data-cw="rmdoc:${it.id}">Remove</button></div>${err?`<div class="callout bad">${ico("warn")}<div>${esc(err)}</div></div>`:""}`;
+  if(!it.id) return `<div class="muted" style="font-size:13px">${ico("doc")} Attach the receipt after you continue, or it's saved as a small expense without one.</div>`;
+  if(it.noReceipt) return `<div class="rc-nr">${ico("check")}<span class="grow">Small expense without a receipt. You'll confirm a declaration before submitting.</span><button type="button" class="btn link sm nolink" data-cw="nr:${it.id}:0">Upload a receipt instead</button></div>`;
+  return `<label class="rb-drop ${busy?"busy":""}"><input type="file" data-cw-up="${it.id}" ${accept} ${busy?"disabled":""} aria-label="Receipt for expense ${i+1}">${ico("doc")}<b>${busy?"Uploading and checking…":"Attach the receipt"}</b><span class="muted">PDF, JPG or PNG · up to 10 MB</span></label>
+    ${small?`<button type="button" class="btn link sm nolink" style="align-self:flex-start" data-cw="nr:${it.id}:1">No bill for this (auto, bus, parking…)? Mark it as a small expense without a receipt</button>`:`<span class="muted" style="font-size:13px">Expenses over ${money(nrMax())} need a receipt.</span>`}
+    ${err?`<div class="callout bad">${ico("warn")}<div>${esc(err)}</div></div>`:""}`;
 }
 function cwLineHtml(it,i,w){
   const er=w.errors, id=k=>`cw-${i}-${k}`, e=k=>er[`${i}-${k}`], cats=(S.rb.cats||[]).filter(c=>c.active||c.key===it.category), pm=(S.rb.meta&&S.rb.meta.paymentMethods)||[];
-  return `<div class="cw-line" data-line="${i}"><div class="cw-line-h"><b>Expense ${i+1}</b>${it.source==="excel"?`<span class="pill p-info">From sheet</span>`:""}<span class="grow"></span>
-      ${w.items.length>1?`<button type="button" class="btn link sm nolink" data-cw="rm:${i}" aria-label="Remove expense ${i+1}">${ico("x")}Remove</button>`:""}</div>
-    ${wf(id("category"),"Category",`<select class="input" id="${id("category")}"><option value="">Choose…</option>${cats.map(c=>`<option value="${c.key}" ${it.category===c.key?"selected":""}>${esc(c.name)}${c.maxAmount?` (limit ${money(c.maxAmount)})`:""}</option>`).join("")}</select>`,e("category"))}
-    ${wf(id("amount"),"Amount (₹)",`<input class="input" id="${id("amount")}" type="number" min="0" step="100" inputmode="decimal" value="${esc(it.amount)}" placeholder="2500">`,e("amount"))}
-    ${wf(id("expenseDate"),"Date",`<input class="input" id="${id("expenseDate")}" type="date" max="${todayIso()}" value="${esc(it.expenseDate)}">`,e("expenseDate"))}
-    ${wf(id("paymentMethod"),"Payment method",`<select class="input" id="${id("paymentMethod")}"><option value="">Choose…</option>${pm.map(p=>`<option ${it.paymentMethod===p?"selected":""}>${esc(p)}</option>`).join("")}</select>`,e("paymentMethod"))}
-    <div class="span">${wf(id("description"),"What was it for?",`<input class="input" id="${id("description")}" maxlength="500" value="${esc(it.description)}" placeholder="${i?"Dinner with the client team":"Hotel during client visit to Pune"}">`,e("description"))}</div>
+  const cat=catOf(it.category), over=overPolicy(it);
+  const lab=(t,k)=>`${t}${xb(it,i,k)}`;
+  return `<div class="cw-rev" data-line="${i}">
+    <div class="cw-line">
+      <div class="cw-line-h"><b>Expense ${i+1}</b>${it.source==="document"?`<span class="pill p-info">Read from invoice</span>`:it.source==="excel"?`<span class="pill p-info">From sheet</span>`:""}<span class="grow"></span>
+        ${w.items.length>1?`<button type="button" class="btn link sm nolink" data-cw="rm:${i}" aria-label="Remove expense ${i+1}">${ico("x")}Remove</button>`:""}</div>
+      ${it.extracted?`<div class="span cw-x">${ico("check")} Details extracted from the invoice. Check each one; anything you change is marked <b>Edited</b>.</div>`:it.source==="document"?`<div class="span cw-x warn">${ico("warn")} This invoice couldn't be read automatically. Fill in the details from it.</div>`:""}
+      <div class="span">${wf(id("vendor"),lab("Vendor","vendor"),`<input class="input" id="${id("vendor")}" data-cw-f="${i}:vendor" maxlength="120" value="${esc(it.vendor)}" placeholder="e.g. ABC Hotel">`,e("vendor"))}</div>
+      ${wf(id("invoiceNo"),lab("Invoice number","invoiceNo"),`<input class="input mono" id="${id("invoiceNo")}" data-cw-f="${i}:invoiceNo" maxlength="60" value="${esc(it.invoiceNo)}" placeholder="Optional">`,e("invoiceNo"))}
+      ${wf(id("expenseDate"),lab("Expense date","expenseDate"),`<input class="input" id="${id("expenseDate")}" data-cw-f="${i}:expenseDate" type="date" max="${todayIso()}" value="${esc(it.expenseDate)}">`,e("expenseDate"))}
+      ${wf(id("category"),lab("Category","category"),`<select class="input" id="${id("category")}" data-cw-f="${i}:category" data-cw-re="1"><option value="">Choose…</option>${cats.map(c=>`<option value="${c.key}" ${it.category===c.key?"selected":""}>${esc(c.name)}</option>`).join("")}</select>`,e("category"))}
+      ${wf(id("amount"),lab("Amount (₹)","amount"),`<input class="input" id="${id("amount")}" data-cw-f="${i}:amount" type="number" min="0" step="0.01" inputmode="decimal" value="${esc(it.amount)}" placeholder="2500">`,e("amount"))}
+      ${wf(id("paymentMethod"),"Payment method",`<select class="input" id="${id("paymentMethod")}"><option value="">Choose…</option>${pm.map(p=>`<option ${it.paymentMethod===p?"selected":""}>${esc(p)}</option>`).join("")}</select>`,e("paymentMethod"))}
+      ${cat&&cat.allowedClass?`${wf(id("travelClass"),lab("Travel class","travelClass"),`<select class="input" id="${id("travelClass")}" data-cw-re="1"><option value="">Not applicable</option>${CLS().map(x=>`<option ${it.travelClass===x?"selected":""}>${esc(x)}</option>`).join("")}</select>`,e("travelClass"),`Policy allows ${esc(cat.allowedClass)}.`)}`:""}
+      ${over?wf(id("policyFare"),`${esc(cat.allowedClass)} fare for the same trip (₹)`,`<input class="input" id="${id("policyFare")}" type="number" min="0" step="0.01" value="${esc(it.policyFare)}" placeholder="e.g. 8000">`,e("policyFare"),`You booked ${esc(it.travelClass)}. Up to the ${esc(cat.allowedClass)} fare is reimbursed; the rest isn't.`):""}
+      <div class="span">${wf(id("description"),"What was it for?",`<input class="input" id="${id("description")}" maxlength="500" value="${esc(it.description)}" placeholder="${i?"Dinner with the client team":"Hotel stay during client visit"}">`,e("description"))}</div>
+      <div class="span" id="cw-mm-${i}">${mmNote(it)}</div>
+      <div class="span" style="display:flex;flex-direction:column;gap:8px">${cwRcpt(it,i,w)}</div>
+    </div>
+    ${docPreview(w,it)}
   </div>`;
 }
-function cwRcptHtml(it,i,w){
-  const x=((w.validation&&w.validation.items)||{})[it.id]||{}, m=x.match||{}, busy=w.busyItem===it.id, small=Number(it.amount)<=nrMax(), err=w.errors["up-"+it.id];
-  const accept=`accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png"`;
-  const pill=it.document?(m.status==="match"?`<span class="pill p-ok">Matches receipt</span>`:m.status==="mismatch"?`<span class="pill p-warn">Receipt shows ${money(m.invoiceTotal)}</span>`:`<span class="pill p-info">Uploaded</span>`)
-    :it.noReceipt?`<span class="pill p-mute">No receipt</span>`:`<span class="pill p-warn">Receipt needed</span>`;
-  return `<div class="rc-row"><div class="rc-h"><div><b>${i+1}. ${esc(rbCat(it.category))} · ${money(Number(it.amount))}</b><div class="muted">${esc(fdate(it.expenseDate))} · ${esc(it.description)}</div></div>${pill}</div>
-    ${it.document?`<div class="rc-doc">${ico("doc")}<a href="/api/reimbursements/${w.id}/documents/${it.document.id}" target="_blank" rel="noopener">${esc(it.document.name)}</a><span class="grow"></span>
-        <label class="btn glass sm cw-file">${busy?"Uploading…":"Replace"}<input type="file" data-cw-up="${it.id}" ${accept} ${busy?"disabled":""} aria-label="Replace the receipt for expense ${i+1}"></label>
-        <button type="button" class="btn link sm nolink" data-cw="rmdoc:${it.id}">Remove</button></div>
-      <ul class="rb-checks">${x.read&&x.read.readable?`<li class="ok">${ico("check")}<span>Read automatically${x.read.fields&&x.read.fields.total!=null?`: receipt total ${money(x.read.fields.total)}`:""}</span></li>`:`<li class="warn">${ico("warn")}<span>${esc((x.read&&x.read.note)||"Not read automatically. HR will compare it by eye.")}</span></li>`}
-        ${m.status==="mismatch"?`<li class="bad">${ico("warn")}<span>Your amount (${money(m.claimed)}) differs from the receipt (${money(m.invoiceTotal)}). Check it, or explain in the description.</span></li>`:""}</ul>`
-    :it.noReceipt?`<div class="rc-nr">${ico("check")}<span class="grow">Small expense without a receipt. You'll confirm a declaration before submitting.</span><button type="button" class="btn link sm nolink" data-cw="nr:${it.id}:0">Upload a receipt instead</button></div>`
-    :`<label class="rb-drop ${busy?"busy":""}"><input type="file" data-cw-up="${it.id}" ${accept} ${busy?"disabled":""} aria-label="Receipt for expense ${i+1}">${ico("doc")}<b>${busy?"Uploading and checking…":"Choose the receipt"}</b><span class="muted">PDF, JPG or PNG · up to 10 MB</span></label>
-      ${small?`<button type="button" class="btn link sm nolink" style="align-self:flex-start" data-cw="nr:${it.id}:1">No bill for this (auto, bus, parking…)? Mark it as a small expense without a receipt</button>`:`<span class="muted" style="font-size:13px">Expenses over ${money(nrMax())} need a receipt.</span>`}`}
-    ${err?`<div class="callout bad">${ico("warn")}<div><b>Receipt upload failed. Please try again.</b><div>${esc(err)}</div></div></div>`:""}
-  </div>`;
+function cwUploadList(w){
+  if(!w.uploads.length) return "";
+  return `<ul class="up-list">${w.uploads.map(u=>`<li class="${u.state}">${u.state==="busy"?`<span class="spin" aria-hidden="true"></span>`:u.state==="ok"?ico("check"):ico("warn")}<div class="grow"><b>${esc(u.name)}</b><span class="muted">${esc(u.msg||"")}</span></div></li>`).join("")}</ul>`;
 }
 function vClaimNew(){
   const w=S.cw; if(!w){ setTimeout(()=>go("reimb")); return ""; }
   const er=w.errors, hr=isHrUser();
   if(!S.rb.cats) rbLoadCats().then(render);
+  const busyUp=w.uploads.some(u=>u.state==="busy");
+  const budgetNote=w.budget?`<div class="callout">${svg("info")}<div><b>Final bill for ${esc(w.budget.requestNo)}</b> · ${esc(w.budget.purpose||"")}<div>Approved budget <b>${money(w.budget.approvedBudget)}</b>. If the bill is higher, only the approved budget is reimbursed.</div></div></div>`:"";
   let body="";
-  if(w.step===1) body=`<div class="card"><div class="card-h"><div><h3>Expenses</h3><span class="muted">Add each expense on its own line. One claim can cover travel, food, hotel and more.</span></div>${w.claimNo?`<span class="muted mono">${esc(w.claimNo)}</span>`:""}</div>
-    <div class="card-b" style="display:flex;flex-direction:column;gap:14px">
-    ${w.comment?`<div class="callout">${svg("info")}<div><b>HR asked for changes</b><div>${esc(w.comment)}</div></div></div>`:""}
-    ${hr&&!w.id?wf("cw-email","Employee",`<select class="input" id="cw-email"><option value="">Choose…</option>${empOptions(w.email)}</select>`,er.email):""}
-    ${w.items.map((it,i)=>cwLineHtml(it,i,w)).join("")}
-    ${er.form?`<div class="callout bad">${ico("warn")}<div>${esc(er.form)}</div></div>`:""}
-    <button type="button" class="cw-add" data-cw="add">${ico("plus")}Add another expense</button>
-    <div class="cw-total"><span>Claim total · ${w.items.length} expense${w.items.length===1?"":"s"}</span><b>${money(cwTotal(w))}</b></div>
-  </div></div>
-  <div class="card cw-import"><div class="cw-import-t"><b>Small expenses without bills?</b><span class="muted">Autos, buses, parking, tea… List them in an Excel sheet and upload it. Up to ${money(nrMax())} each, no receipt needed.</span></div>
-    <div class="row" style="gap:8px;flex-wrap:wrap"><a class="btn glass sm" href="/api/reimbursements/import/template" download>${ico("down")}Download template</a>
-      <label class="btn primary sm cw-file">${ico("doc")}${w.importing?"Reading the sheet…":"Upload Excel or CSV"}<input type="file" id="cw-sheet" accept=".xlsx,.csv,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" ${w.importing?"disabled":""}></label></div></div>`;
-  if(w.step===2){
-    const done=w.items.filter(it=>it.document||it.noReceipt).length;
-    body=`<div class="card"><div class="card-h"><div><h3>Receipts</h3><span class="muted">One receipt per expense. They're shown to HR inside the app.</span></div><span class="muted">${done} of ${w.items.length} ready</span></div>
+  if(w.step===1) body=`${budgetNote}
+    ${hr&&!w.id?`<div class="card"><div class="card-b">${wf("cw-email","Filing for",`<select class="input" id="cw-email"><option value="">Choose the employee…</option>${empOptions(w.email)}</select>`,er.email,"HR can file a claim for someone. It is reviewed like any other claim.")}</div></div>`:""}
+    <div class="card"><div class="card-h"><div><h3>${w.budget?"Upload the final bill":"Upload your invoice or receipt"}</h3><span class="muted">PDF, JPG or PNG, up to 10 MB each. The details are read for you, and you check them next.</span></div>${w.claimNo?`<span class="muted mono">${esc(w.claimNo)}</span>`:""}</div>
       <div class="card-b" style="display:flex;flex-direction:column;gap:14px">
+        <label class="rb-drop big ${busyUp?"busy":""}"><input type="file" id="cw-inv" multiple accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png" ${busyUp?"disabled":""}>
+          ${ico("doc")}<b>${busyUp?"Reading your invoice…":w.items.length?"Upload another invoice":"Choose invoices or receipts"}</b><span class="muted">You can pick several at once. Each becomes one expense.</span></label>
+        ${er.file?`<div class="callout bad">${ico("warn")}<div>${esc(er.file)}</div></div>`:""}
+        ${cwUploadList(w)}
+        ${w.items.length?`<div class="cw-sum"><div class="muted" style="font-size:13px">In this claim</div>${w.items.map((it,i)=>`<div class="li"><div class="grow"><b style="font-weight:600">${i+1}. ${esc(it.vendor||it.description||rbCat(it.category)||"Expense")}</b><div class="meta">${it.amount?money(Number(it.amount)):"Amount to fill in"}${it.document?" · invoice attached":it.source==="excel"?" · from sheet":" · added by hand"}</div></div><button type="button" class="btn link sm nolink" data-cw="rm:${i}" aria-label="Remove expense ${i+1}">Remove</button></div>`).join("")}
+          <div class="cw-total"><span>Claim total · ${w.items.length} expense${w.items.length===1?"":"s"}</span><b>${money(cwTotal(w))}</b></div></div>`:""}
+      </div></div>
+    ${w.budget?"":`<div class="card cw-import"><div class="cw-import-t"><b>No bill?</b><span class="muted">For autos, buses, parking and other small expenses up to ${money(nrMax())} each, add them by hand or list them in an Excel sheet.</span></div>
+      <div class="row" style="gap:8px;flex-wrap:wrap"><button type="button" class="btn glass sm" data-cw="manual">${ico("plus")}Add an expense by hand</button><a class="btn glass sm" href="/api/reimbursements/import/template" download>${ico("down")}Excel template</a>
+        <label class="btn glass sm cw-file">${ico("doc")}${w.importing?"Reading the sheet…":"Upload Excel or CSV"}<input type="file" id="cw-sheet" accept=".xlsx,.csv,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" ${w.importing?"disabled":""}></label></div></div>`}`;
+  if(w.step===2) body=`${budgetNote}
+    ${w.comment?`<div class="callout">${svg("info")}<div><b>HR asked for changes</b><div>${esc(w.comment)}</div></div></div>`:""}
+    <div class="card"><div class="card-h"><div><h3>Review expense details</h3><span class="muted">Check what was read from each invoice and correct anything that's wrong. Every field can be edited.</span></div>${w.claimNo?`<span class="muted mono">${esc(w.claimNo)}</span>`:""}</div>
+      <div class="card-b" style="display:flex;flex-direction:column;gap:16px">
+      ${er.form?`<div class="callout bad">${ico("warn")}<div>${esc(er.form)}</div></div>`:""}
       ${er.file?`<div class="callout bad">${ico("warn")}<div>${esc(er.file)}</div></div>`:""}
       ${(w.duplicates||[]).length?`<div class="callout bad">${ico("warn")}<div>Looks like an earlier claim: ${w.duplicates.map(d=>esc(d.claimNo)).join(", ")}. HR will check.</div></div>`:""}
-      ${w.items.map((it,i)=>cwRcptHtml(it,i,w)).join("")}</div></div>`;
-  }
+      ${w.items.map((it,i)=>cwLineHtml(it,i,w)).join("")}
+      <button type="button" class="cw-add" data-cw="add">${ico("plus")}Add another expense</button>
+      <div class="cw-total"><span>Claim total · ${w.items.length} expense${w.items.length===1?"":"s"}</span><b id="cw-total">${money(cwTotal(w))}</b></div>
+    </div></div>`;
   if(w.step===3){
-    const v=w.validation||{}, nr=w.items.filter(it=>it.noReceipt&&!it.document), nrSum=nr.reduce((n,it)=>n+Number(it.amount),0), withDoc=w.items.filter(it=>it.document).length;
-    body=`${rsec("Expenses","data-cw-goto",1,`${hr&&w.email?`<div class="muted" style="margin-bottom:10px">For ${esc((empBy(w.email)||{name:w.email}).name)}</div>`:""}${linesTable({id:w.id,items:w.items.map((it,i)=>({...it,position:i+1,amount:Number(it.amount)})),validation:v})}`)}
-    ${rsec("Receipts","data-cw-goto",2,rkv([["Receipts uploaded",`${withDoc} of ${w.items.length}`],["Without a receipt",nr.length?`${nr.length} small expense${nr.length===1?"":"s"}, ${money(nrSum)}`:"None"],
-      ["Amount check",v.match&&v.match.status==="match"?"Matches the receipts":v.match&&v.match.status==="mismatch"?`<span style="color:var(--bad)">${v.match.mismatches} expense${v.match.mismatches===1?"":"s"} differ from the receipt</span>`:"Checked by HR"]]))}
-    <div class="cw-total"><span>Claim total</span><b>${money(cwTotal(w))}</b></div>
-    <label class="check" style="border:0;padding:0"><input type="checkbox" id="cw-confirm" ${w.confirm?"checked":""}><div class="grow"><div class="lbl">These are genuine business expenses${withDoc?` and the receipt${withDoc===1?" is":"s are"} original`:""}.${nr.length?` I declare that the ${nr.length} expense${nr.length===1?"":"s"} without a receipt (${money(nrSum)}) ${nr.length===1?"was":"were"} actually spent for work.`:""}</div></div></label>`;
+    const v=w.validation||{}, el=w.eligibility||{}, nr=w.items.filter(it=>it.noReceipt&&!it.document), nrSum=nr.reduce((n,it)=>n+Number(it.amount),0), withDoc=w.items.filter(it=>it.document).length;
+    const mism=w.items.filter(it=>it.extracted&&it.extracted.amount!=null&&!xSame(it,"amount"));
+    const req=el.requested!=null?el.requested:cwTotal(w), elig=el.eligible!=null?el.eligible:req;
+    const row=(k,x,cls="")=>`<div class="am-row ${cls}"><span>${k}</span><b>${x}</b></div>`;
+    body=`${budgetNote}${rsec("Expense details","data-cw-goto",2,`${hr&&w.email?`<div class="muted" style="margin-bottom:10px">For ${esc((empBy(w.email)||{name:w.email}).name)}</div>`:""}${linesTable({id:w.id,items:w.items.map((it,i)=>({...it,position:i+1,amount:Number(it.amount)})),validation:v,eligibility:el})}`)}
+    <div class="card"><div class="card-h"><h3>Amounts</h3></div><div class="card-b rb-amounts">
+      ${row("Requested amount",money(req))}
+      ${el.budget?row(`Approved budget <span class="muted mono">${esc(el.budget.requestNo)}</span>`,money(el.budget.approvedBudget))+row("Company covers",money(el.budget.covered),"good")+row("Employee excess",el.budget.excess?money(el.budget.excess):"—",el.budget.excess?"bad":""):""}
+      ${row("Eligible amount",money(elig),elig<req?"good":"")}${elig<req&&!el.budget?row("Not eligible",money(req-elig),"bad"):""}
+      ${(el.reasons||[]).length?`<ul class="am-why">${el.reasons.map(r=>`<li>${esc(r)}</li>`).join("")}</ul>`:""}
+      <div class="muted" style="font-size:12.5px">HR reviews the claim and can approve the full amount or less. Only the approved amount is paid with your salary.</div></div></div>
+    ${rsec("Receipts","data-cw-goto",2,rkv([["Invoices attached",`${withDoc} of ${w.items.length}`],["Without a receipt",nr.length?`${nr.length} small expense${nr.length===1?"":"s"}, ${money(nrSum)}`:"None"],
+      ["Amount check",mism.length?`<span style="color:var(--warn)">${mism.length} amount${mism.length===1?"":"s"} differ from the invoice</span>`:v.match&&v.match.status==="match"?"Matches the invoices":"Checked by HR"]]))}
+    ${mism.length?`<label class="check confirm-box"><input type="checkbox" id="cw-amt-ok" ${w.confirmAmounts?"checked":""}><div class="grow"><div class="lbl">I confirm the amounts I entered. ${mism.map(it=>`Expense ${w.items.indexOf(it)+1}: invoice ${money(it.extracted.amount)}, claimed ${money(Number(it.amount))}`).join("; ")}.</div></div></label>`:""}
+    <label class="check confirm-box"><input type="checkbox" id="cw-confirm" ${w.confirm?"checked":""}><div class="grow"><div class="lbl">These are genuine business expenses${withDoc?` and the invoice${withDoc===1?" is":"s are"} original`:""}.${nr.length?` I declare that the ${nr.length} expense${nr.length===1?"":"s"} without a receipt (${money(nrSum)}) ${nr.length===1?"was":"were"} actually spent for work.`:""}</div></div></label>`;
   }
-  const last=w.step===3, resub=w.status==="changes_requested";
+  const last=w.step===3, resub=w.status==="changes_requested", needAmt=last&&w.items.some(it=>it.extracted&&it.extracted.amount!=null&&!xSame(it,"amount"));
+  const canSubmit=w.confirm&&(!needAmt||w.confirmAmounts)&&!w.busy;
   return `<section class="section">
-  ${head(hr&&!resub?"Finance":"Me",resub?"Update and <span class=\"grad\">resubmit.</span>":"New <span class=\"grad\">claim.</span>",resub?"Make the changes HR asked for, check the receipts, then send it back.":"Add your expenses, attach a receipt for each, then review and submit. HR reviews every claim.","",true)}
+  ${head(hr&&!resub?"Finance":"Me",resub?"Update and <span class=\"grad\">resubmit.</span>":w.budget?"Final <span class=\"grad\">bill.</span>":"New <span class=\"grad\">claim.</span>",resub?"Make the changes HR asked for, check the details, then send it back.":"Upload the invoice, check the details read from it, then submit. HR reviews every claim.","",true)}
   ${stepper(CW_STEPS,w.step)}
   <form id="cwf" class="grid" style="gap:22px" novalidate>${body}
   <div class="row" style="justify-content:space-between"><div class="row">${w.step>1?`<button type="button" class="btn glass" data-cw="back">Back</button>`:`<button type="button" class="btn glass" data-cw="cancel">Cancel</button>`}</div>
-    ${last?`<button type="submit" class="btn primary" id="cw-submit" ${w.confirm&&!w.busy?"":"disabled"}>${resub?"Resubmit claim":"Submit claim"}</button>`
-      :`<button type="button" class="btn primary" data-cw="next" ${w.busy||w.busyItem?"disabled":""}>${w.busy?"Saving…":"Continue"}</button>`}</div></form></section>`;
+    ${last?`<button type="submit" class="btn primary" id="cw-submit" ${canSubmit?"":"disabled"}>${resub?"Resubmit claim":"Submit claim"}</button>`
+      :`<button type="button" class="btn primary" data-cw="next" ${w.busy||w.busyItem||busyUp?"disabled":""}>${w.busy?"Saving…":"Continue"}</button>`}</div></form></section>`;
 }
 async function cwReload(){
   const w=S.cw, g=await api("GET",`/api/reimbursements/${w.id}`);
-  if(g.ok){ const c=g.data.claim; w.items=c.items.map(cwLine); w.validation=c.validation; w.duplicates=c.duplicates; w.claimNo=c.claimNo; }
+  if(g.ok){ const c=g.data.claim; w.items=c.items.map(cwLine); w.validation=c.validation; w.duplicates=c.duplicates; w.claimNo=c.claimNo; w.eligibility=c.eligibility; if(c.budget) w.budget=c.budget; }
+}
+/* Automation 1: each file goes to the server, which stores it, reads it and adds a pre-filled expense to the draft. */
+async function cwUploadInvoices(files){
+  const w=S.cw; if(!w||!files.length) return;
+  cwCollect(); w.errors={};
+  if(isHrUser()&&!w.id&&!w.email){ w.errors={email:"Choose the employee first."}; return render(); }
+  for(const f of files){
+    const u={name:f.name,state:"busy",msg:"Uploading and reading…"}; w.uploads.push(u); render();
+    if(f.size>10*1024*1024){ u.state="bad"; u.msg="Larger than 10 MB. Not uploaded."; continue; }
+    const qs=new URLSearchParams({name:f.name}); if(w.id) qs.set("claim",w.id); else { if(w.budget) qs.set("budget",w.budget.id); if(isHrUser()&&w.email) qs.set("email",w.email); }
+    try{
+      const r=await fetch("/api/reimbursements/from-document?"+qs,{method:"POST",headers:{"Content-Type":"application/octet-stream"},body:f});
+      const d=await r.json().catch(()=>null);
+      if(!r.ok){ u.state="bad"; u.msg=(d&&(d.error||(d.errors&&Object.values(d.errors)[0])))||"The server refused the file."; if(d&&d.claimId&&!w.id){ u.msg+=" "; } continue; }
+      if(!w.id){ w.id=d.claimId; w.claimNo=d.claimNo; S.rb.state="idle"; }
+      w.items.push(cwLine(d.item));
+      u.state=d.read.found.length?"ok":"warn";
+      u.msg=d.read.found.length?`Read ${d.read.found.join(", ")}${d.item.amount!=null?` · ${money(d.item.amount)}`:""}`:(d.read.note||"Couldn't read it automatically. You'll fill in the details.");
+    }catch(e){ u.state="bad"; u.msg="The server can't be reached."; }
+  }
+  if(w.id) await cwReload();
+  render();
 }
 async function cwNext(){
   const w=S.cw; cwCollect(); w.errors={};
   if(w.step===1){
-    if(w.items.length>1) w.items=w.items.filter(it=>!cwBlank(it));
-    w.busy=true; render();
-    const body={items:w.items.map(it=>({id:it.id,category:it.category,amount:it.amount,expenseDate:it.expenseDate,paymentMethod:it.paymentMethod,description:it.description,noReceipt:it.noReceipt,source:it.source}))};
-    if(isHrUser()&&!w.id) body.email=w.email;
-    const r=w.id?await api("PUT",`/api/reimbursements/${w.id}`,body):await api("POST","/api/reimbursements",body);
-    if(!r.ok){ w.busy=false; w.errors=(r.data&&r.data.errors)||{}; if(!Object.keys(w.errors).length) toast(apiMsg(r)); render(); obFocusError(); return; }
-    if(!w.id){ w.id=r.data.id; S.rb.state="idle"; }
-    await cwReload(); w.busy=false;
+    if(isHrUser()&&!w.id&&!w.email){ w.errors={email:"Choose the employee first."}; return render(); }
+    if(!w.items.length){ w.errors={file:"Upload an invoice, or add an expense by hand."}; return render(); }
+    w.step=2; render(); window.scrollTo(0,0); return;
   }
   if(w.step===2){
+    if(w.items.length>1) w.items=w.items.filter(it=>!cwBlank(it));
+    w.busy=true; render();
+    const body={items:w.items.map(it=>({id:it.id,category:it.category,amount:it.amount,expenseDate:it.expenseDate,paymentMethod:it.paymentMethod,description:it.description,
+      noReceipt:it.id?it.noReceipt:(!it.document&&Number(it.amount)<=nrMax()),source:it.source==="document"?"form":it.source,vendor:it.vendor,invoiceNo:it.invoiceNo,travelClass:it.travelClass,policyFare:it.policyFare}))};
+    if(!w.id){ if(isHrUser()) body.email=w.email; if(w.budget) body.budgetId=w.budget.id; }
+    const r=w.id?await api("PUT",`/api/reimbursements/${w.id}`,body):await api("POST","/api/reimbursements",body);
+    if(!r.ok){ w.busy=false; w.errors=(r.data&&r.data.errors)||{}; if(!Object.keys(w.errors).length) w.errors={form:apiMsg(r)}; render(); obFocusError(); return; }
+    if(!w.id){ w.id=r.data.id; w.claimNo=r.data.claimNo; S.rb.state="idle"; }
+    await cwReload(); w.busy=false;
     const gaps=w.items.map((it,i)=>!it.document&&!it.noReceipt?i+1:0).filter(Boolean);
-    if(gaps.length){ w.errors={file:`Add the receipt for expense ${gaps.join(", ")}, or mark ${gaps.length===1?"it":"them"} as a small expense without a receipt.`}; render(); window.scrollTo(0,0); return; }
+    if(gaps.length){ w.errors={file:`Attach the receipt for expense ${gaps.join(", ")}, or mark ${gaps.length===1?"it":"them"} as a small expense without a receipt.`}; render(); window.scrollTo(0,0); return; }
   }
   w.step++; render(); window.scrollTo(0,0);
 }
 async function cwUpload(itemId,file){
   const w=S.cw; if(!w||!w.id||!file) return;
   if(file.size>10*1024*1024){ w.errors={["up-"+itemId]:"The file is larger than 10 MB."}; return render(); }
-  w.busyItem=itemId; w.errors={}; render();
+  cwCollect(); w.busyItem=itemId; w.errors={}; render();
   try{
     const r=await fetch(`/api/reimbursements/${w.id}/items/${itemId}/document?name=${encodeURIComponent(file.name)}`,{method:"PUT",headers:{"Content-Type":"application/octet-stream"},body:file});
     const data=await r.json().catch(()=>null);
@@ -3700,9 +3893,11 @@ async function cwUpload(itemId,file){
   w.busyItem=null; render();
 }
 async function cwItemCall(itemId,method,path,body){
-  const w=S.cw, r=await api(method,`/api/reimbursements/${w.id}/items/${itemId}${path}`,body);
+  const w=S.cw; cwCollect(); const r=await api(method,`/api/reimbursements/${w.id}/items/${itemId}${path}`,body);
   if(!r.ok){ w.errors={["up-"+itemId]:apiMsg(r)}; return render(); }
-  w.errors={}; w.validation=r.data.validation; w.duplicates=r.data.duplicates; await cwReload(); render();
+  const keep=w.items.map(it=>({...it})); w.errors={}; await cwReload();
+  w.items.forEach(it=>{ const o=keep.find(k=>k.id===it.id); if(o) CW_F.forEach(k=>{ it[k]=o[k]; }); });   // keep unsaved edits
+  render();
 }
 async function cwImport(file){
   const w=S.cw; if(!w) return;
@@ -3732,13 +3927,186 @@ async function cwImport(file){
 async function cwSubmit(){
   const w=S.cw; if(!w.confirm) return;
   w.busy=true; render();
-  const r=await api("POST",`/api/reimbursements/${w.id}/${w.status==="changes_requested"?"resubmit":"submit"}`,{declaration:true});
+  const r=await api("POST",`/api/reimbursements/${w.id}/${w.status==="changes_requested"?"resubmit":"submit"}`,{declaration:true,confirmAmounts:!!w.confirmAmounts});
   w.busy=false;
   if(!r.ok){ toast(apiMsg(r)); return render(); }
-  const id=w.id; S.cw=null; S.rb.state="idle"; S.myrb.state="idle";
+  const id=w.id; S.cw=null; S.rb.state="idle"; S.myrb.state="idle"; S.bq.state="idle";
   toast(w.status==="changes_requested"?"Claim resubmitted for review.":"Claim submitted. HR has been notified.");
   openClaim(id);
 }
+/* Live "From invoice" / "Edited" markers and the invoice-amount warning while typing (no re-render, so focus stays). */
+document.addEventListener("input",ev=>{
+  const t=ev.target, f=t.dataset&&t.dataset.cwF; if(!f||!S.cw) return;
+  const [i,k]=f.split(":"), it=S.cw.items[Number(i)]; if(!it) return; it[k]=t.value;
+  const b=$(`#xb-${i}-${k}`), same=xSame(it,k); if(b&&same!==null){ b.textContent=same?"From invoice":"Edited"; b.className="xb "+(same?"ok":"ed"); }
+  if(k==="amount"){ const m=$(`#cw-mm-${i}`); if(m) m.innerHTML=mmNote(it); const tt=$("#cw-total"); if(tt) tt.textContent=money(cwTotal(S.cw)); }
+});
+document.addEventListener("change",ev=>{
+  const t=ev.target; if(!S.cw) return;
+  if(t.id==="cw-inv"&&t.files.length){ const fs=[...t.files]; t.value=""; return cwUploadInvoices(fs); }
+  if(t.dataset&&t.dataset.cwRe){ cwCollect(); render(); return; }
+  if(t.id==="cw-amt-ok"){ S.cw.confirmAmounts=t.checked; render(); }
+});
+
+/* ---------- budget requests: approve the spending first, then file the final bill against it ---------- */
+const BQ_STATUS={submitted:["Waiting for HR","p-warn"],under_review:["Under HR review","p-info"],approved:["Approved","p-ok"],partially_approved:["Partially approved","p-ok"],rejected:["Rejected","p-bad"]};
+const bqPill=s=>`<span class="pill ${(BQ_STATUS[s]||["",""])[1]}">${esc((BQ_STATUS[s]||[s])[0])}</span>`;
+S.bq={state:"idle",list:[],f:{q:"",status:""}};
+S.bd={id:null,state:"idle",req:null,events:[]};
+async function bqLoad(){
+  S.bq.state="loading"; if(S.route==="budgets") render();
+  await rbLoadCats();
+  const qs=new URLSearchParams(Object.entries(S.bq.f).filter(([,v])=>v)).toString();
+  const r=await api("GET","/api/budget-requests"+(qs?"?"+qs:""));
+  S.bq.list=r.ok?r.data.requests:[]; S.bq.state=r.ok?"ready":"error"; if(S.route==="budgets") render();
+}
+const rbTabs=cur=>`<div class="subtabs" role="tablist"><button type="button" role="tab" class="${cur==="reimb"?"on":""}" aria-selected="${cur==="reimb"}" data-go="reimb">Expense claims</button><button type="button" role="tab" class="${cur==="budgets"?"on":""}" aria-selected="${cur==="budgets"}" data-go="budgets">Budget requests</button></div>`;
+const bqBill=b=>!["approved","partially_approved"].includes(b.status)?`<span class="muted">—</span>`:b.claim?`${rbPill(b.claim.status)}<div class="muted" style="font-size:12px">${money(b.claim.actual)} bill</div>`:`<span class="muted">Not filed yet</span>`;
+function vBudgets(){
+  const hr=isHrUser(), st=S.bq.state, list=S.bq.list, f=S.bq.f;
+  if(!S.user) return `<section class="section"><div class="card"><div class="empty">Budget requests need the server. Sign in to use them.</div></div></section>`;
+  if(st==="idle") setTimeout(bqLoad);
+  const open=list.filter(b=>["submitted","under_review"].includes(b.status)), ok=list.filter(b=>["approved","partially_approved"].includes(b.status));
+  const card=(lbl,val,sub,tone="")=>`<div class="rb-stat ${tone}"><span class="lbl">${lbl}</span><b>${val}</b>${sub?`<span class="sub">${sub}</span>`:""}</div>`;
+  return `<section class="section">
+  ${rbTabs("budgets")}
+  ${head(hr?"Finance":"Me","Budget <span class=\"grad\">requests.</span>",hr?"Approve spending before it happens. The final bill is reimbursed up to the approved budget, never more.":"Planning a team dinner or event? Ask HR for a budget first. After the event, upload the final bill and up to the approved budget is reimbursed.",
+    `<button class="btn primary" data-bq="new">${ico("plus")}New budget request</button>`,true)}
+  <div class="rb-stats four">${card(hr?"Waiting for a decision":"Waiting for HR",open.length,money(open.reduce((n,b)=>n+b.requestedBudget,0))+" requested",open.length?"warn":"")}
+    ${card("Approved",ok.length,money(ok.reduce((n,b)=>n+b.approvedBudget,0))+" approved")}
+    ${card("Bills to file",ok.filter(b=>!b.claim).length,"Approved, no final bill yet")}
+    ${card("Paid out",money(list.reduce((n,b)=>n+(b.claim&&b.claim.paid||0),0)),"From final bills")}</div>
+  <div class="card">
+    <div class="rb-filters"><input class="input grow" id="bqf-q" type="search" placeholder="${hr?"Search employee, request number, purpose":"Search request number or purpose"}" value="${esc(f.q)}" aria-label="Search">
+      <select class="input" id="bqf-status" aria-label="Status"><option value="">All statuses</option>${Object.entries(BQ_STATUS).map(([k,v])=>`<option value="${k}" ${f.status===k?"selected":""}>${v[0]}</option>`).join("")}</select></div>
+    ${st==="loading"&&!list.length?`<div class="tbl-wrap"><table class="rb-table"><tbody>${skelRows(4,6)}</tbody></table></div>`
+      :st==="error"?`<div class="empty">${ico("warn")}<div>Unable to load budget requests. Please try again.</div><button class="btn glass sm" data-bq="reload">Try again</button></div>`
+      :!list.length?`<div class="empty">${f.q||f.status?"No budget requests match.":hr?"No budget requests yet.":"You haven't asked for a budget yet."}</div>`
+      :`<div class="tbl-wrap"><table class="rb-table"><thead><tr><th>Request</th>${hr?"<th>Requested by</th>":""}<th class="num">Requested</th><th class="num">Approved</th><th class="hide-sm">Event date</th><th>Status</th><th class="hide-sm">Final bill</th><th><span class="sr">Action</span></th></tr></thead><tbody>
+        ${list.map(b=>`<tr class="click" data-budget="${b.id}"><td><b>${esc(b.purpose)}</b><div class="muted mono" style="font-size:12px">${esc(b.requestNo)}</div></td>
+          ${hr?`<td>${person(rbPerson(b),b.employee.title||"")}</td>`:""}<td class="num">${money(b.requestedBudget)}</td><td class="num">${b.approvedBudget!=null?`<b>${money(b.approvedBudget)}</b>`:"—"}</td>
+          <td class="hide-sm num-cell">${esc(fdate(b.eventDate))}</td><td>${bqPill(b.status)}</td><td class="hide-sm">${bqBill(b)}</td>
+          <td class="num"><button class="btn ${hr&&["submitted","under_review"].includes(b.status)?"primary":"glass"} sm" data-budget="${b.id}">${hr&&["submitted","under_review"].includes(b.status)?"Review":"View"}</button></td></tr>`).join("")}
+      </tbody></table></div>`}
+  </div></section>`;
+}
+S.bn=null;
+function vBudgetNew(){
+  if(!S.bn) S.bn={d:{purpose:"",category:"",requestedBudget:"",headcount:"",eventDate:"",description:""},errors:{},busy:false};
+  if(!S.rb.cats) rbLoadCats().then(render);
+  const n=S.bn, d=n.d, er=n.errors, cats=(S.rb.cats||[]).filter(c=>c.active);
+  return `<section class="section">
+  ${head("Me","Budget <span class=\"grad\">request.</span>","Ask HR to approve a budget before you spend. HR can approve the full amount or less. After the event, upload the final bill and up to the approved budget is reimbursed.","",true)}
+  <form id="bnf" class="grid" style="gap:22px" novalidate><div class="card"><div class="card-h"><h3>What is the budget for?</h3></div><div class="card-b form">
+    <div class="span" style="grid-column:1/-1">${wf("bn-purpose","Purpose",`<input class="input" id="bn-purpose" maxlength="120" value="${esc(d.purpose)}" placeholder="e.g. Team success dinner">`,er.purpose)}</div>
+    ${wf("bn-category","Category",`<select class="input" id="bn-category"><option value="">Choose…</option>${cats.map(c=>`<option value="${c.key}" ${d.category===c.key?"selected":""}>${esc(c.name)}</option>`).join("")}</select>`,er.category)}
+    ${wf("bn-requestedBudget","Requested budget (₹)",`<input class="input" id="bn-requestedBudget" type="number" min="0" step="100" value="${esc(d.requestedBudget)}" placeholder="20000">`,er.requestedBudget)}
+    ${wf("bn-headcount","Number of people (optional)",`<input class="input" id="bn-headcount" type="number" min="1" step="1" value="${esc(d.headcount)}" placeholder="10">`,er.headcount)}
+    ${wf("bn-eventDate","Date",`<input class="input" id="bn-eventDate" type="date" value="${esc(d.eventDate)}">`,er.eventDate)}
+    <div style="grid-column:1/-1">${wf("bn-description","Description",`<textarea class="input" id="bn-description" rows="3" maxlength="1000" placeholder="Team dinner to celebrate successful project delivery">${esc(d.description)}</textarea>`,er.description)}</div>
+  </div></div>
+  <div class="row" style="justify-content:space-between"><button type="button" class="btn glass" data-bq="cancel">Cancel</button><button type="submit" class="btn primary" ${n.busy?"disabled":""}>${n.busy?"Sending…":"Submit request"}</button></div></form></section>`;
+}
+async function bnSubmit(){
+  const n=S.bn; for(const k of Object.keys(n.d)){ const el=$("#bn-"+k); if(el) n.d[k]=el.value; }
+  n.busy=true; n.errors={}; render();
+  const r=await api("POST","/api/budget-requests",n.d); n.busy=false;
+  if(!r.ok){ n.errors=(r.data&&r.data.errors)||{}; if(!Object.keys(n.errors).length) toast(apiMsg(r)); render(); obFocusError(); return; }
+  S.bn=null; S.bq.state="idle"; toast(`Budget request ${r.data.requestNo} sent to HR.`); openBudget(r.data.id);
+}
+async function openBudget(id){
+  S.bd={id:Number(id),state:"loading",req:null,events:[]}; S.route="budget"; try{history.replaceState(null,"","#budget-"+id)}catch(e){}
+  render(); window.scrollTo(0,0);
+  await rbLoadCats();
+  let r=await api("GET","/api/budget-requests/"+id);
+  if(r.ok&&isHrUser()&&r.data.request.status==="submitted"){ const o=await api("POST",`/api/budget-requests/${id}/open`); if(o.ok&&o.data.changed) r=await api("GET","/api/budget-requests/"+id); }
+  if(S.bd.id!==Number(id)) return;
+  if(!r.ok){ S.bd.state=r.status===404?"missing":"error"; return render(); }
+  S.bd.req=r.data.request; S.bd.events=r.data.events; S.bd.state="ready"; render();
+}
+/* The budget's stepper follows the request and its final bill: decision, expense, bill, verification, payroll, paid. */
+function budgetSteps(b){
+  const c=b.claim, cs=c&&c.status, dec=["approved","partially_approved","rejected"].includes(b.status);
+  const verified=c&&["payroll_pending","in_payroll","paid"].includes(cs);
+  const steps=[["Draft",true],["Submitted",true],["Under HR review",b.status!=="submitted"],
+    [b.status==="rejected"?"Rejected":b.status==="partially_approved"?"Partially approved":"Approved",dec],
+    ["Expense occurred",!!c||(dec&&b.status!=="rejected"&&b.eventDate<=lvToday())],["Bill uploaded",!!c&&cs!=="draft"],["Bill verified",!!verified],
+    ["Eligible amount calculated",!!verified],["Payroll pending",!!c&&["in_payroll","paid"].includes(cs)||cs==="payroll_pending"],["Paid",cs==="paid"]];
+  if(b.status==="rejected") return steps.slice(0,4).map(([l,d],i)=>({label:l,state:i===3?"bad":"done"}));
+  let last=steps.map(x=>x[1]).lastIndexOf(true);
+  return steps.map(([l,d],i)=>({label:l,state:d?(i===last&&i<steps.length-1?"current":"done"):"future"}));
+}
+function vBudget(){
+  const st=S.bd.state, b=S.bd.req, hr=isHrUser();
+  const back=`<button class="back" data-go="budgets">← ${hr?"All budget requests":"My budget requests"}</button>`;
+  if(st==="loading"||st==="idle") return `<section class="section">${back}<div class="card rb-head"><span class="skel" style="width:30%"></span><span class="skel big" style="width:45%"></span></div></section>`;
+  if(st!=="ready") return `<section class="section">${back}<div class="card"><div class="empty">${st==="missing"?"This budget request doesn't exist or isn't yours to see.":"Unable to load the budget request. Please try again."}</div></div></section>`;
+  const open=["submitted","under_review"].includes(b.status), approvedOk=["approved","partially_approved"].includes(b.status), mine=lc(b.email)===lc(myEmail&&myEmail()||"");
+  const cmp=b.comparison, row=(k,v,cls="")=>`<div class="am-row ${cls}"><span>${k}</span><b>${v}</b></div>`;
+  const decide=hr&&open?`<div class="card rb-decide"><div class="card-h"><div><h3>HR decision</h3><span class="muted">Requested ${money(b.requestedBudget)}</span></div></div>
+    <div class="card-b form">
+      ${wf("bd-amt","Approved budget (₹)",`<input class="input" id="bd-amt" type="number" min="1" max="${b.requestedBudget}" step="100" value="${b.requestedBudget}">`,"",`Maximum ${money(b.requestedBudget)}. HR can't approve more than was requested.`)}
+      ${wf("bd-reason","Reason",`<input class="input" id="bd-reason" maxlength="500" placeholder="e.g. Team event budget is ₹1,500 a head">`,"","Needed for a lower amount or a rejection.")}
+      <div class="span rb-diff" id="bd-diff">${bdDiff(b.requestedBudget,b.requestedBudget)}</div></div>
+    <div class="rb-decide-f"><button class="btn danger" data-bq="reject">Reject</button><span class="grow"></span><button class="btn glass" data-bq="approve-full">Approve requested ${money(b.requestedBudget)}</button><button class="btn primary" data-bq="approve" id="bd-go">Approve ${money(b.requestedBudget)}</button></div></div>`:"";
+  const bill=approvedOk?(b.claim?`<div class="card"><div class="card-h"><h3>Final bill</h3>${rbPill(b.claim.status)}</div><div class="card-b">${rkv([["Claim",`<button class="btn link nolink" data-claim="${b.claim.id}">${esc(b.claim.claimNo)}</button>`],["Bill amount",money(b.claim.actual)],
+        ["Eligible",b.claim.eligible!=null?money(b.claim.eligible):"Worked out when submitted"],["Approved",b.claim.approved!=null?money(b.claim.approved):"Waiting for HR"],["Paid",b.claim.paid!=null?money(b.claim.paid):"Not yet"]])}
+        ${mine&&["draft","changes_requested"].includes(b.claim.status)?`<div class="row" style="margin-top:12px"><button class="btn primary sm" data-claim="${b.claim.id}">Continue the bill</button></div>`:""}</div></div>`
+      :`<div class="card"><div class="card-h"><h3>Final bill</h3><span class="pill p-warn">Not filed yet</span></div><div class="card-b" style="display:flex;flex-direction:column;gap:12px">
+        <div class="muted">After the event, upload the final bill. Up to <b>${money(b.approvedBudget)}</b> is reimbursed; anything above it is not.</div>
+        ${mine?`<div><button class="btn primary" data-bq="bill">${ico("doc")}Upload the final bill</button></div>`:`<div class="muted">Waiting for ${esc(b.employee.name)} to upload it.</div>`}</div></div>`):"";
+  return `<section class="section" style="gap:20px">${back}
+  <div class="card rb-head"><div class="rb-head-l"><div class="eyebrow">Budget request <span class="mono">${esc(b.requestNo)}</span></div><h2>${esc(b.purpose)}</h2>
+      <div class="muted">${esc(b.employee.name)}${b.employee.title?` · ${esc(b.employee.title)}`:""} · Submitted ${esc(dtShort(b.submittedAt))}</div></div>
+    <div class="rb-head-r"><b class="rb-amt">${money(b.approvedBudget!=null?b.approvedBudget:b.requestedBudget)}</b>${b.approvedBudget!=null&&b.approvedBudget<b.requestedBudget?`<span class="muted">approved of ${money(b.requestedBudget)}</span>`:""}${bqPill(b.status)}</div></div>
+  <div class="card rb-stepcard"><ol class="rb-steps" aria-label="Budget progress">${budgetSteps(b).map(s=>`<li class="${s.state}" ${s.state==="current"?'aria-current="step"':""}><span class="dot">${s.state==="bad"?ico("x"):s.state==="future"?"":ico("check")}</span><span class="t"><b>${esc(s.label)}</b></span></li>`).join("")}</ol></div>
+  ${b.status==="rejected"?`<div class="callout bad">${ico("x")}<div><b>Rejected</b><div>${esc(b.decisionReason||"")}</div></div></div>`:b.decisionReason?`<div class="callout">${svg("info")}<div><b>HR's reason</b><div>${esc(b.decisionReason)}</div></div></div>`:""}
+  ${decide}
+  <div class="rb-grid"><div class="rb-col">
+    <div class="card"><div class="card-h"><h3>Request</h3></div><div class="card-b">${rkv([["Purpose",esc(b.purpose)],["Category",esc(rbCat(b.category))],["Requested budget",`<b>${money(b.requestedBudget)}</b>`],["Number of people",b.headcount?String(b.headcount):"—"],["Date",esc(fdate(b.eventDate))]])}
+      <div class="rb-descbox"><span class="lab">Description</span><p>${esc(b.description)}</p></div></div></div>
+  </div><div class="rb-col">
+    <div class="card"><div class="card-h"><h3>Budget vs actual</h3></div><div class="card-b rb-amounts">
+      ${row("Requested budget",money(b.requestedBudget))}${row("Approved budget",b.approvedBudget!=null?money(b.approvedBudget):"Not decided yet")}
+      ${row("Actual expense",cmp?money(cmp.actual):"No bill yet")}${row("Company covers",cmp?money(cmp.covered):"—",cmp?"total":"")}${row("Employee excess",cmp&&cmp.excess?money(cmp.excess):"—",cmp&&cmp.excess?"bad":"")}
+      <div class="muted" style="font-size:12.5px">Company covers the lower of the actual bill and the approved budget. The excess is not reimbursed.</div></div></div>
+    ${bill}
+  </div></div>
+  ${timelineHtml(S.bd.events)}
+  </section>`;
+}
+const bdDiff=(req,v)=>!(v>0)?`<span class="ferr">Enter an amount more than zero.</span>`:v>req?`<span class="ferr">That's more than the ${money(req)} requested.</span>`
+  :v<req?`<span>${ico("warn")} Lower budget: <b>${money(req-v)}</b> less than requested. A reason is needed.</span>`:`<span>${ico("check")} The full requested budget.</span>`;
+async function bdDecide(path,body,okMsg){
+  const r=await api("POST",`/api/budget-requests/${S.bd.id}/${path}`,body);
+  if(!r.ok){ const e=(r.data&&r.data.errors)||{}; toast(e.approvedBudget||e.reason||apiMsg(r)); return r; }
+  toast(okMsg); S.bq.state="idle"; await openBudget(S.bd.id); return r;
+}
+document.addEventListener("input",ev=>{ if(ev.target.id!=="bd-amt"||!S.bd.req) return;
+  const req=S.bd.req.requestedBudget, v=Number(ev.target.value), d=$("#bd-diff"), b=$("#bd-go");
+  if(d) d.innerHTML=bdDiff(req,v); if(b){ b.textContent=`Approve ${v>0?money(v):"—"}`; b.disabled=!(v>0&&v<=req); } });
+document.addEventListener("click",ev=>{
+  const bt=ev.target.closest("[data-budget]"); if(bt){ ev.stopPropagation(); return openBudget(bt.dataset.budget); }
+  const t=ev.target.closest("[data-bq]"); if(!t) return;
+  const a=t.dataset.bq, b=S.bd.req;
+  if(a==="new"){ S.bn=null; return go("budgetnew"); }
+  if(a==="cancel"){ S.bn=null; return go("budgets"); }
+  if(a==="reload") return bqLoad();
+  if(a==="bill"&&b){ S.cw=newCw(null,{budget:{id:b.id,requestNo:b.requestNo,purpose:b.purpose,approvedBudget:b.approvedBudget}}); return go("claimnew"); }
+  if(a==="approve"||a==="approve-full"){
+    const inp=$("#bd-amt"); if(a==="approve-full"&&inp){ inp.value=b.requestedBudget; inp.dispatchEvent(new Event("input",{bubbles:true})); }
+    const v=Number(inp.value), reason=$("#bd-reason").value.trim();
+    if(!(v>0)||v>b.requestedBudget) return toast(`Approve between ₹1 and ${money(b.requestedBudget)}.`);
+    if(v<b.requestedBudget&&!reason){ toast("Give a reason for approving a lower amount."); return $("#bd-reason").focus(); }
+    return bdDecide("approve",{approvedBudget:v,reason},v<b.requestedBudget?`Approved a lower budget: ${money(v)}.`:"Budget approved.");
+  }
+  if(a==="reject"){ const reason=$("#bd-reason").value.trim(); if(!reason){ toast("Give a reason for the rejection."); return $("#bd-reason").focus(); }
+    return bdDecide("reject",{reason},"Budget request rejected."); }
+},true);
+let bqTimer=null;
+document.addEventListener("input",ev=>{ if(ev.target.id==="bqf-q"){ S.bq.f.q=ev.target.value; clearTimeout(bqTimer); bqTimer=setTimeout(async()=>{ await bqLoad(); const n=$("#bqf-q"); if(n){ n.focus(); n.setSelectionRange(n.value.length,n.value.length); } },400); } });
+document.addEventListener("change",ev=>{ if(ev.target.id==="bqf-status"){ S.bq.f.status=ev.target.value; bqLoad(); } });
+document.addEventListener("submit",ev=>{ if(ev.target.id==="bnf"){ ev.preventDefault(); bnSubmit(); } });
 
 /* ---------- payroll (HR) ---------- */
 function payTable(lines,editable){
@@ -3820,7 +4188,7 @@ document.addEventListener("click",async ev=>{
   if(bell){ S.nt.open=!S.nt.open; if(S.nt.open) await ntLoad(); ntPaint(); return; }
   const nt=ev.target.closest("[data-nt]");
   if(nt){ const id=nt.dataset.nt; await api("POST","/api/notifications/read",id==="all"?{}:{id:Number(id)});
-    if(id!=="all"){ S.nt.open=false; const link=nt.dataset.link; if(link&&link.startsWith("claim:")) openClaim(Number(link.slice(6))); else if(link) go(link); }
+    if(id!=="all"){ S.nt.open=false; const link=nt.dataset.link; if(link&&link.startsWith("claim:")) openClaim(Number(link.slice(6))); else if(link&&link.startsWith("budget:")) openBudget(Number(link.slice(7))); else if(link) go(link); }
     await ntLoad(); return; }
   if(S.nt.open&&!ev.target.closest("#bell-panel")){ S.nt.open=false; ntPaint(); }
   const pick=ev.target.closest("[data-rb-pick]");
@@ -3834,7 +4202,7 @@ document.addEventListener("click",async ev=>{
   if(a==="new"){ S.cw=newCw(null); return go("claimnew"); }
   if(a==="reload"){ return rbLoad(); }
   if(a==="clear"){ S.rb.f={q:"",category:"",status:"",from:"",to:"",min:"",max:""}; return rbLoad(); }
-  if(a==="approve"||a==="reject"||a==="changes"||a==="delete") return rbConfirm(a);
+  if(a==="approve"||a==="approve-full"||a==="reject"||a==="changes"||a==="delete") return rbConfirm(a);
   if(a==="edit"){ S.cw=newCw(S.cd.claim); return go("claimnew"); }
   if(a&&a.startsWith("zoom:")){ S.cd.zoom=Math.min(3,Math.max(.5,(S.cd.zoom||1)+Number(a.slice(5))*.25)); return render(); }
   if(a&&a.startsWith("doc:")){ S.cd.doc=Number(a.slice(4)); render(); const el=$("#rb-doc"); if(el) el.scrollIntoView({block:"start",behavior:"smooth"}); return; }
@@ -3843,18 +4211,21 @@ document.addEventListener("click",async ev=>{
   if(a&&a.startsWith("cat:")){ const c=S.rb.cats.find(x=>x.key===a.slice(4));
     const m=modal(`<form novalidate><div class="card-h" style="padding-top:24px"><h3>${esc(c.name)}</h3></div><div class="card-b">
       ${wf("ct-max","Limit per claim (₹)",`<input class="input" id="ct-max" type="number" min="0" step="100" value="${c.maxAmount||""}" placeholder="No limit">`,"","Claims above it are flagged for HR. Leave empty for no limit.")}
+      ${wf("ct-class","Highest travel class reimbursed in full",`<select class="input" id="ct-class"><option value="">No class rule</option>${((S.rb.meta&&S.rb.meta.travelClasses)||[]).map(x=>`<option ${c.allowedClass===x?"selected":""}>${esc(x)}</option>`).join("")}</select>`,"","Someone who books a higher class enters this class's fare; only that is reimbursed.")}
       <label class="check" style="border:0;padding:0"><input type="checkbox" id="ct-on" ${c.active?"checked":""}><div class="grow"><div class="lbl">Employees can choose this category</div></div></label></div>
       <div class="modal-f"><button type="button" class="btn glass" data-close>Cancel</button><button type="submit" class="btn primary">Save</button></div></form>`);
-    m.querySelector("form").addEventListener("submit",async e=>{e.preventDefault();const r=await api("PUT",`/api/reimbursements/categories/${c.key}`,{maxAmount:$("#ct-max").value,active:$("#ct-on").checked});
+    m.querySelector("form").addEventListener("submit",async e=>{e.preventDefault();const r=await api("PUT",`/api/reimbursements/categories/${c.key}`,{maxAmount:$("#ct-max").value,allowedClass:$("#ct-class").value,active:$("#ct-on").checked});
       if(!r.ok) return toast(apiMsg(r)); m.remove(); S.rb.cats=null; toast("Category saved."); rbLoad();}); return; }
   const w=t.dataset.cw;
   if(w==="next") return cwNext();
   if(w==="add"&&S.cw){ cwCollect(); const last=S.cw.items[S.cw.items.length-1]||{}; S.cw.items.push(cwLine({expenseDate:last.expenseDate,paymentMethod:last.paymentMethod})); render();
-    const n=$(`#cw-${S.cw.items.length-1}-category`); if(n){ n.focus(); n.scrollIntoView({block:"center",behavior:"smooth"}); } return; }
+    const n=$(`#cw-${S.cw.items.length-1}-vendor`); if(n){ n.focus(); n.scrollIntoView({block:"center",behavior:"smooth"}); } return; }
+  if(w==="manual"&&S.cw){ cwCollect(); if(isHrUser()&&!S.cw.id&&!S.cw.email){ S.cw.errors={email:"Choose the employee first."}; return render(); }
+    S.cw.items.push(cwLine({})); S.cw.step=2; render(); window.scrollTo(0,0); const n=$(`#cw-${S.cw.items.length-1}-vendor`); if(n) n.focus(); return; }
   if(w&&w.startsWith("rm:")&&S.cw){ cwCollect(); S.cw.items.splice(Number(w.slice(3)),1); S.cw.errors={}; return render(); }
   if(w&&w.startsWith("rmdoc:")&&S.cw) return cwItemCall(Number(w.slice(6)),"DELETE","/document");
   if(w&&w.startsWith("nr:")&&S.cw){ const [,id,on]=w.split(":"); return cwItemCall(Number(id),"PATCH","",{noReceipt:on==="1"}); }
-  if(w==="back"&&S.cw){ cwCollect(); S.cw.errors={}; S.cw.step--; return render(); }
+  if(w==="back"&&S.cw){ cwCollect(); S.cw.errors={}; S.cw.step--; S.cw.uploads=[]; return render(); }
   if(w==="cancel"){ const id=S.cw&&S.cw.id; S.cw=null; return id?openClaim(id):go("reimb"); }
   if(t.dataset.cwGoto&&S.cw){ S.cw.step=Number(t.dataset.cwGoto); return render(); }
   const p=t.dataset.pr;
@@ -3884,7 +4255,7 @@ document.addEventListener("change",ev=>{
   if(["rbf-category","rbf-status","rbf-from","rbf-to"].includes(t.id)){ S.rb.f[t.id.slice(4)]=t.value; return rbLoad(); }
   if(t.dataset&&t.dataset.cwUp&&t.files[0]) return cwUpload(Number(t.dataset.cwUp),t.files[0]);
   if(t.id==="cw-sheet"&&t.files[0]){ const f=t.files[0]; t.value=""; return cwImport(f); }
-  if(t.id==="cw-confirm"&&S.cw){ S.cw.confirm=t.checked; const b=$("#cw-submit"); if(b) b.disabled=!t.checked; }
+  if(t.id==="cw-confirm"&&S.cw){ S.cw.confirm=t.checked; render(); }
   if(t.id==="pr-period"&&t.value){ S.pr.period=t.value; prLoad(); }
 });
 document.addEventListener("keydown",ev=>{
@@ -3896,13 +4267,15 @@ document.addEventListener("keydown",ev=>{
 });
 document.addEventListener("focusin",ev=>{ if(ev.target.id==="rbf-q"&&isHrUser()) rbSug(true); });
 document.addEventListener("submit",ev=>{ if(ev.target.id==="cwf"){ ev.preventDefault(); if(S.cw&&S.cw.step===3) cwSubmit(); else cwNext(); } });
-window.addEventListener("hashchange",()=>{ const m=location.hash.match(/^#claim-(\d+)$/); if(m&&Number(m[1])!==S.cd.id) openClaim(m[1]); });
+window.addEventListener("hashchange",()=>{ const m=location.hash.match(/^#claim-(\d+)$/); if(m&&Number(m[1])!==S.cd.id) openClaim(m[1]);
+  const bm=location.hash.match(/^#budget-(\d+)$/); if(bm&&Number(bm[1])!==S.bd.id) openBudget(bm[1]); });
 
 const h=location.hash.slice(1); if(NAV.some(n=>n[0]===h)||["profile","account","myleave","team"].includes(h)) S.route=h;
-const claimHash=h.match(/^claim-(\d+)$/);   // a reload on a claim page stays on that claim
+const claimHash=h.match(/^claim-(\d+)$/), budgetHash=h.match(/^budget-(\d+)$/);   // a reload on a claim or budget page stays there
+if(h==="budgets") S.route="budgets";
 document.addEventListener("click",ev=>{ if(ev.target.closest("#theme")) toggleTheme(); });
 try{ matchMedia("(prefers-color-scheme: dark)").addEventListener("change",()=>{ let t=null; try{t=localStorage.getItem(THEME_KEY)}catch(e){} if(!t) applyTheme(theme()); }); }catch(e){}
 applyTheme(theme());
-boot().then(()=>{ lvLoad(); if(!isEmployee()) offLoad(); ntLoad(); if(claimHash&&S.user) openClaim(claimHash[1]); });
+boot().then(()=>{ lvLoad(); if(!isEmployee()) offLoad(); ntLoad(); if(claimHash&&S.user) openClaim(claimHash[1]); if(budgetHash&&S.user) openBudget(budgetHash[1]); });
 })();
 </script>

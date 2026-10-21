@@ -17,6 +17,7 @@ import { onboardingErrors, detailsErrors, maskAadhaar, maskPan, maskAcct } from 
 import { createGoogleUser, generatePassword, googleMode } from "./google.js";
 import { mailConfigured, sendWorkAccountEmail } from "./mail.js";
 import { reimbursementsRouter, runReimbursementReminders } from "./reimbursements.js";
+import { budgetsRouter, runBudgetReminders } from "./budgets.js";
 import { payrollRouter } from "./payroll.js";
 import { notificationsRouter, emailMode } from "./notify.js";
 
@@ -280,6 +281,7 @@ app.use(leaveRouter(wrap));
 app.use(attendanceRouter(wrap));
 app.use(payslipsRouter(wrap));
 app.use("/api/reimbursements", requireAuth, reimbursementsRouter);   // own claims for everyone; review actions are HR-only inside
+app.use("/api/budget-requests", requireAuth, budgetsRouter);   // own requests for everyone; decisions are HR-only inside
 app.use("/api/payroll", requireHr, payrollRouter);
 app.use("/api/notifications", requireAuth, notificationsRouter);
 app.use(offboardingRouter(wrap));
@@ -310,7 +312,7 @@ sweepInvites();
 setInterval(sweepInvites, 60_000);
 
 // Reimbursements waiting for review too long remind HR (automation 7); checked hourly.
-const checkReminders = () => runReimbursementReminders().catch((err) => console.error("Reimbursement reminder check failed:", err));
+const checkReminders = () => Promise.all([runReimbursementReminders(), runBudgetReminders()]).catch((err) => console.error("Reimbursement reminder check failed:", err));
 checkReminders();
 setInterval(checkReminders, 60 * 60_000);
 console.log(`Email: ${emailMode() === "smtp" ? "sending through SMTP" : "SMTP not configured, emails are logged and skipped"}`);

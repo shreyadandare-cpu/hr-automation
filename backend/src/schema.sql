@@ -395,3 +395,117 @@ CREATE TABLE IF NOT EXISTS attendance_punches (
   employee_id INTEGER NOT NULL REFERENCES employees(id) ON DELETE CASCADE,
   work_date DATE NOT NULL, punch_time TIME NOT NULL, direction TEXT NOT NULL, source TEXT, note TEXT, created_by TEXT);
 CREATE INDEX IF NOT EXISTS attendance_punches_day ON attendance_punches (employee_id, work_date);
+
+-- ---------- Invoice-first claims, partial approval, travel policy, budget requests, holiday calendar ----------
+CREATE TABLE IF NOT EXISTS app_migrations (key TEXT PRIMARY KEY, ran_at TIMESTAMPTZ NOT NULL DEFAULT now());
+
+-- Pre-approved spending: a team lead asks HR for a budget first, then files the final bill against it.
+CREATE TABLE IF NOT EXISTS budget_requests (
+  id               SERIAL PRIMARY KEY,
+  request_no       TEXT UNIQUE,
+  work_email       TEXT NOT NULL,
+  purpose          TEXT NOT NULL,
+  category         TEXT NOT NULL REFERENCES reimbursement_categories(key),
+  requested_budget NUMERIC(12,2) NOT NULL CHECK (requested_budget > 0),
+  approved_budget  NUMERIC(12,2) CHECK (approved_budget > 0 AND approved_budget <= requested_budget),
+  headcount        INTEGER CHECK (headcount > 0),
+  event_date       DATE NOT NULL,
+  description      TEXT NOT NULL,
+  status           TEXT NOT NULL DEFAULT 'submitted'
+                   CHECK (status IN ('submitted','under_review','approved','partially_approved','rejected')),
+  decision_reason  TEXT,
+  decided_by       TEXT,
+  decided_at       TIMESTAMPTZ,
+  created_by       TEXT NOT NULL,
+  submitted_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
+  last_reminded_at TIMESTAMPTZ,
+  created_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at       TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE TABLE IF NOT EXISTS budget_request_events (
+  id                SERIAL PRIMARY KEY,
+  budget_request_id INTEGER NOT NULL REFERENCES budget_requests(id) ON DELETE CASCADE,
+  at                TIMESTAMPTZ NOT NULL DEFAULT now(),
+  actor             TEXT,
+  kind              TEXT NOT NULL,
+  status            TEXT,
+  note              TEXT
+);
+CREATE INDEX IF NOT EXISTS budget_request_events_req ON budget_request_events (budget_request_id, id);
+
+-- A claim is a plain expense claim, or the final bill against an approved budget. Its requested amount is never
+-- overwritten: eligible (after policy and budget), approved (HR's decision) and the differences are stored beside it.
+ALTER TABLE reimbursements ALTER COLUMN category DROP NOT NULL;
+ALTER TABLE reimbursements ALTER COLUMN amount DROP NOT NULL;
+ALTER TABLE reimbursements ALTER COLUMN expense_date DROP NOT NULL;
+ALTER TABLE reimbursements ALTER COLUMN description DROP NOT NULL;
+ALTER TABLE reimbursements ADD COLUMN IF NOT EXISTS budget_request_id INTEGER REFERENCES budget_requests(id);
+ALTER TABLE reimbursements ADD COLUMN IF NOT EXISTS requested_amount NUMERIC(12,2);
+ALTER TABLE reimbursements ADD COLUMN IF NOT EXISTS eligible_amount NUMERIC(12,2);
+ALTER TABLE reimbursements ADD COLUMN IF NOT EXISTS non_eligible_amount NUMERIC(12,2);
+ALTER TABLE reimbursements ADD COLUMN IF NOT EXISTS approved_amount NUMERIC(12,2);
+ALTER TABLE reimbursements ADD COLUMN IF NOT EXISTS unapproved_amount NUMERIC(12,2);
+ALTER TABLE reimbursements ADD COLUMN IF NOT EXISTS approval_reason TEXT;
+ALTER TABLE reimbursements ADD COLUMN IF NOT EXISTS eligibility JSONB NOT NULL DEFAULT '{}';
+DO $$ BEGIN
+  ALTER TABLE reimbursements ADD CONSTRAINT reimbursements_approved_le_requested
+    CHECK (approved_amount IS NULL OR (approved_amount > 0 AND approved_amount <= requested_amount));
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+CREATE UNIQUE INDEX IF NOT EXISTS reimbursements_one_claim_per_budget ON reimbursements (budget_request_id)
+  WHERE budget_request_id IS NOT NULL AND status <> 'rejected';
+-- Claims approved before partial approval existed were approved in full.
+UPDATE reimbursements SET requested_amount = amount, approved_amount = amount, unapproved_amount = 0
+  WHERE status IN ('payroll_pending','in_payroll','paid') AND approved_amount IS NULL;
+UPDATE reimbursements SET requested_amount = amount
+  WHERE requested_amount IS NULL AND status NOT IN ('draft','changes_requested');
+
+-- An expense line can start from an uploaded invoice and be completed by the employee, so its fields can be empty
+-- while it is a draft (submitting checks they are filled in). What was read from the invoice is kept in `extracted`.
+ALTER TABLE reimbursement_items ALTER COLUMN category DROP NOT NULL;
+ALTER TABLE reimbursement_items ALTER COLUMN expense_date DROP NOT NULL;
+ALTER TABLE reimbursement_items ALTER COLUMN amount DROP NOT NULL;
+ALTER TABLE reimbursement_items ALTER COLUMN description DROP NOT NULL;
+ALTER TABLE reimbursement_items ADD COLUMN IF NOT EXISTS vendor TEXT;
+ALTER TABLE reimbursement_items ADD COLUMN IF NOT EXISTS invoice_no TEXT;
+ALTER TABLE reimbursement_items ADD COLUMN IF NOT EXISTS currency TEXT NOT NULL DEFAULT 'INR';
+ALTER TABLE reimbursement_items ADD COLUMN IF NOT EXISTS extracted JSONB;
+ALTER TABLE reimbursement_items ADD COLUMN IF NOT EXISTS travel_class TEXT;
+ALTER TABLE reimbursement_items ADD COLUMN IF NOT EXISTS policy_fare NUMERIC(12,2) CHECK (policy_fare > 0);
+ALTER TABLE reimbursement_items DROP CONSTRAINT IF EXISTS reimbursement_items_source_check;
+ALTER TABLE reimbursement_items ADD CONSTRAINT reimbursement_items_source_check CHECK (source IN ('form','excel','document'));
+
+-- Travel policy: the highest class a category allows (empty = no class rule). HR changes it on the categories card.
+ALTER TABLE reimbursement_categories ADD COLUMN IF NOT EXISTS allowed_class TEXT;
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM app_migrations WHERE key = 'travel-policy-economy') THEN
+    UPDATE reimbursement_categories SET allowed_class = 'Economy' WHERE key = 'travel';
+    INSERT INTO app_migrations (key) VALUES ('travel-policy-economy');
+  END IF;
+END $$;
+
+-- Holiday calendar. The company list (Holiday List 2026 Wohlig.pdf) is imported once and marked as imported;
+-- holidays HR adds later are 'manual'. Removing an imported holiday is not undone on the next start.
+ALTER TABLE holidays ADD COLUMN IF NOT EXISTS type TEXT;
+ALTER TABLE holidays ADD COLUMN IF NOT EXISTS source TEXT NOT NULL DEFAULT 'manual';
+ALTER TABLE holidays ADD COLUMN IF NOT EXISTS updated_by TEXT;
+ALTER TABLE holidays ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ;
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM app_migrations WHERE key = 'holidays-2026-wohlig-pdf') THEN
+    INSERT INTO holidays (day, name, source) VALUES
+      ('2026-01-01', 'New Year Day', 'imported'),
+      ('2026-01-26', 'Republic Day', 'imported'),
+      ('2026-03-03', 'Holi (Second Day)', 'imported'),
+      ('2026-03-19', 'Gudhi Padwa', 'imported'),
+      ('2026-04-03', 'Good Friday', 'imported'),
+      ('2026-05-01', 'Maharashtra Day', 'imported'),
+      ('2026-08-15', 'Independence Day', 'imported'),
+      ('2026-09-14', 'Ganesh Chaturthi', 'imported'),
+      ('2026-10-02', 'Mahatma Gandhi Jayanti', 'imported'),
+      ('2026-10-20', 'Dasara', 'imported'),
+      ('2026-11-08', 'Diwali (Laxmi Pujan)', 'imported'),
+      ('2026-11-10', 'Diwali (Bali Pratipada)', 'imported'),
+      ('2026-12-25', 'Christmas', 'imported')
+    ON CONFLICT (day) DO UPDATE SET name = EXCLUDED.name, source = 'imported';
+    INSERT INTO app_migrations (key) VALUES ('holidays-2026-wohlig-pdf');
+  END IF;
+END $$;

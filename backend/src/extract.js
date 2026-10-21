@@ -159,7 +159,7 @@ export async function readInvoice(buf, type) {
   for (const name of order) {
     try {
       const r = await PROVIDERS[name](buf, type);
-      if (r && r.text && r.text.trim()) return { method: name, readable: true, fields: parseInvoice(r.text) };
+      if (r && r.text && r.text.trim()) return { method: name, readable: true, fields: parseInvoice(r.text), text: r.text.slice(0, 3000) };
     } catch (err) {
       console.error(`Invoice reader ${name} failed:`, err.message);
     }

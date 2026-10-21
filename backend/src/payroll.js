@@ -44,10 +44,11 @@ async function lines(db, period) {
   return [...byEmail.values()].map((e) => {
     const base = num(e.monthly_gross);
     const lopDeduction = base ? L.salaryCut(base, e.lopDays) : 0;
-    const reimb = Math.round(e.claims.reduce((n, c) => n + Number(c.amount), 0) * 100) / 100;
+    const pay = (c) => Number(c.approved_amount ?? c.amount);   // only what HR approved is paid
+    const reimb = Math.round(e.claims.reduce((n, c) => n + pay(c), 0) * 100) / 100;
     return { email: e.work_email, name: e.name, empNo: e.emp_no, baseSalary: base, lopDays: e.lopDays, lopDeduction,
       reimbursementTotal: reimb, payable: Math.round(((base || 0) - lopDeduction + reimb) * 100) / 100,
-      claims: e.claims.map((c) => ({ id: c.id, claimNo: c.claim_no, amount: num(c.amount), category: c.category })) };
+      claims: e.claims.map((c) => ({ id: c.id, claimNo: c.claim_no, amount: pay(c), requestedAmount: num(c.requested_amount ?? c.amount), category: c.category })) };
   });
 }
 
@@ -82,7 +83,7 @@ payrollRouter.get("/runs/:id", wrap(async (req, res) => {
     `SELECT i.*, e.name, e.emp_no FROM payroll_items i LEFT JOIN employees e ON lower(e.work_email)=lower(i.work_email)
      WHERE run_id=$1 ORDER BY e.name`, [run[0].id]);
   const { rows: claims } = await pool.query(
-    "SELECT id, claim_no, work_email, amount, category, status FROM reimbursements WHERE payroll_run_id=$1 ORDER BY id", [run[0].id]);
+    "SELECT id, claim_no, work_email, coalesce(approved_amount, amount) AS amount, category, status FROM reimbursements WHERE payroll_run_id=$1 ORDER BY id", [run[0].id]);
   res.json({ run: { id: run[0].id, period: run[0].period, status: run[0].status, processedAt: run[0].processed_at, processedBy: run[0].processed_by, paidAt: run[0].paid_at, paidBy: run[0].paid_by },
     items: items.map((i) => ({ email: i.work_email, name: i.name || i.work_email, empNo: i.emp_no, baseSalary: num(i.base_salary), lopDays: num(i.lop_days),
       lopDeduction: num(i.lop_deduction), reimbursementTotal: num(i.reimbursement_total), payable: num(i.payable),
@@ -124,8 +125,8 @@ payrollRouter.post("/runs", wrap(async (req, res) => {
     client.release();
   }
   for (const c of included)
-    await notify(c.work_email, { title: `Your approved reimbursement of ${inr(c.amount)} has been included in your upcoming payroll.`, body: `${c.claim_no} · ${monthName(period)}`, link: `claim:${c.id}`,
-      email: { subject: `Reimbursement included in payroll: ${c.claim_no}`, body: `Your approved reimbursement of ${inr(c.amount)} (${c.claim_no}) has been included in your ${monthName(period)} payroll.` } });
+    await notify(c.work_email, { title: `Your approved reimbursement of ${inr(c.approved_amount ?? c.amount)} has been included in your upcoming payroll.`, body: `${c.claim_no} · ${monthName(period)}`, link: `claim:${c.id}`,
+      email: { subject: `Reimbursement included in payroll: ${c.claim_no}`, body: `Your approved reimbursement of ${inr(c.approved_amount ?? c.amount)} (${c.claim_no}) has been included in your ${monthName(period)} payroll.` } });
   res.status(201).json({ id: run.id, included: included.length });
 }));
 
@@ -140,8 +141,8 @@ payrollRouter.post("/runs/:id/pay", wrap(async (req, res) => {
     if (run.status === "paid") { await client.query("ROLLBACK"); return res.status(409).json({ error: "This payroll is already marked as paid." }); }
     await client.query("UPDATE payroll_runs SET status='paid', paid_at=now(), paid_by=$2 WHERE id=$1", [run.id, req.user.email]);
     const { rows } = await client.query(
-      "UPDATE reimbursements SET status='paid', paid_at=now(), paid_amount=amount, updated_at=now() WHERE payroll_run_id=$1 AND status='in_payroll' RETURNING *", [run.id]);
-    for (const c of rows) await event(client, c, { actor: req.user.email, kind: "Paid", status: "paid", note: `${inr(c.amount)} with ${monthName(run.period)} payroll (run #${run.id})` });
+      "UPDATE reimbursements SET status='paid', paid_at=now(), paid_amount=coalesce(approved_amount, amount), updated_at=now() WHERE payroll_run_id=$1 AND status='in_payroll' RETURNING *", [run.id]);
+    for (const c of rows) await event(client, c, { actor: req.user.email, kind: "Paid", status: "paid", note: `${inr(c.paid_amount)} with ${monthName(run.period)} payroll (run #${run.id})` });
     await client.query("INSERT INTO audit_log (action, work_email) VALUES ($1, NULL)",
       [`Payroll for ${monthName(run.period)} marked as paid by ${req.user.email}: ${rows.length} reimbursements paid`]);
     await client.query("COMMIT");
@@ -153,7 +154,7 @@ payrollRouter.post("/runs/:id/pay", wrap(async (req, res) => {
     client.release();
   }
   for (const c of paid)
-    await notify(c.work_email, { title: `Your reimbursement of ${inr(c.amount)} has been paid.`, body: `${c.claim_no} · ${monthName(run.period)} payroll`, link: `claim:${c.id}`,
-      email: { subject: `Reimbursement paid: ${c.claim_no}`, body: `Your reimbursement of ${inr(c.amount)} (${c.claim_no}) has been paid with the ${monthName(run.period)} payroll.` } });
+    await notify(c.work_email, { title: `Your reimbursement of ${inr(c.paid_amount)} has been paid.`, body: `${c.claim_no} · ${monthName(run.period)} payroll`, link: `claim:${c.id}`,
+      email: { subject: `Reimbursement paid: ${c.claim_no}`, body: `Your reimbursement of ${inr(c.paid_amount)} (${c.claim_no}) has been paid with the ${monthName(run.period)} payroll.` } });
   res.json({ ok: true, paid: paid.length });
 }));

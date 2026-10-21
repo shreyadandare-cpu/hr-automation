@@ -25,7 +25,7 @@ async function payslipOf(email, period) {
      WHERE lower(i.work_email)=$1 AND r.period=$2`, [email, period]);
   if (!rows[0]) return null;
   const x = rows[0];
-  const { rows: claims } = await pool.query("SELECT claim_no, category, amount FROM reimbursements WHERE payroll_run_id=$1 AND lower(work_email)=$2 ORDER BY id", [x.run_id, email]);
+  const { rows: claims } = await pool.query("SELECT claim_no, category, coalesce(approved_amount, amount) AS amount FROM reimbursements WHERE payroll_run_id=$1 AND lower(work_email)=$2 ORDER BY id", [x.run_id, email]);
   return { period, status: x.status, paidAt: x.paid_at, name: x.name || email, empNo: x.emp_no, title: x.title, dept: x.dept, start: x.start_date, location: x.work_location, email: x.email || email,
     base: num(x.base_salary), lopDays: num(x.lop_days), lopDeduction: num(x.lop_deduction), reimbursement: num(x.reimbursement_total), net: num(x.payable),
     claims: claims.map((c) => ({ no: c.claim_no, category: c.category, amount: num(c.amount) })) };

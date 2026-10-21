@@ -81,7 +81,7 @@ export function leaveRouter(wrap) {
     const [reqs, comps, hols, pay] = await Promise.all([
       pool.query(`SELECT * FROM leave_requests ${where} ORDER BY from_date DESC, id DESC`, args),
       pool.query(`SELECT * FROM comp_off_credits ${where} ORDER BY worked_on DESC`, args),
-      pool.query("SELECT day, name FROM holidays ORDER BY day"),
+      pool.query("SELECT day, name, type, source FROM holidays ORDER BY day"),
       pool.query(`SELECT work_email, start_date, monthly_gross, casual_opening FROM employees ${where}`, args),
     ]);
     res.json({
@@ -208,12 +208,37 @@ export function leaveRouter(wrap) {
   r.post("/api/leave/comp-offs", requireHr, addCompOff("approved"));
   r.post("/api/leave/holidays", requireHr, wrap(async (req, res) => {
     const { day, name } = req.body || {};
+    const type = String((req.body && req.body.type) || "").trim().slice(0, 40) || null;
     if (!L.validDate(day) || !String(name || "").trim()) return res.status(400).json({ error: "Enter a date and a name for the holiday." });
+    if (String(name).trim().length > 80) return res.status(400).json({ error: "Keep the holiday name under 80 characters." });
     await tx(res, async (client) => {
-      const { rowCount } = await client.query("INSERT INTO holidays (day, name) VALUES ($1,$2) ON CONFLICT DO NOTHING", [day, String(name).trim()]);
+      const { rowCount } = await client.query("INSERT INTO holidays (day, name, type, source, updated_by, updated_at) VALUES ($1,$2,$3,'manual',$4,now()) ON CONFLICT DO NOTHING",
+        [day, String(name).trim(), type, req.user.email]);
       if (!rowCount) return [409, { error: "That date is already a holiday." }];
       await audit(client, `Holiday added: ${String(name).trim()} on ${day}`, null);
-      return [201, { day, name: String(name).trim() }];
+      return [201, { day, name: String(name).trim(), type, source: "manual" }];
+    });
+  }));
+
+  // Rename a holiday, change its type, or move it to another date. An imported holiday stays marked as imported.
+  r.put("/api/leave/holidays/:day", requireHr, wrap(async (req, res) => {
+    const { day, name } = req.body || {};
+    const type = String((req.body && req.body.type) || "").trim().slice(0, 40) || null;
+    if (!L.validDate(day) || !String(name || "").trim()) return res.status(400).json({ error: "Enter a date and a name for the holiday." });
+    if (String(name).trim().length > 80) return res.status(400).json({ error: "Keep the holiday name under 80 characters." });
+    await tx(res, async (client) => {
+      const old = L.validDate(req.params.day) ? req.params.day : null;
+      const { rows: [h] } = await client.query("SELECT * FROM holidays WHERE day=$1 FOR UPDATE", [old]);
+      if (!h) return [404, { error: "Holiday not found." }];
+      if (day !== old) {
+        const { rowCount } = await client.query("SELECT 1 FROM holidays WHERE day=$1", [day]);
+        if (rowCount) return [409, { error: "That date is already a holiday." }];
+      }
+      await client.query("UPDATE holidays SET day=$2, name=$3, type=$4, updated_by=$5, updated_at=now() WHERE day=$1", [old, day, String(name).trim(), type, req.user.email]);
+      const what = [h.name !== String(name).trim() ? `renamed "${h.name}" to "${String(name).trim()}"` : null, day !== old ? `moved from ${old} to ${day}` : null,
+        (h.type || null) !== type ? `type ${type || "none"}` : null].filter(Boolean).join(", ");
+      await audit(client, `Holiday updated: ${what || "no change"}`, null);
+      return [200, { day, name: String(name).trim(), type, source: h.source }];
     });
   }));
 

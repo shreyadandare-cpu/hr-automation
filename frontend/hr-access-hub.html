@@ -845,7 +845,7 @@ const ICONS = {
   info:'<circle cx="12" cy="12" r="9"/><path d="M12 8v5M12 16h.01"/>',
   bundle:'<rect x="4" y="4" width="7" height="7" rx="2"/><rect x="13" y="4" width="7" height="7" rx="2"/><rect x="4" y="13" width="7" height="7" rx="2"/><rect x="13" y="13" width="7" height="7" rx="2"/>',
 };
-const NAV = [["dashboard","Dashboard"],["employees","Employees"],["onboard","Onboarding"],["offboard","Offboarding"],["leave","Leave"],["attendance","Attendance"],["reimb","Reimbursements"],["payroll","Payroll"],["templates","Connected tools"],["audit","Audit log"]];
+const NAV = [["dashboard","Dashboard"],["employees","Employees"],["onboard","Onboarding"],["offboard","Offboarding"],["leave","Leave"],["attendance","Attendance"],["reimb","Reimbursements"],["payroll","Payroll"],["audit","Audit log"]];
 const svg = k=>`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${ICONS[k]}</svg>`;
 /* ---------- Light / dark theme ---------- */
 const THEME_KEY="hr_theme";
@@ -865,8 +865,8 @@ function toggleTheme(){ const t=theme()==="dark"?"light":"dark"; try{localStorag
 const isEmployee = ()=>!!S.user&&S.user.role!=="hr";   // employees and reporting managers: view-only site plus their own pages
 /* A reporting manager: HR has picked them as someone's manager in the Employees list. There is no separate manager login role. */
 const isManager = ()=>!!S.user&&Object.values((S.lv&&S.lv.approvers)||{}).includes(String(S.user.email).toLowerCase());
-/* Everyone signed in can look at the site. Employees see Onboarding as their own documents page and Offboarding as a read-only list. Users, Connected tools, Audit log and Leave are HR's; employees get My leave (and Team leave if people report to them). */
-const HR_ONLY=["users","templates","audit","leave","payroll"];
+/* Everyone signed in can look at the site. Employees see Onboarding as their own documents page and Offboarding as a read-only list. Users, Audit log and Leave are HR's; employees get My leave (and Team leave if people report to them). */
+const HR_ONLY=["users","audit","leave","payroll"];
 /* Pages reachable from the avatar menu and the address bar that are not links in the bar. */
 const pageKnown=h=>navItems().some(n=>n[0]===h)||h==="profile"||h==="account"||h==="docs"||h==="payslips"||h==="budgets";
 function navItems(){ return !S.user?[...NAV,["myleave","My leave"]]:isEmployee()?[...NAV.filter(n=>!HR_ONLY.includes(n[0])),["myleave","My leave"],...(isManager()?[["team","Team leave"]]:[])]:NAV; }
@@ -2976,15 +2976,6 @@ document.addEventListener("submit",async ev=>{
   toast(`${b.name.trim()} added as a holiday.`); render();
 });
 
-function vTemplates(){
-  return `  <section class="section">
-  ${head("Integrations","Connected <span class=\"grad\">tools.</span>","",`<button class="btn glass sm" data-proto="Connecting a new tool">Connect a tool</button>`)}
-  <div class="card"><div class="tbl-wrap"><table><thead><tr><th>Tool</th><th>How access is given</th><th>Status</th></tr></thead><tbody>
-    ${APPS.map(a=>`<tr><td>${`<div class="person">${appIc(a.id)}<div><b>${esc(a.name)}</b><span>${esc(a.sub)}</span></div></div>`}</td><td>Automatic · ${esc(a.how)}</td><td><span class="pill p-ok">Connected</span></td></tr>`).join("")}
-    <tr><td><div class="person"><span class="app-ic" style="background:var(--ink-faint)">IT</span><div><b>Laptop, ID card, building access</b><span>No API</span></div></div></td><td>Manual checklist task</td><td><span class="pill p-mute">Manual</span></td></tr>
-  </tbody></table></div></div></section>`;
-}
-
 function vAudit(){
   const f=S.af;
   const rows=S.audit.filter(a=>(!f.q||(a.emp+a.action+a.actor).toLowerCase().includes(f.q.toLowerCase()))&&(!f.app||a.app===f.app)&&(!f.res||a.result===f.res));
@@ -3139,7 +3130,7 @@ function render(){
   if(S.user&&!isEmployee()&&["onboard","docs","employee"].includes(S.route)) refreshDocs();
   if(S.user&&["profile","employees","employee","dashboard"].includes(S.route)) refreshManagers();
   renderNav();
-  const v={dashboard:vDashboard,employees:vEmployees,employee:vEmployee,onboard:isEmployee()?vDocs:vOnboard,docs:vDocs,offboard:vOffboard,myleave:vMyLeave,team:vTeam,leaveapply:vLeaveApply,reimb:vReimb,budgets:vBudgets,budget:vBudget,budgetnew:vBudgetNew,attendance:vAttendance,claim:vClaim,claimnew:vClaimNew,payroll:vPayroll,leave:vLeave,templates:vTemplates,audit:vAudit,users:vUsers,account:vAccount,profile:vProfile,payslips:vPayslips}[S.route]||vDashboard;
+  const v={dashboard:vDashboard,employees:vEmployees,employee:vEmployee,onboard:isEmployee()?vDocs:vOnboard,docs:vDocs,offboard:vOffboard,myleave:vMyLeave,team:vTeam,leaveapply:vLeaveApply,reimb:vReimb,budgets:vBudgets,budget:vBudget,budgetnew:vBudgetNew,attendance:vAttendance,claim:vClaim,claimnew:vClaimNew,payroll:vPayroll,leave:vLeave,audit:vAudit,users:vUsers,account:vAccount,profile:vProfile,payslips:vPayslips}[S.route]||vDashboard;
   $("#view").innerHTML=v();
   if(isEmployee()) document.querySelectorAll("#view #laptopf input,#view #laptopf button").forEach(x=>x.disabled=true);
 }

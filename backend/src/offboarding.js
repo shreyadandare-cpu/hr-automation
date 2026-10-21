@@ -141,7 +141,7 @@ export async function runRemoval(id) {
     const { rows: to } = await pool.query("SELECT name FROM employees WHERE lower(work_email)=$1", [String(o.transfer_to || "").toLowerCase()]);
     for (const t of tools) {
       try {
-        const detail = await removeAccess(t.key, { transferTo: to[0] ? to[0].name : o.transfer_to });
+        const detail = await removeAccess(t.key, { transferTo: to[0] ? to[0].name : o.transfer_to, email: o.work_email });
         await pool.query("UPDATE offboarding_steps SET status='done', detail=$2, done_at=now() WHERE id=$1", [t.id, detail]);
         await audit(pool, `${TOOL_NAMES[t.key]}: ${detail}`, o.work_email);
       } catch (err) {

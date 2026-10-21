@@ -395,3 +395,8 @@ CREATE TABLE IF NOT EXISTS attendance_punches (
   employee_id INTEGER NOT NULL REFERENCES employees(id) ON DELETE CASCADE,
   work_date DATE NOT NULL, punch_time TIME NOT NULL, direction TEXT NOT NULL, source TEXT, note TEXT, created_by TEXT);
 CREATE INDEX IF NOT EXISTS attendance_punches_day ON attendance_punches (employee_id, work_date);
+
+-- Which tools each person has been given (or had removed), and what the tool said.
+CREATE TABLE IF NOT EXISTS tool_access (
+  work_email TEXT NOT NULL, tool TEXT NOT NULL, status TEXT NOT NULL, detail TEXT, updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (work_email, tool));

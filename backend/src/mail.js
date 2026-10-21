@@ -34,6 +34,25 @@ export async function sendTestEmail(to, by) {
   });
 }
 
+const clean = (v) => String(v).replace(/[<>&"]/g, "");
+
+/** Sends the new work email address and its one-time password to the person's personal email. */
+export async function sendWorkAccountEmail({ to, name, workEmail, password }) {
+  const url = publicUrl();
+  await sendMail({
+    to,
+    subject: "Your Wohlig work email account",
+    text: `Hello ${name},\n\nYour Wohlig work email has been created.\n\nEmail: ${workEmail}\nPassword: ${password}\n\nThis password is only for you. Google will ask you to choose a new one when you first sign in at https://mail.google.com. Please do not share it.\n\nThe HR Access Hub is at ${url}.\n\nRegards,\nWOHLIG TRANSFORMATIONS PRIVATE LIMITED\n`,
+    html: `<div style="font:15px/1.6 Arial,Helvetica,sans-serif;color:#1c1b3a;max-width:520px;border:1px solid #d9d9ea;padding:28px 32px">`
+      + `<p style="margin:0 0 6px;font-weight:700;font-size:18px">Your work email account</p><div style="width:48px;height:3px;background:#4254d4;margin:0 0 18px"></div>`
+      + `<p style="margin:0 0 14px">Hello ${clean(name)},</p><p style="margin:0 0 14px">Your Wohlig work email has been created.</p>`
+      + `<table role="presentation" style="border-collapse:collapse;margin:0 0 14px"><tr><td style="padding:4px 14px 4px 0;color:#555177">Email</td><td><b>${clean(workEmail)}</b></td></tr>`
+      + `<tr><td style="padding:4px 14px 4px 0;color:#555177">Password</td><td><b style="font-family:Menlo,Consolas,monospace">${clean(password)}</b></td></tr></table>`
+      + `<p style="margin:0 0 14px">This password is only for you. Google will ask you to choose a new one when you first sign in. Please do not share it.</p>`
+      + `<p style="margin:0">Regards,<br>WOHLIG TRANSFORMATIONS PRIVATE LIMITED</p></div>`,
+  });
+}
+
 export const maskEmail = (v) => {
   const [a, b] = String(v || "").split("@");
   return b ? `${a.slice(0, 2)}•••@${b}` : "";

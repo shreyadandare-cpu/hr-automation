@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import crypto from "node:crypto";
 import { JWT } from "google-auth-library";
 
 const API = "https://admin.googleapis.com/admin/directory/v1/users";
@@ -24,8 +25,15 @@ function authClient() {
 
 const message = (err) => err.response?.data?.error?.message || err.message || "Google request failed";
 
+const WORDS = ["Maple", "River", "Sunny", "Tiger", "Cloud", "Lemon", "Panda", "Coral", "Amber", "Zebra", "Mango", "Eagle", "Daisy", "Pearl", "Robin", "Cedar", "Honey", "Lotus", "Otter", "Peach"];
+
+/** An easy password that is still different for every person: a word, a symbol and four digits, like Maple@4827. */
+export function generatePassword() {
+  return `${WORDS[crypto.randomInt(WORDS.length)]}@${crypto.randomInt(1000, 10000)}`;
+}
+
 /**
- * Creates the work email as an active Google Workspace user. The password is the default one and
+ * Creates the work email as an active Google Workspace user. The password is the one given and
  * Google makes the person choose a new one at first sign-in.
  * Returns { status: "active" | "simulated" }. Throws an Error with a readable message on failure.
  */

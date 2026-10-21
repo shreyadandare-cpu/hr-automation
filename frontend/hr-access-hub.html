@@ -651,7 +651,7 @@ function deptOf(title){
   if(/^hr\b/.test(t)) return "HR";
   if(/account|admin/.test(t)&&!/network/.test(t)) return "Finance & Admin";
   if(/sales/.test(t)) return "Sales";
-  if(/gen ai/.test(t)) return "Gen AI";
+  if(/gen ?ai/.test(t)) return "Gen AI";
   if(/data/.test(t)) return "Data";
   if(/devops|network/.test(t)) return "DevOps & Cloud";
   return "Engineering";
@@ -1378,10 +1378,26 @@ async function refreshDocs(force){
   docsAt=Date.now();
   try{ const r=await api("GET","/api/documents"); if(r.ok&&setDocs(r.data)) render(); }catch(e){}
 }
+/* The company's own list (served from the database) replaces the built-in sample list. Dates come back as ISO timestamps. */
+const isoDay=v=>v?String(v).slice(0,10):"";
+function applyRoster(list){
+  const keep=Object.fromEntries(S.emps.map(e=>[(e.email||"").toLowerCase(),e]));
+  S.emps=list.map((r,i)=>{
+    const start=isoDay(r.start), lastDay=isoDay(r.lastDay), title=r.title||"—", old=keep[r.email.toLowerCase()];
+    const isNew=start>=NEW_FROM, status=r.status==="offboarded"?"offboarded":(isNew?"onboarding":"active"), dept=deptOf(title);
+    const e=old||mk({grants:all(T(DEPT_TPL[dept]),"active"),onTasks:ON_TASKS.map(t=>({t,done:!isNew}))});
+    Object.assign(e,{no:r.no||"Not assigned",name:r.name,email:r.email,start,title,dept,manager:r.manager||"",lastDay:lastDay||undefined,
+      location:r.location||"",status:(old&&old.status==="offboarding")?"offboarding":status,color:AV[i%AV.length]});
+    if(status==="offboarded") e.end=e.end||lastDay;
+    return e;
+  });
+  const me=S.user&&keep[S.user.email.toLowerCase()]; if(me&&!S.emps.includes(me)) S.emps.push(me);
+}
 async function loadFromServer(){
   try{
     const hr=!isEmployee();
-    const [recs,draft,docs,prof,mgrs]=await Promise.all([api("GET",hr?"/api/onboarding":"/api/directory"),hr?api("GET","/api/onboarding/draft"):{ok:false},api("GET","/api/documents"),api("GET","/api/profile"),api("GET","/api/managers")]);
+    const [roster,recs,draft,docs,prof,mgrs]=await Promise.all([api("GET","/api/roster"),api("GET",hr?"/api/onboarding":"/api/directory"),hr?api("GET","/api/onboarding/draft"):{ok:false},api("GET","/api/documents"),api("GET","/api/profile"),api("GET","/api/managers")]);
+    if(roster.ok&&roster.data.length) applyRoster(roster.data);
     if(recs.ok) recs.data.forEach(applyServerRecord);
     if(mgrs.ok) applyManagers(mgrs.data);
     if(prof.ok){ S.profile=prof.data; S.photoV=prof.data.photoV||null; renderAcct(); }
@@ -1461,7 +1477,7 @@ function obWorkEmailCard(ob){
     return `<div class="card"><div class="card-h"><h3>Work email</h3><span class="muted">Created in Google and active straight away</span></div><div class="card-b" style="display:flex;flex-direction:column;gap:14px">
       <div class="input mono" style="background:var(--paper-2);font-size:18px">${esc(preview||"Add a first name and surname above")}</div>
       <p style="margin:0;color:var(--ink-dim)">Built as <span class="mono">name.surname@${DOMAIN}</span>, in lowercase. If the address is taken, a number is added. Fill in the details above, then create it. The name cannot be changed afterwards.</p>
-      ${note("The account starts with the default password and the employee must choose a new one at first sign-in.")}
+      ${note("A different password is generated for each person and emailed to their personal email. They must choose a new one at first sign-in.")}
       <div class="row"><button type="button" class="btn primary" data-ob-mkmail ${ob.busy?"disabled":""}>${ob.busy?"Creating…":"Create work email"}</button></div>
     </div></div>`;
   }
@@ -1472,6 +1488,7 @@ function obWorkEmailCard(ob){
       ${w.google==="failed"?note(`${esc(w.error||"Google returned an error.")} The address is reserved for this person. Retry when the problem is fixed.`)
         :w.google==="simulated"?note("Google is not connected yet, so this account was only simulated. Add the Google credentials in backend/.env to create real accounts.")
         :w.google==="existing"?note("This person already has a work email, so none is created."):""}
+      ${w.account?(w.account.emailed?note("The email address and its password were sent to the employee's personal email."):note(`Email is not set up, so the password was not sent. Give it to the employee yourself: <b class="mono">${esc(w.account.password)}</b>. It is shown only now.`)):""}
       ${w.google==="failed"?`<div class="row"><button type="button" class="btn primary" data-ob-mkmail ${ob.busy?"disabled":""}>${ob.busy?"Retrying…":"Retry"}</button></div>`:""}
     </div></div>`;
 }
@@ -1557,7 +1574,7 @@ async function obMakeEmail(){
     else if(!r.ok){ toast(apiMsg(r)); }
     else{
       const e=applyServerRecord(r.data); ob.empId=e.id;
-      ob.work={email:r.data.email,google:r.data.googleStatus};
+      ob.work={email:r.data.email,google:r.data.googleStatus,account:r.data.workAccount||null};
       ob.login=r.data.hasLogin?{created:true,existing:true}:null;
       toast(`${r.data.email} is ready${r.data.googleStatus==="active"?" and active in Google":""}.`);
     }

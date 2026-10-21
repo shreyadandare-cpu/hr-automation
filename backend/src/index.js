@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url";
 import express from "express";
 import { pool, initDb } from "./db.js";
 import { documentsRouter } from "./documents.js";
-import { bootstrapAuth, loadSession, requireAuth, requireHr, getDefaultPassword } from "./auth.js";
+import { bootstrapAuth, loadSession, requireAuth, requireHr } from "./auth.js";
 import { sessionRouter, accountRouter, usersRouter } from "./users.js";
 import { profileRouter } from "./profile.js";
 import { googleRouter } from "./google-signin.js";
@@ -12,7 +12,8 @@ import { inviteRouter, expireInvites } from "./invites.js";
 import { leaveRouter } from "./leave.js";
 import { offboardingRouter, runDue } from "./offboarding.js";
 import { onboardingErrors, detailsErrors, maskAadhaar, maskPan, maskAcct } from "./validate.js";
-import { createGoogleUser, googleMode } from "./google.js";
+import { createGoogleUser, generatePassword, googleMode } from "./google.js";
+import { mailConfigured, sendWorkAccountEmail } from "./mail.js";
 import { setupTeams } from "./teams.js";
 import { reimbursementsRouter, runReimbursementReminders } from "./reimbursements.js";
 import { payrollRouter } from "./payroll.js";
@@ -90,6 +91,15 @@ app.get("/api/directory", wrap(async (_req, res) => {
      WHERE onboarded_at IS NOT NULL OR google_status IS NOT NULL ORDER BY created_at`);
   res.json(rows.map((r) => ({ email: r.work_email, name: r.name, dept: r.dept, title: r.title, manager: r.manager,
     start: r.start_date, status: r.status, apps: r.apps })));
+}));
+
+// The company roster, for everyone signed in. Only non-personal fields are sent, so this is safe for employees too.
+app.get("/api/roster", wrap(async (_req, res) => {
+  const { rows } = await pool.query(
+    `SELECT id, emp_no, name, work_email, title, sub_title, work_location, manager, start_date, last_day, status
+     FROM employees ORDER BY id`);
+  res.json(rows.map((r) => ({ id: r.id, no: r.emp_no, name: r.name, email: r.work_email, title: r.title, subTitle: r.sub_title,
+    location: r.work_location, manager: r.manager, start: r.start_date, lastDay: r.last_day, status: r.status })));
 }));
 
 // Who reports to whom, for everyone. Only the manager's name is sent, so this is safe for employees too.
@@ -199,10 +209,12 @@ app.post("/api/onboarding/work-email", wrap(async (req, res) => {
     client.release();
   }
 
+  let workPassword = null, emailed = false;
   if (status === "pending" || status === "failed") {
+    workPassword = generatePassword();   // different for every person
     try {
       status = (await createGoogleUser({
-        email, first: d.first.trim(), last: d.last.trim(), password: await getDefaultPassword(), personalEmail: d.pemail.trim(),
+        email, first: d.first.trim(), last: d.last.trim(), password: workPassword, personalEmail: d.pemail.trim(),
       })).status;
       await pool.query("UPDATE employees SET google_status=$1, google_error=NULL WHERE lower(work_email)=$2", [status, email.toLowerCase()]);
       await pool.query("INSERT INTO audit_log (action, work_email) VALUES ($1,$2)",
@@ -213,7 +225,13 @@ app.post("/api/onboarding/work-email", wrap(async (req, res) => {
       return res.status(502).json({ error: `Google could not create the account: ${err.message}`, email });
     }
   }
-  res.status(201).json({ ...toApi(await loadRecord(email)), googleMode });
+  if (workPassword && mailConfigured()) {
+    try { await sendWorkAccountEmail({ to: d.pemail.trim(), name: full, workEmail: email, password: workPassword }); emailed = true; }
+    catch (err) { await pool.query("INSERT INTO audit_log (action, work_email) VALUES ($1,$2)", [`Could not email the work account details: ${err.message}`, email]); }
+  }
+  if (workPassword) await pool.query("INSERT INTO audit_log (action, work_email) VALUES ($1,$2)",
+    [emailed ? "Work account password emailed to the personal email" : "Work account password generated (not emailed)", email]);
+  res.status(201).json({ ...toApi(await loadRecord(email)), googleMode, workAccount: workPassword ? { emailed, password: emailed ? null : workPassword } : null });
 }));
 
 // Last step: save the tool access and mark the person as onboarded. The work email and the login must exist by now.

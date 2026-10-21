@@ -375,3 +375,20 @@ UPDATE reimbursements r SET doc_stored = NULL
 
 -- The ID card and exit interview items were dropped from the offboarding checklist.
 DELETE FROM offboarding_steps WHERE kind = 'task' AND key IN ('idcard', 'exit_interview');
+
+-- Company data (projects, who works on them, attendance) and the office each person works from.
+ALTER TABLE employees ADD COLUMN IF NOT EXISTS work_location TEXT;
+ALTER TABLE employees ADD COLUMN IF NOT EXISTS sub_title TEXT;
+CREATE TABLE IF NOT EXISTS projects (
+  id SERIAL PRIMARY KEY, name TEXT NOT NULL, project_lead TEXT, start_date DATE, end_date DATE,
+  status TEXT NOT NULL DEFAULT 'Active', description TEXT);
+CREATE TABLE IF NOT EXISTS employee_project_allocations (
+  id SERIAL PRIMARY KEY,
+  employee_id INTEGER NOT NULL REFERENCES employees(id) ON DELETE CASCADE,
+  project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+  start_date DATE, end_date DATE, project_lead TEXT, location TEXT, status TEXT NOT NULL DEFAULT 'Active',
+  end_reason TEXT, handover_to TEXT, handover_notes TEXT, transferred_to TEXT);
+CREATE TABLE IF NOT EXISTS attendance_punches (
+  id SERIAL PRIMARY KEY,
+  employee_id INTEGER NOT NULL REFERENCES employees(id) ON DELETE CASCADE,
+  work_date DATE NOT NULL, punch_time TIME NOT NULL, direction TEXT NOT NULL, source TEXT, note TEXT, created_by TEXT);

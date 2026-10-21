@@ -10,11 +10,12 @@ import { profileRouter } from "./profile.js";
 import { googleRouter } from "./google-signin.js";
 import { inviteRouter, expireInvites } from "./invites.js";
 import { leaveRouter } from "./leave.js";
+import { attendanceRouter } from "./attendance.js";
+import { payslipsRouter } from "./payslips.js";
 import { offboardingRouter, runDue } from "./offboarding.js";
 import { onboardingErrors, detailsErrors, maskAadhaar, maskPan, maskAcct } from "./validate.js";
 import { createGoogleUser, generatePassword, googleMode } from "./google.js";
 import { mailConfigured, sendWorkAccountEmail } from "./mail.js";
-import { setupTeams } from "./teams.js";
 import { reimbursementsRouter, runReimbursementReminders } from "./reimbursements.js";
 import { payrollRouter } from "./payroll.js";
 import { notificationsRouter, emailMode } from "./notify.js";
@@ -276,6 +277,8 @@ app.post("/api/onboarding", wrap(async (req, res) => {
 }));
 
 app.use(leaveRouter(wrap));
+app.use(attendanceRouter(wrap));
+app.use(payslipsRouter(wrap));
 app.use("/api/reimbursements", requireAuth, reimbursementsRouter);   // own claims for everyone; review actions are HR-only inside
 app.use("/api/payroll", requireHr, payrollRouter);
 app.use("/api/notifications", requireAuth, notificationsRouter);
@@ -297,7 +300,6 @@ app.use((err, _req, res, _next) => {
 
 await initDb();
 await bootstrapAuth();
-await setupTeams();
 // Scheduled offboardings run at 6 pm India time on the last working day; check every minute.
 const checkDue = () => runDue().catch((err) => console.error("Scheduled offboarding check failed:", err));
 checkDue();

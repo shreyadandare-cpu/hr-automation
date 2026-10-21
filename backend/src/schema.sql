@@ -206,8 +206,10 @@ EXCEPTION WHEN duplicate_object THEN NULL;
           WHEN check_violation THEN RAISE NOTICE 'Some work emails are not @wohlig.com, so the check was not added.';
 END $$;
 -- Reporting managers. A 'manager' login approves their team's leave; HR approves the managers' own leave.
+-- There is no manager role: managers are whoever has people reporting to them. Older manager logins become employees.
 ALTER TABLE users DROP CONSTRAINT IF EXISTS users_role_check;
-ALTER TABLE users ADD CONSTRAINT users_role_check CHECK (role IN ('hr','manager','employee'));
+UPDATE users SET role='employee' WHERE role='manager';
+ALTER TABLE users ADD CONSTRAINT users_role_check CHECK (role IN ('hr','employee'));
 ALTER TABLE employees ADD COLUMN IF NOT EXISTS reporting_manager TEXT;
 
 -- One-time links that open the app for a new account. Only a hash of the link's secret is stored.
@@ -392,3 +394,4 @@ CREATE TABLE IF NOT EXISTS attendance_punches (
   id SERIAL PRIMARY KEY,
   employee_id INTEGER NOT NULL REFERENCES employees(id) ON DELETE CASCADE,
   work_date DATE NOT NULL, punch_time TIME NOT NULL, direction TEXT NOT NULL, source TEXT, note TEXT, created_by TEXT);
+CREATE INDEX IF NOT EXISTS attendance_punches_day ON attendance_punches (employee_id, work_date);

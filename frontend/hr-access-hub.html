@@ -812,7 +812,7 @@ const ICONS = {
   info:'<circle cx="12" cy="12" r="9"/><path d="M12 8v5M12 16h.01"/>',
   bundle:'<rect x="4" y="4" width="7" height="7" rx="2"/><rect x="13" y="4" width="7" height="7" rx="2"/><rect x="4" y="13" width="7" height="7" rx="2"/><rect x="13" y="13" width="7" height="7" rx="2"/>',
 };
-const NAV = [["dashboard","Dashboard"],["employees","Employees"],["onboard","Onboarding"],["offboard","Offboarding"],["leave","Leave"],["reimb","Reimbursements"],["payroll","Payroll"],["templates","Access bundles"],["audit","Audit log"]];
+const NAV = [["dashboard","Dashboard"],["employees","Employees"],["onboard","Onboarding"],["offboard","Offboarding"],["leave","Leave"],["attendance","Attendance"],["reimb","Reimbursements"],["payroll","Payroll"],["templates","Access bundles"],["audit","Audit log"]];
 const svg = k=>`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${ICONS[k]}</svg>`;
 /* ---------- Light / dark theme ---------- */
 const THEME_KEY="hr_theme";
@@ -830,17 +830,17 @@ function toggleTheme(){ const t=theme()==="dark"?"light":"dark"; try{localStorag
 /* Signed in (S.user set): everyone can view the site. Only HR can change things, and employees can only change their own documents and password.
    Without a backend S.user stays null and the page behaves as the old prototype. */
 const isEmployee = ()=>!!S.user&&S.user.role!=="hr";   // employees and reporting managers: view-only site plus their own pages
-/* A reporting manager: has the manager role, or HR has picked them as someone's manager in the Employees list. */
-const isManager = ()=>!!S.user&&(S.user.role==="manager"||Object.values((S.lv&&S.lv.approvers)||{}).includes(String(S.user.email).toLowerCase()));
+/* A reporting manager: HR has picked them as someone's manager in the Employees list. There is no separate manager login role. */
+const isManager = ()=>!!S.user&&Object.values((S.lv&&S.lv.approvers)||{}).includes(String(S.user.email).toLowerCase());
 /* Everyone signed in can look at the site. Employees see Onboarding as their own documents page and Offboarding as a read-only list. Users, Access bundles, Audit log and Leave are HR's; employees get My leave (and Team leave if people report to them). */
 const HR_ONLY=["users","templates","audit","leave","payroll"];
 /* Pages reachable from the avatar menu and the address bar that are not links in the bar. */
-const pageKnown=h=>navItems().some(n=>n[0]===h)||h==="profile"||h==="account"||h==="docs";
+const pageKnown=h=>navItems().some(n=>n[0]===h)||h==="profile"||h==="account"||h==="docs"||h==="payslips";
 function navItems(){ return !S.user?[...NAV,["myleave","My leave"]]:isEmployee()?[...NAV.filter(n=>!HR_ONLY.includes(n[0])),["myleave","My leave"],...(isManager()?[["team","Team leave"]]:[])]:NAV; }
 function routeAllowed(r){
   if(DEMO&&r==="users") return false;   // logins live on the real server
   if(!S.user) return r!=="account"&&r!=="users"&&r!=="profile";
-  if(r==="account") return true;
+  if(r==="account"||r==="payslips") return true;
   if(isEmployee()) return (!HR_ONLY.includes(r)&&r!=="team"&&r!=="claimnew")||(r==="claimnew"&&!!S.cw)||r==="myleave"||(r==="team"&&isManager())||(r==="leaveapply"&&!!S.lw&&S.lw.self);
   return r!=="myleave"&&r!=="team"&&!(r==="leaveapply"&&S.lw&&S.lw.self);   // HR uses Leave; My leave and Team leave are the employee views
 }
@@ -860,9 +860,9 @@ function renderAcct(){
   const b=$("#acct"), m=$("#acct-menu"), u=S.user; if(!b||!m||!u) return;
   const e=myRecord(), src=photoSrc(), bg=src?"transparent":(e.color||"#4254d4");
   b.innerHTML=avatarInner(e.name,src); b.style.background=bg; b.title=`${e.name}, account menu`;
-  b.classList.toggle("on",S.route==="profile"||S.route==="account");
+  b.classList.toggle("on",S.route==="profile"||S.route==="account"||S.route==="payslips");
   m.innerHTML=`<div class="acct-head"><span class="avatar-btn" style="background:${bg}">${avatarInner(e.name,src)}</span><div style="min-width:0"><b>${esc(e.name)}</b><span>${esc(u.email)} · ${isEmployee()?"Employee":"HR"}</span></div></div>
-    <a href="#profile" role="menuitem">My profile</a><a href="#account" role="menuitem">Account and password</a>${!isEmployee()&&routeAllowed("users")?`<a href="#users" role="menuitem">Manage users</a>`:""}<button type="button" role="menuitem" data-signout>Sign out</button>`;
+    <a href="#profile" role="menuitem">My profile</a><a href="#payslips" role="menuitem">My payslips</a><a href="#account" role="menuitem">Account and password</a>${!isEmployee()&&routeAllowed("users")?`<a href="#users" role="menuitem">Manage users</a>`:""}<button type="button" role="menuitem" data-signout>Sign out</button>`;
 }
 function closeAcct(){ const m=$("#acct-menu"), b=$("#acct"); if(m&&!m.hidden){ m.hidden=true; if(b) b.setAttribute("aria-expanded","false"); } }
 document.addEventListener("click",ev=>{
@@ -894,7 +894,7 @@ function vTeam(){
   const done=all.filter(r=>r.status==="approved"||r.status==="declined").sort((a,b)=>a.from<b.from?1:-1).slice(0,15);
   const pendDays=e=>all.filter(r=>r.status==="pending"&&lc(r.email)===lc(e.email)).reduce((n,r)=>n+Number(r.days||0),0);
   return `<section class="section">
-  ${head("Team","Team <span class=\"grad\">leave.</span>","Leave and comp-off requests from the people who report to you. You approve them; your own leave is approved automatically.","",true)}
+  ${head("Team","Team <span class=\"grad\">leave.</span>","Leave and comp-off requests from the people who report to you. You approve them. Your own leave goes to your reporting manager, or to HR if you have none.","",true)}
   <div class="grid g4">
     <div class="card stat"><span class="num">${team.length}</span><span class="lbl">People in your team</span></div>
     <div class="card stat ${pend.length+compPend.length?"alert":""}"><span class="num">${pend.length+compPend.length}</span><span class="lbl">Waiting for you</span></div>
@@ -1755,12 +1755,12 @@ async function appInvite(email,create,send){
   S.appBusy=null; S.users=null; loadUsers();   // fresh list, and the card redraws
 }
 /* What each app role can do. HR is "all rights": everything in the app. */
-const ACCESS_LABEL={employee:"Employee",manager:"Manager",hr:"HR (full rights)"};
+const ACCESS_LABEL={employee:"Employee",hr:"HR (full rights)"};   // there is no separate manager role: whoever HR sets as someone's reporting manager is a manager
 const ACCESS_HELP={
   employee:"Sees the site and uses their own pages: documents, profile and leave.",
   manager:"Like an employee, and also approves leave for the people who report to them.",
   hr:"Full rights: can see and change everything, including onboarding, offboarding, leave, access bundles, the audit log and everyone's logins."};
-const accessOptions=sel=>["employee","manager","hr"].map(r=>`<option value="${r}" ${r===sel?"selected":""}>${ACCESS_LABEL[r]}</option>`).join("");
+const accessOptions=sel=>["employee","hr"].map(r=>`<option value="${r}" ${r===sel?"selected":""}>${ACCESS_LABEL[r]}</option>`).join("");
 /* Handing out HR rights is a big step, so it always asks first. */
 const hrConfirm=name=>confirm(`Give ${name} full HR rights?\n\nHR can see and change everything in the app: onboarding, offboarding, leave, access bundles, the audit log and everyone's logins. Only do this for someone who works in HR.`);
 function inviteBox(n,copyId){
@@ -1777,7 +1777,7 @@ function vUsers(){
   const top=head("People","Logins and <span class=\"grad\">roles.</span>","HR creates every account. New accounts start with the default password, and people can change it on their Account page.");
   if(!d) return `<section class="section">${top}<div class="card"><div class="card-b muted">Loading…</div></div></section>`;
   const rows=d.users.map(u=>`<tr><td><b>${esc(u.name||u.email)}</b><div class="muted">${esc(u.email)}</div></td>
-    <td><select class="input" data-u-role="${esc(u.email)}" style="max-width:140px" aria-label="Role for ${esc(u.email)}"><option value="employee" ${u.role==="employee"?"selected":""}>Employee</option><option value="manager" ${u.role==="manager"?"selected":""}>Manager</option><option value="hr" ${u.role==="hr"?"selected":""}>HR</option></select></td>
+    <td><select class="input" data-u-role="${esc(u.email)}" style="max-width:140px" aria-label="Role for ${esc(u.email)}"><option value="employee" ${u.role==="employee"?"selected":""}>Employee</option><option value="hr" ${u.role==="hr"?"selected":""}>HR</option></select></td>
     <td class="hide-sm">${u.lastLogin?esc(new Date(u.lastLogin).toLocaleString()):"Never"}</td>
     <td><div class="row"><button type="button" class="btn glass sm" data-u-reset="${esc(u.email)}">Reset password</button><button type="button" class="btn glass sm" data-u-del="${esc(u.email)}" ${u.email.toLowerCase()===me?"disabled":""}>Delete</button></div></td></tr>`).join("");
   return `<section class="section">${top}
@@ -1788,7 +1788,7 @@ function vUsers(){
   <div class="card"><div class="card-h"><h3>Create an account</h3></div><div class="card-b">
     <form id="ucf" class="row" novalidate>
       <input class="input" id="uc-email" type="email" placeholder="name.surname@wohlig.com" style="max-width:300px" aria-label="Work email" autocomplete="off">
-      <select class="input" id="uc-role" style="max-width:150px" aria-label="Role"><option value="employee">Employee</option><option value="manager">Manager</option><option value="hr">HR</option></select>
+      <select class="input" id="uc-role" style="max-width:150px" aria-label="Role"><option value="employee">Employee</option><option value="hr">HR</option></select>
       <button type="submit" class="btn primary sm">Create account</button>
       <button type="button" class="btn glass sm" data-u-bulk ${d.withoutAccount?"":"disabled"}>Create for everyone without one (${d.withoutAccount})</button>
     </form>
@@ -2192,9 +2192,9 @@ const reqsOf = email=>S.lv.requests.filter(r=>lc(r.email)===lc(email));
 const compsOf = email=>S.lv.compOffs.filter(c=>lc(c.email)===lc(email));
 const payOf = email=>S.lv.pay[lc(email)]||{monthlyGross:null,casualOpening:0};
 const holDays = ()=>S.lv.holidays.map(h=>h.day);
-/* Approvals: a reporting manager decides their team's requests, HR decides the managers' own. Without sign-in (prototype) anyone can. */
+/* Approvals: a reporting manager decides their team's requests; HR decides when someone has no reporting manager. Without sign-in (prototype) anyone can. */
 const approverOf=email=>(S.lv.approvers||{})[lc(email)]||"hr";
-function canDecide(email){ if(!S.user) return true; const a=approverOf(email); return isManager()&&a!=="hr"&&a===lc(S.user.email); }
+function canDecide(email){ if(!S.user) return true; const a=approverOf(email); return a==="hr"?(!isEmployee()&&lc(email)!==lc(S.user.email)):(isManager()&&a===lc(S.user.email)); }
 const approverName=email=>{const a=approverOf(email);return a==="hr"?"HR":((empBy(a)||{}).name||a)};
 const decideBtns=(kind,id,email)=>canDecide(email)
   ?`<div class="row" style="gap:8px"><button class="btn glass sm" data-lv="${kind}:${id}:declined">Decline</button><button class="btn primary sm" data-lv="${kind}:${id}:approved">Approve</button></div>`
@@ -2375,7 +2375,7 @@ function vLeave(){
     `<button class="btn glass" data-lv="comp">Record comp off</button><button class="btn glass" data-lv="new">Add leave for someone</button>`,true)}
   ${S.lv.online?"":`<div class="callout">${svg("info")}<div><b>Sample data.</b> The backend isn't connected, so changes here last until you reload. Start the server to save them.</div></div>`}
   <div class="grid g4">
-    <div class="card stat"><span class="num">${pend.length+compPend.length}</span><span class="lbl">Waiting for you</span></div>
+    <div class="card stat"><span class="num">${pend.filter(r=>canDecide(r.email)).length+compPend.filter(c=>canDecide(c.email)).length}</span><span class="lbl">Waiting for you</span></div>
     <div class="card stat"><span class="num">${away.filter(r=>r.from<=today).length}</span><span class="lbl">Away today</span></div>
     <div class="card stat"><span class="num">${away.filter(r=>r.from>today).length}</span><span class="lbl">Upcoming leave</span></div>
     <div class="card stat ${lopDaysIn(today.slice(0,7))?"alert":""}"><span class="num">${lopDaysIn(today.slice(0,7))}</span><span class="lbl">Loss-of-pay days this month</span></div>
@@ -2643,7 +2643,7 @@ function vLeaveApply(){
     <label class="check" style="border:0;padding:0"><input type="checkbox" id="lw-reviewed" ${w.reviewed?"checked":""}><div class="grow"><div class="lbl">I have reviewed all the details above</div></div></label>`;
   }
   return `<section class="section">
-  ${head(w.self?"Me":"Time off",w.self?"Request <span class=\"grad\">leave.</span>":"Add leave for <span class=\"grad\">someone.</span>",w.self?`Pick your dates and the type of leave, add a note, then review. ${approverOf(w.email)==="hr"?"It is approved automatically.":"Your manager approves it."}`:"For when HR enters leave on an employee's behalf. It still goes to the approval list.","",true)}
+  ${head(w.self?"Me":"Time off",w.self?"Request <span class=\"grad\">leave.</span>":"Add leave for <span class=\"grad\">someone.</span>",w.self?`Pick your dates and the type of leave, add a note, then review. ${approverOf(w.email)==="hr"?"You have no reporting manager, so HR approves it.":"Your reporting manager approves it."}`:"For when HR enters leave on an employee's behalf. It still goes to the approval list.","",true)}
   ${stepper(LW_STEPS,w.step)}
   <form id="lwf" class="grid" style="gap:22px" novalidate>${body}
   ${wizFoot("lw",w.step,w.step===4,w.reviewed,w.fromReview,"Request leave",false)}</form></section>`;
@@ -2662,7 +2662,7 @@ async function lwSubmit(){
     w.errors=errs; w.step=["email","from","to","half"].includes(k)?1:k==="type"?2:3; w.reviewed=false; render(); toast(errs[k]); return;
   }
   const e=empBy(v.email); log(`${LTYPE[v.type]} requested: ${lrange(v)}${v.notify.length?` (notify ${v.notify.map(x=>empBy(x).name).join(", ")})`:""}`,e,null,"info");
-  const back=w.self?"myleave":"leave"; S.lw=null; toast(w.self?(approverOf(v.email)==="hr"?"Leave approved.":"Leave requested. Your manager will review it."):`Leave request for ${e.name} sent for approval.`); go(back);
+  const back=w.self?"myleave":"leave"; S.lw=null; toast(w.self?(approverOf(v.email)==="hr"?"Leave requested. HR will review it.":"Leave requested. Your manager will review it."):`Leave request for ${e.name} sent for approval.`); go(back);
 }
 /* Notify picker: type to filter colleagues, pick with a click or the arrow keys and Enter. */
 let lwMenuAt=0;
@@ -2925,6 +2925,126 @@ function activateDue(){
   }
   return n;
 }
+/* ---------- Attendance ---------- */
+S.at={tab:"", month:"", date:"", emp:"", today:null, mine:null, day:null, person:null, err:"", busy:false, loaded:false};
+const AT_PILL={"Present":"p-ok","Half day":"p-warn","Working":"p-info","Short hours":"p-warn","Absent":"p-bad","On leave":"p-info","Half day leave":"p-info","Weekend":"p-mute","Holiday":"p-mute"};
+const atPill=s=>s?`<span class="pill ${AT_PILL[s]||(/^Worked/.test(s)?"p-ok":"p-mute")}">${esc(s)}</span>`:`<span class="muted">—</span>`;
+const atHours=m=>m?`${Math.floor(m/60)}h ${String(m%60).padStart(2,"0")}m`:"—";
+const atDay=d=>{const [y,m,dd]=d.split("-").map(Number);return `${dd} ${MON[m-1]}, ${["Sun","Mon","Tue","Wed","Thu","Fri","Sat"][new Date(Date.UTC(y,m-1,dd)).getUTCDay()]}`};
+async function atFetch(url){ try{ const r=await api("GET",url); if(!r.ok){ S.at.err=apiMsg(r); return null; } S.at.err=""; return r.data; }catch(e){ S.at.err="No server, so attendance is not available here."; return null; } }
+async function atLoad(){
+  const a=S.at; a.loaded=true;
+  if(isEmployee()||!a.emp){
+    if(isEmployee()&&!a.emp){
+      a.today=await atFetch("/api/attendance/today"); if(a.today&&!a.month) a.month=a.today.date.slice(0,7); a.mine=await atFetch(`/api/attendance/month?month=${a.month}`);
+      if(isManager()){ const e=a.err; a.day=await atFetch(`/api/attendance/day${a.date?`?date=${a.date}`:""}`); if(a.day&&!a.date) a.date=a.day.date; a.err=e; }
+    }
+    else if(isEmployee()){ if(!a.month) a.month=(a.date||"").slice(0,7)||undefined; a.person=await atFetch(`/api/attendance/month?email=${encodeURIComponent(a.emp)}${a.month?`&month=${a.month}`:""}`); if(a.person) a.month=a.person.month; }
+    else { a.day=await atFetch(`/api/attendance/day${a.date?`?date=${a.date}`:""}`); if(a.day&&!a.date) a.date=a.day.date; }
+  } else {
+    if(!a.month) a.month=(a.date||"").slice(0,7)||undefined;
+    a.person=await atFetch(`/api/attendance/month?email=${encodeURIComponent(a.emp)}${a.month?`&month=${a.month}`:""}`); if(a.person) a.month=a.person.month;
+  }
+  render();
+}
+const atReload=()=>{ S.at.loaded=false; render(); };
+function atMonthTable(m,hr){
+  if(!m) return `<div class="empty">${esc(S.at.err||"Loading…")}</div>`;
+  const s=m.summary;
+  const rows=m.days.map(d=>`<tr><td>${atDay(d.date)}${d.holiday?`<div class="muted">${esc(d.holiday)}</div>`:""}</td><td>${atPill(d.status)}${d.missingOut?` <span class="pill p-warn">No punch out</span>`:""}</td>
+    <td>${d.firstIn||"—"}</td><td>${d.lastOut||"—"}</td><td>${atHours(d.minutes)}</td>
+    ${hr?`<td class="hide-sm">${d.punches.map(p=>`<span class="muted" style="white-space:nowrap">${p.direction} ${p.time}${p.source==="hr"?` (HR: ${esc(p.note||"")})`:""} <button type="button" class="btn link sm" data-at="del:${p.id}" aria-label="Remove ${p.direction} at ${p.time}">Remove</button></span>`).join("<br>")}</td>`:""}</tr>`).join("");
+  return `<div class="grid g4"><div class="card stat"><span class="num">${s.present}</span><span class="lbl">Days present</span></div>
+    <div class="card stat"><span class="num">${s.half}</span><span class="lbl">Half days</span></div>
+    <div class="card stat"><span class="num">${s.leave}</span><span class="lbl">Days on leave</span></div>
+    <div class="card stat ${s.absent?"alert":""}"><span class="num">${s.absent}</span><span class="lbl">Days absent</span></div></div>
+    <div class="card"><div class="card-h"><h3>${esc(m.name)}</h3><input class="input" type="month" id="at-month" value="${esc(m.month)}" aria-label="Month" style="width:auto;padding:8px 12px"></div>
+    <div class="tbl-wrap"><table><thead><tr><th>Day</th><th>Status</th><th>First in</th><th>Last out</th><th>Hours</th>${hr?`<th class="hide-sm">Punches</th>`:""}</tr></thead><tbody>${rows}</tbody></table></div>
+    <p class="muted" style="margin:0;padding:12px 24px 18px;font-size:12.5px">Present is 6 hours or more, half day is 3 to 6 hours. Times are Indian time. Weekends and holidays are not counted as absent.</p></div>`;
+}
+function vAttendance(){
+  const a=S.at, hr=!isEmployee();
+  if(!a.loaded&&S.user&&!a.busy){ a.busy=true; atLoad().finally(()=>{a.busy=false;}); }
+  const err=a.err?`<div class="callout">${svg("info")}<div>${esc(a.err)}</div></div>`:"";
+  if(!S.user) return `<section class="section">${head("Attendance","Attendance <span class=\"grad\">log.</span>","","",true)}<div class="empty">Sign in to the real server to use attendance.</div></section>`;
+  if(!hr&&a.emp){
+    const p=a.person;
+    return `<section class="section">${head("My team",esc(p?p.name:"Attendance"),"Their attendance for the month. Only HR can change punches.",`<button type="button" class="btn glass sm" data-at="back">Back</button>`,true)}${err}${atMonthTable(p,false)}</section>`;
+  }
+  if(!hr){
+    const t=a.today, inNow=t&&t.state==="in";
+    return `<section class="section">${head("Me","My <span class=\"grad\">attendance.</span>","Punch in when you start and out when you finish. Your hours and days are counted from these punches.","",true)}${err}
+    ${t?`<div class="card"><div class="card-b" style="display:flex;flex-wrap:wrap;gap:20px;align-items:center;justify-content:space-between">
+      <div><div class="muted">${atDay(t.date)}, now ${t.time}</div><div style="font:600 28px/1.2 var(--display)">${inNow?"You are punched in":"You are punched out"}</div>
+      <div class="muted">${t.punches.length?t.punches.map(p=>`${p.direction} ${p.time}`).join(" · ")+" · worked "+atHours(t.minutes):"No punches yet today."}</div></div>
+      <button type="button" class="btn primary" data-at="punch" ${a.busy?"disabled":""}>${inNow?"Punch out":"Punch in"}</button></div></div>`:""}
+    ${atMonthTable(a.mine,false)}
+    ${isManager()&&a.day?`<div class="sec-head" style="margin-top:28px"><div><div class="eyebrow">My team</div><h2>Team attendance</h2></div><div class="row">${atDatePick()}</div></div>${atDayCard(a.day)}`:""}</section>`;
+  }
+  if(a.emp){
+    const p=a.person;
+    return `<section class="section">${head("Attendance",`${esc(p?p.name:"Attendance")}`,"Every punch for the month. Add a missed punch with a reason, or remove a wrong one. Both are recorded in the audit log.",`<button type="button" class="btn glass sm" data-at="back">Back to everyone</button>`,true)}${err}
+    ${atMonthTable(p,true)}
+    <div class="card"><div class="card-h"><h3>Add a missed punch</h3></div><div class="card-b"><form id="at-add" class="row" style="flex-wrap:wrap;gap:12px" novalidate>
+      <input class="input" type="date" id="at-add-date" aria-label="Date" max="${esc(a.day?a.day.today:(p?p.today:""))}" style="width:auto">
+      <input class="input" type="time" id="at-add-time" aria-label="Time" style="width:auto">
+      <select class="input" id="at-add-dir" aria-label="In or out" style="width:auto"><option>IN</option><option>OUT</option></select>
+      <input class="input grow" id="at-add-note" placeholder="Reason, for example forgot to punch out" aria-label="Reason" maxlength="300">
+      <button type="button" class="btn primary" data-at="add">Add punch</button></form></div></div></section>`;
+  }
+  return `<section class="section">${head("Attendance","Attendance <span class=\"grad\">today.</span>","Who is in, who is on leave and who is absent. Open a person to see their month or fix a missed punch.",
+    atDatePick(),true)}${err}${atDayCard(a.day)}</section>`;
+}
+const atDatePick=()=>`<input class="input" type="date" id="at-date" value="${esc(S.at.date)}" aria-label="Date" style="width:auto;padding:8px 12px">`;
+function atDayCard(d){
+  const a=S.at, people=d?d.people:[];
+  const cnt=s=>people.filter(x=>x.status===s).length;
+  return d?`<div class="grid g4"><div class="card stat"><span class="num">${people.filter(x=>/^(Present|Working|Half day)$/.test(x.status||"")).length}</span><span class="lbl">Punched in</span></div>
+    <div class="card stat"><span class="num">${people.filter(x=>/leave$/i.test(x.status||"")).length}</span><span class="lbl">On leave</span></div>
+    <div class="card stat ${cnt("Absent")?"alert":""}"><span class="num">${cnt("Absent")}</span><span class="lbl">Absent</span></div>
+    <div class="card stat"><span class="num">${people.filter(x=>x.missingOut).length}</span><span class="lbl">No punch out</span></div></div>
+  ${d.off?`<p class="muted">${esc(d.holiday||d.off)}: no attendance is expected on this day.</p>`:""}
+  <div class="card"><div class="tbl-wrap"><table><thead><tr><th>Employee</th><th>Status</th><th>First in</th><th>Last out</th><th>Hours</th></tr></thead><tbody>
+  ${people.map(x=>`<tr class="click" data-at="open:${esc(x.email)}" tabindex="0"><td>${person({name:x.name,email:x.email,color:"#4254d4"},x.title||x.email)}</td><td>${atPill(x.status)}${x.missingOut?` <span class="pill p-warn">No punch out</span>`:""}</td><td>${x.firstIn||"—"}</td><td>${x.lastOut||"—"}</td><td>${atHours(x.minutes)}</td></tr>`).join("")}
+  </tbody></table></div></div>`:`<div class="empty">${esc(a.err||"Loading…")}</div>`;
+}
+document.addEventListener("click",async ev=>{
+  const b=ev.target.closest("[data-at]"); if(!b) return;
+  const [k,arg]=[b.dataset.at.split(":")[0],b.dataset.at.slice(b.dataset.at.indexOf(":")+1)], a=S.at;
+  if(k==="punch"){ a.busy=true; render(); const r=await api("POST","/api/attendance/punch"); a.busy=false; toast(r.ok?`Punched ${r.data.direction==="IN"?"in":"out"} at ${r.data.time}.`:apiMsg(r)); atReload(); return; }
+  if(k==="open"){ a.emp=arg; a.month=(a.date||"").slice(0,7)||""; a.person=null; atReload(); return; }
+  if(k==="back"){ a.emp=""; a.person=null; atReload(); return; }
+  if(k==="del"){ if(!confirm("Remove this punch? This is recorded in the audit log.")) return; const r=await api("DELETE","/api/attendance/punches/"+arg); toast(r.ok?"Punch removed.":apiMsg(r)); atReload(); return; }
+  if(k==="add"){
+    const v=id=>$("#"+id).value, r=await api("POST","/api/attendance/punches",{email:a.emp,date:v("at-add-date"),time:v("at-add-time"),direction:v("at-add-dir"),note:v("at-add-note")});
+    if(!r.ok){ toast(apiMsg(r)); return; } toast("Punch added."); a.person=r.data; a.month=r.data.month; render(); }
+});
+document.addEventListener("keydown",ev=>{ if(ev.key==="Enter"&&ev.target.matches&&ev.target.matches("tr[data-at]")) ev.target.click(); });
+document.addEventListener("change",ev=>{
+  const t=ev.target, a=S.at;
+  if(t.id==="at-month"&&t.value){ a.month=t.value; atReload(); }
+  if(t.id==="at-date"&&t.value){ a.date=t.value; atReload(); }
+});
+
+/* ---------- My payslips ---------- */
+S.ps={list:null,err:"",busy:false};
+async function psLoad(){
+  S.ps.busy=true;
+  try{ const r=await api("GET","/api/payslips"); S.ps.list=r.ok?r.data:[]; S.ps.err=r.ok?"":apiMsg(r); }catch(e){ S.ps.list=[]; S.ps.err="No server, so payslips are not available here."; }
+  S.ps.busy=false; render();
+}
+function vPayslips(){
+  const p=S.ps;
+  if(p.list===null&&!p.busy&&S.user) psLoad();
+  const money=n=>"₹"+Number(n||0).toLocaleString("en-IN",{minimumFractionDigits:2,maximumFractionDigits:2});
+  const label=per=>{const [y,m]=per.split("-").map(Number);return `${["January","February","March","April","May","June","July","August","September","October","November","December"][m-1]} ${y}`};
+  const rows=(p.list||[]).map(x=>`<tr><td><b>${label(x.period)}</b></td><td class="num">${money(x.net)}</td><td>${x.status==="paid"?`<span class="pill p-ok">Paid${x.paidAt?" "+esc(fdate(String(x.paidAt).slice(0,10))):""}</span>`:`<span class="pill p-info">Processed</span>`}</td>
+    <td style="text-align:right"><a class="btn primary sm" href="/api/payslips/${x.period}/pdf" download>Download PDF</a></td></tr>`).join("");
+  return `<section class="section">${head("Me","My <span class=\"grad\">payslips.</span>","Download the payslip for any month that payroll has been processed. Each one is a PDF.","",true)}
+  ${p.err?`<div class="callout">${svg("info")}<div>${esc(p.err)}</div></div>`:""}
+  <div class="card">${p.list===null?`<div class="empty">Loading…</div>`:p.list.length?`<div class="tbl-wrap"><table><thead><tr><th>Month</th><th class="num">Net pay</th><th>Status</th><th><span class="sr">Download</span></th></tr></thead><tbody>${rows}</tbody></table></div>`
+    :`<div class="empty">No payslips yet. A payslip appears here once HR has processed payroll for a month you were paid in.</div>`}</div></section>`;
+}
 function render(){
   if(activateDue()) toast("A work email was activated on its joining date.");
   if(S.route==="leaveapply"&&!S.lw) S.route=isEmployee()?"myleave":"leave";
@@ -2933,7 +3053,7 @@ function render(){
   if(S.user&&!isEmployee()&&["onboard","docs","employee"].includes(S.route)) refreshDocs();
   if(S.user&&["profile","employees","employee","dashboard"].includes(S.route)) refreshManagers();
   renderNav();
-  const v={dashboard:vDashboard,employees:vEmployees,employee:vEmployee,onboard:isEmployee()?vDocs:vOnboard,docs:vDocs,offboard:vOffboard,myleave:vMyLeave,team:vTeam,leaveapply:vLeaveApply,reimb:vReimb,claim:vClaim,claimnew:vClaimNew,payroll:vPayroll,leave:vLeave,templates:vTemplates,audit:vAudit,users:vUsers,account:vAccount,profile:vProfile}[S.route]||vDashboard;
+  const v={dashboard:vDashboard,employees:vEmployees,employee:vEmployee,onboard:isEmployee()?vDocs:vOnboard,docs:vDocs,offboard:vOffboard,myleave:vMyLeave,team:vTeam,leaveapply:vLeaveApply,reimb:vReimb,attendance:vAttendance,claim:vClaim,claimnew:vClaimNew,payroll:vPayroll,leave:vLeave,templates:vTemplates,audit:vAudit,users:vUsers,account:vAccount,profile:vProfile,payslips:vPayslips}[S.route]||vDashboard;
   $("#view").innerHTML=v();
   if(isEmployee()) document.querySelectorAll("#view #laptopf input,#view #laptopf button").forEach(x=>x.disabled=true);
 }

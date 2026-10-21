@@ -20,10 +20,12 @@ const toEmp = (e) => ({ name: e.name, status: e.status, start: e.start_date, cas
 const isHr = (req) => req.user && req.user.role === "hr";
 const self = (req) => req.user.email.toLowerCase();
 // A reporting manager decides their own team's requests; HR decides the managers' own (and anyone without a manager).
-// Only the reporting manager decides. HR views leave but never approves; requests with no manager to approve them
-// (the managers' own, or someone whose manager has left) are approved automatically when submitted.
-const mayDecide = (req, approver) => !isHr(req) && approver !== "hr" && approver === self(req);
-const notYours = () => ({ error: "Only this person's reporting manager can approve or decline this request." });
+// The reporting manager decides. When someone has no reporting manager (or theirs has left), HR decides instead.
+// Nobody decides their own request: an HR person's own leave needs another HR login.
+const mayDecide = (req, approver, owner) => (approver === "hr" ? isHr(req) && String(owner).toLowerCase() !== self(req) : !isHr(req) && approver === self(req));
+const notYours = (approver) => ({ error: approver === "hr"
+  ? "This person has no reporting manager, so HR approves it, and not the person's own request."
+  : "Only this person's reporting manager can approve or decline this request." });
 
 const holidayDays = async (db) => (await db.query("SELECT day FROM holidays ORDER BY day")).rows.map((h) => h.day);
 
@@ -118,13 +120,6 @@ export function leaveRouter(wrap) {
         [emp.work_email, type, from, to, half, days, String(reason).trim(), JSON.stringify(notify)]);
       const lr = toRequest(rows[0]);
       await audit(client, `${L.TYPES[type].name} requested: ${when(lr)} (${plural(days)})`, emp.work_email);
-      if ((await approverOf(client, emp.work_email)) === "hr") {
-        const { paid, lop } = L.allocate(type, days, bal);   // balance before this request, as on a normal approval
-        const { rows: out } = await client.query(
-          `UPDATE leave_requests SET status='approved', paid_days=$2, lop_days=$3, decided_at=now() WHERE id=$1 RETURNING *`, [lr.id, paid, lop]);
-        await audit(client, `${L.TYPES[type].name} approved automatically (no reporting manager to approve): ${when(lr)} (${plural(paid)} paid${lop ? `, ${plural(lop)} loss of pay` : ""})`, emp.work_email);
-        return [201, toRequest(out[0])];
-      }
       return [201, lr];
     });
   }));
@@ -137,7 +132,7 @@ export function leaveRouter(wrap) {
       const found = await client.query("SELECT work_email FROM leave_requests WHERE id=$1", [Number(req.params.id) || 0]);
       if (!found.rows[0]) return [404, { error: "Leave request not found." }];
       const approver = await approverOf(client, found.rows[0].work_email);
-      if (!mayDecide(req, approver)) return [403, notYours(approver)];
+      if (!mayDecide(req, approver, found.rows[0].work_email)) return [403, notYours(approver)];
       const emp = await lockEmployee(client, found.rows[0].work_email);
       const { rows } = await client.query("SELECT * FROM leave_requests WHERE id=$1 FOR UPDATE", [Number(req.params.id)]);
       const lr = toRequest(rows[0]);
@@ -185,12 +180,11 @@ export function leaveRouter(wrap) {
       const { compOffs } = emp ? await historyOf(client, emp.work_email) : { compOffs: [] };
       const errors = L.compOffProblems({ emp, workedOn, reason, holidays: await holidayDays(client), today: todayIso(), existing: compOffs });
       if (Object.keys(errors).length) return [400, { errors }];
-      // a comp off with no reporting manager to approve it is approved straight away
-      const final = status === "pending" && (await approverOf(client, emp.work_email)) === "hr" ? "approved" : status;
+      const final = status;
       const { rows } = await client.query(
         "INSERT INTO comp_off_credits (work_email, worked_on, reason, status, decided_at) VALUES ($1,$2,$3,$4,$5) RETURNING *",
         [emp.work_email, workedOn, String(reason).trim(), final, final === "approved" ? new Date() : null]);
-      await audit(client, final === "approved" ? `Comp off earned for working on ${workedOn}${status === "pending" ? " (approved automatically)" : ""}` : `Comp off credit requested for working on ${workedOn}`, emp.work_email);
+      await audit(client, final === "approved" ? `Comp off earned for working on ${workedOn}` : `Comp off credit requested for working on ${workedOn}`, emp.work_email);
       return [201, toCompOff(rows[0])];
     });
   });
@@ -203,7 +197,7 @@ export function leaveRouter(wrap) {
       const { rows } = await client.query("SELECT * FROM comp_off_credits WHERE id=$1 FOR UPDATE", [Number(req.params.id) || 0]);
       if (!rows[0]) return [404, { error: "Comp off request not found." }];
       const approver = await approverOf(client, rows[0].work_email);
-      if (!mayDecide(req, approver)) return [403, notYours(approver)];
+      if (!mayDecide(req, approver, rows[0].work_email)) return [403, notYours(approver)];
       if (rows[0].status !== "pending") return [409, { error: `This comp off was already ${rows[0].status}.` }];
       const { rows: out } = await client.query("UPDATE comp_off_credits SET status=$2, decided_at=now() WHERE id=$1 RETURNING *", [rows[0].id, decision]);
       await audit(client, `Comp off credit ${decision} by ${req.user.email} for working on ${rows[0].worked_on}`, rows[0].work_email);

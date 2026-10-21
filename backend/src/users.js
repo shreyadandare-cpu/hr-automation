@@ -10,7 +10,7 @@ import { mailConfigured, sendTestEmail } from "./mail.js";
 import { googleEnabled } from "./google-signin.js";
 
 const wrap = (fn) => (req, res, next) => fn(req, res, next).catch(next);
-const ROLES = ["hr", "manager", "employee"];
+const ROLES = ["hr", "employee"];
 
 /* Public: sign in and out. */
 export const sessionRouter = express.Router();

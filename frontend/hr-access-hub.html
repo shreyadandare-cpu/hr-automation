@@ -72,9 +72,12 @@ h1,h2,h3{margin:0;font-family:var(--display);color:var(--ink);text-wrap:balance}
 /* ---------- Glass pill nav ---------- */
 .navbar{position:sticky;top:calc(env(safe-area-inset-top,0px) + 14px);z-index:20;margin-top:14px}
 .pill-nav{display:flex;align-items:center;gap:8px;padding:10px 10px 10px 26px;border-radius:999px;background:var(--glass);box-shadow:inset 0 1px 0 rgba(255,255,255,.95),0 2px 8px rgba(27,22,80,.06),0 22px 50px rgba(77,73,221,.18);backdrop-filter:blur(24px);-webkit-backdrop-filter:blur(24px)}
-.logo{display:inline-flex;align-items:baseline;font:600 27px/1 var(--display);letter-spacing:-.03em;color:var(--ink);text-decoration:none;white-space:nowrap}
-.logo .o{display:inline-block;width:.56em;height:.56em;border-radius:50%;background:var(--purple);position:relative;margin:0 .02em;transform:translateY(.02em)}
-.logo .o::after{content:"";position:absolute;left:22%;right:22%;top:38%;height:30%;border:2px solid #fff;border-top:0;border-radius:0 0 999px 999px}
+.logo{display:inline-flex;align-items:center;font:700 27px/1 var(--display);letter-spacing:-.02em;color:var(--ink);text-decoration:none;white-space:nowrap}
+.lg{height:1.25em;width:auto;display:block}
+.lg-dark{display:none}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .lg-light{display:none}:root:not([data-theme="light"]) .lg-dark{display:block}}
+:root[data-theme="dark"] .lg-light{display:none}
+:root[data-theme="dark"] .lg-dark{display:block}
 .logo small{font:500 12px/1 var(--body);color:var(--ink-faint);letter-spacing:0;margin-left:10px;padding-left:10px;border-left:1px solid var(--line-2)}
 .links{display:flex;gap:2px;margin-inline:auto;min-width:0}
 .links a{padding:9px 12px;border-radius:999px;color:var(--ink-dim);text-decoration:none;font:500 15px/1 var(--display);white-space:nowrap;position:relative}
@@ -459,7 +462,7 @@ textarea.input{resize:vertical;font-family:var(--body)}
   .profile,.facts{padding-inline:18px}
 }
 @media (max-width:460px){.stat .num{font-size:34px}.facts{grid-template-columns:minmax(0,1fr)}.btn{padding:11px 18px}}
-body.ro [data-retry],body.ro [data-provision],body.ro [data-offboard],body.ro [data-confirmoff],body.ro [data-proto],body.ro [data-edit],body.ro [data-leave],body.ro [data-activate],body.ro [data-go="onboard"],body.ro [data-go="offboard"],body.ro [data-go="users"]{display:none!important}
+body.ro [data-tool],body.ro [data-retry],body.ro [data-provision],body.ro [data-offboard],body.ro [data-confirmoff],body.ro [data-proto],body.ro [data-edit],body.ro [data-leave],body.ro [data-activate],body.ro [data-go="onboard"],body.ro [data-go="offboard"],body.ro [data-go="users"]{display:none!important}
 /* Dashboard */
 .db-hero{position:relative;overflow:hidden;display:flex;align-items:center;gap:26px;flex-wrap:wrap;padding:32px 36px;border-radius:var(--radius);color:var(--ink);border:1px solid var(--card-edge);box-shadow:var(--glass-shadow);
   background:linear-gradient(120deg,var(--db-a,rgba(125,140,238,.14)),var(--db-b,rgba(189,238,226,.12))),var(--surface)}
@@ -621,7 +624,7 @@ tr.former td{opacity:.6}
 
 <div class="wrap navbar">
   <nav class="pill-nav" aria-label="Main">
-    <a class="logo" href="#dashboard" aria-label="wohlig HR Access Hub, dashboard">w<span class="o" aria-hidden="true"></span>hlig<small>HR Access Hub</small></a>
+    <a class="logo" href="#dashboard" aria-label="wohlig HR Access Hub, dashboard"><img class="lg lg-light" src="/wohlig-logo.png" alt="wohlig"><img class="lg lg-dark" src="/wohlig-logo-dark.png" alt=""><small>HR Access Hub</small></a>
     <div class="links" id="links"></div>
     <button class="avatar-btn" id="acct" type="button" aria-label="Account menu" aria-haspopup="true" aria-expanded="false" style="display:none"></button>
     <button class="bell-btn" id="bell" type="button" aria-label="Notifications" aria-haspopup="dialog" style="display:none"></button>
@@ -631,10 +634,10 @@ tr.former td{opacity:.6}
   <div class="acct-menu" id="acct-menu" role="menu" hidden></div>
 </div>
 <main class="wrap view" id="view"></main>
-<footer class="wrap"><div class="foot"><a class="logo" href="#dashboard" style="text-decoration:none">w<span class="o" aria-hidden="true"></span>hlig</a><span>HR Access Hub · People Ops · Prototype · roster from HR sheet, 8 Oct 2026</span><span id="who">Signed in as <b style="color:var(--ink)">Shreya Dandare</b>, HR Admin</span></div></footer>
+<footer class="wrap"><div class="foot"><a class="logo" href="#dashboard" style="text-decoration:none"><img class="lg lg-light" src="/wohlig-logo.png" alt="wohlig"><img class="lg lg-dark" src="/wohlig-logo-dark.png" alt=""></a><span>HR Access Hub · People Ops · Prototype · roster from HR sheet, 8 Oct 2026</span><span id="who">Signed in as <b style="color:var(--ink)">Shreya Dandare</b>, HR Admin</span></div></footer>
 <div id="demo-login" class="demo-login" hidden>
   <main class="dl-card">
-    <div class="logo" style="font-size:28px">w<span class="o" aria-hidden="true"></span>hlig</div>
+    <div class="logo" style="font-size:28px"><img class="lg lg-light" src="/wohlig-logo.png" alt="wohlig"><img class="lg lg-dark" src="/wohlig-logo-dark.png" alt=""></div>
     <div class="eyebrow" style="margin-top:10px;color:var(--ink-dim)">HR Access Hub</div>
     <h1>Sign in</h1>
     <p class="sub">Use your work email and the password HR gave you.</p>
@@ -797,7 +800,7 @@ const head = (eyebrow,title,sub,actions="",big=false)=>`<div class="sec-head"><d
 
 const GRANT = {
   none:["Not started","p-mute"], provisioning:["Giving access","p-info p-busy"], active:["Active","p-ok"], created:["Created, waiting for joining date","p-warn"],
-  failed:["Failed","p-bad"], revoking:["Removing","p-warn p-busy"], revoked:["Removed","p-mute"]
+  invited:["Invite sent","p-info"], failed:["Failed","p-bad"], revoking:["Removing","p-warn p-busy"], revoked:["Removed","p-mute"]
 };
 const EMP = {onboarding:["Onboarding","p-info"], active:["Active","p-ok"], offboarding:["Offboarding","p-warn"], offboarded:["Offboarded","p-mute"]};
 const gpill = s=>`<span class="pill ${GRANT[s][1]}">${GRANT[s][0]}</span>`;
@@ -811,7 +814,7 @@ function checklist(e){
   const phase = (e.status==="offboarding"||e.status==="offboarded")?"off":"on";
   const auto = Object.keys(e.grants).filter(id=>(phase==="on"?ON_TOOLS:OFF_TOOLS).includes(id)).map(id=>{
     const s=e.grants[id];
-    const done = phase==="on" ? s==="active" : s==="revoked";
+    const done = phase==="on" ? (s==="active"||s==="invited") : s==="revoked";
     return {t:(phase==="on"?"Give access: ":"Remove access: ")+APP[id].name, done};
   });
   const manual = (phase==="on"?e.onTasks:e.offTasks||[]).map((x,i)=>({...x,i}));
@@ -842,7 +845,7 @@ const ICONS = {
   info:'<circle cx="12" cy="12" r="9"/><path d="M12 8v5M12 16h.01"/>',
   bundle:'<rect x="4" y="4" width="7" height="7" rx="2"/><rect x="13" y="4" width="7" height="7" rx="2"/><rect x="4" y="13" width="7" height="7" rx="2"/><rect x="13" y="13" width="7" height="7" rx="2"/>',
 };
-const NAV = [["dashboard","Dashboard"],["employees","Employees"],["onboard","Onboarding"],["offboard","Offboarding"],["leave","Leave"],["attendance","Attendance"],["reimb","Reimbursements"],["payroll","Payroll"],["templates","Access bundles"],["audit","Audit log"]];
+const NAV = [["dashboard","Dashboard"],["employees","Employees"],["onboard","Onboarding"],["offboard","Offboarding"],["leave","Leave"],["attendance","Attendance"],["reimb","Reimbursements"],["payroll","Payroll"],["templates","Connected tools"],["audit","Audit log"]];
 const svg = k=>`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${ICONS[k]}</svg>`;
 /* ---------- Light / dark theme ---------- */
 const THEME_KEY="hr_theme";
@@ -862,7 +865,7 @@ function toggleTheme(){ const t=theme()==="dark"?"light":"dark"; try{localStorag
 const isEmployee = ()=>!!S.user&&S.user.role!=="hr";   // employees and reporting managers: view-only site plus their own pages
 /* A reporting manager: HR has picked them as someone's manager in the Employees list. There is no separate manager login role. */
 const isManager = ()=>!!S.user&&Object.values((S.lv&&S.lv.approvers)||{}).includes(String(S.user.email).toLowerCase());
-/* Everyone signed in can look at the site. Employees see Onboarding as their own documents page and Offboarding as a read-only list. Users, Access bundles, Audit log and Leave are HR's; employees get My leave (and Team leave if people report to them). */
+/* Everyone signed in can look at the site. Employees see Onboarding as their own documents page and Offboarding as a read-only list. Users, Connected tools, Audit log and Leave are HR's; employees get My leave (and Team leave if people report to them). */
 const HR_ONLY=["users","templates","audit","leave","payroll"];
 /* Pages reachable from the avatar menu and the address bar that are not links in the bar. */
 const pageKnown=h=>navItems().some(n=>n[0]===h)||h==="profile"||h==="account"||h==="docs"||h==="payslips"||h==="budgets";
@@ -1202,7 +1205,7 @@ function vEmployee(){
   </div>
   <div class="grid g-main">
     <div class="card"><div class="card-h"><h3>Tool access</h3><span class="muted">${toolIds(e).filter(k=>e.grants[k]==="active").length} of ${toolIds(e).length} active</span></div>
-      ${toolIds(e).length?"":`<div class="card-b muted">No Claude access yet.</div>`}${toolIds(e).map(id=>`<div class="access-row">${appIc(id)}<div class="grow"><b>${esc(APP[id].name)}</b><span class="${e.grants[id]==="failed"?"err":""}">${esc(e.grants[id]==="failed"?(e.errors[id]||"Request failed"):e.grants[id]==="created"?`Suspended until ${fdate(e.start)}, then activates automatically`:APP[id].sub)}</span></div>${gpill(e.grants[id])}${e.grants[id]==="failed"?`<button class="btn glass sm" data-retry="${e.id}:${id}">Retry</button>`:""}${e.grants[id]==="created"?`<button class="btn glass sm" data-activate="${e.id}">Activate now</button>`:""}</div>`).join("")}
+      ${toolIds(e).length?"":`<div class="card-b muted">No Claude access yet.</div>`}${toolIds(e).map(id=>`<div class="access-row">${appIc(id)}<div class="grow"><b>${esc(APP[id].name)}</b><span class="${e.grants[id]==="failed"?"err":""}">${esc(e.grants[id]==="failed"?(e.errors[id]||"Request failed"):e.grants[id]==="created"?`Suspended until ${fdate(e.start)}, then activates automatically`:APP[id].sub)}</span></div>${gpill(e.grants[id])}${e.grants[id]==="failed"?`<button class="btn glass sm" data-retry="${e.id}:${id}">Retry</button>`:""}${id==="claude"&&e.status!=="offboarded"&&["none","revoked"].includes(e.grants[id])?`<button class="btn primary sm" data-tool="grant:${e.id}">Give access</button>`:""}${id==="claude"&&["active","invited"].includes(e.grants[id])?`<button class="btn glass sm" data-tool="remove:${e.id}">Remove access</button>`:""}${e.grants[id]==="created"?`<button class="btn glass sm" data-activate="${e.id}">Activate now</button>`:""}</div>`).join("")}
     </div>
     <div class="card"><div class="card-h"><h3>${c.phase==="on"?"Onboarding":"Offboarding"} checklist</h3><span class="muted">${c.done} of ${c.total}</span></div>
       <div style="padding:0 24px 14px"><div class="progress"><i style="width:${pct}%"></i></div></div>
@@ -1410,12 +1413,30 @@ async function refreshDocs(force){
 }
 /* The company's own list (served from the database) replaces the built-in sample list. Dates come back as ISO timestamps. */
 const isoDay=v=>v?String(v).slice(0,10):"";
+const TOOL_STATE={active:"active",invited:"invited",revoked:"revoked",failed:"failed"};
+function applyToolAccess(d){
+  S.claudeMode=d.claudeMode;
+  for(const r of d.rows){
+    const e=S.emps.find(x=>lc(x.email)===lc(r.email)); if(!e||!TOOL_STATE[r.status]) continue;
+    e.grants[r.tool]=r.status; if(r.status==="failed") e.errors[r.tool]=r.detail||"Request failed"; else delete e.errors[r.tool];
+  }
+}
+/* Give or remove Claude through the server (a real Anthropic call when the admin key is set). */
+async function toolDo(e,action){
+  const id="claude";
+  e.grants[id]=action==="grant"?"provisioning":"revoking"; soft();
+  let r; try{ r=await api("POST","/api/tool-access/claude",{email:e.email,action}); }catch(err){ r={ok:false,data:{error:"No server connection."}}; }
+  if(r.ok){ e.grants[id]=r.data.status; delete e.errors[id]; log(r.data.detail,e,id,"ok"); toast(r.data.mode==="simulated"?"Done as a test only: Claude is not connected yet (no admin key).":action==="grant"?`Claude access for ${e.name}: ${r.data.detail}.`:`Claude access removed for ${e.name}.`); }
+  else{ e.grants[id]="failed"; e.errors[id]=(r.data&&r.data.error)||"Request failed"; log(e.errors[id],e,id,"failed"); toast(e.errors[id]); }
+  settle(e); soft();
+}
 function applyRoster(list){
   const keep=Object.fromEntries(S.emps.map(e=>[(e.email||"").toLowerCase(),e]));
   S.emps=list.map((r,i)=>{
     const start=isoDay(r.start), lastDay=isoDay(r.lastDay), title=r.title||"—", old=keep[r.email.toLowerCase()];
     const isNew=start>=NEW_FROM, status=r.status==="offboarded"?"offboarded":(isNew?"onboarding":"active"), dept=deptOf(title);
-    const e=old||mk({grants:all(T(DEPT_TPL[dept]),"active"),onTasks:ON_TASKS.map(t=>({t,done:!isNew}))});
+    const e=old||mk({grants:{},onTasks:ON_TASKS.map(t=>({t,done:!isNew}))});
+    e.grants=status==="offboarded"?{}:{claude:"none"}; e.errors={};
     Object.assign(e,{no:r.no||"Not assigned",name:r.name,email:r.email,start,title,dept,manager:r.manager||"",lastDay:lastDay||undefined,
       location:r.location||"",status:(old&&old.status==="offboarding")?"offboarding":status,color:AV[i%AV.length]});
     if(status==="offboarded") e.end=e.end||lastDay;
@@ -1426,8 +1447,9 @@ function applyRoster(list){
 async function loadFromServer(){
   try{
     const hr=!isEmployee();
-    const [roster,recs,draft,docs,prof,mgrs]=await Promise.all([api("GET","/api/roster"),api("GET",hr?"/api/onboarding":"/api/directory"),hr?api("GET","/api/onboarding/draft"):{ok:false},api("GET","/api/documents"),api("GET","/api/profile"),api("GET","/api/managers")]);
+    const [roster,tools,recs,draft,docs,prof,mgrs]=await Promise.all([api("GET","/api/roster"),api("GET","/api/tool-access"),api("GET",hr?"/api/onboarding":"/api/directory"),hr?api("GET","/api/onboarding/draft"):{ok:false},api("GET","/api/documents"),api("GET","/api/profile"),api("GET","/api/managers")]);
     if(roster.ok&&roster.data.length) applyRoster(roster.data);
+    if(tools.ok) applyToolAccess(tools.data);
     if(recs.ok) recs.data.forEach(applyServerRecord);
     if(mgrs.ok) applyManagers(mgrs.data);
     if(prof.ok){ S.profile=prof.data; S.photoV=prof.data.photoV||null; renderAcct(); }
@@ -1789,10 +1811,10 @@ const ACCESS_LABEL={employee:"Employee",hr:"HR (full rights)"};   // there is no
 const ACCESS_HELP={
   employee:"Sees the site and uses their own pages: documents, profile and leave.",
   manager:"Like an employee, and also approves leave for the people who report to them.",
-  hr:"Full rights: can see and change everything, including onboarding, offboarding, leave, access bundles, the audit log and everyone's logins."};
+  hr:"Full rights: can see and change everything, including onboarding, offboarding, leave, the audit log and everyone's logins."};
 const accessOptions=sel=>["employee","hr"].map(r=>`<option value="${r}" ${r===sel?"selected":""}>${ACCESS_LABEL[r]}</option>`).join("");
 /* Handing out HR rights is a big step, so it always asks first. */
-const hrConfirm=name=>confirm(`Give ${name} full HR rights?\n\nHR can see and change everything in the app: onboarding, offboarding, leave, access bundles, the audit log and everyone's logins. Only do this for someone who works in HR.`);
+const hrConfirm=name=>confirm(`Give ${name} full HR rights?\n\nHR can see and change everything in the app: onboarding, offboarding, leave, the audit log and everyone's logins. Only do this for someone who works in HR.`);
 function inviteBox(n,copyId){
   if(!n) return "";
   const noMail=typeof DEMO!=="undefined"&&DEMO;
@@ -2955,11 +2977,7 @@ document.addEventListener("submit",async ev=>{
 });
 
 function vTemplates(){
-  return `<section class="section">
-  ${head("Settings","Access <span class=\"grad\">bundles.</span>","Each department starts with a bundle of tools. HR can still add or remove tools for one person during onboarding.",`<button class="btn glass" data-proto="Creating bundles">New bundle</button>`,true)}
-  <div class="grid g2">${TEMPLATES.map(t=>`<div class="card svc"><div class="icon-tile">${svg("bundle")}</div><h3>${esc(t.name)}</h3><p>${esc(t.roles)} · used by ${S.emps.filter(e=>DEPT_TPL[e.dept]===t.id&&e.status!=="offboarded").length} people</p><div class="chips">${t.apps.map(id=>`<span class="chip">${appIc(id)}${esc(APP[id].name)}</span>`).join("")}</div><div><button class="btn link" data-proto="Editing bundles">Edit bundle</button></div></div>`).join("")}</div>
-  </section>
-  <section class="section">
+  return `  <section class="section">
   ${head("Integrations","Connected <span class=\"grad\">tools.</span>","",`<button class="btn glass sm" data-proto="Connecting a new tool">Connect a tool</button>`)}
   <div class="card"><div class="tbl-wrap"><table><thead><tr><th>Tool</th><th>How access is given</th><th>Status</th></tr></thead><tbody>
     ${APPS.map(a=>`<tr><td>${`<div class="person">${appIc(a.id)}<div><b>${esc(a.name)}</b><span>${esc(a.sub)}</span></div></div>`}</td><td>Automatic · ${esc(a.how)}</td><td><span class="pill p-ok">Connected</span></td></tr>`).join("")}
@@ -3130,6 +3148,7 @@ function soft(){ if(S.route!=="onboard") render(); else renderNav(); }
 /* ---------- actions ---------- */
 async function provision(e,ids){
   for(const id of ids){
+    if(id==="claude"&&S.user&&!DEMO){ await toolDo(e,"grant"); continue; }
     e.grants[id]="provisioning"; soft(); await sleep(650);
     const wait=id==="gws"&&e.start&&e.start>todayIso();   // work email: create now, activate on the joining date
     e.grants[id]=wait?"created":"active"; delete e.errors[id];
@@ -3180,8 +3199,10 @@ function editEmployee(e){
 
 document.addEventListener("click",ev=>{
   if(ev.target.closest("[data-mgr-sel]")) return;
-  const t=ev.target.closest("[data-go],[data-emp],[data-retry],[data-provision],[data-offboard],[data-proto],[data-edit],[data-lv],[data-activate],[data-offrun],[data-offcancel]"); if(!t) return;
-  if(isEmployee()&&t.matches("[data-retry],[data-provision],[data-offboard],[data-proto],[data-edit],[data-activate],[data-offrun],[data-offcancel]")){ toast("Only HR can do this."); return; }
+  const t=ev.target.closest("[data-go],[data-emp],[data-retry],[data-provision],[data-offboard],[data-proto],[data-edit],[data-lv],[data-activate],[data-offrun],[data-offcancel],[data-tool]"); if(!t) return;
+  if(isEmployee()&&t.matches("[data-retry],[data-provision],[data-offboard],[data-proto],[data-edit],[data-activate],[data-offrun],[data-offcancel],[data-tool]")){ toast("Only HR can do this."); return; }
+  if(t.dataset.tool){ const [act,eid]=t.dataset.tool.split(":"), e=S.emps.find(x=>x.id==eid); if(!e) return;
+    if(act==="remove"&&!confirm(`Remove ${e.name} from the Claude organization?`)) return; toolDo(e,act); return; }
   if(t.dataset.activate){const e=S.emps.find(x=>x.id==t.dataset.activate);if(e&&e.grants.gws==="created"){e.grants.gws="active";log("Work email activated early by HR",e,"gws","ok");settle(e);toast(`${e.email} is now active.`);render()}return}
   if(t.dataset.lv){lvAction(t.dataset.lv);return}
   if(t.dataset.edit){editEmployee(S.emps.find(x=>x.id==t.dataset.edit));return}

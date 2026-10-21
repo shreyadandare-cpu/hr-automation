@@ -509,3 +509,8 @@ DO $$ BEGIN
     INSERT INTO app_migrations (key) VALUES ('holidays-2026-wohlig-pdf');
   END IF;
 END $$;
+
+-- Which tools each person has been given (or had removed), and what the tool said.
+CREATE TABLE IF NOT EXISTS tool_access (
+  work_email TEXT NOT NULL, tool TEXT NOT NULL, status TEXT NOT NULL, detail TEXT, updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (work_email, tool));

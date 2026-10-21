@@ -10,7 +10,14 @@ const ACTIONS = {
 export const TOOLS = Object.keys(ACTIONS);
 export const TOOL_NAMES = { gws: "Google Workspace", gemini: "Gemini", claude: "Claude", github: "GitHub", gcp: "Google Cloud" };
 
-export async function removeAccess(tool, { transferTo } = {}) {
+import { removeClaude, recordAccess, claudeMode } from "./anthropic.js";
+
+export async function removeAccess(tool, { transferTo, email } = {}) {
+  if (tool === "claude" && email) {
+    const detail = await removeClaude(email);
+    await recordAccess(email, "claude", "revoked", detail);
+    return detail;
+  }
   const failing = String(process.env.STUB_FAIL || "").split(",").map((s) => s.trim());
   if (failing.includes(tool)) throw new Error(`${TOOL_NAMES[tool]} refused the request (simulated failure)`);
   return `${ACTIONS[tool](transferTo)} (simulated)`;

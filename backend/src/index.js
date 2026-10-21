@@ -12,6 +12,7 @@ import { inviteRouter, expireInvites } from "./invites.js";
 import { leaveRouter } from "./leave.js";
 import { attendanceRouter } from "./attendance.js";
 import { payslipsRouter } from "./payslips.js";
+import { claudeMode, grantClaude, removeClaude, recordAccess } from "./anthropic.js";
 import { offboardingRouter, runDue } from "./offboarding.js";
 import { onboardingErrors, detailsErrors, maskAadhaar, maskPan, maskAcct } from "./validate.js";
 import { createGoogleUser, generatePassword, googleMode } from "./google.js";
@@ -280,6 +281,37 @@ app.post("/api/onboarding", wrap(async (req, res) => {
 app.use(leaveRouter(wrap));
 app.use(attendanceRouter(wrap));
 app.use(payslipsRouter(wrap));
+
+// Tool access HR gives from the Employees page. Claude is real when ANTHROPIC_ADMIN_KEY is set.
+app.get("/api/tool-access", requireAuth, wrap(async (req, res) => {
+  const { rows } = await pool.query("SELECT work_email, tool, status, detail FROM tool_access");
+  const hr = req.user.role === "hr";   // everyone sees who has access; only HR sees the tool's own message
+  res.json({ claudeMode: claudeMode(), rows: rows.map((r) => ({ email: r.work_email, tool: r.tool, status: r.status, detail: hr ? r.detail : null })) });
+}));
+app.post("/api/tool-access/claude", requireHr, wrap(async (req, res) => {
+  const email = String((req.body && req.body.email) || "").toLowerCase();
+  const action = req.body && req.body.action;
+  if (!["grant", "remove"].includes(action)) return res.status(400).json({ error: "Action must be grant or remove." });
+  const emp = (await pool.query("SELECT name, status FROM employees WHERE lower(work_email)=$1", [email])).rows[0];
+  if (!emp) return res.status(404).json({ error: "Employee not found." });
+  try {
+    if (action === "grant") {
+      if (emp.status === "offboarded") return res.status(400).json({ error: `${emp.name} has left, so Claude access cannot be given.` });
+      const r = await grantClaude(email);
+      await recordAccess(email, "claude", r.status, r.detail);
+      await pool.query("INSERT INTO audit_log (action, work_email) VALUES ($1,$2)", [`Claude: ${r.detail} (by ${req.user.email})`, email]);
+      return res.json({ ...r, mode: claudeMode() });
+    }
+    const detail = await removeClaude(email);
+    await recordAccess(email, "claude", "revoked", detail);
+    await pool.query("INSERT INTO audit_log (action, work_email) VALUES ($1,$2)", [`Claude: ${detail} (by ${req.user.email})`, email]);
+    res.json({ status: "revoked", detail, mode: claudeMode() });
+  } catch (err) {
+    await recordAccess(email, "claude", "failed", err.message);
+    await pool.query("INSERT INTO audit_log (action, work_email) VALUES ($1,$2)", [`Claude: ${action} failed. ${err.message}`, email]);
+    res.status(502).json({ error: `Claude could not do that: ${err.message}` });
+  }
+}));
 app.use("/api/reimbursements", requireAuth, reimbursementsRouter);   // own claims for everyone; review actions are HR-only inside
 app.use("/api/budget-requests", requireAuth, budgetsRouter);   // own requests for everyone; decisions are HR-only inside
 app.use("/api/payroll", requireHr, payrollRouter);
@@ -289,6 +321,7 @@ app.use(offboardingRouter(wrap));
 // The page itself, so one command serves everything on the same origin.
 app.use("/auth", googleRouter);       // "Continue with Google" (public: it is how people sign in)
 app.use("/invite", inviteRouter);     // the link in the invite email
+for (const f of ["wohlig-logo.png", "wohlig-logo-dark.png"]) app.get("/" + f, (_req, res) => res.sendFile(path.join(frontendDir, "public", f)));
 app.get("/favicon.ico", (_req, res) => res.status(204).end());
 app.get("/login", (req, res) => (req.user ? res.redirect("/") : res.sendFile(path.join(frontendDir, "public/login.html"))));
 app.get("/", (req, res) => (req.user ? res.sendFile(path.join(frontendDir, "hr-access-hub.html")) : res.redirect("/login")));

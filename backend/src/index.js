@@ -1,4 +1,5 @@
 import "dotenv/config";
+import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import express from "express";
@@ -282,6 +283,14 @@ app.use(leaveRouter(wrap));
 app.use(attendanceRouter(wrap));
 app.use(payslipsRouter(wrap));
 
+// The audit log: every recorded action, newest first. HR only.
+app.get("/api/audit", requireHr, wrap(async (req, res) => {
+  const limit = Math.min(Number(req.query.limit) || 200, 1000);
+  const { rows } = await pool.query(
+    `SELECT a.id, a.ts, a.action, a.work_email, e.name FROM audit_log a LEFT JOIN employees e ON lower(e.work_email)=lower(a.work_email) ORDER BY a.ts DESC, a.id DESC LIMIT $1`, [limit]);
+  res.json(rows.map((r) => ({ id: r.id, ts: r.ts, action: r.action, email: r.work_email, name: r.name || null })));
+}));
+
 // Tool access HR gives from the Employees page. Claude is real when ANTHROPIC_ADMIN_KEY is set.
 app.get("/api/tool-access", requireAuth, wrap(async (req, res) => {
   const { rows } = await pool.query("SELECT work_email, tool, status, detail FROM tool_access");
@@ -323,8 +332,14 @@ app.use("/auth", googleRouter);       // "Continue with Google" (public: it is h
 app.use("/invite", inviteRouter);     // the link in the invite email
 for (const f of ["wohlig-logo.png", "wohlig-logo-dark.png"]) app.get("/" + f, (_req, res) => res.sendFile(path.join(frontendDir, "public", f)));
 app.get("/favicon.ico", (_req, res) => res.status(204).end());
-app.get("/login", (req, res) => (req.user ? res.redirect("/") : res.sendFile(path.join(frontendDir, "public/login.html"))));
-app.get("/", (req, res) => (req.user ? res.sendFile(path.join(frontendDir, "hr-access-hub.html")) : res.redirect("/login")));
+// The whole interface is React (frontend-react), built into frontend/dist with `npm run build:ui`.
+const distDir = path.join(frontendDir, "dist");
+const hasDist = () => fs.existsSync(path.join(distDir, "index.html"));
+const notBuilt = (res) => res.status(503).type("text").send("The interface has not been built yet. Run `npm run build:ui` in the backend folder, then reload.");
+app.use("/app/assets", express.static(path.join(distDir, "assets"), { immutable: true, maxAge: "1y" }));
+app.get("/app/*", (req, res) => (!req.user ? res.redirect("/login") : hasDist() ? res.sendFile(path.join(distDir, "index.html")) : notBuilt(res)));
+app.get("/login", (req, res) => (req.user ? res.redirect("/app/dashboard") : hasDist() ? res.sendFile(path.join(distDir, "login.html")) : notBuilt(res)));
+app.get("/", (req, res) => res.redirect(req.user ? "/app/dashboard" : "/login"));
 // Leave rules shared by the page and the server (no personal data in it).
 app.get("/leave-rules.js", (_req, res) => res.sendFile(path.join(frontendDir, "leave-rules.js")));
 

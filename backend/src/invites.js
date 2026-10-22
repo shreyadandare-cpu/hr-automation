@@ -1,4 +1,5 @@
 import crypto from "node:crypto";
+import { existsSync } from "node:fs";
 import fs from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import express from "express";
@@ -10,7 +11,7 @@ import { mailConfigured, sendMail, publicUrl, maskEmail } from "./mail.js";
 const VALID_MINUTES = 30;   // an invite not accepted in this time is cancelled
 const sha = (s) => crypto.createHash("sha256").update(s).digest("hex");
 const escHtml = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
-const PAGE = fileURLToPath(new URL("../../frontend/public/invite.html", import.meta.url));
+const REACT_PAGE = fileURLToPath(new URL("../../frontend/dist/login.html", import.meta.url));
 
 /** A new link for this account. Any older unused link for the same person stops working. Returns the full link. */
 async function createInvite(email, createdBy) {
@@ -112,8 +113,20 @@ inviteRouter.get("/:token", async (req, res, next) => {
        LEFT JOIN employees e ON lower(e.work_email)=lower(i.email)
        WHERE i.token_hash=$1 AND i.used_at IS NULL AND i.expires_at > now()`, [sha(req.params.token)]);
     if (!rows[0] || !isCompanyEmail(rows[0].email)) return res.redirect("/login?error=invite");
-    const first = (rows[0].name || "").split(/\s+/)[0] || "there";
-    res.type("html").send((await fs.readFile(PAGE, "utf8")).replace("{{name}}", escHtml(first)));
+    // The React page (built into frontend/dist); it asks /invite/:token/info for the first name.
+    if (!existsSync(REACT_PAGE)) return res.status(503).type("text").send("The interface has not been built yet. Run `npm run build:ui` in the backend folder.");
+    res.sendFile(REACT_PAGE);
+  } catch (e) { next(e); }
+});
+
+// Only the first name, for the welcome line. It reads the link but never uses it up.
+inviteRouter.get("/:token/info", async (req, res, next) => {
+  try {
+    if (!isToken(req.params.token)) return res.json({});
+    const { rows } = await pool.query(
+      `SELECT e.name FROM invites i LEFT JOIN employees e ON lower(e.work_email)=lower(i.email)
+       WHERE i.token_hash=$1 AND i.used_at IS NULL AND i.expires_at > now()`, [sha(req.params.token)]);
+    res.json({ firstName: rows[0] ? (rows[0].name || "").split(/\s+/)[0] || "there" : null });
   } catch (e) { next(e); }
 });
 

@@ -1,14 +1,3 @@
-<!doctype html>
-<html lang="en">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<meta name="referrer" content="no-referrer">
-<title>Welcome · HR Access Hub</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600&family=Geist:wght@400;500;600&display=swap">
-<style>
 :root{
   color-scheme:light;
   --paper:#fdfcff; --card:rgba(255,255,255,.85); --ink:#0e0a38; --ink-dim:#555177;
@@ -55,17 +44,3 @@ button:disabled{opacity:.6;cursor:wait}
 .gbtn[aria-disabled="true"]:hover{box-shadow:inset 0 0 0 1px var(--line)}
 .gbtn svg{width:20px;height:20px;flex:none}
 .gnote{margin:10px 0 0;font-size:12.5px;color:var(--ink-dim);text-align:center}
-</style>
-</head>
-<body>
-<main class="card">
-  <div class="logo"><img class="lg lg-light" src="/wohlig-logo.png" alt="wohlig"><img class="lg lg-dark" src="/wohlig-logo-dark.png" alt=""></div>
-  <div class="app-name">HR Access Hub</div>
-  <h1>Welcome, {{name}}.</h1>
-  <p class="sub">HR has created your account. Open the app to start. This link works once and only for a short time.</p>
-  <!-- A button, not an automatic sign-in: mail scanners open links on their own and must not use this one up. -->
-  <form method="post"><button type="submit">Open the HR Access Hub</button></form>
-  <p class="hint">Next time, use “Continue with Google” on the sign-in page, or the password HR gave you.</p>
-</main>
-</body>
-</html>

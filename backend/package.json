@@ -6,7 +6,8 @@
   "scripts": {
     "start": "node src/index.js",
     "dev": "node --watch src/index.js",
-    "build:ui": "cd ../frontend && npm install && npm run build"
+    "build:ui": "cd ../frontend && npm install && npm run build",
+    "test:invites": "node test/invite-flow.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.135.0",

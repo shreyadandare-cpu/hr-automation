@@ -38,7 +38,7 @@ export function buildPerson(r, i, toolRows, offs) {
   for (const t of toolRows) if (String(t.email).toLowerCase() === String(r.email).toLowerCase()) { grants[t.tool] = t.status; if (t.status === "failed") errors[t.tool] = t.detail; }
   return {
     id: r.id, no: r.no || "Not assigned", name: r.name, email: r.email, start, title, dept: deptOf(title), manager: r.manager || "",
-    lastDay, location: r.location || "", status, grants, errors, color: AVATAR_COLORS[i % AVATAR_COLORS.length],
+    lastDay, location: r.location || "", projects: r.projects || [], status, grants, errors, color: AVATAR_COLORS[i % AVATAR_COLORS.length],
   };
 }
 

@@ -1,22 +1,33 @@
 import nodemailer from "nodemailer";
 
-/* Outgoing email over SMTP. Settings are read when needed, so the .env file is already loaded. */
-export const mailConfigured = () => Boolean(process.env.SMTP_HOST);
+/* Outgoing email over SMTP. Settings are read when needed, so the .env file is already loaded.
+   MAILTRAP_* or MAIL_* (Mailtrap's own names) win over the older SMTP_* names, so any of the three sets works. */
+const env = (...names) => names.map((n) => process.env[n]).find(Boolean) || "";
+export const smtpSettings = () => ({
+  host: env("MAILTRAP_HOST", "MAIL_HOST", "SMTP_HOST"),
+  port: Number(env("MAILTRAP_PORT", "MAIL_PORT", "SMTP_PORT") || 587),
+  secure: process.env.SMTP_SECURE === "true",
+  user: env("MAILTRAP_USER", "MAIL_USERNAME", "SMTP_USER"),
+  pass: env("MAILTRAP_PASS", "MAIL_PASSWORD", "SMTP_PASS"),
+});
+export const mailConfigured = () => Boolean(smtpSettings().host);
 
 /** The address people use to reach this app. Links in emails and the Google sign-in redirect are built from it. */
 export const publicUrl = () => (process.env.PUBLIC_URL || `http://localhost:${process.env.PORT || 3000}`).replace(/\/+$/, "");
 
+/** The address of the web app. Invitation links are built from it (FRONTEND_URL, else PUBLIC_URL). */
+export const frontendUrl = () => (process.env.FRONTEND_URL ? process.env.FRONTEND_URL.replace(/\/+$/, "") : publicUrl());
+
 let transport;
-const getTransport = () => (transport ??= nodemailer.createTransport({
-  host: process.env.SMTP_HOST,
-  port: Number(process.env.SMTP_PORT || 587),
-  secure: process.env.SMTP_SECURE === "true",
-  auth: process.env.SMTP_USER ? { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS } : undefined,
-}));
+const getTransport = () => {
+  if (transport) return transport;
+  const s = smtpSettings();
+  return (transport = nodemailer.createTransport({ host: s.host, port: s.port, secure: s.secure, auth: s.user ? { user: s.user, pass: s.pass } : undefined }));
+};
 
 export async function sendMail({ to, subject, text, html }) {
   if (!mailConfigured()) throw new Error("Email is not set up");
-  await getTransport().sendMail({ from: process.env.MAIL_FROM || process.env.SMTP_USER, to, subject, text, html });
+  await getTransport().sendMail({ from: process.env.MAIL_FROM || smtpSettings().user, to, subject, text, html });
 }
 
 /** A short message that proves email works: it goes through the same path as invites. */

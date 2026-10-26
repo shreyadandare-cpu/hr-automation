@@ -22,9 +22,12 @@ export const V = {
 };
 
 /** Only company addresses (name@wohlig.com) can have an account or sign in. Anything else, such as a lookalike domain, is refused. */
-export const COMPANY_DOMAIN = "wohlig.com";
+export const COMPANY_DOMAIN = (process.env.ALLOWED_EMAIL_DOMAIN || "wohlig.com").trim().toLowerCase().replace(/^@/, "");
 export const COMPANY_EMAIL_MESSAGE = `Only @${COMPANY_DOMAIN} email addresses can have an account.`;
-export const isCompanyEmail = (v) => /^[^@\s]+@wohlig\.com$/i.test(String(v || "").trim());
+export const isCompanyEmail = (v) => {
+  const s = String(v || "").trim().toLowerCase();
+  return /^[^@\s]+@[^@\s]+$/.test(s) && s.endsWith(`@${COMPANY_DOMAIN}`) && s.split("@").length === 2;
+};
 
 export const maskAadhaar = (v) => (digits(v).length === 12 ? "•••• •••• " + digits(v).slice(-4) : null);
 export const maskPan = (v) => {

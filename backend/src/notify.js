@@ -1,29 +1,20 @@
 import express from "express";
-import nodemailer from "nodemailer";
 import { pool } from "./db.js";
+import { mailConfigured, sendMail } from "./mail.js";
 
-// Email goes out through SMTP when SMTP_HOST is set. Without it (local development) nothing is sent: the message is
+// Email goes out through SMTP when it is set up (see mail.js). Without it (local development) nothing is sent: the message is
 // recorded in email_outbox as "skipped" and the app carries on. Failures are recorded too, never thrown.
-const transport = process.env.SMTP_HOST
-  ? nodemailer.createTransport({
-      host: process.env.SMTP_HOST,
-      port: Number(process.env.SMTP_PORT || 587),
-      secure: process.env.SMTP_SECURE === "true",
-      auth: process.env.SMTP_USER ? { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS } : undefined,
-    })
-  : null;
-const FROM = process.env.MAIL_FROM || "HR Access Hub <no-reply@wohlig.com>";
-export const emailMode = () => (transport ? "smtp" : "off");
+export const emailMode = () => (mailConfigured() ? "smtp" : "off");
 
 export async function sendEmail(to, subject, body) {
   if (!to) return;
-  if (!transport) {
+  if (!mailConfigured()) {
     console.log(`[email skipped: SMTP not configured] to=${to} subject="${subject}"`);
     await pool.query("INSERT INTO email_outbox (recipient, subject, body, status) VALUES ($1,$2,$3,'skipped')", [to, subject, body]);
     return;
   }
   try {
-    await transport.sendMail({ from: FROM, to, subject, text: body });
+    await sendMail({ to, subject, text: body });
     await pool.query("INSERT INTO email_outbox (recipient, subject, body, status) VALUES ($1,$2,$3,'sent')", [to, subject, body]);
   } catch (err) {
     console.error("Email failed:", err.message);

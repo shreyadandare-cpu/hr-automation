@@ -222,6 +222,9 @@ CREATE TABLE IF NOT EXISTS invites (
   expires_at TIMESTAMPTZ NOT NULL,
   used_at    TIMESTAMPTZ
 );
+-- pending | accepted | expired | revoked (a newer invite replaces an older one)
+ALTER TABLE invites ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'pending';
+UPDATE invites SET status = 'accepted' WHERE used_at IS NOT NULL AND status = 'pending';
 CREATE INDEX IF NOT EXISTS invites_email_idx ON invites (lower(email));
 
 -- ---------- Reimbursements ----------

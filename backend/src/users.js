@@ -5,7 +5,7 @@ import {
   getDefaultPassword, setDefaultPassword, createUser, lockedFor, noteFailure, clearFailures,
 } from "./auth.js";
 import { V, isCompanyEmail, COMPANY_EMAIL_MESSAGE } from "./validate.js";
-import { sendInvite } from "./invites.js";
+import { sendInvite, acceptInvitation, tooMany } from "./invites.js";
 import { mailConfigured, sendTestEmail } from "./mail.js";
 import { googleEnabled } from "./google-signin.js";
 
@@ -29,6 +29,28 @@ sessionRouter.post("/login", wrap(async (req, res) => {
   await pool.query("UPDATE users SET last_login=now() WHERE lower(email)=$1", [email]);
   await startSession(res, rows[0].email);
   res.json({ ok: true });
+}));
+
+// The new employee opens the emailed link, picks a password and is signed in. Public, so it is rate limited.
+sessionRouter.post("/auth/accept-invitation", wrap(async (req, res) => {
+  if (tooMany(`accept:${req.ip}`, 10, 15 * 60 * 1000)) return res.status(429).json({ error: "Too many attempts. Try again in a few minutes." });
+  const r = await acceptInvitation(String(req.body?.token || ""), req.body?.password);
+  if (!r.ok) return res.status(r.status).json({ error: r.error });
+  await startSession(res, r.email);
+  res.json({ ok: true });
+}));
+
+// HR sends a fresh invitation (the old link stops working). The answer never says whether an address has an account.
+sessionRouter.post("/auth/resend-invitation", requireHr, wrap(async (req, res) => {
+  if (tooMany(`resend:${req.user.email}`, 30, 60 * 60 * 1000)) return res.status(429).json({ error: "Too many invitations sent. Try again later." });
+  const email = String(req.body?.email || "").trim().toLowerCase();
+  let mode = "email";
+  if (V.email(email) && isCompanyEmail(email)) {
+    const u = (await pool.query("SELECT email FROM users WHERE lower(email)=$1", [email])).rows[0];
+    if (u) mode = (await sendInvite(u.email, req.user.email)).mode;
+  }
+  if (mode === "failed" || mode === "not-configured") return res.status(502).json({ error: "The invitation email could not be sent. Check the email settings and try again." });
+  res.json({ ok: true, message: "If that account exists, a new invitation has been sent." });
 }));
 
 // What the sign-in page can offer.
@@ -68,7 +90,7 @@ const toApi = (r) => ({ email: r.email, role: r.role, name: r.name || "", lastLo
 usersRouter.get("/", wrap(async (_req, res) => {
   const { rows } = await pool.query(
     `SELECT u.*, e.name,
-       (SELECT max(i.expires_at) FROM invites i WHERE lower(i.email)=lower(u.email) AND i.used_at IS NULL AND i.expires_at > now()) AS invite_expires
+       (SELECT max(i.expires_at) FROM invites i WHERE lower(i.email)=lower(u.email) AND i.status='pending' AND i.expires_at > now()) AS invite_expires
      FROM users u LEFT JOIN employees e ON lower(e.work_email)=lower(u.email) ORDER BY u.role, u.email`);
   const { rows: miss } = await pool.query(
     `SELECT count(*)::int AS n FROM employees e WHERE e.last_day IS NULL AND e.status <> 'offboarded'

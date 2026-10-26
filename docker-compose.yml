@@ -1,21 +1,9 @@
-# Local development only needs `db` (run the backend with npm). `docker compose up --build` runs the whole app
-# at http://localhost:8080: frontend (nginx + React) in front, backend (API) and db behind it.
+# `docker compose up --build` runs the app at http://localhost:8080: frontend (nginx + React) in front, backend (API) behind it.
+# The database is the shared Cloud SQL one named by DATABASE_URL in backend/.env. Inside a container 127.0.0.1 is the
+# container itself, so if that URL points at a Cloud SQL proxy on your machine, write host.docker.internal instead.
+# For a throwaway local database instead: `docker compose --profile local-db up --build` with
+# DATABASE_URL=postgres://hr:hr@db:5432/hrhub in backend/.env.
 services:
-  db:
-    image: postgres:16
-    environment:
-      POSTGRES_USER: hr
-      POSTGRES_PASSWORD: hr
-      POSTGRES_DB: hrhub
-    ports:
-      - "5432:5432"
-    volumes:
-      - hrhub-data:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U hr -d hrhub"]
-      interval: 2s
-      retries: 30
-
   backend:
     build:
       context: .
@@ -25,13 +13,12 @@ services:
       - path: backend/.env
         required: false
     environment:
-      DATABASE_URL: postgres://hr:hr@db:5432/hrhub
       PUBLIC_URL: ${PUBLIC_URL:-http://localhost:8080}
+      FRONTEND_URL: ${PUBLIC_URL:-http://localhost:8080}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     volumes:
       - hrhub-uploads:/srv/uploads
-    depends_on:
-      db:
-        condition: service_healthy
     restart: unless-stopped
 
   frontend:
@@ -43,6 +30,18 @@ services:
     depends_on:
       - backend
     restart: unless-stopped
+
+  db:
+    profiles: ["local-db"]
+    image: postgres:16
+    environment:
+      POSTGRES_USER: hr
+      POSTGRES_PASSWORD: hr
+      POSTGRES_DB: hrhub
+    ports:
+      - "5432:5432"
+    volumes:
+      - hrhub-data:/var/lib/postgresql/data
 
 volumes:
   hrhub-data:

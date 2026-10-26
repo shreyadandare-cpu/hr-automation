@@ -11,7 +11,7 @@ import { ACCESS_HELP, ACCESS_LABEL, DEPTS, DOMAIN, DocRows, ObTabs, ON_TOOLS, V,
 const OB_STEPS = ["Details and work email", "Create login", "Tools and review"];
 const OB_DRAFT_KEY = "hr_ob_draft";
 const newDetails = () => ({ first: "", last: "", pemail: "", phone: "", address: "", dept: "Engineering", title: "", mgr: "", start: "" });
-const newOb = () => ({ step: 1, fromReview: false, email: null, d: newDetails(), work: null, login: null, busy: false, apps: null, reviewed: false, errors: {}, role: null });
+const newOb = () => ({ step: 1, fromReview: false, email: null, d: newDetails(), work: null, login: null, busy: false, apps: null, reviewed: false, errors: {}, role: null, sendInvite: true });
 
 /* Step 1 asks only for personal and job details. Documents come from the employee, so none are required here. */
 function step1Errors(d) {
@@ -209,9 +209,19 @@ export default function Onboarding() {
     if (role === "hr" && !hrConfirm((d.first + " " + d.last).trim() || ob.work.email)) return;
     patch({ busy: true });
     try {
-      const r = await api("POST", "/api/users", { email: ob.work.email, role });
-      if (r.ok) patch({ busy: false, login: { created: true, password: r.data.defaultPassword, role } });
+      const r = await api("POST", "/api/users", { email: ob.work.email, role, sendInvite: ob.sendInvite !== false });
+      if (r.ok) patch({ busy: false, login: { created: true, password: r.data.defaultPassword, role, invite: r.data.invite } });
       else if (r.status === 409) patch({ busy: false, login: { created: true, existing: true } });
+      else { toast(apiMsg(r)); patch({ busy: false }); }
+    } catch { toast("The server can't be reached. Try again."); patch({ busy: false }); }
+  };
+
+  /* Send (or resend) the invitation email for a login that already exists. */
+  const resendInvite = async () => {
+    patch({ busy: true });
+    try {
+      const r = await api("POST", `/api/users/${encodeURIComponent(ob.work.email)}/invite`);
+      if (r.ok) patch({ busy: false, login: { ...ob.login, invite: r.data.invite } });
       else { toast(apiMsg(r)); patch({ busy: false }); }
     } catch { toast("The server can't be reached. Try again."); patch({ busy: false }); }
   };
@@ -288,8 +298,15 @@ export default function Onboarding() {
                 <select className="input" id="ob-role" style={{ maxWidth: 320 }} value={role} onChange={(e) => patch({ role: e.target.value })}>{["employee", "hr"].map((r) => <option key={r} value={r}>{ACCESS_LABEL[r]}</option>)}</select>
                 <span className="hint">{ACCESS_HELP[role]}{d.dept === "HR" ? " This person is joining HR, so HR rights are preselected." : ""}</span></div>}
               <p style={{ margin: 0, color: "var(--ink-dim)" }}>The employee signs in with their work email and the default password, then uploads their own documents. Details from their resume will be added later.</p>
-              {l ? <Callout>{l.existing ? "This person already has a login." : <>Login created{l.role === "hr" ? <> with <b>HR rights</b></> : ""}. Password: <b className="mono">{l.password || "the default password"}</b>. Tell them to change it on their Account page.</>}</Callout>
-                : <div className="row"><button type="button" className="btn primary" disabled={ob.busy} onClick={makeLogin}>{ob.busy ? "Creating…" : "Create login"}</button></div>}
+              {!l && <label className="row" style={{ gap: 8, alignItems: "flex-start" }}>
+                <input type="checkbox" checked={ob.sendInvite !== false} onChange={(e) => patch({ sendInvite: e.target.checked })} style={{ marginTop: 4 }} />
+                <span>Email them an invitation to sign in{d.pemail ? <> (sent to <b>{d.pemail}</b>)</> : ""}<span className="hint" style={{ display: "block" }}>The link works once and expires after 30 minutes. You can resend it later.</span></span></label>}
+              {l ? <>
+                  <Callout>{l.existing ? "This person already has a login." : <>Login created{l.role === "hr" ? <> with <b>HR rights</b></> : ""}. Password: <b className="mono">{l.password || "the default password"}</b>. Tell them to change it on their Account page.</>}</Callout>
+                  {l.invite && <Callout>{l.invite.mode === "email" ? <>Invitation emailed to <b>{l.invite.to}</b>. The link works for 30 minutes.</> : <>The invitation email could not be sent. Check the email settings, then press the button below to try again.</>}</Callout>}
+                  <div className="row"><button type="button" className="btn" disabled={ob.busy} onClick={resendInvite}>{ob.busy ? "Sending…" : l.invite ? "Resend invitation" : "Email invitation"}</button></div>
+                </>
+                : <div className="row"><button type="button" className="btn primary" disabled={ob.busy} onClick={makeLogin}>{ob.busy ? "Creating…" : ob.sendInvite !== false ? "Create login and send invite" : "Create login"}</button></div>}
             </div></div>
         )}
         {ob.step === 3 && w && <>

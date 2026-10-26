@@ -91,7 +91,7 @@ CREATE TABLE IF NOT EXISTS settings (
   value TEXT NOT NULL
 );
 
--- Leave management. Rules (quotas, carry-over, salary cut) live in leave-rules.js at the repo root.
+-- Leave management. Rules (quotas, carry-over, salary cut) live in frontend/leave-rules.cjs.
 ALTER TABLE employees ADD COLUMN IF NOT EXISTS monthly_gross  NUMERIC(12,2);
 ALTER TABLE employees ADD COLUMN IF NOT EXISTS casual_opening NUMERIC(5,1) NOT NULL DEFAULT 0;
 

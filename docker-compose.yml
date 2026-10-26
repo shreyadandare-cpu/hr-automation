@@ -1,3 +1,5 @@
+# Local development only needs `db` (run the backend with npm). `docker compose up --build` runs the whole app
+# at http://localhost:8080: frontend (nginx + React) in front, backend (API) and db behind it.
 services:
   db:
     image: postgres:16
@@ -9,5 +11,39 @@ services:
       - "5432:5432"
     volumes:
       - hrhub-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U hr -d hrhub"]
+      interval: 2s
+      retries: 30
+
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    # Same settings as running it locally (see backend/.env.example); the lines below override what differs in Docker.
+    env_file:
+      - path: backend/.env
+        required: false
+    environment:
+      DATABASE_URL: postgres://hr:hr@db:5432/hrhub
+      PUBLIC_URL: ${PUBLIC_URL:-http://localhost:8080}
+    volumes:
+      - hrhub-uploads:/srv/uploads
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+
+  frontend:
+    build: ./frontend
+    environment:
+      BACKEND_URL: http://backend:3000
+    ports:
+      - "8080:80"
+    depends_on:
+      - backend
+    restart: unless-stopped
+
 volumes:
   hrhub-data:
+  hrhub-uploads:

@@ -332,7 +332,7 @@ app.use("/auth", googleRouter);       // "Continue with Google" (public: it is h
 app.use("/invite", inviteRouter);     // the link in the invite email
 for (const f of ["wohlig-logo.png", "wohlig-logo-dark.png"]) app.get("/" + f, (_req, res) => res.sendFile(path.join(frontendDir, "public", f)));
 app.get("/favicon.ico", (_req, res) => res.status(204).end());
-// The whole interface is React (frontend-react), built into frontend/dist with `npm run build:ui`.
+// The whole interface is React (frontend/src), built into frontend/dist with `npm run build:ui`.
 const distDir = path.join(frontendDir, "dist");
 const hasDist = () => fs.existsSync(path.join(distDir, "index.html"));
 const notBuilt = (res) => res.status(503).type("text").send("The interface has not been built yet. Run `npm run build:ui` in the backend folder, then reload.");
@@ -341,7 +341,7 @@ app.get("/app/*", (req, res) => (!req.user ? res.redirect("/login") : hasDist() 
 app.get("/login", (req, res) => (req.user ? res.redirect("/app/dashboard") : hasDist() ? res.sendFile(path.join(distDir, "login.html")) : notBuilt(res)));
 app.get("/", (req, res) => res.redirect(req.user ? "/app/dashboard" : "/login"));
 // Leave rules shared by the page and the server (no personal data in it).
-app.get("/leave-rules.js", (_req, res) => res.sendFile(path.join(frontendDir, "leave-rules.js")));
+app.get("/leave-rules.js", (_req, res) => res.type("js").sendFile(path.join(frontendDir, "leave-rules.cjs")));
 
 app.use((err, _req, res, _next) => {
   console.error(err);

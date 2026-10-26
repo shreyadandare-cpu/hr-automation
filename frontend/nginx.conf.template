@@ -1,0 +1,57 @@
+# ${BACKEND_URL} is filled in from the environment when the container starts.
+server {
+  listen 80;
+  root /usr/share/nginx/html;
+  # Redirects stay relative, so they work behind any host or port mapping.
+  absolute_redirect off;
+  # Invoices and documents go up to 10 MB.
+  client_max_body_size 12m;
+
+  proxy_set_header Host $host;
+  proxy_set_header X-Real-IP $remote_addr;
+  proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+  proxy_set_header X-Forwarded-Proto $scheme;
+
+  location /api/    { proxy_pass ${BACKEND_URL}; }
+  location /auth/   { proxy_pass ${BACKEND_URL}; }
+  # The backend checks the invite link, then hands the page back here with X-Accel-Redirect.
+  location /invite/ { proxy_pass ${BACKEND_URL}; }
+
+  # Signed in? The backend answers 200 or 401; the app pages and /login use it like the backend did on its own.
+  location = /_auth {
+    internal;
+    proxy_pass ${BACKEND_URL}/api/me;
+    proxy_pass_request_body off;
+    proxy_set_header Content-Length "";
+  }
+
+  location /app/assets/ {
+    add_header Cache-Control "public, max-age=31536000, immutable";
+    try_files $uri =404;
+  }
+  location /app/ {
+    auth_request /_auth;
+    error_page 401 = @signin;
+    try_files /app/index.html =404;
+  }
+  location = /login {
+    auth_request /_auth;
+    error_page 401 = @login_page;
+    try_files /signed-in @dashboard;
+  }
+  location = / {
+    auth_request /_auth;
+    error_page 401 = @signin;
+    try_files /signed-in @dashboard;
+  }
+  location = /_ui/login.html {
+    internal;
+    alias /usr/share/nginx/html/app/login.html;
+  }
+
+  location @dashboard  { return 302 /app/dashboard; }
+  location @signin     { return 302 /login; }
+  location @login_page { rewrite ^ /_ui/login.html last; }
+
+  location = /favicon.ico { return 204; }
+}

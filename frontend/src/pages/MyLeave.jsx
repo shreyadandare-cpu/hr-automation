@@ -34,7 +34,7 @@ export default function MyLeave() {
   const hist = mine.filter((r) => r.status !== "pending");
   const pendOf = (t) => pend.filter((r) => r.type === t).reduce((n, r) => n + Number(r.days || 0), 0);
   const years = []; for (let y = R.POLICY.startYear; y <= thisYear + 1; y++) years.push(y);
-  const hrApproves = lv.approverOf(me.email) === "hr";
+  const waitingFor = `Waiting for ${lv.approverOf(me.email) === "hr" || lv.approverOf(me.email) === "directors" ? lv.approverName(me.email) : "manager"}`;
   const cTot = b.casual.carried + b.casual.quota;
 
   const cancel = async (r) => {
@@ -60,10 +60,10 @@ export default function MyLeave() {
             {pend.map((r) => (
               <div key={r.id} className="li wrap"><div className="grow"><b style={{ fontWeight: 600 }}>{LTYPE[r.type]}</b> · {rangeText(r, shortDate)} · {dd(r.days)}
                 <div className="meta">“{r.reason}”{r.notify && r.notify.length > 0 && ` · Notify: ${r.notify.map((x) => (lv.empBy(x) || { name: x }).name).join(", ")}`}</div></div>
-                <Pill tone="warn">{hrApproves ? "Waiting for HR" : "Waiting for manager"}</Pill><button type="button" className="btn glass sm" onClick={() => cancel(r)}>Cancel</button></div>))}
+                <Pill tone="warn">{waitingFor}</Pill><button type="button" className="btn glass sm" onClick={() => cancel(r)}>Cancel</button></div>))}
             {compPend.map((c) => (
               <div key={`c${c.id}`} className="li"><div className="grow"><b style={{ fontWeight: 600 }}>Comp off credit</b> · worked on {shortDate(c.workedOn)}<div className="meta">“{c.reason}”</div></div>
-                <Pill tone="warn">{hrApproves ? "Waiting for HR" : "Waiting for reporting manager"}</Pill></div>))}
+                <Pill tone="warn">{waitingFor}</Pill></div>))}
           </> : <div className="empty">No pending leave requests. Request leave on the right.</div>}
         </div>
         <div className="card" style={{ alignSelf: "start" }}><div className="card-b" style={{ display: "flex", flexDirection: "column", gap: 12, alignItems: "flex-start", paddingTop: 22 }}>

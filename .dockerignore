@@ -1,0 +1,13 @@
+# Build context for backend/Dockerfile (the repo root). Keep secrets, data and local installs out of the image.
+.git
+**/node_modules
+**/.env
+**/*.log
+**/.DS_Store
+server
+backend/uploads
+frontend/dist
+*.dump
+*.bak
+*.key.json
+*service-account*.json

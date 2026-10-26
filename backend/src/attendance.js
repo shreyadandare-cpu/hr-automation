@@ -1,11 +1,11 @@
 import express from "express";
-import L from "../../frontend/leave-rules.js";
+import L from "../../frontend/leave-rules.cjs";
 import { pool } from "./db.js";
 import { requireAuth, requireHr } from "./auth.js";
-import { approverMap } from "./teams.js";
+import { managerMap } from "./teams.js";
 
 /* A reporting manager sees their own team (the people HR set under them); there is no separate manager login role. */
-const teamEmails = async (email) => Object.entries(await approverMap(pool)).filter(([, rm]) => rm === email).map(([e]) => e);
+const teamEmails = async (email) => Object.entries(await managerMap(pool)).filter(([, rm]) => rm === email).map(([e]) => e);
 
 /* Attendance: people punch in and out on the web page; HR sees everyone and can add or remove a punch with a reason.
    Days are counted in Indian time. A day is Present from 6 hours worked, a Half day from 3 hours. */

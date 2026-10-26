@@ -1,17 +1,16 @@
-import { useAuth } from "../auth.jsx";
 import { useData } from "../data.jsx";
 import { PersonCell, Pill, SectionHead, Stat, shortDate } from "../components/ui.jsx";
 import { DecideButtons } from "../components/leaveParts.jsx";
 import { LSTAT, LTYPE, dd, lc, rangeText, useLeave } from "../lib/useLeave.js";
 
-/* A reporting manager approves their own team's leave and comp-off requests. */
+/* A reporting manager approves their own team's leave and comp-off requests; the directors also approve HR staff's. */
 export default function TeamLeave() {
-  const { user } = useAuth();
   const { people } = useData();
   const lv = useLeave();
   if (!people) return <section className="section"><div className="empty">Loading…</div></section>;
-  const me = lc(user.email), { today } = lv, year = Number(today.slice(0, 4));
-  const team = people.filter((e) => lc(e.email) !== me && lv.approverOf(e.email) === me).sort((a, b) => a.name.localeCompare(b.name));
+  const { today } = lv, year = Number(today.slice(0, 4));
+  const team = people.filter((e) => lv.approvedByMe(e.email)).sort((a, b) => a.name.localeCompare(b.name));
+  const approvesHr = team.some((e) => lv.approverOf(e.email) === "directors");
   const inTeam = new Set(team.map((e) => lc(e.email)));
   const all = lv.requests.filter((r) => inTeam.has(lc(r.email))).map((r) => ({ ...r, emp: lv.empBy(r.email) })).filter((r) => r.emp);
   const pend = all.filter((r) => r.status === "pending").sort((a, b) => (a.from < b.from ? -1 : 1));
@@ -21,7 +20,7 @@ export default function TeamLeave() {
   const pendDays = (e) => all.filter((r) => r.status === "pending" && lc(r.email) === lc(e.email)).reduce((n, r) => n + Number(r.days || 0), 0);
   return (
     <section className="section">
-      <SectionHead eyebrow="Team" title="Team" accent="leave." sub="Leave and comp-off requests from the people who report to you. You approve them. Your own leave goes to your reporting manager, or to HR if you have none." />
+      <SectionHead eyebrow="Team" title="Team" accent="leave." sub={`Leave and comp-off requests from the people who report to you${approvesHr ? ", and from the HR team" : ""}. You approve them.${approvesHr ? ` HR's leave can be approved by ${lv.approverName(team.find((e) => lv.approverOf(e.email) === "directors").email)}; whoever acts first decides.` : ""} Your own leave goes to your reporting manager, or to HR if you have none.`} />
       <div className="grid g4">
         <Stat value={team.length} label="People in your team" />
         <Stat value={pend.length + compPend.length} label="Waiting for you" alert={pend.length + compPend.length > 0} />

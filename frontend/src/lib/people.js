@@ -38,7 +38,7 @@ export function buildPerson(r, i, toolRows, offs) {
   for (const t of toolRows) if (String(t.email).toLowerCase() === String(r.email).toLowerCase()) { grants[t.tool] = t.status; if (t.status === "failed") errors[t.tool] = t.detail; }
   return {
     id: r.id, no: r.no || "Not assigned", name: r.name, email: r.email, start, title, dept: deptOf(title), manager: r.manager || "",
-    lastDay, location: r.location || "", projects: r.projects || [], status, grants, errors, color: AVATAR_COLORS[i % AVATAR_COLORS.length],
+    lastDay, location: r.location || "", projects: r.projects || [], photoV: r.photoV || 0, status, grants, errors, color: AVATAR_COLORS[i % AVATAR_COLORS.length],
   };
 }
 
@@ -60,3 +60,8 @@ export function chainOf(p, people) {
 }
 
 export const docCount = (docs, email) => docs.filter((d) => String(d.email).toLowerCase() === String(email).toLowerCase()).length;
+
+/* Employee number order: WT/01, WT/02, WT/03, WT/17, ... compared as numbers, not text. Former employees go last. */
+const numOf = (p) => { const m = String(p.no || "").match(/\d+/); return m ? parseInt(m[0], 10) : Infinity; };
+export const byEmployeeNo = (a, b) =>
+  (a.status === "offboarded") - (b.status === "offboarded") || numOf(a) - numOf(b) || String(a.no).localeCompare(String(b.no)) || a.name.localeCompare(b.name);

@@ -6,7 +6,8 @@ import { useData } from "../data.jsx";
 import { PersonCell, Pill, SectionHead, ToolIcon, shortDate } from "../components/ui.jsx";
 import { useToast } from "../components/toast.jsx";
 import OrgChart from "../components/OrgChart.jsx";
-import { STATUS, TOOLS, isTop, mgrOf, toolIds } from "../lib/people.js";
+import Pager from "../components/Pager.jsx";
+import { STATUS, TOOLS, byEmployeeNo, isTop, mgrOf, toolIds } from "../lib/people.js";
 
 function StatusPill({ person }) {
   if (person.status === "active" && person.lastDay) return <Pill tone="warn">Leaving {shortDate(person.lastDay)}</Pill>;
@@ -29,18 +30,18 @@ function ManagerCell({ person, people, isHr, onChange }) {
   );
 }
 
-/* The projects someone is working on now (the full history is on their own page). */
+/* The projects someone is working on now: the first one, and a "+N" badge (hover for all, with where each runs). */
 function ProjectsCell({ person }) {
-  const now = (person.projects || []).filter((a) => a.status === "Active").map((a) => a.project);
+  const now = (person.projects || []).filter((a) => a.status === "Active");
   if (!now.length) return <span className="muted">—</span>;
-  return <>{now.slice(0, 2).map((n) => <div key={n}>{n}</div>)}{now.length > 2 && <div className="muted" title={now.join("\n")}>+{now.length - 2} more</div>}</>;
+  const all = now.map((a) => (a.location ? `${a.project} · ${a.location}` : a.project)).join("\n");
+  return (
+    <div className="proj-line" title={all}>
+      <span className="proj-name">{now[0].project}</span>
+      {now.length > 1 && <span className="proj-more">+{now.length - 1}</span>}
+    </div>
+  );
 }
-
-const pageNumbers = (cur, total) => {
-  const keep = [...new Set([1, total, cur - 1, cur, cur + 1].filter((n) => n >= 1 && n <= total))].sort((a, b) => a - b), out = [];
-  keep.forEach((n, i) => { if (i && n - keep[i - 1] > 1) out.push(null); out.push(n); });
-  return out;
-};
 
 export default function Employees() {
   const { isHr } = useAuth();
@@ -58,7 +59,8 @@ export default function Employees() {
   const showFormer = isHr && former && formerCount > 0;
   const all = useMemo(() => {
     const s = q.toLowerCase();
-    return (people || []).filter((p) => (showFormer || p.status !== "offboarded") && (!s || (p.name + p.email + p.dept + p.title + (p.projects || []).map((a) => a.project).join(" ")).toLowerCase().includes(s)));
+    return (people || []).filter((p) => (showFormer || p.status !== "offboarded") && (!s || (p.no + p.name + p.email + p.dept + p.title + (p.location || "") + (p.projects || []).map((a) => a.project).join(" ")).toLowerCase().includes(s)))
+      .sort(byEmployeeNo);
   }, [people, q, showFormer]);
   const pages = Math.max(1, Math.ceil(all.length / size)), cur = Math.min(page, pages);
   const rows = all.slice((cur - 1) * size, cur * size);
@@ -71,7 +73,6 @@ export default function Employees() {
   };
 
   if (!people) return <section className="section"><div className="empty">Loading…</div></section>;
-  const from = all.length ? (cur - 1) * size + 1 : 0, to = Math.min(all.length, cur * size);
   const views = (
     <div className="seg" role="radiogroup" aria-label="Employees view" style={{ alignSelf: "flex-start" }}>
       <label><input type="radio" name="emp-view" checked={!chart} onChange={() => setParams({}, { replace: true })} />List</label>
@@ -91,40 +92,27 @@ export default function Employees() {
       <SectionHead eyebrow="People" title="Everyone," accent="at a glance." sub="Everyone with a record here, and which tools they can use right now."
         actions={<>
           {isHr && formerCount > 0 && <label className="former-toggle"><input type="checkbox" checked={former} onChange={(e) => { setFormer(e.target.checked); setPage(1); }} />Show former employees ({formerCount})</label>}
-          <input className="input" placeholder="Search by name, team, project or email" aria-label="Search employees" value={q} onChange={(e) => { setQ(e.target.value); setPage(1); }} />
+          <input className="input" placeholder="Search by name, ID, project, location or email" aria-label="Search employees" value={q} onChange={(e) => { setQ(e.target.value); setPage(1); }} />
         </>} />
-      <div className="card"><div className="tbl-wrap"><table>
-        <thead><tr><th>Employee</th><th className="hide-sm">Department</th><th className="hide-sm">Reporting manager</th><th className="hide-sm">Projects</th><th>Status</th><th>Tool access</th><th className="hide-sm">Start date</th></tr></thead>
+      <div className="card"><div className="tbl-wrap"><table className="dir-table">
+        <thead><tr><th>ID</th><th>Employee</th><th className="hide-sm">Role</th><th className="hide-sm">Reporting manager</th><th className="hide-sm">Projects</th><th>Status</th><th>Tools</th></tr></thead>
         <tbody>
           {rows.length ? rows.map((p) => (
             <tr key={p.id} className={`click${p.status === "offboarded" ? " former" : ""}`} tabIndex={0}
               onClick={() => nav(`/app/employees/${encodeURIComponent(p.email)}`)}
               onKeyDown={(e) => e.key === "Enter" && nav(`/app/employees/${encodeURIComponent(p.email)}`)}>
+              <td className="num-cell"><span className="emp-no">{p.no}</span></td>
               <td><PersonCell person={p} /></td>
-              <td className="hide-sm">{p.dept}<div className="muted">{p.title}</div></td>
+              <td className="hide-sm"><div className="cell-main">{p.title}</div><div className="cell-sub">{[p.dept, p.location].filter((x) => x && x !== "—").join(" · ")}</div></td>
               <td className="hide-sm"><ManagerCell person={p} people={people} isHr={isHr} onChange={setManager} /></td>
               <td className="hide-sm"><ProjectsCell person={p} /></td>
-              <td><StatusPill person={p} /></td>
+              <td><StatusPill person={p} /><div className="cell-sub">Joined {shortDate(p.start)}</div></td>
               <td><div className="apps-row">{toolIds(p).map((id) => <ToolIcon key={id} tool={TOOLS[id]} state={p.grants[id]} />)}</div></td>
-              <td className="num-cell hide-sm">{shortDate(p.start)}</td>
             </tr>
           )) : <tr><td colSpan="7"><div className="empty">No one matches “{q}”.</div></td></tr>}
         </tbody>
       </table></div>
-      <div className="pager">
-        <span className="muted" style={{ fontSize: 13 }}>Showing {from}–{to} of {all.length}</span>
-        <div className="row">
-          <label>Rows per page<select className="input" value={size} onChange={(e) => { setSize(Number(e.target.value)); setPage(1); }}>{[10, 25, 50].map((n) => <option key={n}>{n}</option>)}</select></label>
-          {pages > 1 && (
-            <nav className="pg-nav" aria-label="Pages">
-              <button type="button" className="pg" disabled={cur <= 1} onClick={() => setPage(cur - 1)}>Previous</button>
-              {pageNumbers(cur, pages).map((n, i) => n === null ? <span key={`g${i}`} className="pg-gap" aria-hidden="true">…</span>
-                : <button key={n} type="button" className={`pg ${n === cur ? "on" : ""}`} aria-label={`Page ${n}`} aria-current={n === cur ? "page" : undefined} onClick={() => setPage(n)}>{n}</button>)}
-              <button type="button" className="pg" disabled={cur >= pages} onClick={() => setPage(cur + 1)}>Next</button>
-            </nav>
-          )}
-        </div>
-      </div></div>
+      <Pager total={all.length} page={cur} size={size} onPage={setPage} onSize={(n) => { setSize(n); setPage(1); }} /></div>
     </section>
   );
 }

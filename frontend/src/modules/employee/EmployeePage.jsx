@@ -162,6 +162,7 @@ function EmployeeView({ p }) {
           <div><dt>Work email</dt><dd className="mono">{e.email}</dd></div>
           <div><dt>Date of joining</dt><dd>{fdate(e.start)}</dd></div>
           <div><dt>Reporting manager</dt><dd>{mgrOf(e) || "—"}</dd></div>
+          <div><dt>Works from</dt><dd>{e.location || "—"}</dd></div>
           <div><dt>{status === "offboarded" ? "Left on" : "Last working day"}</dt><dd>{status === "offboarded" ? fdate(e.lastDay) : e.lastDay ? fdate(e.lastDay) : "Not set"}</dd></div>
         </dl>
       </div>

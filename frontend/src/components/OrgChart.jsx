@@ -50,7 +50,7 @@ function Card({ person, photoV, me, reports, open, onToggle }) {
         <span className="org-txt"><b>{person.name}{me && <em> · You</em>}</b><span>{person.title}</span></span>
       </button>
       {reports > 0 && (
-        <button type="button" className="org-toggle" aria-expanded={open} onClick={onToggle}
+        <button type="button" className="oc-toggle" aria-expanded={open} onClick={onToggle}
           aria-label={`${open ? "Hide" : "Show"} ${person.name}'s team`}>{open ? "−" : "+"} {reports}</button>
       )}
     </div>

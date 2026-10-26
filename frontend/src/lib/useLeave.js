@@ -22,10 +22,15 @@ export function useLeave() {
     const payOf = (email) => pay[lc(email)] || { monthlyGross: null, casualOpening: 0 };
     const holDays = L.holidays.map((h) => h.day);
     const approverOf = (email) => (L.approvers || {})[lc(email)] || "hr";
-    const approverName = (email) => { const a = approverOf(email); return a === "hr" ? "HR" : (empBy(a) || {}).name || a; };
+    // HR staff's own leave goes to "directors": any of L.hrLeaveApprovers can decide it.
+    const directors = (L.hrLeaveApprovers || []).map(lc);
+    const directorNames = () => directors.map((d) => (empBy(d) || {}).name || d).join(" or ");
+    const approverName = (email) => { const a = approverOf(email); return a === "hr" ? "HR" : a === "directors" ? directorNames() : (empBy(a) || {}).name || a; };
+    // Requests this person approves as a reporting manager or, for HR staff, as one of the directors.
+    const approvedByMe = (email) => { const a = approverOf(email), me = lc(user.email); return lc(email) !== me && (a === me || (a === "directors" && directors.includes(me))); };
     const canDecide = (email) => {
       const a = approverOf(email);
-      return a === "hr" ? isHr && lc(email) !== lc(user.email) : isManager && a === lc(user.email);
+      return a === "hr" ? isHr && lc(email) !== lc(user.email) : a === "directors" ? approvedByMe(email) : isManager && approvedByMe(email);
     };
     const bal = (p, year) => R.balances(year, { start: p.start, casualOpening: payOf(p.email).casualOpening }, reqsOf(p.email), compsOf(p.email));
     const preview = (r) => {
@@ -34,7 +39,7 @@ export function useLeave() {
     };
     const lopDaysIn = (month, email) => L.requests.filter((r) => r.status === "approved" && r.lopDays && (!email || lc(r.email) === lc(email)))
       .reduce((n, r) => n + (R.lopByMonth(r, holDays)[month] || 0), 0);
-    return { L, today: L.today, requests: L.requests, compOffs: L.compOffs, holidays: L.holidays, empBy, reqsOf, compsOf, payOf, holDays, approverOf, approverName, canDecide, bal, preview, lopDaysIn };
+    return { L, today: L.today, requests: L.requests, compOffs: L.compOffs, holidays: L.holidays, empBy, reqsOf, compsOf, payOf, holDays, approverOf, approverName, approvedByMe, canDecide, bal, preview, lopDaysIn };
   }, [people, leave, user, isHr, isManager]);
 }
 

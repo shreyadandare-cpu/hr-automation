@@ -169,7 +169,9 @@ inviteRouter.get("/:token", async (req, res, next) => {
   try {
     if (!isToken(req.params.token)) return res.redirect("/login?error=invite");
     // The React page (built into frontend/dist). It asks /invite/:token/info what to show and never uses the link up.
-    if (!existsSync(REACT_PAGE)) return res.status(503).type("text").send("The interface has not been built yet. Run `npm run build:ui` in the backend folder.");
+    // In the Docker setup the page lives in the frontend container: nginx serves it when it sees X-Accel-Redirect,
+    // keeping this reply's Content-Type, so it stays text/html.
+    if (!existsSync(REACT_PAGE)) return res.set("X-Accel-Redirect", "/_ui/login.html").status(503).type("html").send("The interface has not been built yet. Run `npm run build:ui` in the backend folder.");
     res.sendFile(REACT_PAGE);
   } catch (e) { next(e); }
 });

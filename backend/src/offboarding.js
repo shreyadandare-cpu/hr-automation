@@ -1,5 +1,5 @@
 import express from "express";
-import L from "../../frontend/leave-rules.js";
+import L from "../../frontend/leave-rules.cjs";
 import { pool } from "./db.js";
 import { requireHr } from "./auth.js";
 import { TOOL_NAMES, removeAccess } from "./connectors.js";

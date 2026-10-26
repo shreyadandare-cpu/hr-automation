@@ -1,5 +1,5 @@
 import express from "express";
-import L from "../../frontend/leave-rules.js";
+import L from "../../frontend/leave-rules.cjs";
 import { pool } from "./db.js";
 import { event } from "./reimbursements.js";
 import { notify } from "./notify.js";

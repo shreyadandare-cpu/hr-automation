@@ -1,11 +1,12 @@
 import { useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { useData } from "../data.jsx";
 import { useAuth } from "../auth.jsx";
 import { PersonCell, Pill, SectionHead, Stat, shortDate } from "../components/ui.jsx";
 import { CompOffModal, DecideButtons, HolidayCalendar, PayModal } from "../components/leaveParts.jsx";
 import { R } from "../lib/leave.js";
 import { LSTAT, LTYPE, dd, inr, lc, rangeText, useLeave } from "../lib/useLeave.js";
+import MyLeave from "./MyLeave.jsx";
 
 const monthText = (m) => shortDate(m + "-01").replace(/^1 /, "");
 
@@ -16,8 +17,19 @@ export default function LeaveHr() {
   const [month, setMonth] = useState(lv.today.slice(0, 7));
   const [q, setQ] = useState("");
   const [modal, setModal] = useState(null);   // "comp" or { pay: email }
+  const [params, setParams] = useSearchParams();
+  const tab = params.get("tab") === "mine" ? "mine" : "manage";   // "mine": the HR person's own leave
   if (!isHr) return <section className="section"><SectionHead eyebrow="Time off" title="Leave" accent="management." /><div className="empty">Only HR can manage leave.</div></section>;
   if (!people) return <section className="section"><div className="empty">Loading…</div></section>;
+
+  // HR manage everyone's leave here, and apply for their own under "My leave" (the directors approve it).
+  const tabs = (
+    <div className="seg" role="radiogroup" aria-label="Leave view" style={{ alignSelf: "flex-start" }}>
+      <label><input type="radio" name="lv-tab" checked={tab === "manage"} onChange={() => setParams({}, { replace: true })} />Manage leave</label>
+      <label><input type="radio" name="lv-tab" checked={tab === "mine"} onChange={() => setParams({ tab: "mine" }, { replace: true })} />My leave</label>
+    </div>
+  );
+  if (tab === "mine") return <section className="section">{tabs}<MyLeave /></section>;
 
   const { today } = lv, year = Number(today.slice(0, 4));
   const named = (r) => ({ ...r, emp: lv.empBy(r.email) });
@@ -33,6 +45,7 @@ export default function LeaveHr() {
 
   return (
     <section className="section">
+      {tabs}
       <SectionHead eyebrow="Time off" title="Leave" accent="management."
         sub="Days beyond someone's balance, and all unpaid leave, are loss of pay. The salary cut is monthly gross ÷ 30 for each loss-of-pay day. Saturdays, Sundays and holidays are never counted."
         actions={<><button type="button" className="btn glass" onClick={() => setModal("comp")}>Record comp off</button><Link className="btn glass" to="/app/leave/apply">Add leave for someone</Link></>} />

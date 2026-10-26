@@ -655,10 +655,56 @@ a.ht-card:hover,a.ht-card:focus-visible{box-shadow:0 8px 22px rgba(77,73,221,.18
 .org-av.grp{background:var(--paper);color:var(--purple);border:2px dashed var(--line-2);box-shadow:none}
 .org-role{align-self:flex-start;max-width:100%;padding:3px 9px;border-radius:6px;font:600 10px/1.3 var(--body);letter-spacing:.04em;text-transform:uppercase;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .r-leader{background:#7d6ee8}.r-hr{background:#0e8a5f}.r-lead{background:#3a6ea5}.r-member{background:#6b7189}
-.org-toggle{flex:none;min-width:38px;border:1px solid var(--line-2);background:var(--paper-2);color:var(--ink);border-radius:999px;padding:5px 9px;font:600 12px/1 var(--body);cursor:pointer}
-.org-toggle:hover{background:var(--tint)}
+.ht-toggle{flex:none;min-width:38px;border:1px solid var(--line-2);background:var(--paper-2);color:var(--ink);border-radius:999px;padding:5px 9px;font:600 12px/1 var(--body);cursor:pointer}
+.ht-toggle:hover{background:var(--tint)}
 .org-legend{display:flex;flex-wrap:wrap;align-items:center;gap:8px 20px;font-size:13px;color:var(--ink-dim)}
 .org-legend span{display:inline-flex;align-items:center;gap:8px}
 .org-legend i{width:12px;height:12px;border-radius:4px;display:inline-block}
 .org-legend i.dash{background:none;border-top:2px dashed var(--ink-faint);height:0;width:22px;border-radius:0}
 .org-tools{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+/* Org chart (Employees > Org chart): a top-down tree. Connector lines are drawn with ::before/::after on each <li>. */
+.avatar img{width:100%;height:100%;object-fit:cover;border-radius:50%;display:block}
+.org{overflow:auto;padding:8px 16px 28px;outline:none}
+/* The chart may be wider than the page column: let its card use the whole window, centred on the column. */
+.org-bleed{width:min(calc(100vw - 48px),1880px);position:relative;left:50%;transform:translateX(-50%)}
+.org:focus-visible{box-shadow:inset 0 0 0 2px var(--purple)}
+.org ul{display:flex;justify-content:center;margin:0;padding:22px 0 0;position:relative}
+.org>ul{padding-top:0;min-width:max-content}
+.org li{list-style:none;position:relative;padding:22px 6px 0;display:flex;flex-direction:column;align-items:center}
+.org>ul>li{padding-top:0}
+.org li::before,.org li::after{content:"";position:absolute;top:0;right:50%;width:50%;height:22px;border-top:2px solid var(--line-2)}
+.org li::after{right:auto;left:50%;border-left:2px solid var(--line-2)}
+.org li:only-child::before,.org li:only-child::after{display:none}
+.org li:only-child{padding-top:22px}
+.org>ul>li:only-child{padding-top:0}
+.org li:only-child>.org-card::before{content:"";position:absolute;top:-22px;left:50%;height:22px;border-left:2px solid var(--line-2)}
+.org>ul>li>.org-card::before{display:none}
+.org li:first-child::before,.org li:last-child::after{border:0}
+.org li:last-child::before{border-right:2px solid var(--line-2);border-radius:0 10px 0 0}
+.org li:first-child::after{border-radius:10px 0 0 0}
+.org ul ul::before{content:"";position:absolute;top:0;left:50%;height:22px;border-left:2px solid var(--line-2)}
+.org-card{position:relative;display:flex;flex-direction:column;align-items:center;gap:6px;width:160px;padding:12px 10px 10px;border-radius:16px;background:var(--surface);box-shadow:inset 0 0 0 1px var(--line),0 6px 18px rgba(77,73,221,.08)}
+.org-card.me{box-shadow:inset 0 0 0 2px var(--purple),0 6px 18px rgba(77,73,221,.16)}
+.org-card.org-root{width:auto;min-width:200px;padding:14px 20px;background:var(--tint)}
+.org-main{display:flex;flex-direction:column;align-items:center;gap:8px;width:100%;padding:0;border:0;background:none;color:inherit;font:inherit;cursor:pointer;text-align:center}
+.org-main:hover b{color:var(--purple)}
+.org-main:focus-visible{outline:2px solid var(--purple);outline-offset:4px;border-radius:10px}
+.org-card .avatar{width:48px;height:48px;font-size:16px}
+.org-txt{display:flex;flex-direction:column;align-items:center;gap:3px;min-width:0;max-width:100%}
+.org-txt b{font:600 13.5px/1.25 var(--body);color:var(--ink)}
+.org-txt b em{font-style:normal;color:var(--purple)}
+.org-txt>span{font-size:12px;line-height:1.3;color:var(--ink-faint);overflow-wrap:anywhere}
+.org-logo .lg{height:22px;margin:0 auto 4px}
+.org-toggle{border:0;border-radius:999px;padding:3px 10px;background:var(--paper-2);color:var(--ink-dim);font:600 11.5px/1.4 var(--body);cursor:pointer}
+.org-toggle:hover{color:var(--purple)}
+.org-toggle:focus-visible{outline:2px solid var(--purple)}
+/* A team with no sub-teams: one column with a line down its left side. */
+.org-stack{position:relative;display:flex;flex-direction:column;gap:10px;margin-top:22px;padding-left:22px}
+.org-stack::before{content:"";position:absolute;top:-22px;bottom:36px;left:50%;margin-left:-80px;border-left:2px solid var(--line-2)}
+.org-stack>.org-card{flex-direction:row;width:186px;padding:10px 12px;gap:10px}
+.org-stack>.org-card::before{content:"";position:absolute;left:-12px;top:50%;width:12px;border-top:2px solid var(--line-2)}
+.org-stack>.org-card .org-main{flex-direction:row;text-align:left;gap:10px}
+.org-stack>.org-card .avatar{width:36px;height:36px;font-size:13px}
+.org-stack>.org-card .org-txt{align-items:flex-start}
+.org-loose{border-top:1px solid var(--line);padding:16px 24px 20px;display:flex;flex-direction:column;gap:12px}
+.org-loose-row{display:flex;flex-wrap:wrap;gap:12px}

@@ -58,7 +58,7 @@ export default function LeaveApply() {
   const set = (patch) => setW((x) => ({ ...x, ...patch }));
   if (!people) return <section className="section"><div className="empty">Loading…</div></section>;
 
-  const back = self ? "/app/my-leave" : "/app/leave";
+  const back = self ? (isHr ? "/app/leave?tab=mine" : "/app/my-leave") : "/app/leave";
   const e = lv.empBy(w.email);
   const val = { email: w.email, type: w.type, from: w.from, to: w.dur === "half" ? w.from : w.to, half: w.dur === "half" ? w.half : null, reason: w.reason, notify: w.notify.slice() };
   const days = R.validDate(val.from) && R.validDate(val.to) && val.to >= val.from ? R.requestDays(val.from, val.to, val.half, lv.holDays) : 0;
@@ -91,7 +91,7 @@ export default function LeaveApply() {
       if (!k) { toast(apiMsg(r)); return; }
       set({ errors: errs, step: ["email", "from", "to", "half"].includes(k) ? 1 : k === "type" ? 2 : 3, reviewed: false }); toast(errs[k]); return;
     }
-    toast(self ? (lv.approverOf(val.email) === "hr" ? "Leave requested. HR will review it." : "Leave requested. Your manager will review it.") : `Leave request for ${e.name} sent for approval.`);
+    toast(self ? `Leave requested. ${lv.approverOf(val.email) === "hr" || lv.approverOf(val.email) === "directors" ? lv.approverName(val.email) : "Your manager"} will review it.` : `Leave request for ${e.name} sent for approval.`);
     reloadLeave(); nav(back);
   };
 
@@ -152,7 +152,7 @@ export default function LeaveApply() {
   return (
     <section className="section" ref={top}>
       <SectionHead eyebrow={self ? "Me" : "Time off"} title={self ? "Request" : "Add leave for"} accent={self ? "leave." : "someone."}
-        sub={self ? `Pick your dates and the type of leave, add a note, then review. ${lv.approverOf(w.email) === "hr" ? "You have no reporting manager, so HR approves it." : "Your reporting manager approves it."}` : "For when HR enters leave on an employee's behalf. It still goes to the approval list."} />
+        sub={self ? `Pick your dates and the type of leave, add a note, then review. ${lv.approverOf(w.email) === "hr" ? "You have no reporting manager, so HR approves it." : lv.approverOf(w.email) === "directors" ? `HR's own leave is approved by ${lv.approverName(w.email)}.` : "Your reporting manager approves it."}` : "For when HR enters leave on an employee's behalf. It still goes to the approval list."} />
       <Stepper cur={w.step} />
       <form className="grid" style={{ gap: 22 }} noValidate onSubmit={submit}>
         {body}

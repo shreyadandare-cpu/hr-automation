@@ -1,8 +1,8 @@
 import express from "express";
-import L from "../../frontend/leave-rules.js";
+import L from "../../frontend/leave-rules.cjs";
 import { pool } from "./db.js";
 import { requireAuth, requireHr } from "./auth.js";
-import { approverOf, approverMap } from "./teams.js";
+import { DIRECTORS, approverOf, approverMap, approves, hrLeaveApprovers } from "./teams.js";
 
 const num = (v) => (v === null || v === undefined ? null : Number(v));
 const todayIso = () => new Date().toISOString().slice(0, 10);
@@ -21,10 +21,16 @@ const isHr = (req) => req.user && req.user.role === "hr";
 const self = (req) => req.user.email.toLowerCase();
 // A reporting manager decides their own team's requests; HR decides the managers' own (and anyone without a manager).
 // The reporting manager decides. When someone has no reporting manager (or theirs has left), HR decides instead.
-// Nobody decides their own request: an HR person's own leave needs another HR login.
-const mayDecide = (req, approver, owner) => (approver === "hr" ? isHr(req) && String(owner).toLowerCase() !== self(req) : !isHr(req) && approver === self(req));
+// HR staff's own leave goes to the directors (either one decides). Nobody decides their own request.
+const mayDecide = (req, approver, owner) => {
+  if (String(owner).toLowerCase() === self(req)) return false;
+  if (approver === "hr") return isHr(req);
+  if (approver === DIRECTORS) return approves(approver, self(req));
+  return !isHr(req) && approver === self(req);
+};
 const notYours = (approver) => ({ error: approver === "hr"
   ? "This person has no reporting manager, so HR approves it, and not the person's own request."
+  : approver === DIRECTORS ? "HR staff's leave is approved by the directors, not by HR or the person themselves."
   : "Only this person's reporting manager can approve or decline this request." });
 
 const holidayDays = async (db) => (await db.query("SELECT day FROM holidays ORDER BY day")).rows.map((h) => h.day);
@@ -74,6 +80,11 @@ export function leaveRouter(wrap) {
         `SELECT lower(e.work_email) AS e FROM employees e JOIN employees me ON lower(me.name) = lower(e.manager)
          WHERE lower(me.work_email) = $1`, [self(req)]);
       scope.push(...rows.map((x) => x.e));
+      // plus HR staff, for the directors who approve their leave
+      if (hrLeaveApprovers().includes(self(req))) {
+        const { rows: hr } = await pool.query("SELECT lower(email) AS e FROM users WHERE role = 'hr'");
+        scope.push(...hr.map((x) => x.e));
+      }
     }
     const where = scope ? "WHERE lower(work_email) = ANY($1)" : "";
     const args = scope ? [scope] : [];
@@ -94,6 +105,7 @@ export function leaveRouter(wrap) {
       pay: pay.rows.map((p) => ({ email: p.work_email, start: p.start_date,
         monthlyGross: isHr(req) || p.work_email.toLowerCase() === self(req) ? num(p.monthly_gross) : null, casualOpening: num(p.casual_opening) })),
       approvers,
+      hrLeaveApprovers: hrLeaveApprovers(),
     });
   }));
 

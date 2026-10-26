@@ -2,12 +2,14 @@ import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import { resolve } from "node:path";
 
-// Builds into ../frontend/dist, which the Express server serves: index.html under /app, login.html at /login.
+// Builds into dist/, which the Express server serves: index.html under /app, login.html at /login.
 export default defineConfig({
   plugins: [react()],
   base: "/app/",
+  // The logos in public/ are served by Express at the site root, so they are not copied into dist.
+  publicDir: false,
   build: {
-    outDir: "../frontend/dist",
+    outDir: "dist",
     emptyOutDir: true,
     rollupOptions: { input: { index: resolve(import.meta.dirname, "index.html"), login: resolve(import.meta.dirname, "login.html") } },
   },

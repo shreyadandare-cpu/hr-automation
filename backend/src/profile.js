@@ -107,6 +107,12 @@ profileRouter.put("/photo", express.raw({ type: () => true, limit: MAX_PHOTO }),
   res.json({ photoV: await photoVersion(email) });
 }));
 
+// Who has a photo, as { email: version }, so pages showing many people only ask for the photos that exist.
+profileRouter.get("/photos", wrap(async (_req, res) => {
+  const { rows } = await pool.query("SELECT lower(email) AS email, updated_at FROM profile_photos");
+  res.json(Object.fromEntries(rows.map((r) => [r.email, new Date(r.updated_at).getTime()])));
+}));
+
 // Anyone signed in can see anyone's photo, like the names and job titles on the Employees page. ?email= picks the person.
 profileRouter.get("/photo", wrap(async (req, res) => {
   const email = String(req.query.email || req.user.email).toLowerCase();

@@ -1,11 +1,12 @@
 import { useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { api, apiMsg } from "../api.js";
 import { useAuth } from "../auth.jsx";
 import { useData } from "../data.jsx";
 import { PersonCell, Pill, SectionHead, ToolIcon, shortDate } from "../components/ui.jsx";
 import { useToast } from "../components/toast.jsx";
 import Pager from "../components/Pager.jsx";
+import OrgChart from "../components/OrgChart.jsx";
 import { STATUS, TOOLS, byEmployeeNo, isTop, mgrOf, toolIds } from "../lib/people.js";
 
 function StatusPill({ person }) {
@@ -51,6 +52,8 @@ export default function Employees() {
   const [former, setFormer] = useState(false);
   const [size, setSize] = useState(10);
   const [page, setPage] = useState(1);
+  const [params, setParams] = useSearchParams();
+  const chart = params.get("view") === "chart";
 
   const formerCount = (people || []).filter((p) => p.status === "offboarded").length;
   const showFormer = isHr && former && formerCount > 0;
@@ -70,8 +73,22 @@ export default function Employees() {
   };
 
   if (!people) return <section className="section"><div className="empty">Loading…</div></section>;
+  const views = (
+    <div className="seg" role="radiogroup" aria-label="Employees view" style={{ alignSelf: "flex-start" }}>
+      <label><input type="radio" name="emp-view" checked={!chart} onChange={() => setParams({}, { replace: true })} />List</label>
+      <label><input type="radio" name="emp-view" checked={chart} onChange={() => setParams({ view: "chart" }, { replace: true })} />Org chart</label>
+    </div>
+  );
+  if (chart) return (
+    <section className="section">
+      {views}
+      <SectionHead eyebrow="People" title="Who reports" accent="to whom." sub="The company from the top down, from the reporting manager set for each person. Click someone to open their page." />
+      <OrgChart people={people} />
+    </section>
+  );
   return (
     <section className="section">
+      {views}
       <SectionHead eyebrow="People" title="Everyone," accent="at a glance." sub="Everyone with a record here, and which tools they can use right now."
         actions={<>
           {isHr && formerCount > 0 && <label className="former-toggle"><input type="checkbox" checked={former} onChange={(e) => { setFormer(e.target.checked); setPage(1); }} />Show former employees ({formerCount})</label>}

@@ -85,17 +85,21 @@ accountRouter.post("/password", wrap(async (req, res) => {
 export const usersRouter = express.Router();
 usersRouter.use(requireHr);
 
-const toApi = (r) => ({ email: r.email, role: r.role, name: r.name || "", lastLogin: r.last_login, createdAt: r.created_at, inviteExpires: r.invite_expires });
+const toApi = (r) => ({ email: r.email, role: r.role, name: r.name || "", no: r.emp_no || "", title: r.title || "", lastLogin: r.last_login, createdAt: r.created_at, inviteExpires: r.invite_expires });
 
 usersRouter.get("/", wrap(async (_req, res) => {
   const { rows } = await pool.query(
-    `SELECT u.*, e.name,
+    `SELECT u.*, e.name, e.emp_no, e.title,
        (SELECT max(i.expires_at) FROM invites i WHERE lower(i.email)=lower(u.email) AND i.status='pending' AND i.expires_at > now()) AS invite_expires
      FROM users u LEFT JOIN employees e ON lower(e.work_email)=lower(u.email) ORDER BY u.role, u.email`);
   const { rows: miss } = await pool.query(
     `SELECT count(*)::int AS n FROM employees e WHERE e.last_day IS NULL AND e.status <> 'offboarded'
      AND NOT EXISTS (SELECT 1 FROM users u WHERE lower(u.email)=lower(e.work_email))`);
-  res.json({ users: rows.map(toApi), withoutAccount: miss[0].n, defaultPassword: await getDefaultPassword(), mailConfigured: mailConfigured() });
+  // Everyone on the staff list who has no login yet, so the page can show the full list of people.
+  const { rows: none } = await pool.query(
+    `SELECT e.name, e.work_email AS email, e.emp_no, e.title FROM employees e WHERE e.status <> 'offboarded'
+     AND NOT EXISTS (SELECT 1 FROM users u WHERE lower(u.email)=lower(e.work_email)) ORDER BY e.id`);
+  res.json({ users: rows.map(toApi), noLogin: none.map((r) => ({ email: r.email, name: r.name, no: r.emp_no || "", title: r.title || "" })), withoutAccount: miss[0].n, defaultPassword: await getDefaultPassword(), mailConfigured: mailConfigured() });
 }));
 
 usersRouter.post("/", wrap(async (req, res) => {

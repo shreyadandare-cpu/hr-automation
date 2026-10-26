@@ -6,7 +6,7 @@ import { useData } from "../data.jsx";
 import { PersonCell, Pill, SectionHead, ToolIcon, shortDate } from "../components/ui.jsx";
 import { useToast } from "../components/toast.jsx";
 import Pager from "../components/Pager.jsx";
-import { STATUS, TOOLS, isTop, mgrOf, toolIds } from "../lib/people.js";
+import { STATUS, TOOLS, byEmployeeNo, isTop, mgrOf, toolIds } from "../lib/people.js";
 
 function StatusPill({ person }) {
   if (person.status === "active" && person.lastDay) return <Pill tone="warn">Leaving {shortDate(person.lastDay)}</Pill>;
@@ -41,11 +41,6 @@ function ProjectsCell({ person }) {
     </div>
   );
 }
-
-/* Employee number order: WT/01, WT/02, WT/03, WT/17, ... compared as numbers, not text. Former employees go last. */
-const numOf = (p) => { const m = String(p.no || "").match(/\d+/); return m ? parseInt(m[0], 10) : Infinity; };
-const byEmployeeNo = (a, b) =>
-  (a.status === "offboarded") - (b.status === "offboarded") || numOf(a) - numOf(b) || String(a.no).localeCompare(String(b.no)) || a.name.localeCompare(b.name);
 
 export default function Employees() {
   const { isHr } = useAuth();

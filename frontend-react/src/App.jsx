@@ -12,6 +12,7 @@ import LeaveHr from "./pages/LeaveHr.jsx";
 import MyLeave from "./pages/MyLeave.jsx";
 import TeamLeave from "./pages/TeamLeave.jsx";
 import LeaveApply from "./pages/LeaveApply.jsx";
+import OrgChart from "./pages/OrgChart.jsx";
 
 /* Bigger features live in src/modules/<name>/index.jsx and export `routes = [{ path, element }]`. They are picked up here. */
 const modules = import.meta.glob("./modules/*/index.jsx", { eager: true });
@@ -26,6 +27,7 @@ export default function App() {
         <Route path="/app/account" element={<Account />} />
         <Route path="/app/users" element={<Users />} />
         <Route path="/app/employees" element={<Employees />} />
+        <Route path="/app/org-chart" element={<OrgChart />} />
         <Route path="/app/profile" element={<Profile />} />
         <Route path="/app/dashboard" element={<Dashboard />} />
         <Route path="/app/audit" element={<Audit />} />

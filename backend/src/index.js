@@ -104,10 +104,11 @@ app.get("/api/roster", wrap(async (_req, res) => {
        (SELECT COALESCE(json_agg(json_build_object('project', p.name, 'lead', a.project_lead, 'location', a.location,
                                                    'status', a.status, 'start', a.start_date, 'end', a.end_date)
                                  ORDER BY (a.status = 'Active') DESC, p.name), '[]'::json)
-        FROM employee_project_allocations a JOIN projects p ON p.id = a.project_id WHERE a.employee_id = e.id) AS projects
+        FROM employee_project_allocations a JOIN projects p ON p.id = a.project_id WHERE a.employee_id = e.id) AS projects,
+       (SELECT extract(epoch FROM ph.updated_at)::bigint FROM profile_photos ph WHERE lower(ph.email) = lower(e.work_email)) AS photo_v
      FROM employees e ORDER BY e.id`);
   res.json(rows.map((r) => ({ id: r.id, no: r.emp_no, name: r.name, email: r.work_email, title: r.title, subTitle: r.sub_title,
-    location: r.work_location, manager: r.manager, start: r.start_date, lastDay: r.last_day, status: r.status, projects: r.projects })));
+    location: r.work_location, manager: r.manager, start: r.start_date, lastDay: r.last_day, status: r.status, projects: r.projects, photoV: r.photo_v })));
 }));
 
 // Who reports to whom, for everyone. Only the manager's name is sent, so this is safe for employees too.

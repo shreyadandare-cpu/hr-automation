@@ -80,7 +80,7 @@ export function Branch({ n, open, toggle, hits }) {
     <li className={n.dashed ? "dsh" : ""}>
       <div className="ht-node">
         <Card n={n} hit={hits.has(n.key)} />
-        {has && <button type="button" className="org-toggle" aria-expanded={isOpen} aria-label={`${isOpen ? "Hide" : "Show"} ${n.children.length} under ${n.p ? n.p.name : n.label}`} onClick={() => toggle(n.key)}>{isOpen ? "−" : "+"} {n.children.length}</button>}
+        {has && <button type="button" className="ht-toggle" aria-expanded={isOpen} aria-label={`${isOpen ? "Hide" : "Show"} ${n.children.length} under ${n.p ? n.p.name : n.label}`} onClick={() => toggle(n.key)}>{isOpen ? "−" : "+"} {n.children.length}</button>}
       </div>
       {has && isOpen && <ul className="ht-kids">{n.children.map((c) => <Branch key={c.key} n={c} open={open} toggle={toggle} hits={hits} />)}</ul>}
     </li>

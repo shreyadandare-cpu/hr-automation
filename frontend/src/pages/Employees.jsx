@@ -5,8 +5,8 @@ import { useAuth } from "../auth.jsx";
 import { useData } from "../data.jsx";
 import { PersonCell, Pill, SectionHead, ToolIcon, shortDate } from "../components/ui.jsx";
 import { useToast } from "../components/toast.jsx";
-import OrgChart from "../components/OrgChart.jsx";
 import Pager from "../components/Pager.jsx";
+import OrgChart from "../components/OrgChart.jsx";
 import { STATUS, TOOLS, byEmployeeNo, isTop, mgrOf, toolIds } from "../lib/people.js";
 
 function StatusPill({ person }) {

@@ -8,8 +8,8 @@ import { initials } from "./ui.jsx";
 import NotificationBell from "./NotificationBell.jsx";
 
 /* Pages still in the older single page app are plain links (hash routes under /). Pages already in React stay in the app. */
-const HR_LINKS = [["dashboard", "Dashboard"], ["employees", "Employees"], ["orgchart", "Org chart"], ["onboard", "Onboarding"], ["offboard", "Offboarding"], ["leave", "Leave"], ["attendance", "Attendance"], ["reimb", "Reimbursements"], ["payroll", "Payroll"], ["audit", "Audit log"]];
-const EMP_LINKS = [["dashboard", "Dashboard"], ["employees", "Employees"], ["orgchart", "Org chart"], ["onboard", "Onboarding"], ["offboard", "Offboarding"], ["attendance", "Attendance"], ["reimb", "Reimbursements"], ["myleave", "My leave"]];
+const HR_LINKS = [["dashboard", "Dashboard"], ["orgchart", "Team tree"], ["employees", "Employees"], ["onboard", "Onboarding"], ["offboard", "Offboarding"], ["leave", "Leave"], ["attendance", "Attendance"], ["reimb", "Reimbursements"], ["payroll", "Payroll"], ["audit", "Audit log"]];
+const EMP_LINKS = [["dashboard", "Dashboard"], ["orgchart", "Team tree"], ["employees", "Employees"], ["onboard", "Onboarding"], ["offboard", "Offboarding"], ["attendance", "Attendance"], ["reimb", "Reimbursements"], ["myleave", "My leave"]];
 const REACT_PAGES = {
   dashboard: "/app/dashboard", employees: "/app/employees", orgchart: "/app/org-chart", onboard: "/app/onboarding", offboard: "/app/offboarding", leave: "/app/leave", attendance: "/app/attendance",
   reimb: "/app/reimbursements", payroll: "/app/payroll", audit: "/app/audit", myleave: "/app/my-leave", team: "/app/team-leave",

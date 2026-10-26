@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { api, apiMsg } from "../api.js";
 import { useAuth } from "../auth.jsx";
 import { Callout, Person, Pill, SectionHead, Stat, dayLabel, hours } from "../components/ui.jsx";
+import Pager, { usePaged } from "../components/Pager.jsx";
 
 const TONE = { Present: "ok", "Half day": "warn", Working: "info", "Short hours": "warn", Absent: "bad", "On leave": "info", "Half day leave": "info", Weekend: "mute", Holiday: "mute" };
 const StatusPill = ({ status }) => (status ? <Pill tone={TONE[status] || (/^Worked/.test(status) ? "ok" : "mute")}>{status}</Pill> : <span className="muted">—</span>);
@@ -9,6 +10,7 @@ const StatusPill = ({ status }) => (status ? <Pill tone={TONE[status] || (/^Work
 /* Everyone for one day: HR sees all, a reporting manager sees their team. */
 function DayTable({ day, onOpen }) {
   const people = day.people;
+  const { rows, pager } = usePaged(people, day.date);
   const count = (s) => people.filter((x) => x.status === s).length;
   return (
     <>
@@ -21,14 +23,14 @@ function DayTable({ day, onOpen }) {
       {day.off && <p className="muted">{day.holiday || day.off}: no attendance is expected on this day.</p>}
       <div className="card"><div className="tbl-wrap"><table>
         <thead><tr><th>Employee</th><th>Status</th><th>First in</th><th>Last out</th><th>Hours</th></tr></thead>
-        <tbody>{people.map((x) => (
+        <tbody>{rows.map((x) => (
           <tr key={x.email} className="click" tabIndex={0} onClick={() => onOpen(x.email)} onKeyDown={(e) => e.key === "Enter" && onOpen(x.email)}>
             <td><Person name={x.name} sub={x.title || x.email} /></td>
             <td><StatusPill status={x.status} />{x.missingOut && <> <Pill tone="warn">No punch out</Pill></>}</td>
             <td>{x.firstIn || "—"}</td><td>{x.lastOut || "—"}</td><td>{hours(x.minutes)}</td>
           </tr>
         ))}</tbody>
-      </table></div></div>
+      </table></div><Pager {...pager} /></div>
     </>
   );
 }
@@ -36,6 +38,7 @@ function DayTable({ day, onOpen }) {
 /* One person's month. HR also sees each punch with a Remove button. */
 function MonthTable({ data, canEdit, onMonth, onRemove }) {
   const s = data.summary;
+  const { rows, pager } = usePaged(data.days, `${data.email || data.name}-${data.month}`);
   return (
     <>
       <div className="grid g4">
@@ -47,7 +50,7 @@ function MonthTable({ data, canEdit, onMonth, onRemove }) {
           <input className="input" type="month" value={data.month} aria-label="Month" style={{ width: "auto", padding: "8px 12px" }} onChange={(e) => e.target.value && onMonth(e.target.value)} /></div>
         <div className="tbl-wrap"><table>
           <thead><tr><th>Day</th><th>Status</th><th>First in</th><th>Last out</th><th>Hours</th>{canEdit && <th className="hide-sm">Punches</th>}</tr></thead>
-          <tbody>{data.days.map((d) => (
+          <tbody>{rows.map((d) => (
             <tr key={d.date}>
               <td>{dayLabel(d.date)}{d.holiday && <div className="muted">{d.holiday}</div>}</td>
               <td><StatusPill status={d.status} />{d.missingOut && <> <Pill tone="warn">No punch out</Pill></>}</td>
@@ -61,6 +64,7 @@ function MonthTable({ data, canEdit, onMonth, onRemove }) {
             </tr>
           ))}</tbody>
         </table></div>
+        <Pager {...pager} />
         <p className="muted" style={{ margin: 0, padding: "12px 24px 18px", fontSize: "12.5px" }}>
           Present is 6 hours or more, half day is 3 to 6 hours. Times are Indian time. Weekends and holidays are not counted as absent.
         </p>

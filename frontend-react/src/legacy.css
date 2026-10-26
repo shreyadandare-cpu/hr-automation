@@ -615,3 +615,14 @@ tr.former td{opacity:.6}
 .dl-demo b{color:var(--ink);font-weight:600}
 .dl-hint{margin:20px 0 0;font-size:13px;color:var(--ink-dim)}
 @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+
+/* Employee directory: calm, two-line cells instead of many small columns */
+.dir-table td,.dir-table th{padding-inline:18px}
+.dir-table td{padding-block:16px}
+.cell-main{font-weight:500;color:var(--ink)}
+.cell-sub{color:var(--ink-faint);font-size:12.5px;margin-top:3px}
+.proj-line{display:flex;align-items:center;gap:8px;min-width:0}
+.proj-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:190px}
+.proj-more{flex:none;font:600 11.5px/1 var(--body);color:var(--purple);background:var(--tint);border-radius:999px;padding:5px 9px}
+.emp-no{font:500 12.5px/1 ui-monospace,Menlo,Consolas,monospace;color:var(--ink-faint)}
+.dir-table td:first-child,.dir-table th:first-child{padding-right:6px;width:1%}

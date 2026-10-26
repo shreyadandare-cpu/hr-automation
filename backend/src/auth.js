@@ -16,7 +16,19 @@ export async function hashPassword(pw) {
 // A throwaway hash, so a login for an unknown email takes as long as one for a real account.
 const dummy = await hashPassword("not-a-real-password");
 
+/**
+ * Checks a password against a stored hash. Two formats: this app's own "salthex:hashhex", and the Employee Portal's
+ * "scrypt:N:r:p$salt$hashhex" (so logins copied from the portal keep working with the same passwords).
+ */
 export async function verifyPassword(pw, stored) {
+  if (stored && stored.startsWith("scrypt:")) {
+    const [params, salt, hex] = stored.split("$");
+    const [, N, r, p] = params.split(":").map(Number);
+    const want = Buffer.from(hex || "", "hex");
+    if (!salt || !want.length || !N || !r || !p) return false;
+    const got = await scrypt(pw, Buffer.from(salt, "utf8"), want.length, { N, r, p, maxmem: 256 * N * r });
+    return crypto.timingSafeEqual(got, want);
+  }
   const [salt, hash] = (stored || dummy).split(":");
   const got = await scrypt(pw, Buffer.from(salt, "hex"), 64);
   const want = Buffer.from(hash, "hex");

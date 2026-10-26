@@ -28,6 +28,13 @@ function ManagerCell({ person, people, isHr, onChange }) {
   );
 }
 
+/* The projects someone is working on now (the full history is on their own page). */
+function ProjectsCell({ person }) {
+  const now = (person.projects || []).filter((a) => a.status === "Active").map((a) => a.project);
+  if (!now.length) return <span className="muted">—</span>;
+  return <>{now.slice(0, 2).map((n) => <div key={n}>{n}</div>)}{now.length > 2 && <div className="muted" title={now.join("\n")}>+{now.length - 2} more</div>}</>;
+}
+
 const pageNumbers = (cur, total) => {
   const keep = [...new Set([1, total, cur - 1, cur, cur + 1].filter((n) => n >= 1 && n <= total))].sort((a, b) => a - b), out = [];
   keep.forEach((n, i) => { if (i && n - keep[i - 1] > 1) out.push(null); out.push(n); });
@@ -48,7 +55,7 @@ export default function Employees() {
   const showFormer = isHr && former && formerCount > 0;
   const all = useMemo(() => {
     const s = q.toLowerCase();
-    return (people || []).filter((p) => (showFormer || p.status !== "offboarded") && (!s || (p.name + p.email + p.dept + p.title).toLowerCase().includes(s)));
+    return (people || []).filter((p) => (showFormer || p.status !== "offboarded") && (!s || (p.name + p.email + p.dept + p.title + (p.projects || []).map((a) => a.project).join(" ")).toLowerCase().includes(s)));
   }, [people, q, showFormer]);
   const pages = Math.max(1, Math.ceil(all.length / size)), cur = Math.min(page, pages);
   const rows = all.slice((cur - 1) * size, cur * size);
@@ -67,10 +74,10 @@ export default function Employees() {
       <SectionHead eyebrow="People" title="Everyone," accent="at a glance." sub="Everyone with a record here, and which tools they can use right now."
         actions={<>
           {isHr && formerCount > 0 && <label className="former-toggle"><input type="checkbox" checked={former} onChange={(e) => { setFormer(e.target.checked); setPage(1); }} />Show former employees ({formerCount})</label>}
-          <input className="input" placeholder="Search by name, team or email" aria-label="Search employees" value={q} onChange={(e) => { setQ(e.target.value); setPage(1); }} />
+          <input className="input" placeholder="Search by name, team, project or email" aria-label="Search employees" value={q} onChange={(e) => { setQ(e.target.value); setPage(1); }} />
         </>} />
       <div className="card"><div className="tbl-wrap"><table>
-        <thead><tr><th>Employee</th><th className="hide-sm">Department</th><th className="hide-sm">Reporting manager</th><th>Status</th><th>Tool access</th><th className="hide-sm">Start date</th></tr></thead>
+        <thead><tr><th>Employee</th><th className="hide-sm">Department</th><th className="hide-sm">Reporting manager</th><th className="hide-sm">Projects</th><th>Status</th><th>Tool access</th><th className="hide-sm">Start date</th></tr></thead>
         <tbody>
           {rows.length ? rows.map((p) => (
             <tr key={p.id} className={`click${p.status === "offboarded" ? " former" : ""}`} tabIndex={0}
@@ -79,11 +86,12 @@ export default function Employees() {
               <td><PersonCell person={p} /></td>
               <td className="hide-sm">{p.dept}<div className="muted">{p.title}</div></td>
               <td className="hide-sm"><ManagerCell person={p} people={people} isHr={isHr} onChange={setManager} /></td>
+              <td className="hide-sm"><ProjectsCell person={p} /></td>
               <td><StatusPill person={p} /></td>
               <td><div className="apps-row">{toolIds(p).map((id) => <ToolIcon key={id} tool={TOOLS[id]} state={p.grants[id]} />)}</div></td>
               <td className="num-cell hide-sm">{shortDate(p.start)}</td>
             </tr>
-          )) : <tr><td colSpan="6"><div className="empty">No one matches “{q}”.</div></td></tr>}
+          )) : <tr><td colSpan="7"><div className="empty">No one matches “{q}”.</div></td></tr>}
         </tbody>
       </table></div>
       <div className="pager">

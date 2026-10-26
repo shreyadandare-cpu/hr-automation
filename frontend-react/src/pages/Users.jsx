@@ -33,8 +33,17 @@ export default function Users() {
     if (!email) { toast("Enter the work email first."); return; }
     if (!COMPANY.test(email)) { toast("Only @wohlig.com addresses can have an account."); return; }
     if (create.role === "hr" && !hrConfirm(email)) return;
-    const r = await act(api("POST", "/api/users", { email, role: create.role }), `Account created for ${email}.`);
-    if (r.ok) setCreate({ email: "", role: "employee" });
+    const r = await api("POST", "/api/users", { email, role: create.role, sendInvite: true });
+    if (!r.ok) { toast(apiMsg(r)); return; }
+    const sent = r.data.invite && r.data.invite.mode === "email";
+    toast(sent ? "Employee created successfully. Invitation email sent." : "Employee created, but the invitation email could not be sent. Use “Resend invite” on their row to try again.");
+    setCreate({ email: "", role: "employee" });
+    load();
+  };
+  const resend = async (u) => {
+    const r = await api("POST", "/api/auth/resend-invitation", { email: u.email });
+    toast(r.ok ? `Invitation sent to ${u.email}. Earlier links no longer work.` : apiMsg(r));
+    if (r.ok) load();
   };
   const changeRole = async (u, role) => {
     if (role === "hr" && !hrConfirm(u.name || u.email)) { load(); return; }
@@ -96,6 +105,7 @@ export default function Users() {
                     <td><select className="input" style={{ maxWidth: 140 }} aria-label={`Role for ${u.email}`} value={u.role} onChange={(e) => changeRole(u, e.target.value)}><option value="employee">Employee</option><option value="hr">HR</option></select></td>
                     <td className="hide-sm">{u.lastLogin ? new Date(u.lastLogin).toLocaleString() : "Never"}</td>
                     <td><div className="row">
+                      <button type="button" className="btn glass sm" onClick={() => resend(u)}>{u.inviteExpires ? "Resend invite" : "Send invite"}</button>
                       <button type="button" className="btn glass sm" onClick={() => confirm(`Reset ${u.email} to the default password? They will be signed out.`) && act(api("POST", `/api/users/${encodeURIComponent(u.email)}/reset`), `${u.email} was reset to the default password.`, () => {})}>Reset password</button>
                       <button type="button" className="btn glass sm" disabled={u.email.toLowerCase() === user.email.toLowerCase()}
                         onClick={() => confirm(`Delete the account for ${u.email}? They will no longer be able to sign in.`) && act(api("DELETE", `/api/users/${encodeURIComponent(u.email)}`), "Account deleted.")}>Delete</button>

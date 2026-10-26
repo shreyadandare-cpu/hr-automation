@@ -71,6 +71,22 @@ export function RecordCard({ e, record, docs, isMe, isHr }) {
 }
 
 /* ---------- leave ---------- */
+/* Every project this person is or was allocated to, from the company database. */
+export function ProjectsCard({ e }) {
+  const list = e.projects || [];
+  const active = list.filter((a) => a.status === "Active").length;
+  return (
+    <div className="card"><div className="card-h"><h3>Projects</h3><span className="muted">{list.length ? `${active} active` : "None"}</span></div>
+      {list.length ? <div className="tbl-wrap"><table>
+        <thead><tr><th>Project</th><th className="hide-sm">Lead</th><th className="hide-sm">Location</th><th>From</th><th>To</th><th>Status</th></tr></thead>
+        <tbody>{list.map((a, i) => (
+          <tr key={i}><td><b>{a.project}</b></td><td className="hide-sm">{a.lead || "—"}</td><td className="hide-sm">{a.location || "—"}</td>
+            <td>{fdate(a.start)}</td><td>{fdate(a.end)}</td><td>{a.status}</td></tr>))}</tbody>
+      </table></div> : <div className="card-b"><p className="muted" style={{ margin: 0 }}>Not allocated to any project yet.</p></div>}
+    </div>
+  );
+}
+
 export function LeaveCard({ e, isHr }) {
   const lv = useLeave();
   const { leave } = useData();

@@ -9,7 +9,7 @@ import { useToast } from "../../components/toast.jsx";
 import { NEW_FROM, TOOLS, mgrOf, toolIds } from "../../lib/people.js";
 import { lc, useLeave } from "../../lib/useLeave.js";
 import { AppLoginCard } from "./access.jsx";
-import { HistoryCard, LaptopCard, LaptopReturnModal, LeaveCard, ProjectsCard, OffCard, RecordCard, ReimbCard, fdate } from "./cards.jsx";
+import { HistoryCard, LaptopCard, LaptopReturnModal, LeaveCard, ProjectsCard, TeamCard, OffCard, RecordCard, ReimbCard, fdate } from "./cards.jsx";
 import { getLocal, patchLocal, useLocal } from "./local.js";
 
 const ON_TASKS = ["Laptop issued", "Policy documents signed"];
@@ -195,6 +195,7 @@ function EmployeeView({ p }) {
       <LaptopCard key={p.email + (loc.laptop ? "1" : "0")} e={e} isHr={isHr} />
       <RecordCard e={e} record={record} docs={docs} isMe={isMe} isHr={isHr} />
       <OffCard e={e} rec={rec} scheduled={scheduled} isHr={isHr} onChanged={() => { loadRec(); reload(); }} />
+      <TeamCard e={e} />
       <ProjectsCard e={e} />
       <LeaveCard e={e} isHr={isHr} />
       {isHr && <ReimbCard e={e} />}

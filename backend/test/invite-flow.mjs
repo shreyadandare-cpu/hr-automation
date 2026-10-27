@@ -17,7 +17,7 @@ const accept = (token, password) => fetch(`${base}/api/auth/accept-invitation`, 
 const login = (password) => fetch(`${base}/api/login`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email, password }) }).then((r) => r.status);
 const setExpiry = (token, sql) => pool.query(`UPDATE invites SET expires_at = ${sql} WHERE token_hash = $1`, [crypto.createHash("sha256").update(token).digest("hex")]);
 
-const server = spawn("node", ["src/index.js"], { env: { ...process.env, PORT: String(PORT) }, stdio: "ignore" });
+const server = spawn("node", ["src/index.js"], { env: { ...process.env, PORT: String(PORT), ALLOW_PASSWORD_LOGIN: "true" }, stdio: "ignore" });
 let n = 0;
 const ok = (name) => console.log(`  ✓ ${++n}. ${name}`);
 try {

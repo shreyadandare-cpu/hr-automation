@@ -10,12 +10,15 @@ import { mailConfigured, sendTestEmail } from "./mail.js";
 import { googleEnabled } from "./google-signin.js";
 
 const wrap = (fn) => (req, res, next) => fn(req, res, next).catch(next);
+/** Email and password sign-in is for testing: it works only when ALLOW_PASSWORD_LOGIN=true. Google sign-in is the normal way in. */
+const passwordLoginOn = () => String(process.env.ALLOW_PASSWORD_LOGIN || "").toLowerCase() === "true";
 const ROLES = ["hr", "employee"];
 
 /* Public: sign in and out. */
 export const sessionRouter = express.Router();
 
 sessionRouter.post("/login", wrap(async (req, res) => {
+  if (!passwordLoginOn()) return res.status(403).json({ error: "Password sign-in is turned off. Use Continue with Google." });
   const email = String(req.body?.email || "").trim().toLowerCase();
   const password = String(req.body?.password || "");
   if (email && !isCompanyEmail(email)) return res.status(403).json({ error: COMPANY_EMAIL_MESSAGE.replace("have an account", "sign in") });
@@ -54,7 +57,7 @@ sessionRouter.post("/auth/resend-invitation", requireHr, wrap(async (req, res) =
 }));
 
 // What the sign-in page can offer.
-sessionRouter.get("/login-options", (_req, res) => res.json({ google: googleEnabled() }));
+sessionRouter.get("/login-options", (_req, res) => res.json({ google: googleEnabled(), password: passwordLoginOn() }));
 
 sessionRouter.post("/logout", wrap(async (req, res) => {
   await endSession(req, res);

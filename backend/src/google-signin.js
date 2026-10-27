@@ -1,7 +1,7 @@
 import crypto from "node:crypto";
 import express from "express";
 import { pool } from "./db.js";
-import { startSession } from "./auth.js";
+import { startSession, accountForSignIn } from "./auth.js";
 import { isCompanyEmail } from "./validate.js";
 import { publicUrl } from "./mail.js";
 
@@ -60,7 +60,7 @@ googleRouter.get("/google/callback", async (req, res) => {
     if (!infoRes.ok || info.email_verified !== true || !email) return back(res, "google");
     if (!isCompanyEmail(email)) return back(res, "google_domain");
 
-    const u = (await pool.query("SELECT email FROM users WHERE lower(email)=$1", [email])).rows[0];
+    const u = await accountForSignIn(email);
     if (!u) return back(res, "google_no_account");
     await pool.query("UPDATE users SET last_login=now() WHERE lower(email)=$1", [email]);
     clearCookie(res);

@@ -12,6 +12,8 @@ import { googleRouter } from "./google-signin.js";
 import { inviteRouter, expireInvites } from "./invites.js";
 import { leaveRouter } from "./leave.js";
 import { attendanceRouter } from "./attendance.js";
+import { deviceRouter } from "./device.js";
+import { startPortalAttendanceSync } from "./portal-attendance.js";
 import { payslipsRouter } from "./payslips.js";
 import { claudeMode, grantClaude, removeClaude, recordAccess } from "./anthropic.js";
 import { offboardingRouter, runDue } from "./offboarding.js";
@@ -69,6 +71,7 @@ app.use(loadSession);
 app.use("/api/documents", requireAuth, documentsRouter); // raw file bodies, so it goes before the JSON parser
 app.use(express.json({ limit: "100kb" }));
 app.use("/api", sessionRouter); // login and logout are the only public API routes
+app.use(deviceRouter()); // the office device posts punches with its own key (no session); the linking screens check for HR themselves
 app.use("/api", accountRouter);
 app.use("/api/users", usersRouter);
 app.use("/api/profile", profileRouter);
@@ -368,6 +371,7 @@ setInterval(sweepInvites, 60_000);
 const checkReminders = () => Promise.all([runReimbursementReminders(), runBudgetReminders()]).catch((err) => console.error("Reimbursement reminder check failed:", err));
 checkReminders();
 setInterval(checkReminders, 60 * 60_000);
+startPortalAttendanceSync();   // copies the office device punches the Employee Portal received (only when PORTAL_ATTENDANCE_SYNC=true)
 console.log(`Email: ${emailMode() === "smtp" ? "sending through SMTP" : "SMTP not configured, emails are logged and skipped"}`);
 const port = process.env.PORT || 3000;
 app.listen(port, () => console.log(`HR Access Hub on http://localhost:${port}`));

@@ -399,6 +399,17 @@ CREATE TABLE IF NOT EXISTS attendance_punches (
   work_date DATE NOT NULL, punch_time TIME NOT NULL, direction TEXT NOT NULL, source TEXT, note TEXT, created_by TEXT);
 CREATE INDEX IF NOT EXISTS attendance_punches_day ON attendance_punches (employee_id, work_date);
 
+-- Office biometric device: which device user ID is which employee, and punches from IDs nobody has linked yet.
+CREATE TABLE IF NOT EXISTS device_users (
+  device_user_id TEXT PRIMARY KEY,
+  employee_id    INTEGER NOT NULL REFERENCES employees(id) ON DELETE CASCADE,
+  created_at     TIMESTAMPTZ NOT NULL DEFAULT now());
+CREATE TABLE IF NOT EXISTS device_unmatched (
+  device_user_id TEXT NOT NULL,
+  punched_at     TIMESTAMP NOT NULL,   -- Indian wall-clock time, as the device shows it
+  PRIMARY KEY (device_user_id, punched_at));
+CREATE UNIQUE INDEX IF NOT EXISTS attendance_punches_device_once ON attendance_punches (employee_id, work_date, punch_time) WHERE source = 'device';
+
 -- ---------- Invoice-first claims, partial approval, travel policy, budget requests, holiday calendar ----------
 CREATE TABLE IF NOT EXISTS app_migrations (key TEXT PRIMARY KEY, ran_at TIMESTAMPTZ NOT NULL DEFAULT now());
 

@@ -87,6 +87,26 @@ export function ProjectsCard({ e }) {
   );
 }
 
+/* Who works under this person: their direct reports, from the reporting managers. Anyone signed in can see it, like the rest of the roster. */
+export function TeamCard({ e }) {
+  const { people } = useData();
+  const nav = useNavigate();
+  const mine = useMemo(() => (people || []).filter((x) => x.status !== "offboarded" && String(x.manager || "").trim().toLowerCase() === String(e.name || "").trim().toLowerCase() && x.id !== e.id)
+    .sort((a, b) => String(a.no).localeCompare(String(b.no), undefined, { numeric: true })), [people, e]);
+  if (!mine.length) return null;
+  return (
+    <div className="card"><div className="card-h"><h3>Team</h3><span className="muted">{mine.length} {mine.length === 1 ? "person reports" : "people report"} to {String(e.name).split(" ")[0]}</span></div>
+      <div className="card-b">
+        <div className="team-grid">{mine.map((p) => (
+          <button key={p.id} type="button" className="team-p" onClick={() => nav(`/app/employees/${encodeURIComponent(p.email)}`)}>
+            <span className="avatar" style={{ background: p.color }}>{String(p.name).split(/\s+/).slice(0, 2).map((w) => w[0]).join("").toUpperCase()}</span>
+            <span><b>{p.name}</b><span className="muted">{p.title}</span></span>
+          </button>))}</div>
+      </div>
+    </div>
+  );
+}
+
 export function LeaveCard({ e, isHr }) {
   const lv = useLeave();
   const { leave } = useData();

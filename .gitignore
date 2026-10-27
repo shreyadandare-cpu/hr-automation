@@ -22,3 +22,7 @@ hr-automation/backups/
 venv/
 __pycache__/
 backend/.env
+
+# Office connector: local settings and progress
+attendance-bridge/.env
+attendance-bridge/bridge-state.json

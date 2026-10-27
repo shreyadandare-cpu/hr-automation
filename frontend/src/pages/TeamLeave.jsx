@@ -2,6 +2,7 @@ import { useData } from "../data.jsx";
 import { PersonCell, Pill, SectionHead, Stat, shortDate } from "../components/ui.jsx";
 import { DecideButtons } from "../components/leaveParts.jsx";
 import { LSTAT, LTYPE, dd, lc, rangeText, useLeave } from "../lib/useLeave.js";
+import Pager, { Paged } from "../components/Pager.jsx";
 
 /* A reporting manager approves their own team's leave and comp-off requests; the directors also approve HR staff's. */
 export default function TeamLeave() {
@@ -44,19 +45,25 @@ export default function TeamLeave() {
           {away.length ? away.map((r) => <div key={r.id} className="li"><PersonCell person={r.emp} sub={`${LTYPE[r.type]} · ${rangeText(r, shortDate)}`} /></div>) : <div className="empty">No one in your team is on approved leave.</div>}
         </div>
       </div>
-      <div className="card"><div className="card-h"><h3>Team balances {year}</h3></div><div className="tbl-wrap"><table>
+      <div className="card"><div className="card-h"><h3>Team balances {year}</h3></div>
+        <Paged items={team}>{(rows, pager) => (<>
+        <div className="tbl-wrap"><table>
         <thead><tr><th>Employee</th><th>Casual left</th><th>Sick left</th><th>Comp off left</th><th>Waiting</th></tr></thead>
-        <tbody>{team.length ? team.map((e) => { const b = lv.bal(e, year);
+        <tbody>{rows.length ? rows.map((e) => { const b = lv.bal(e, year);
           return <tr key={e.id}><td><PersonCell person={e} sub={e.title} /></td><td className="num-cell">{b.casual.left}</td><td className="num-cell">{b.sick.left}</td><td className="num-cell">{b.compoff.left}</td><td className="num-cell">{pendDays(e) ? dd(pendDays(e)) : "—"}</td></tr>; })
           : <tr><td colSpan="5"><div className="empty">No one reports to you yet.</div></td></tr>}</tbody>
-      </table></div></div>
-      <div className="card"><div className="card-h"><h3>Decided recently</h3></div><div className="tbl-wrap"><table>
+      </table></div>
+        {pager.total > 10 && <Pager {...pager} />}</>)}</Paged></div>
+      <div className="card"><div className="card-h"><h3>Decided recently</h3></div>
+        <Paged items={done}>{(rows, pager) => (<>
+        <div className="tbl-wrap"><table>
         <thead><tr><th>Employee</th><th>Type</th><th className="hide-sm">Dates</th><th>Days</th><th>Status</th></tr></thead>
-        <tbody>{done.length ? done.map((r) => (
+        <tbody>{rows.length ? rows.map((r) => (
           <tr key={r.id}><td><PersonCell person={r.emp} sub={r.emp.title} /></td><td>{LTYPE[r.type]}</td><td className="num-cell hide-sm">{rangeText(r, shortDate)}</td>
             <td className="num-cell">{r.status === "approved" ? <>{r.paidDays} paid{r.lopDays ? ` · ${r.lopDays} loss of pay` : ""}</> : dd(r.days)}</td><td><Pill tone={LSTAT[r.status][1]}>{LSTAT[r.status][0]}</Pill></td></tr>))
           : <tr><td colSpan="5"><div className="empty">Nothing decided yet.</div></td></tr>}</tbody>
-      </table></div></div>
+      </table></div>
+        {pager.total > 10 && <Pager {...pager} />}</>)}</Paged></div>
     </section>
   );
 }

@@ -144,11 +144,10 @@ function HolidayModal({ holiday, onClose }) {
   };
   return (
     <Modal onClose={onClose}><form onSubmit={submit} noValidate>
-      <div className="card-h" style={{ paddingTop: 24 }}><h3>Edit holiday</h3>{holiday.source === "imported" && <Pill tone="info">From the company holiday list</Pill>}</div>
+      <div className="card-h" style={{ paddingTop: 24 }}><h3>Edit holiday</h3></div>
       <div className="card-b form">
         <Field id="he-day" label="Date"><input className="input" type="date" id="he-day" value={f.day} onChange={set("day")} /></Field>
         <Field id="he-name" label="Holiday"><input className="input" id="he-name" maxLength={80} value={f.name} onChange={set("name")} /></Field>
-        <Field id="he-type" label="Type (optional)"><input className="input" id="he-type" maxLength={40} placeholder="e.g. Optional, Regional" value={f.type} onChange={set("type")} /></Field>
       </div>
       <div className="modal-f"><button type="button" className="btn glass" onClick={onClose}>Cancel</button><button type="submit" className="btn primary">Save holiday</button></div>
     </form></Modal>
@@ -187,14 +186,12 @@ export function HolidayCalendar({ editable }) {
       </div>
       {list.length ? (
         <div className="tbl-wrap"><table className="hol-table">
-          <thead><tr><th>Date</th><th>Day</th><th>Holiday</th><th className="hide-sm">Type</th><th className="hide-sm">Source</th>{editable && <th><span className="sr">Actions</span></th>}</tr></thead>
+          <thead><tr><th>Date</th><th>Day</th><th>Holiday</th>{editable && <th><span className="sr">Actions</span></th>}</tr></thead>
           <tbody>{list.map((h) => (
             <tr key={h.day} className={`${h.day < today ? "past" : ""}${next && h.day === next.day ? " next" : ""}`}>
               <td className="num-cell"><b>{new Date(h.day + "T00:00:00").toLocaleDateString("en-IN", { day: "2-digit", month: "short" })}</b></td>
               <td>{wd(h.day)}{weekend(h.day) && <> <span className="muted" style={{ fontSize: 12 }}>(weekend)</span></>}</td>
               <td>{h.name}{next && h.day === next.day && <> <Pill tone="info">Next</Pill></>}</td>
-              <td className="hide-sm">{h.type || <span className="muted">—</span>}</td>
-              <td className="hide-sm"><span className="muted">{h.source === "imported" ? "Company list" : "Added by HR"}</span></td>
               {editable && <td className="num"><div className="row" style={{ gap: 6, justifyContent: "flex-end" }}>
                 <button type="button" className="btn glass sm" aria-label={`Edit ${h.name}`} onClick={() => setEditing(h)}>Edit</button>
                 <button type="button" className="btn glass sm" aria-label={`Remove ${h.name}`} onClick={() => remove(h)}>Remove</button></div></td>}
@@ -205,7 +202,6 @@ export function HolidayCalendar({ editable }) {
         <form className="li wrap" noValidate onSubmit={addHoliday}>
           <input className="input" type="date" aria-label="Holiday date" style={{ width: "auto" }} value={add.day} onChange={(e) => setAdd({ ...add, day: e.target.value })} />
           <input className="input grow" maxLength={80} placeholder="Holiday name" aria-label="Holiday name" style={{ minWidth: 140 }} value={add.name} onChange={(e) => setAdd({ ...add, name: e.target.value })} />
-          <input className="input" maxLength={40} placeholder="Type (optional)" aria-label="Holiday type" style={{ width: 150 }} value={add.type} onChange={(e) => setAdd({ ...add, type: e.target.value })} />
           <button type="submit" className="btn primary sm">Add holiday</button>
         </form>
       )}

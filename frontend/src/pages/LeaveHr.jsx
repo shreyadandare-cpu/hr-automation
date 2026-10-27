@@ -7,6 +7,7 @@ import { CompOffModal, DecideButtons, HolidayCalendar, PayModal } from "../compo
 import { R } from "../lib/leave.js";
 import { LSTAT, LTYPE, dd, inr, lc, rangeText, useLeave } from "../lib/useLeave.js";
 import MyLeave from "./MyLeave.jsx";
+import Pager, { Paged } from "../components/Pager.jsx";
 
 const monthText = (m) => shortDate(m + "-01").replace(/^1 /, "");
 
@@ -74,36 +75,43 @@ export default function LeaveHr() {
       </div>
 
       <div className="card"><div className="card-h"><h3>Salary cuts</h3><input className="input" type="month" aria-label="Month" value={month} onChange={(e) => e.target.value && setMonth(e.target.value)} style={{ width: "auto", padding: "8px 12px" }} /></div>
+        <Paged items={cuts} resetKey={month}>{(rows, pager) => (<>
         <div className="tbl-wrap"><table>
           <thead><tr><th>Employee</th><th>Loss-of-pay days</th><th className="hide-sm">Monthly gross</th><th>Salary cut</th></tr></thead>
-          <tbody>{cuts.length ? cuts.map((x) => (
+          <tbody>{rows.length ? rows.map((x) => (
             <tr key={x.e.id}><td><PersonCell person={x.e} sub={x.e.title} /></td><td className="num-cell">{x.lop}</td><td className="num-cell hide-sm">{x.g ? inr(x.g) : "—"}</td>
               <td className="num-cell">{x.g ? <b>{inr(R.salaryCut(x.g, x.lop))}</b> : <button type="button" className="btn link" onClick={() => setModal({ pay: x.e.email })}>Add salary</button>}</td></tr>))
             : <tr><td colSpan="4"><div className="empty">No loss-of-pay days in {monthText(month)}.</div></td></tr>}</tbody>
-        </table></div></div>
+        </table></div>
+        {pager.total > 10 && <Pager {...pager} />}</>)}</Paged></div>
 
       <div className="card"><div className="card-h"><h3>Balances {year}</h3>
         <input className="input" placeholder="Search people" aria-label="Search balances" value={q} onChange={(e) => setQ(e.target.value)} style={{ width: 220, borderRadius: 999, padding: "8px 14px" }} /></div>
         <div style={{ padding: "0 24px 12px" }}><span className="muted">{LTYPE.casual} {R.POLICY.casualPerYear} days a year, unused days carry over · {LTYPE.sick} {R.POLICY.sickPerYear} days a year, lapses on 31 Dec · {LTYPE.compoff} earned by working a weekend or holiday, lapses on 31 Dec · {LTYPE.unpaid} is always a salary cut · Half days count as 0.5</span></div>
+        <Paged items={here} resetKey={q}>{(rows, pager) => (<>
         <div className="tbl-wrap"><table>
           <thead><tr><th>Employee</th><th>Casual left</th><th className="hide-sm">Carried + quota − used</th><th>Sick left</th><th>Comp off left</th><th>Loss of pay ({year})</th><th></th></tr></thead>
-          <tbody>{here.length ? here.map((e) => { const b = lv.bal(e, year);
+          <tbody>{rows.length ? rows.map((e) => { const b = lv.bal(e, year);
             return (
               <tr key={e.id}><td><PersonCell person={e} sub={e.title} /></td><td className="num-cell"><b>{b.casual.left}</b></td>
                 <td className="num-cell hide-sm muted">{b.casual.carried} + {b.casual.quota} − {b.casual.used}</td><td className="num-cell">{b.sick.left}</td><td className="num-cell">{b.compoff.left}</td><td className="num-cell">{b.lopDays || "—"}</td>
                 <td><button type="button" className="btn glass sm" onClick={() => setModal({ pay: e.email })}>Pay &amp; balance</button></td></tr>); })
             : <tr><td colSpan="7"><div className="empty">No one matches “{q}”.</div></td></tr>}</tbody>
-        </table></div></div>
+        </table></div>
+        <Pager {...pager} /></>)}</Paged></div>
 
       <div className="grid g-main">
-        <div className="card"><div className="card-h"><h3>Decided</h3></div><div className="tbl-wrap"><table>
+        <div className="card"><div className="card-h"><h3>Decided</h3></div>
+          <Paged items={done}>{(rows, pager) => (<>
+          <div className="tbl-wrap"><table>
           <thead><tr><th>Employee</th><th>Type</th><th className="hide-sm">Dates</th><th>Paid</th><th>Loss of pay</th><th>Status</th></tr></thead>
-          <tbody>{done.length ? done.map((r) => (
+          <tbody>{rows.length ? rows.map((r) => (
             <tr key={r.id}><td><PersonCell person={r.emp} sub={r.emp.title} /></td><td>{LTYPE[r.type]}</td><td className="num-cell hide-sm">{rangeText(r, shortDate)}</td>
               <td className="num-cell">{r.status === "approved" ? r.paidDays : "—"}</td><td className="num-cell">{r.status === "approved" ? (r.lopDays || "—") : "—"}</td>
               <td><Pill tone={LSTAT[r.status][1]}>{LSTAT[r.status][0]}</Pill></td></tr>))
             : <tr><td colSpan="6"><div className="empty">Nothing decided yet.</div></td></tr>}</tbody>
-        </table></div></div>
+        </table></div>
+          {pager.total > 10 && <Pager {...pager} />}</>)}</Paged></div>
       </div>
       <HolidayCalendar editable />
       {modal === "comp" && <CompOffModal onClose={() => setModal(null)} />}

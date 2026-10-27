@@ -59,6 +59,33 @@ export async function createUser(client, email, role) {
   return r.rowCount === 1;
 }
 
+/**
+ * An account for someone on the staff list who will sign in with Google. Its password is random and never shown, so it cannot be
+ * guessed (not even with the shared default password). HR can still send an invitation or reset it later. False if it already exists.
+ */
+export async function createGoogleUser(client, email, role = "employee") {
+  if (!isCompanyEmail(email)) throw new Error(COMPANY_EMAIL_MESSAGE);
+  const hash = await hashPassword(crypto.randomBytes(24).toString("base64url"));
+  const r = await client.query("INSERT INTO users (email,password_hash,role) VALUES ($1,$2,$3) ON CONFLICT DO NOTHING", [email.toLowerCase(), hash, role]);
+  return r.rowCount === 1;
+}
+
+/**
+ * The account for a verified company email at sign-in. Anyone with an account gets it. Someone on the staff list who has never signed in
+ * gets one made now (as an employee), so a first Google sign-in just works. Anyone else, or a person who has left, gets null.
+ */
+export async function accountForSignIn(email) {
+  const e = String(email || "").trim().toLowerCase();
+  if (!isCompanyEmail(e)) return null;
+  const have = (await pool.query("SELECT email FROM users WHERE lower(email)=$1", [e])).rows[0];
+  if (have) return have;
+  const emp = (await pool.query("SELECT name, status FROM employees WHERE lower(work_email)=$1", [e])).rows[0];
+  if (!emp || emp.status === "offboarded") return null;
+  await createGoogleUser(pool, e, "employee");
+  await pool.query("INSERT INTO audit_log (action, work_email) VALUES ($1,$2)", ["Login created automatically at first Google sign-in (employee role)", e]);
+  return (await pool.query("SELECT email FROM users WHERE lower(email)=$1", [e])).rows[0] || null;
+}
+
 /** First run: set the default password from the environment and create the first HR login(s). */
 export async function bootstrapAuth() {
   if (!(await getDefaultPassword())) {

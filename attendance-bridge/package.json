@@ -1,0 +1,16 @@
+{
+  "name": "hr-attendance-bridge",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Runs inside the office network: reads the eSSL / ZKTeco attendance device and sends new punches to the HR Access Hub.",
+  "scripts": {
+    "start": "node bridge.mjs",
+    "once": "node bridge.mjs --once",
+    "test-device": "node bridge.mjs --test"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.5",
+    "node-zklib": "^1.3.0"
+  }
+}

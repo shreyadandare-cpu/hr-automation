@@ -1,15 +1,15 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Link, Navigate, useParams } from "react-router-dom";
-import { api } from "../../api.js";
+import { Link, Navigate, useParams, useSearchParams } from "react-router-dom";
+import { api, apiMsg } from "../../api.js";
 import { useAuth } from "../../auth.jsx";
 import { useData } from "../../data.jsx";
 import Modal from "../../components/Modal.jsx";
 import { Avatar, Icon } from "../../components/ui.jsx";
 import { useToast } from "../../components/toast.jsx";
-import { NEW_FROM, TOOLS, mgrOf, toolIds } from "../../lib/people.js";
+import { NEW_FROM, TOOLS, isTop, mgrOf, toolIds } from "../../lib/people.js";
 import { lc, useLeave } from "../../lib/useLeave.js";
 import { AppLoginCard } from "./access.jsx";
-import { HistoryCard, LaptopCard, LaptopReturnModal, LeaveCard, ProjectsCard, OffCard, RecordCard, ReimbCard, fdate } from "./cards.jsx";
+import { HistoryCard, LaptopReturnModal, LeaveCard, ProjectsCard, TeamCard, OffCard, RecordCard, ReimbCard, fdate } from "./cards.jsx";
 import { getLocal, patchLocal, useLocal } from "./local.js";
 
 const ON_TASKS = ["Laptop issued", "Policy documents signed"];
@@ -25,9 +25,17 @@ function EmpPill({ e }) {
   return <span className={`pill ${EMP[e.status][1]}`}>{EMP[e.status][0]}</span>;
 }
 
-/* Edit details: name, work email, job title, joining date and department. No API saves these, so they stay on this page (as in the old one). */
+/* Edit details (HR only): the reporting manager is saved on the server, and only HR can change it (the server checks again).
+   Name, work email, job title, joining date and department have no server record yet, so they stay on this page (as in the old one). */
 function EditModal({ e, people, onClose }) {
   const toast = useToast();
+  const { isHr } = useAuth();
+  const { setRoster } = useData();
+  const [saving, setSaving] = useState(false);
+  const curMgr = mgrOf(e), top = isTop(e);
+  const [manager, setManager] = useState(curMgr);
+  const mgrNames = people.filter((m) => m.id !== e.id && m.status !== "offboarded").map((m) => m.name).sort((a, b) => a.localeCompare(b));
+  if (curMgr && !mgrNames.includes(curMgr)) mgrNames.unshift(curMgr);   // keep a manager who has since left visible
   const [f, setF] = useState({ name: e.name || "", email: e.email || "", title: e.title === "—" ? "" : e.title || "", start: e.start || "", dept: e.dept });
   const [emailErr, setEmailErr] = useState("");
   const taken = (email) => people.find((x) => x.id !== e.id && lc(x.email) === lc(email.trim()));
@@ -37,15 +45,23 @@ function EditModal({ e, people, onClose }) {
     const dup = taken(email); return dup ? `${email.trim().toLowerCase()} already belongs to ${dup.name}. Use a different work email.` : "";
   };
   const set = (k) => (ev) => { setF({ ...f, [k]: ev.target.value }); if (k === "email") setEmailErr(taken(ev.target.value) ? problem(ev.target.value) : ""); };
-  const submit = (ev) => {
+  const submit = async (ev) => {
     ev.preventDefault();
     const v = { name: f.name.trim(), email: f.email.trim().toLowerCase(), title: f.title.trim() || "—", start: f.start, dept: f.dept };
     if (!v.name) { document.getElementById("e-name").focus(); toast("Add the employee's full name."); return; }
     const bad = problem(v.email); if (bad) { setEmailErr(bad); document.getElementById("e-email").focus(); return; }
     const diff = Object.keys(v).filter((k) => (e[k] || "") !== v[k]);
-    if (!diff.length) { onClose(); toast("No changes to save."); return; }
-    patchLocal(e.baseEmail, { edits: { ...(getLocal(e.baseEmail).edits || {}), ...Object.fromEntries(diff.map((k) => [k, v[k]])) } });
-    onClose(); toast(`Saved changes for ${e.name}.`);
+    const mgrChanged = isHr && !top && manager !== curMgr;
+    if (!diff.length && !mgrChanged) { onClose(); toast("No changes to save."); return; }
+    if (mgrChanged) {   // saved on the server first; if it is refused (a loop, someone who left) nothing else is saved
+      setSaving(true);
+      const r = await api("PUT", "/api/employees/manager", { email: e.baseEmail, manager });
+      setSaving(false);
+      if (!r.ok) { toast(apiMsg(r)); return; }
+      setRoster((rs) => rs.map((x) => (x.email === e.baseEmail ? { ...x, manager } : x)));
+    }
+    if (diff.length) patchLocal(e.baseEmail, { edits: { ...(getLocal(e.baseEmail).edits || {}), ...Object.fromEntries(diff.map((k) => [k, v[k]])) } });
+    onClose(); toast(mgrChanged ? (manager ? `${e.name} now reports to ${manager}.` : `${e.name} has no reporting manager now.`) : `Saved changes for ${e.name}.`);
   };
   const F = [["name", "Full name", "text"], ["email", "Work email", "email"], ["title", "Job title", "text"], ["start", "Date of joining", "date"]];
   return (
@@ -57,9 +73,14 @@ function EditModal({ e, people, onClose }) {
             <input className={`input${k === "email" ? " mono" : ""}`} id={`e-${k}`} type={ty} value={f[k]} onChange={set(k)} {...(k === "email" ? { "aria-describedby": "e-email-err", "aria-invalid": !!emailErr } : {})} />
             {k === "email" && <span className="ferr" id="e-email-err" role="alert" hidden={!emailErr}>{emailErr}</span>}</div>
         ))}
+        <div className="field"><label htmlFor="e-mgr">Reporting manager</label>
+          {top ? <span className="muted" id="e-mgr">{e.name} is at the top of the company, so has no reporting manager.</span> : (
+            <select className="input" id="e-mgr" value={manager} disabled={!isHr} onChange={(ev) => setManager(ev.target.value)}>
+              <option value="">No manager</option>{mgrNames.map((n) => <option key={n}>{n}</option>)}</select>)}
+          <span className="hint">{isHr ? "Only HR can change this. Their manager approves their leave; with no manager, HR does. Saved for everyone." : "Only HR can change the reporting manager."}</span></div>
         <div className="field"><label htmlFor="e-dept">Department</label><select className="input" id="e-dept" value={f.dept} onChange={set("dept")}>{[...new Set([f.dept, ...DEPTS])].map((d) => <option key={d}>{d}</option>)}</select></div>
-        <div className="muted" style={{ fontSize: 13 }}>No server record stores these edits yet, so they show on this page until it is reloaded.</div></div>
-      <div className="modal-f"><button type="button" className="btn glass" onClick={onClose}>Cancel</button><button type="submit" className="btn primary">Save changes</button></div>
+        <div className="muted" style={{ fontSize: 13 }}>The reporting manager is saved for everyone. The other details have no server record yet, so they show on this page until it is reloaded.</div></div>
+      <div className="modal-f"><button type="button" className="btn glass" onClick={onClose}>Cancel</button><button type="submit" className="btn primary" disabled={saving}>{saving ? "Saving…" : "Save changes"}</button></div>
     </form></Modal>
   );
 }
@@ -72,7 +93,9 @@ function EmployeeView({ p }) {
   const loc = useLocal(p.email);
   const [rec, setRec] = useState(null);          // the offboarding record (HR)
   const [busy, setBusy] = useState(null);        // "provisioning" or "revoking" while a Claude call runs
-  const [modal, setModal] = useState(null);      // "edit" | "laptop"
+  const [params, setParams] = useSearchParams();
+  const [modal, setModal] = useState(() => (params.get("edit") === "1" && isHr && p.status !== "offboarded" ? "edit" : null));   // "edit" | "laptop"; the directory's Edit sends people here with ?edit=1
+  useEffect(() => { if (params.get("edit")) { const n = new URLSearchParams(params); n.delete("edit"); setParams(n, { replace: true }); } }, []);   // clean the address so a refresh does not reopen it
 
   const loadRec = useCallback(async () => {
     if (!isHr) return;
@@ -192,9 +215,9 @@ function EmployeeView({ p }) {
         </div>
       </div>
       {isHr && status !== "offboarded" && <AppLoginCard person={{ ...e, email: p.email }} personalEmail={record && record.personalEmail} />}
-      <LaptopCard key={p.email + (loc.laptop ? "1" : "0")} e={e} isHr={isHr} />
       <RecordCard e={e} record={record} docs={docs} isMe={isMe} isHr={isHr} />
       <OffCard e={e} rec={rec} scheduled={scheduled} isHr={isHr} onChanged={() => { loadRec(); reload(); }} />
+      <TeamCard e={e} isHr={isHr} isMe={isMe} />
       <ProjectsCard e={e} />
       <LeaveCard e={e} isHr={isHr} />
       {isHr && <ReimbCard e={e} />}

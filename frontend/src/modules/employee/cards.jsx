@@ -8,40 +8,12 @@ import { PayModal } from "../../components/leaveParts.jsx";
 import { useData } from "../../data.jsx";
 import { R } from "../../lib/leave.js";
 import { LSTAT, LTYPE, dd, inr, lc, rangeText, useLeave } from "../../lib/useLeave.js";
-import { patchLocal } from "./local.js";
+import { isTop } from "../../lib/people.js";
 
 export const fdate = (s) => (s ? shortDate(s) : "—");
 const InfoIcon = () => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="9" /><path d="M12 8v5M12 16h.01" /></svg>;
 const MON = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 export const fts = (d) => `${d.getDate()} ${MON[d.getMonth()]}, ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
-
-/* ---------- laptop record (memory only: no API stores it) ---------- */
-export function LaptopCard({ e, isHr }) {
-  const toast = useToast();
-  const l = e.laptop || { received: false, serial: "", date: "" };
-  const [f, setF] = useState({ got: l.received, serial: l.serial, date: l.date });
-  const off = e.status === "offboarded", dis = off || !isHr;
-  const submit = (ev) => {
-    ev.preventDefault();
-    if (!isHr) { toast("Only HR can do this."); return; }
-    const serial = f.serial.trim();
-    if (f.got && !serial) { toast("Enter the laptop serial number."); document.getElementById("lp-serial").focus(); return; }
-    if (f.got && !f.date) { toast("Pick the date the laptop was received."); document.getElementById("lp-date").focus(); return; }
-    patchLocal(e.baseEmail, { laptop: { received: f.got, serial: f.got ? serial : "", date: f.got ? f.date : "" } });
-    toast("Laptop details saved.");
-  };
-  return (
-    <form className="card" onSubmit={submit} noValidate>
-      <div className="card-h"><h3>Laptop</h3><span className={`pill ${l.received ? "p-ok" : "p-mute"}`}>{l.received ? "Received" : "Not received"}</span></div>
-      <div className="card-b form">
-        <label className="check" style={{ gridColumn: "1/-1", border: 0, padding: 0 }}><input type="checkbox" id="lp-got" checked={f.got} disabled={dis} onChange={(ev) => setF({ ...f, got: ev.target.checked })} /><div className="grow"><div className="lbl">Laptop received</div></div></label>
-        <div className="field"><label htmlFor="lp-serial">Serial number</label><input className="input mono" id="lp-serial" value={f.serial} placeholder="e.g. C02XK1ABJG5H" disabled={dis} onChange={(ev) => setF({ ...f, serial: ev.target.value })} /></div>
-        <div className="field"><label htmlFor="lp-date">Date received</label><input className="input" id="lp-date" type="date" value={f.date} disabled={dis} onChange={(ev) => setF({ ...f, date: ev.target.value })} /></div>
-        <div className="row" style={{ gridColumn: "1/-1" }}><button type="submit" className="btn primary sm" disabled={dis}>Save laptop details</button><span className="muted">Editable by HR.</span></div>
-      </div>
-    </form>
-  );
-}
 
 /* ---------- personal / ID record and uploaded documents ---------- */
 const DOCS = [
@@ -84,6 +56,80 @@ export function ProjectsCard({ e }) {
             <td>{fdate(a.start)}</td><td>{fdate(a.end)}</td><td>{a.status}</td></tr>))}</tbody>
       </table></div> : <div className="card-b"><p className="muted" style={{ margin: 0 }}>Not allocated to any project yet.</p></div>}
     </div>
+  );
+}
+
+/* Who works under this person: their direct reports, from the reporting managers. Anyone signed in can see it, like the rest of the roster.
+   HR, and the manager themself, get an Add member button (the server decides again who may do what). */
+export function TeamCard({ e, isHr = false, isMe = false }) {
+  const { people } = useData();
+  const nav = useNavigate();
+  const [adding, setAdding] = useState(false);
+  const me = String(e.name || "").trim().toLowerCase();
+  const mine = useMemo(() => (people || []).filter((x) => x.status !== "offboarded" && String(x.manager || "").trim().toLowerCase() === me && x.id !== e.id)
+    .sort((a, b) => String(a.no).localeCompare(String(b.no), undefined, { numeric: true })), [people, e, me]);
+  const canAdd = e.status !== "offboarded" && (isHr || (isMe && mine.length > 0));
+  if (!mine.length && !canAdd) return null;
+  return (
+    <div className="card"><div className="card-h"><h3>Team</h3>
+      <div className="row"><span className="muted">{mine.length ? `${mine.length} ${mine.length === 1 ? "person reports" : "people report"} to ${String(e.name).split(" ")[0]}` : "No one reports to them yet"}</span>
+        {canAdd && <button type="button" className="btn glass sm" onClick={() => setAdding(true)}>+ Add member</button>}</div></div>
+      <div className="card-b">
+        {mine.length ? <div className="team-grid">{mine.map((p) => (
+          <button key={p.id} type="button" className="team-p" onClick={() => nav(`/app/employees/${encodeURIComponent(p.email)}`)}>
+            <span className="avatar" style={{ background: p.color }}>{String(p.name).split(/\s+/).slice(0, 2).map((w) => w[0]).join("").toUpperCase()}</span>
+            <span><b>{p.name}</b><span className="muted">{p.title}</span></span>
+          </button>))}</div> : <p className="muted" style={{ margin: 0 }}>Use “Add member” to put someone in {String(e.name).split(" ")[0]}'s team.</p>}
+      </div>
+      {adding && <AddMemberModal boss={e} asHr={isHr} onClose={() => setAdding(false)} />}
+    </div>
+  );
+}
+
+/* Pick someone to join a team. HR can take anyone (the change is saved for everyone, so their leave goes to the new manager). A manager adding
+   to their own team can only take people who have no manager yet; moving someone from another team is HR's call. People above the manager in the
+   chain are left out (that would make a loop), and so are Directors and the Vice President. The server checks all of it again. */
+export function AddMemberModal({ boss, asHr = false, onClose }) {
+  const { people, setRoster } = useData();
+  const toast = useToast();
+  const [who, setWho] = useState("");
+  const [busy, setBusy] = useState(false);
+  const lcn = (x) => String(x || "").trim().toLowerCase();
+  const above = useMemo(() => {   // the boss's own chain upwards
+    const out = new Set([lcn(boss.name)]); let cur = lcn(boss.manager);
+    for (let i = 0; cur && i < 50 && !out.has(cur); i++) { out.add(cur); const n = (people || []).find((p) => lcn(p.name) === cur); cur = n ? lcn(n.manager) : ""; }
+    return out;
+  }, [boss, people]);
+  const options = (people || []).filter((p) => p.status !== "offboarded" && !isTop(p) && !above.has(lcn(p.name)) && lcn(p.manager) !== lcn(boss.name) && (asHr || !lcn(p.manager)))
+    .sort((a, b) => a.name.localeCompare(b.name));
+  const chosen = (people || []).find((p) => p.email === who);
+  const add = async () => {
+    if (!chosen) return;
+    setBusy(true);
+    const r = asHr ? await api("PUT", "/api/employees/manager", { email: chosen.email, manager: boss.name }) : await api("POST", "/api/team/members", { email: chosen.email });
+    setBusy(false);
+    if (!r.ok) { toast(apiMsg(r)); return; }
+    setRoster((rs) => rs.map((x) => (x.email === chosen.email ? { ...x, manager: boss.name } : x)));
+    toast(`${chosen.name} now reports to ${boss.name}.`);
+    onClose();
+  };
+  return (
+    <Modal onClose={onClose}>
+      <div className="card-h" style={{ paddingTop: 24 }}><h3>Add to {asHr ? `${boss.name}'s` : "your"} team</h3></div>
+      <div className="card-b">
+        <Field id="add-member" label="Who is joining the team?" hint="They will report to this manager, who approves their leave from now on.">
+          <select id="add-member" className="input" autoFocus value={who} onChange={(ev) => setWho(ev.target.value)}>
+            <option value="">{options.length ? "Choose a person…" : "No one is available to add"}</option>
+            {options.map((p) => <option key={p.id} value={p.email}>{p.name} ({p.no}){lcn(p.manager) ? ` · now with ${p.manager}` : " · no manager yet"}</option>)}
+          </select>
+        </Field>
+        {chosen && lcn(chosen.manager) && <p className="muted" style={{ margin: "12px 0 0" }}>{chosen.name} moves from {chosen.manager}'s team to {boss.name}'s.</p>}
+        {!asHr && <p className="muted" style={{ margin: "14px 0 0", fontSize: 13 }}>The list shows people who have no manager yet. To move someone who already reports to another manager, ask HR.</p>}
+        <p className="muted" style={{ margin: "10px 0 0", fontSize: 13 }}>Someone brand new? Add them through <Link to="/app/onboarding" onClick={onClose}>Onboarding</Link> first, then come back here.</p>
+      </div>
+      <div className="modal-f"><button type="button" className="btn glass" onClick={onClose}>Cancel</button>
+        <button type="button" className="btn primary" disabled={!chosen || busy} onClick={add}>{busy ? "Adding…" : "Add to team"}</button></div>
+    </Modal>
   );
 }
 

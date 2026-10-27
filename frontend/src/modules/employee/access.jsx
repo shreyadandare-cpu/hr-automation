@@ -44,6 +44,8 @@ export function AppLoginCard({ person, personalEmail }) {
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState(null);
   const [newRole, setNewRole] = useState((person.dept || "") === "HR" ? "hr" : "employee");
+  const [draftRole, setDraftRole] = useState(null);   // an access level picked but not saved yet
+  const [savingRole, setSavingRole] = useState(false);
   const lc = (s) => String(s || "").toLowerCase();
   const load = useCallback(async () => {
     try { const r = await api("GET", "/api/users"); setD(r.ok ? r.data : { failed: true }); } catch { setD({ failed: true }); }
@@ -63,12 +65,17 @@ export function AppLoginCard({ person, personalEmail }) {
   const hint = d.mailConfigured ? null : <span className="muted" style={{ fontSize: 12.5 }}>Email isn't set up on the server yet, so you'll get the link to share instead.</span>;
   const noteEl = note && lc(note.email) === lc(person.email) ? <InviteBox note={note} copyId="inv-link" /> : null;
 
-  const changeRole = async (role) => {
-    if (role === u.role) return;
+  // The access level changes only when HR presses Save.
+  const saveRole = async () => {
+    const role = draftRole;
+    if (!role || role === u.role) { setDraftRole(null); return; }
     if (role === "hr" && !hrConfirm(person.name || person.email)) return;
+    setSavingRole(true);
     const r = await api("PUT", `/api/users/${encodeURIComponent(person.email)}/role`, { role });
-    if (!r.ok) { toast(apiMsg(r)); load(); return; }
+    setSavingRole(false);
+    if (!r.ok) { toast(apiMsg(r)); return; }
     toast(role === "hr" ? `${person.name || person.email} now has full HR rights.` : `${person.name || person.email} is now ${ACCESS_LABEL[role].toLowerCase()}.`);
+    setDraftRole(null);
     load();
   };
   const invite = async (create, send) => {
@@ -94,8 +101,14 @@ export function AppLoginCard({ person, personalEmail }) {
       <div><dt>Signs in with</dt><dd><span className="mono">{u.email}</span></dd></div>
       <div><dt>Last signed in</dt><dd>{u.lastLogin ? new Date(u.lastLogin).toLocaleString() : "Never"}</dd></div>
       <div style={{ gridColumn: "1/-1" }}><dt>App access</dt><dd>
-        <select className="input" value={u.role} onChange={(ev) => changeRole(ev.target.value)} style={{ maxWidth: 260 }} aria-label={`App access for ${person.name}`}>{accessOptions()}</select>
-        <div className="muted" style={{ marginTop: 6, fontSize: 12.5 }}>{ACCESS_HELP[u.role] || ""}</div></dd></div>
+        <select className="input" value={draftRole ?? u.role} onChange={(ev) => setDraftRole(ev.target.value)} disabled={savingRole} style={{ maxWidth: 260 }} aria-label={`App access for ${person.name}`}>{accessOptions()}</select>
+        <div className="muted" style={{ marginTop: 6, fontSize: 12.5 }}>{ACCESS_HELP[draftRole ?? u.role] || ""}</div>
+        {draftRole && draftRole !== u.role && (
+          <div className="row" style={{ marginTop: 12 }}>
+            <button type="button" className="btn primary sm" disabled={savingRole} onClick={saveRole}>{savingRole ? "Saving…" : "Save"}</button>
+            <button type="button" className="btn glass sm" disabled={savingRole} onClick={() => setDraftRole(null)}>Cancel</button>
+            <span className="muted" style={{ fontSize: 12.5 }}>Not saved yet.</span>
+          </div>)}</dd></div>
       {u.inviteExpires && <div><dt>Invite waiting</dt><dd>Open until {new Date(u.inviteExpires).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</dd></div>}
     </dl>
     <p style={{ margin: 0, color: "var(--ink-dim)" }}>{where}</p>

@@ -10,6 +10,8 @@
     "test:invites": "node test/invite-flow.mjs",
     "migrate": "node scripts/migrate.mjs",
     "migrate:sql": "node scripts/migrate.mjs --write-sql",
+    "test:device": "node test/device-flow.mjs",
+    "sync:portal-attendance": "node scripts/sync-portal-attendance.mjs",
     "test": "node --test test/*.test.mjs"
   },
   "dependencies": {

@@ -65,3 +65,17 @@ export const docCount = (docs, email) => docs.filter((d) => String(d.email).toLo
 const numOf = (p) => { const m = String(p.no || "").match(/\d+/); return m ? parseInt(m[0], 10) : Infinity; };
 export const byEmployeeNo = (a, b) =>
   (a.status === "offboarded") - (b.status === "offboarded") || numOf(a) - numOf(b) || String(a.no).localeCompare(String(b.no)) || a.name.localeCompare(b.name);
+
+/** Everyone under a person: `direct` are the people who report to them, `team` is everyone below them at any depth.
+ *  Found from the reporting managers (matched by name). Safe if the data ever contains a loop. */
+export function teamUnder(people, email) {
+  const lc = (x) => String(x || "").trim().toLowerCase();
+  const active = (people || []).filter((p) => p.status !== "offboarded");
+  const me = active.find((p) => lc(p.email) === lc(email));
+  if (!me) return { direct: [], team: [] };
+  const under = (name) => active.filter((p) => lc(p.manager) === lc(name) && p.id !== me.id);
+  const direct = under(me.name).sort(byEmployeeNo), seen = new Set([me.id]), team = [];
+  const walk = (list) => list.forEach((p) => { if (seen.has(p.id)) return; seen.add(p.id); team.push(p); walk(under(p.name).sort(byEmployeeNo)); });
+  walk(direct);
+  return { direct, team };
+}

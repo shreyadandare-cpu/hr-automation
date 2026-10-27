@@ -5,7 +5,8 @@ import { requireAuth, requireHr } from "./auth.js";
 import { DIRECTORS, approverOf, approverMap, approves, hrLeaveApprovers } from "./teams.js";
 
 const num = (v) => (v === null || v === undefined ? null : Number(v));
-const todayIso = () => new Date().toISOString().slice(0, 10);
+// Today in India (UTC+5:30), so "today" turns over at midnight IST, not 5:30 am.
+const todayIso = () => new Date(Date.now() + 330 * 60000).toISOString().slice(0, 10);
 const plural = (n) => `${n} day${n === 1 ? "" : "s"}`;
 const when = (r) => (r.half ? `${r.from} (${L.HALVES[r.half]})` : `${r.from} to ${r.to}`);
 
@@ -119,20 +120,25 @@ export function leaveRouter(wrap) {
       const hist = emp ? await historyOf(client, emp.work_email) : { requests: [], compOffs: [] };
       const holidays = await holidayDays(client);
       const bal = emp && L.validDate(from) ? L.balances(Number(from.slice(0, 4)), toEmp(emp), hist.requests, hist.compOffs) : null;
-      const errors = L.requestProblems({ emp: emp && toEmp(emp), type, from, to, half, reason, holidays, existing: hist.requests, bal });
+      // split: days over the balance of a paid type go in a second, unpaid request (the page asks for this).
+      const split = Boolean(req.body && req.body.split);
+      const errors = L.requestProblems({ emp: emp && toEmp(emp), type, from, to, half, reason, holidays, existing: hist.requests, bal, split, today: todayIso() });
       // People to notify must be colleagues on the employee list; anything else is dropped.
       const asked = Array.isArray(req.body.notify) ? req.body.notify.map((x) => String(x).toLowerCase()).slice(0, 20) : [];
       const { rows: known } = asked.length
         ? await client.query("SELECT work_email FROM employees WHERE lower(work_email) = ANY($1)", [asked]) : { rows: [] };
       const notify = known.map((k) => k.work_email).filter((x) => !emp || x.toLowerCase() !== emp.work_email.toLowerCase());
       if (Object.keys(errors).length) return [400, { errors }];
-      const days = L.requestDays(from, to, half, holidays);
-      const { rows } = await client.query(
-        `INSERT INTO leave_requests (work_email, type, from_date, to_date, half, days, reason, notify) VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *`,
-        [emp.work_email, type, from, to, half, days, String(reason).trim(), JSON.stringify(notify)]);
-      const lr = toRequest(rows[0]);
-      await audit(client, `${L.TYPES[type].name} requested: ${when(lr)} (${plural(days)})`, emp.work_email);
-      return [201, lr];
+      const saved = [];
+      for (const p of L.planRequest({ type, from, to, half, holidays, bal, existing: hist.requests, today: todayIso() })) {
+        const { rows } = await client.query(
+          `INSERT INTO leave_requests (work_email, type, from_date, to_date, half, days, reason, notify) VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *`,
+          [emp.work_email, p.type, p.from, p.to, p.half, p.days, String(reason).trim(), JSON.stringify(notify)]);
+        const lr = toRequest(rows[0]);
+        await audit(client, `${L.TYPES[p.type].name} requested: ${when(lr)} (${plural(p.days)})`, emp.work_email);
+        saved.push(lr);
+      }
+      return [201, { ...saved[0], requests: saved }];
     });
   }));
 

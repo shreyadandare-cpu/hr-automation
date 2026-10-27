@@ -9,6 +9,7 @@
     casualPerYear: 14,    // casual leave days a year, pro-rated in the year someone joins
     sickPerYear: 6,       // sick leave days a year, pro-rated the same way
     lopDivisor: 30,       // salary cut per loss-of-pay day = monthly gross / 30
+    sickBackdateDays: 2,  // sick leave can be applied this many days after the date; other leave can't start in the past
   };
   // casual carries over to next year; sick leave and comp offs lapse on 31 Dec
   const TYPES = {
@@ -24,6 +25,9 @@
   const validDate = (s) => typeof s === "string" && ISO.test(s) && fmt(parse(s)) === s;
   const isWeekend = (s) => { const w = parse(s).getUTCDay(); return w === 0 || w === 6; };
   const half = (n) => Math.round(n * 2) / 2;
+  const addDays = (s, n) => { const d = parse(s); d.setUTCDate(d.getUTCDate() + n); return fmt(d); };
+  const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+  const longDate = (s) => `${Number(s.slice(8))} ${MONTHS[Number(s.slice(5, 7)) - 1]} ${s.slice(0, 4)}`;
 
   /** Working dates from `from` to `to` inclusive: Saturdays, Sundays and listed holidays are skipped. */
   function workingDates(from, to, holidays = []) {
@@ -136,7 +140,7 @@
   }
 
   /** Problems with a new leave request, as { field: message }. Empty object means it can be saved. */
-  function requestProblems({ emp, type, from, to, half: halfDay, reason, holidays = [], existing = [], bal }) {
+  function requestProblems({ emp, type, from, to, half: halfDay, reason, holidays = [], existing = [], bal, split = false, today }) {
     const e = {};
     if (halfDay && !HALVES[halfDay]) e.half = "Pick the first or second half.";
     if (halfDay) to = from;
@@ -149,16 +153,65 @@
     if (e.from || e.to) return e;
     if (to < from) return { ...e, to: "The end date is before the start date." };
     if (from.slice(0, 4) !== to.slice(0, 4)) return { ...e, to: "Leave can't cross into a new year. Split it into two requests." };
+    // No leave for dates that have passed, except sick leave, which can be applied up to SICK_BACKDATE days after.
+    if (today && validDate(today) && from < today) {
+      const earliest = addDays(today, -POLICY.sickBackdateDays);
+      if (from < earliest) return { ...e, from: `That date has passed. Sick leave can be applied up to ${POLICY.sickBackdateDays} days back (from ${longDate(earliest)}); other leave must start today or later.` };
+      if (type !== "sick") e.type = `Only sick leave can be for a past date. Choose sick leave, or change the dates to today or later.`;
+    }
     const days = requestDays(from, to, halfDay, holidays);
     if (!days) return halfDay ? { ...e, from: "That day is a weekend or holiday, so no leave is needed." }
       : { ...e, to: "These dates are all weekends or holidays, so no leave is needed." };
     const otherHalf = (r) => halfDay && r.half && r.from === from && r.half !== halfDay;   // morning off and afternoon off can both be booked
     const clash = existing.find((r) => (r.status === "pending" || r.status === "approved") && r.from <= to && r.to >= from && !otherHalf(r));
     if (clash) e.from = `Overlaps an existing ${clash.status === "pending" ? "waiting" : "approved"} request (${clash.from === clash.to ? clash.from : `${clash.from} to ${clash.to}`}${clash.half ? `, ${HALVES[clash.half]}` : ""}).`;
-    if (type === "compoff" && bal && bal.compoff.left < days)
-      e.type = bal.compoff.left > 0 ? `Only ${bal.compoff.left} comp off day${bal.compoff.left === 1 ? "" : "s"} available. Use casual leave for the rest.`
-        : "No comp off days available. Comp offs are earned by working on a weekend or holiday.";
+    // A paid type covers at most what is left of it. With split, the days over that go as unpaid leave instead.
+    if (TYPES[type] && TYPES[type].paid && bal) {
+      const left = available(type, bal, existing, yearOf(from));
+      const fits = split && (splitRequest(from, to, halfDay, holidays, left) || pastSick(type, from, today));
+      if (!e.type && days > left && !fits) e.type = overBalance(type, left);
+    }
     return e;
+  }
+
+  /** Days of a paid type someone can still ask for: what is left, less what is already waiting for approval. */
+  function available(type, bal, existing = [], year) {
+    if (!TYPES[type] || !TYPES[type].paid) return Infinity;
+    const waiting = sum(existing.filter((r) => r.status === "pending" && r.type === type && yearOf(r.from) === year), (r) => r.days);
+    return Math.max(0, bal[type].left - waiting);
+  }
+
+  const daysText = (n) => `${n} day${n === 1 ? "" : "s"}`;
+  function overBalance(type, left) {
+    const name = TYPES[type].name.toLowerCase();
+    if (left <= 0) return type === "compoff" ? "No comp off days available. Comp offs are earned by working on a weekend or holiday."
+      : `No ${name} left. Choose unpaid leave.`;
+    if (left < 1) return `Only half a day of ${name} left. Book it as a half day, and choose unpaid leave for these dates.`;
+    return `Only ${daysText(left)} of ${name} left. Take ${daysText(Math.floor(left))} as ${name} and the rest as unpaid leave.`;
+  }
+
+  /** The first `paidDays` whole working days, then the rest; null when that can't be done (a half day, or under one day to use). */
+  function splitRequest(from, to, halfDay, holidays, paidDays) {
+    const dates = workingDates(from, to, holidays), n = Math.floor(paidDays);
+    if (halfDay || n < 1 || n >= dates.length) return null;
+    return [{ from, to: dates[n - 1], days: n }, { from: dates[n], to, days: dates.length - n }];
+  }
+
+  /**
+   * The request(s) to save: one when the balance covers it (or it is unpaid), otherwise the paid type for the days left
+   * and unpaid leave for the rest. null when it can't be booked as this type at all.
+   */
+  /** Sick leave for a day that has passed: when there is not enough sick leave left, it goes in as unpaid leave. */
+  const pastSick = (type, from, today) => type === "sick" && Boolean(today) && from < today;
+
+  function planRequest({ type, from, to, half: halfDay, holidays = [], bal, existing = [], today }) {
+    if (halfDay) to = from;
+    const days = requestDays(from, to, halfDay, holidays);
+    const left = bal ? available(type, bal, existing, yearOf(from)) : Infinity;
+    if (days <= left) return [{ type, from, to, half: halfDay || null, days }];
+    const parts = splitRequest(from, to, halfDay, holidays, left);
+    if (parts) return [{ type, ...parts[0], half: null }, { type: "unpaid", ...parts[1], half: null }];
+    return pastSick(type, from, today) ? [{ type: "unpaid", from, to, half: halfDay || null, days }] : null;
   }
 
   /** Problems with a comp-off credit: it must be for a weekend or holiday that has already happened. */
@@ -174,5 +227,5 @@
   }
 
   return { POLICY, TYPES, HALVES, validDate, isWeekend, workingDates, requestDays, casualQuota, balances, allocate, lopByMonth, salaryCut, exitSettlement,
-    requestProblems, compOffProblems };
+    requestProblems, compOffProblems, available, planRequest };
 });

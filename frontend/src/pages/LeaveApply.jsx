@@ -64,9 +64,18 @@ export default function LeaveApply() {
   const days = R.validDate(val.from) && R.validDate(val.to) && val.to >= val.from ? R.requestDays(val.from, val.to, val.half, lv.holDays) : 0;
   const bal = e && R.validDate(val.from) ? lv.bal(e, Number(val.from.slice(0, 4))) : null;
   const emp = e ? { name: e.name, status: e.status, start: e.start, casualOpening: lv.payOf(e.email).casualOpening } : null;
+  const existing = e ? lv.reqsOf(e.email) : [];
+  // Days of each paid type still free to ask for (requests waiting for approval already count against it).
+  const left = (t) => (bal ? R.available(t, bal, existing, Number(val.from.slice(0, 4))) : 0);
+  // What gets saved: one request, or the days left of a paid type plus unpaid leave for the rest.
+  const parts = e && days && val.type && bal ? R.planRequest({ ...val, holidays: lv.holDays, bal, existing, today: lv.today }) : null;
+  val.split = Boolean(parts && (parts.length > 1 || parts[0].type !== val.type));   // split, or all unpaid (past sick leave, none left)
+  // Only sick leave can be for a date that has passed, and only up to POLICY.sickBackdateDays back.
+  const past = R.validDate(val.from) && val.from < lv.today;
+  const earliest = (() => { const d = new Date(lv.today + "T00:00:00Z"); d.setUTCDate(d.getUTCDate() - R.POLICY.sickBackdateDays); return d.toISOString().slice(0, 10); })();
 
   const problems = () => {
-    const all = R.requestProblems({ emp, type: val.type || "unpaid", from: val.from, to: val.to, half: val.half, reason: val.reason || "x", holidays: lv.holDays, existing: e ? lv.reqsOf(e.email) : [], bal });
+    const all = R.requestProblems({ emp, type: val.type || "unpaid", from: val.from, to: val.to, half: val.half, reason: val.reason || "x", holidays: lv.holDays, existing, bal, split: true, today: lv.today });
     const pick = (ks) => Object.fromEntries(Object.entries(all).filter(([k]) => ks.includes(k)));
     if (w.step === 1) return pick(["email", "from", "to", "half"]);
     if (w.step === 2) return w.type ? pick(["type"]) : { type: "Pick a leave type." };
@@ -91,15 +100,24 @@ export default function LeaveApply() {
       if (!k) { toast(apiMsg(r)); return; }
       set({ errors: errs, step: ["email", "from", "to", "half"].includes(k) ? 1 : k === "type" ? 2 : 3, reviewed: false }); toast(errs[k]); return;
     }
-    toast(self ? `Leave requested. ${lv.approverOf(val.email) === "hr" || lv.approverOf(val.email) === "directors" ? lv.approverName(val.email) : "Your manager"} will review it.` : `Leave request for ${e.name} sent for approval.`);
+    const sent = !val.split ? "" : parts.length === 1 ? " as unpaid leave (no sick leave left)"
+      : ` as ${dd(parts[0].days)} of ${LTYPE[parts[0].type].toLowerCase()} and ${dd(parts[1].days)} of unpaid leave`;
+    toast(self ? `Leave requested${sent}. ${lv.approverOf(val.email) === "hr" || lv.approverOf(val.email) === "directors" ? lv.approverName(val.email) : "Your manager"} will review it.` : `Leave request for ${e.name}${sent} sent for approval.`);
     reloadLeave(); nav(back);
   };
 
   const er = w.errors;
   let preview = null;
-  if (e && days && val.type && bal) {
-    const a = R.allocate(val.type, days, bal);
-    preview = <div className="callout" id="lw-preview"><div><b>{dd(days)}</b>. If approved: <b>{dd(a.paid)} paid</b>{a.lop > 0 && <>, <b style={{ color: "var(--bad)" }}>{dd(a.lop)} loss of pay</b></>}.</div></div>;
+  if (parts && val.split && parts.length === 1) {
+    preview = <div className="callout" id="lw-preview"><div>No {LTYPE[val.type].toLowerCase()} left, so these past dates go in as <b style={{ color: "var(--bad)" }}>{dd(days)} of unpaid leave</b> (loss of pay).</div></div>;
+  } else if (parts && val.split) {
+    const [p, u] = parts;
+    preview = <div className="callout" id="lw-preview"><div>Only <b>{dd(left(val.type))}</b> of {LTYPE[val.type].toLowerCase()} left, so this is sent as two requests:
+      <ul style={{ margin: "6px 0 0", paddingLeft: 18 }}><li><b>{dd(p.days)} {LTYPE[p.type].toLowerCase()}</b> ({rangeText(p, shortDate)}), paid</li>
+        <li><b style={{ color: "var(--bad)" }}>{dd(u.days)} unpaid leave</b> ({rangeText(u, shortDate)}), loss of pay</li></ul></div></div>;
+  } else if (parts) {
+    const paid = R.TYPES[val.type].paid;
+    preview = <div className="callout" id="lw-preview"><div><b>{dd(days)}</b>. If approved: {paid ? <b>{dd(days)} paid</b> : <b style={{ color: "var(--bad)" }}>{dd(days)} loss of pay</b>}.</div></div>;
   }
 
   let body = null;
@@ -111,22 +129,24 @@ export default function LeaveApply() {
         <label><input type="radio" name="lw-dur" checked={w.dur === "full"} onChange={() => set({ dur: "full" })} />Full day(s)</label>
         <label><input type="radio" name="lw-dur" checked={w.dur === "half"} onChange={() => set({ dur: "half" })} />Half day</label></div></div>
       <div className="lv-dates">
-        <Field id="lw-from" label={w.dur === "half" ? "Date" : "From"} error={er.from}><input className="input" type="date" id="lw-from" value={w.from} onChange={(x) => set({ from: x.target.value, to: w.to < x.target.value ? x.target.value : w.to })} /></Field>
+        <Field id="lw-from" label={w.dur === "half" ? "Date" : "From"} error={er.from}><input className="input" type="date" id="lw-from" min={earliest} value={w.from} onChange={(x) => set({ from: x.target.value, to: w.to < x.target.value ? x.target.value : w.to })} /></Field>
         <span className="lv-days">{dd(days)}</span>
         {w.dur === "half"
           ? <Field id="lw-half" label="Which half" error={er.half}><select className="input" id="lw-half" value={w.half} onChange={(x) => set({ half: x.target.value })}><option value="first">First half (morning)</option><option value="second">Second half (afternoon)</option></select></Field>
-          : <Field id="lw-to" label="To" error={er.to}><input className="input" type="date" id="lw-to" value={w.to} onChange={(x) => set({ to: x.target.value })} /></Field>}
+          : <Field id="lw-to" label="To" error={er.to}><input className="input" type="date" id="lw-to" min={w.from > earliest ? w.from : earliest} value={w.to} onChange={(x) => set({ to: x.target.value })} /></Field>}
       </div>
-      <p className="muted" style={{ margin: 0 }}>Saturdays, Sundays and company holidays are not counted.</p>
+      <p className="muted" style={{ margin: 0 }}>Saturdays, Sundays and company holidays are not counted. Leave starts today or later; only sick leave can go back, up to {R.POLICY.sickBackdateDays} days.</p>
     </div></div>
   );
   if (w.step === 2) {
-    const info = { casual: [`${bal.casual.left} days available`, "For planned time off. Unused days carry over."], sick: [`${bal.sick.left} days available`, "When you are unwell."],
-      compoff: [bal.compoff.left > 0 ? `${bal.compoff.left} day${bal.compoff.left === 1 ? "" : "s"} available` : "Not available", "Uses a day earned by working a weekend or holiday."], unpaid: ["", "When your other leave has run out."] };
+    const avail = (t) => (left(t) > 0 ? `${dd(left(t))} available` : "None left");
+    const info = { casual: [avail("casual"), "For planned time off. Unused days carry over. Days over this go as unpaid leave."], sick: [avail("sick"), "When you are unwell."],
+      compoff: [left("compoff") > 0 ? `${dd(left("compoff"))} available` : "Not available", "Uses a day earned by working a weekend or holiday."], unpaid: ["", "When your other leave has run out."] };
     body = (
       <div className="card"><div className="card-h"><h3>Type of leave</h3><span className="muted">{dd(days)} requested</span></div><div className="card-b" style={{ display: "flex", flexDirection: "column", gap: 16 }}>
         {er.type && <span className="ferr" role="alert">{er.type}</span>}
-        <div className="tiles">{Object.entries(LTYPE).map(([k, name]) => { const off = k === "compoff" && bal.compoff.left <= 0;
+        {past && <div className="callout"><div>These dates have passed, so only <b>sick leave</b> can be applied for them.</div></div>}
+        <div className="tiles">{Object.entries(LTYPE).map(([k, name]) => { const off = past ? k !== "sick" : R.TYPES[k].paid && left(k) <= 0;
           return <label key={k} className={`tile${off ? " off" : ""}`}><input type="radio" name="lw-type" checked={w.type === k} disabled={off} onChange={() => set({ type: k })} />
             <span className="t"><b>{name}{info[k][0] && ` · ${info[k][0]}`}</b><span>{info[k][1]}</span></span></label>; })}</div>
         {preview}
@@ -143,7 +163,7 @@ export default function LeaveApply() {
     <>
       {!self && <Review title="Employee" step={1} go={goStep}><Pairs pairs={[["Name", e.name], ["Work email", <span className="mono">{e.email}</span>]]} /></Review>}
       <Review title="Dates" step={1} go={goStep}><Pairs pairs={[["Dates", rangeText(val, shortDate)], ["Days", dd(days)]]} /></Review>
-      <Review title="Leave type" step={2} go={goStep}><Pairs pairs={[["Type", LTYPE[val.type]]]} />{preview}</Review>
+      <Review title="Leave type" step={2} go={goStep}><Pairs pairs={[["Type", val.split ? parts.map((p) => `${LTYPE[p.type]} (${dd(p.days)})`).join(" + ") : LTYPE[val.type]]]} />{preview}</Review>
       <Review title="Note" step={3} go={goStep}><Pairs pairs={[["Note", val.reason], ["Notify", val.notify.map((x) => (lv.empBy(x) || { name: x }).name).join(", ") || "Nobody"]]} /></Review>
       <label className="check" style={{ border: 0, padding: 0 }}><input type="checkbox" checked={w.reviewed} onChange={(x) => set({ reviewed: x.target.checked })} /><div className="grow"><div className="lbl">I have reviewed all the details above</div></div></label>
     </>

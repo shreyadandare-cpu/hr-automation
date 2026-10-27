@@ -840,3 +840,9 @@ tr.att-detail td{background:var(--paper-2);padding:10px 26px}
 .team-p{display:flex;align-items:center;gap:12px;padding:10px 14px;border:1px solid var(--line);border-radius:14px;background:var(--paper);text-align:left;cursor:pointer;font:inherit;color:var(--ink)}
 .team-p:hover{border-color:var(--line-2);background:var(--tint)}
 .team-p b{display:block;font-size:14px}.team-p .muted{display:block}
+
+/* Profile photo: remove button opposite the camera */
+.pf-trash{position:absolute;left:6px;bottom:6px;width:36px;height:36px;display:grid;place-items:center;padding:0;border:0;border-radius:50%;background:var(--surface);color:var(--bad);box-shadow:0 2px 10px rgba(14,10,56,.35),inset 0 0 0 1px var(--line);cursor:pointer}
+.pf-trash:hover{background:var(--bad-soft)}
+.pf-trash:focus-visible{outline:2px solid var(--purple);outline-offset:2px}
+.pf-trash svg{width:18px;height:18px}

@@ -122,7 +122,10 @@ export default function Profile() {
     setProfile({ ...profile, photoV: data.photoV }); toast("Photo updated.");
   };
   const removePhoto = async () => {
-    await fetch("/api/profile/photo", { method: "DELETE" });
+    if (!confirm("Remove your profile photo? Your initials will show instead.")) return;
+    const r = await fetch("/api/profile/photo", { method: "DELETE" });
+    if (r.status === 401) { location.href = "/login"; return; }
+    if (!r.ok) { toast("Could not remove the photo. Try again."); return; }
     setProfile({ ...profile, photoV: null }); toast("Photo removed.");
   };
 
@@ -163,12 +166,14 @@ export default function Profile() {
               <label className="pf-cam" title={photo ? "Change photo" : "Add your photo"}><Icon name="camera" />
                 <span style={{ position: "absolute", width: 1, height: 1, overflow: "hidden", clip: "rect(0 0 0 0)" }}>{photo ? "Change photo" : "Add your photo"}</span>
                 <input type="file" ref={fileRef} accept="image/png,image/jpeg" hidden onChange={(e) => { changePhoto(e.target.files[0]); e.target.value = ""; }} /></label>
+              {photo && <button type="button" className="pf-trash" title="Remove photo" aria-label="Remove photo" onClick={removePhoto}>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 12h10l1-12M9 7V4h6v3" /></svg></button>}
             </div>
             <h2>{me.name}</h2>
             <p className="pf2-role">{me.title && me.title !== "—" ? me.title : ""}{me.dept && me.dept !== "—" && !String(me.title || "").toLowerCase().includes(me.dept.toLowerCase()) ? ` · ${me.dept}` : ""}</p>
             <Pill tone={statusTone}>{statusLabel}</Pill>
             <div><span className={`pill ${pct === 100 ? "p-ok" : "p-info"}`} style={{ marginTop: 8 }} title="Parts of your profile that are filled in">Profile {pct}% complete</span></div>
-            {photo && <div><button type="button" className="pf-rm" onClick={removePhoto}>Remove photo</button></div>}
+            {photo && <div><button type="button" className="btn glass sm" style={{ marginTop: 12 }} onClick={removePhoto}>Remove photo</button></div>}
             <ul className="pf2-facts">
               <li><Icon name="mail" />{me.email}</li><li><Icon name="phone" />{phone || "Add a phone number"}</li>
               <li><Icon name="pin" />{city || "Add your city"}</li><li><Icon name="idcard" />{me.no || "No employee number yet"}</li>

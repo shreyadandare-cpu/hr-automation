@@ -9,6 +9,18 @@ import { byEmployeeNo } from "../lib/people.js";
 
 const hrConfirm = (who) => confirm(`Give ${who} full HR rights?\n\nHR can see and change everything in the app: onboarding, offboarding, leave, the audit log and everyone's logins. Only do this for someone who works in HR.`);
 
+/* Directors and the Vice President get a label next to their name; everyone shows their designation under it. */
+const leadership = (title) => (/\bvice president\b/i.test(title || "") ? "Vice President" : /\bdirector\b/i.test(title || "") ? "Director" : "");
+function WhoCell({ name, title, email }) {
+  const lead = leadership(title);
+  return (
+    <td>
+      <b>{name || email}</b>{lead && <span className="pill p-info" style={{ marginLeft: 8, verticalAlign: "middle" }}>{lead}</span>}
+      <div className="muted">{title && title !== "—" && !lead ? `${title} · ` : ""}{email}</div>
+    </td>
+  );
+}
+
 export default function Users() {
   const { user, isHr } = useAuth();
   const toast = useToast();
@@ -75,7 +87,7 @@ export default function Users() {
                 {pageRows.map((u) => u.login ? (
                   <tr key={u.email}>
                     <td className="num-cell"><span className="emp-no">{u.no}</span></td>
-                    <td><b>{u.name || u.email}</b><div className="muted">{u.email}</div></td>
+                    <WhoCell name={u.name} title={u.title} email={u.email} />
                     <td><select className="input" style={{ maxWidth: 140 }} aria-label={`Role for ${u.email}`} value={u.role} onChange={(e) => changeRole(u, e.target.value)}><option value="employee">Employee</option><option value="hr">HR</option></select></td>
                     <td className="hide-sm">{u.lastLogin ? new Date(u.lastLogin).toLocaleString() : "Never"}</td>
                     <td><div className="row">
@@ -88,7 +100,7 @@ export default function Users() {
                 ) : (
                   <tr key={u.email}>
                     <td className="num-cell"><span className="emp-no">{u.no}</span></td>
-                    <td><b>{u.name}</b><div className="muted">{u.email}</div></td>
+                    <WhoCell name={u.name} title={u.title} email={u.email} />
                     <td><span className="muted">No login yet</span></td>
                     <td className="hide-sm"><span className="muted">—</span></td>
                     <td><button type="button" className="btn primary sm" onClick={() => makeLogin(u)}>Create login &amp; send invite</button></td>

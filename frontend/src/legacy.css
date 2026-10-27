@@ -708,3 +708,8 @@ a.ht-card:hover,a.ht-card:focus-visible{box-shadow:0 8px 22px rgba(77,73,221,.18
 .org-stack>.org-card .org-txt{align-items:flex-start}
 .org-loose{border-top:1px solid var(--line);padding:16px 24px 20px;display:flex;flex-direction:column;gap:12px}
 .org-loose-row{display:flex;flex-wrap:wrap;gap:12px}
+
+/* Audit log: a fixed-height box that scrolls inside the card, with the column headings kept in view */
+.audit-box{max-height:min(62vh,640px);overflow:auto;border-top:1px solid var(--line)}
+.audit-box thead th{position:sticky;top:0;z-index:1;background:var(--paper-2)}
+.audit-box:focus-visible{outline:2px solid var(--purple);outline-offset:-2px}

@@ -23,8 +23,9 @@ export default function Audit() {
       <SectionHead eyebrow="Compliance" title="Audit" accent="log." sub="Every action recorded by the server and who it was about. Entries can't be edited or deleted." />
       {error && <Callout>{error}</Callout>}
       <div className="card">
-        <div className="filters"><input className="input grow" placeholder="Filter by person or action" aria-label="Filter by person or action" value={q} onChange={(e) => setQ(e.target.value)} /></div>
-        <div className="tbl-wrap"><table>
+        <div className="filters"><input className="input grow" placeholder="Filter by person or action" aria-label="Filter by person or action" value={q} onChange={(e) => setQ(e.target.value)} />
+          {rows && <span className="muted" style={{ whiteSpace: "nowrap" }}>{shown.length === rows.length ? `${rows.length} entries` : `${shown.length} of ${rows.length}`}</span>}</div>
+        <div className="tbl-wrap audit-box" tabIndex={0} aria-label="Audit log entries"><table>
           <thead><tr><th>When</th><th>Person</th><th>Action</th></tr></thead>
           <tbody>
             {rows === null && <tr><td colSpan="3"><div className="empty">Loading…</div></td></tr>}

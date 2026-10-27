@@ -121,34 +121,60 @@ app.get("/api/managers", wrap(async (_req, res) => {
 }));
 
 // HR changes someone's reporting manager (or clears it with an empty name).
-app.put("/api/employees/manager", requireHr, wrap(async (req, res) => {
-  const email = String(req.body?.email || "").toLowerCase();
-  const manager = String(req.body?.manager || "").trim();
+/** Checks and saves one reporting-manager change (an empty manager clears it). Returns { ok: true } or { status, error }. */
+async function applyManager(email, manager, actor) {
   const emp = (await pool.query("SELECT name, title FROM employees WHERE lower(work_email)=$1", [email])).rows[0];
-  if (!emp) return res.status(404).json({ error: "Employee not found." });
+  if (!emp) return { status: 404, error: "Employee not found." };
   // Directors and the Vice President are at the top of the company, so nobody is above them.
   if (manager && /\b(director|vice president)\b/i.test(emp.title || "")) {
-    return res.status(400).json({ error: `${emp.name} is at the top of the company and has no reporting manager.` });
+    return { status: 400, error: `${emp.name} is at the top of the company and has no reporting manager.` };
   }
   if (manager) {
     const boss = (await pool.query("SELECT name, status FROM employees WHERE lower(name)=lower($1) LIMIT 1", [manager])).rows[0];
-    if (!boss) return res.status(400).json({ error: `${manager} is not in the employee list.` });
-    if (boss.status === "offboarded") return res.status(400).json({ error: `${boss.name} has left, so cannot be a manager.` });
+    if (!boss) return { status: 400, error: `${manager} is not in the employee list.` };
+    if (boss.status === "offboarded") return { status: 400, error: `${boss.name} has left, so cannot be a manager.` };
     // Walk up from the new manager: reaching this person again would make a loop.
     let cur = boss.name;
     for (let i = 0; cur && i < 50; i++) {
       if (cur.toLowerCase() === emp.name.toLowerCase()) {
-        return res.status(400).json({ error: cur === boss.name && boss.name.toLowerCase() === emp.name.toLowerCase()
+        return { status: 400, error: cur === boss.name && boss.name.toLowerCase() === emp.name.toLowerCase()
           ? "Nobody can be their own reporting manager."
-          : `${boss.name} already reports up to ${emp.name}, so that would make a loop.` });
+          : `${boss.name} already reports up to ${emp.name}, so that would make a loop.` };
       }
       cur = (await pool.query("SELECT manager FROM employees WHERE lower(name)=lower($1) LIMIT 1", [cur])).rows[0]?.manager || "";
     }
   }
   await pool.query("UPDATE employees SET manager=$1 WHERE lower(work_email)=$2", [manager || null, email]);
   await pool.query("INSERT INTO audit_log (action, work_email) VALUES ($1,$2)",
-    [manager ? `Reporting manager set to ${manager}` : "Reporting manager cleared", email]);
+    [manager ? `Reporting manager set to ${manager} (by ${actor})` : `Reporting manager cleared (by ${actor})`, email]);
+  return { ok: true };
+}
+
+// HR changes anyone's reporting manager (or clears it with an empty name).
+app.put("/api/employees/manager", requireHr, wrap(async (req, res) => {
+  const email = String(req.body?.email || "").toLowerCase();
+  const manager = String(req.body?.manager || "").trim();
+  const r = await applyManager(email, manager, req.user.email);
+  if (!r.ok) return res.status(r.status).json({ error: r.error });
   res.json({ email, manager });
+}));
+
+// A manager adds someone to their OWN team. Allowed for anyone who already has people reporting to them (and for HR). The person
+// must have no manager yet: taking someone out of another manager's team is HR's call. The same checks apply (no loops, no top of the company).
+app.post("/api/team/members", requireAuth, wrap(async (req, res) => {
+  const email = String(req.body?.email || "").trim().toLowerCase();
+  const me = (await pool.query("SELECT name, status FROM employees WHERE lower(work_email)=$1", [req.user.email.toLowerCase()])).rows[0];
+  if (!me || me.status === "offboarded") return res.status(403).json({ error: "Your employee record was not found." });
+  const isHr = req.user.role === "hr";
+  const hasTeam = (await pool.query("SELECT 1 FROM employees WHERE lower(manager)=lower($1) AND status <> 'offboarded' LIMIT 1", [me.name])).rowCount > 0;
+  if (!isHr && !hasTeam) return res.status(403).json({ error: "Only managers and HR can add team members." });
+  const emp = (await pool.query("SELECT name, manager, status FROM employees WHERE lower(work_email)=$1", [email])).rows[0];
+  if (!emp) return res.status(404).json({ error: "Employee not found." });
+  if (emp.status === "offboarded") return res.status(400).json({ error: `${emp.name} has left, so cannot join a team.` });
+  if (!isHr && emp.manager) return res.status(403).json({ error: `${emp.name} already reports to ${emp.manager}. Ask HR to move them.` });
+  const r = await applyManager(email, me.name, req.user.email);
+  if (!r.ok) return res.status(r.status).json({ error: r.error });
+  res.json({ email, manager: me.name });
 }));
 
 // Preview of the work email that would be issued, with the uniqueness check done against the database.

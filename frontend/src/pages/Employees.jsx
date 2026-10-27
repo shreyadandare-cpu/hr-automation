@@ -1,14 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { api, apiMsg } from "../api.js";
 import { useAuth } from "../auth.jsx";
 import { useData } from "../data.jsx";
 import { PersonCell, Pill, SectionHead, ToolIcon, shortDate } from "../components/ui.jsx";
-import { useToast } from "../components/toast.jsx";
 import Pager from "../components/Pager.jsx";
-import Modal, { Field } from "../components/Modal.jsx";
 import OrgChart from "../components/OrgChart.jsx";
+import { AddMemberModal } from "../modules/employee/cards.jsx";
 import { STATUS, TOOLS, byEmployeeNo, isTop, mgrOf, teamUnder, toolIds } from "../lib/people.js";
 
 function StatusPill({ person }) {
@@ -25,7 +23,7 @@ function ManagerCell({ person }) {
 }
 
 /* The three dots at the end of a row (HR only). The menu is drawn over the page so the table never clips it. */
-function RowMenu({ person, onEditManager, onOpen }) {
+function RowMenu({ person, onEdit }) {
   const [at, setAt] = useState(null);
   const btn = useRef(null);
   useEffect(() => {
@@ -41,7 +39,7 @@ function RowMenu({ person, onEditManager, onOpen }) {
     const r = btn.current.getBoundingClientRect();
     setAt({ top: r.bottom + 6, right: Math.max(8, window.innerWidth - r.right) });
   };
-  const pick = (fn) => (e) => { e.stopPropagation(); setAt(null); fn(person); };
+  const pick = (e) => { e.stopPropagation(); setAt(null); onEdit(person); };
   return (
     <>
       <button ref={btn} type="button" className="dots-btn" aria-label={`Actions for ${person.name}`} aria-haspopup="menu" aria-expanded={!!at} onClick={toggle}>⋯</button>
@@ -49,37 +47,10 @@ function RowMenu({ person, onEditManager, onOpen }) {
         <>
           <div className="row-menu-scrim" onMouseDown={() => setAt(null)} />
           <div className="row-menu" role="menu" style={{ top: at.top, right: at.right }}>
-            <button type="button" role="menuitem" onClick={pick(onEditManager)} disabled={person.status === "offboarded"}>Edit reporting manager</button>
-            <button type="button" role="menuitem" onClick={pick(onOpen)}>View profile</button>
+            <button type="button" role="menuitem" onClick={pick} disabled={person.status === "offboarded"}>Edit</button>
           </div>
         </>, document.body)}
     </>
-  );
-}
-
-/* HR picks who a person reports to. The server checks it again (no loops, nobody above the top of the company). */
-function EditManagerModal({ person, people, onClose, onSave }) {
-  const top = isTop(person);
-  const cur = mgrOf(person);
-  const [value, setValue] = useState(cur);
-  const [busy, setBusy] = useState(false);
-  const names = people.filter((m) => m.id !== person.id && m.status !== "offboarded").map((m) => m.name).sort((a, b) => a.localeCompare(b));
-  if (cur && !names.includes(cur)) names.unshift(cur);   // keep a manager who has since left visible
-  return (
-    <Modal onClose={onClose}>
-      <h3 style={{ margin: "0 0 4px" }}>Reporting manager</h3>
-      <p className="muted" style={{ margin: "0 0 18px" }}>{person.name}, {person.title}</p>
-      {top ? <p style={{ margin: "0 0 18px" }}>{person.name} is at the top of the company, so has no reporting manager.</p> : (
-        <Field id="mgr-pick" label="Reports to" hint="Their manager approves their leave. Choose “No manager” and HR approves instead.">
-          <select id="mgr-pick" className="input" autoFocus value={value} onChange={(e) => setValue(e.target.value)}>
-            <option value="">No manager</option>{names.map((n) => <option key={n}>{n}</option>)}
-          </select>
-        </Field>)}
-      <div className="row" style={{ justifyContent: "flex-end", marginTop: 20 }}>
-        <button type="button" className="btn glass" onClick={onClose}>{top ? "Close" : "Cancel"}</button>
-        {!top && <button type="button" className="btn primary" disabled={busy || value === cur} onClick={async () => { setBusy(true); const ok = await onSave(person, value); setBusy(false); if (ok) onClose(); }}>Save</button>}
-      </div>
-    </Modal>
   );
 }
 
@@ -98,8 +69,7 @@ function ProjectsCell({ person }) {
 
 export default function Employees() {
   const { isHr, user } = useAuth();
-  const { people, setRoster } = useData();
-  const toast = useToast();
+  const { people } = useData();
   const nav = useNavigate();
   const [q, setQ] = useState("");
   const [former, setFormer] = useState(false);
@@ -108,10 +78,11 @@ export default function Employees() {
   const [params, setParams] = useSearchParams();
   const chart = params.get("view") === "chart";
   const [scope, setScope] = useState("all");          // "all" or "team": the people under me
-  const [editing, setEditing] = useState(null);       // the person whose manager HR is changing
+  const [adding, setAdding] = useState(false);        // the Add member dialog for my own team
 
   const { direct, team } = useMemo(() => teamUnder(people, user && user.email), [people, user]);   // the people under me
   const inTeam = scope === "team" && team.length > 0;
+  const meP = (people || []).find((p) => String(p.email).toLowerCase() === String(user && user.email).toLowerCase());
 
   const formerCount = (people || []).filter((p) => p.status === "offboarded").length;
   const showFormer = isHr && former && formerCount > 0;
@@ -122,14 +93,6 @@ export default function Employees() {
   }, [people, team, inTeam, q, showFormer]);
   const pages = Math.max(1, Math.ceil(all.length / size)), cur = Math.min(page, pages);
   const rows = all.slice((cur - 1) * size, cur * size);
-
-  const setManager = async (person, value) => {
-    const r = await api("PUT", "/api/employees/manager", { email: person.email, manager: value });
-    if (!r.ok) { toast(apiMsg(r)); return false; }
-    setRoster((rs) => rs.map((x) => (x.email === person.email ? { ...x, manager: value } : x)));
-    toast(value ? `${person.name} now reports to ${value}.` : `${person.name} has no reporting manager now.`);
-    return true;
-  };
 
   if (!people) return <section className="section"><div className="empty">Loading…</div></section>;
   const views = (
@@ -159,6 +122,7 @@ export default function Employees() {
             <label><input type="radio" name="emp-scope" checked={scope === "all"} onChange={() => { setScope("all"); setPage(1); }} />Everyone</label>
             <label><input type="radio" name="emp-scope" checked={scope === "team"} onChange={() => { setScope("team"); setPage(1); }} />My team ({team.length})</label>
           </div>
+          <button type="button" className="btn glass sm" onClick={() => setAdding(true)}>+ Add member</button>
           {inTeam && <span className="muted">{direct.length} {direct.length === 1 ? "person reports" : "people report"} to you directly{team.length > direct.length ? `, ${team.length - direct.length} more work under them` : ""}.</span>}
         </div>)}
       <div className="card"><div className="tbl-wrap"><table className="dir-table">
@@ -175,13 +139,13 @@ export default function Employees() {
               <td className="hide-sm"><ProjectsCell person={p} /></td>
               <td><StatusPill person={p} /><div className="cell-sub">Joined {shortDate(p.start)}</div></td>
               <td><div className="apps-row">{toolIds(p).map((id) => <ToolIcon key={id} tool={TOOLS[id]} state={p.grants[id]} />)}</div></td>
-              {isHr && <td className="dots-cell" onKeyDown={(e) => e.stopPropagation()}><RowMenu person={p} onEditManager={setEditing} onOpen={(x) => nav(`/app/employees/${encodeURIComponent(x.email)}`)} /></td>}
+              {isHr && <td className="dots-cell" onKeyDown={(e) => e.stopPropagation()}><RowMenu person={p} onEdit={(x) => nav(`/app/employees/${encodeURIComponent(x.email)}?edit=1`)} /></td>}
             </tr>
           )) : <tr><td colSpan={isHr ? 8 : 7}><div className="empty">{q ? `No one matches “${q}”.` : "No one here yet."}</div></td></tr>}
         </tbody>
       </table></div>
       <Pager total={all.length} page={cur} size={size} onPage={setPage} onSize={(n) => { setSize(n); setPage(1); }} /></div>
-      {editing && <EditManagerModal person={editing} people={people} onClose={() => setEditing(null)} onSave={setManager} />}
+      {adding && meP && <AddMemberModal boss={meP} asHr={isHr} onClose={() => setAdding(false)} />}
     </section>
   );
 }

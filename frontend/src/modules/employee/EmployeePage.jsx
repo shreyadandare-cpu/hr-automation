@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Link, Navigate, useParams } from "react-router-dom";
+import { Link, Navigate, useParams, useSearchParams } from "react-router-dom";
 import { api, apiMsg } from "../../api.js";
 import { useAuth } from "../../auth.jsx";
 import { useData } from "../../data.jsx";
@@ -9,7 +9,7 @@ import { useToast } from "../../components/toast.jsx";
 import { NEW_FROM, TOOLS, isTop, mgrOf, toolIds } from "../../lib/people.js";
 import { lc, useLeave } from "../../lib/useLeave.js";
 import { AppLoginCard } from "./access.jsx";
-import { HistoryCard, LaptopCard, LaptopReturnModal, LeaveCard, ProjectsCard, TeamCard, OffCard, RecordCard, ReimbCard, fdate } from "./cards.jsx";
+import { HistoryCard, LaptopReturnModal, LeaveCard, ProjectsCard, TeamCard, OffCard, RecordCard, ReimbCard, fdate } from "./cards.jsx";
 import { getLocal, patchLocal, useLocal } from "./local.js";
 
 const ON_TASKS = ["Laptop issued", "Policy documents signed"];
@@ -93,7 +93,9 @@ function EmployeeView({ p }) {
   const loc = useLocal(p.email);
   const [rec, setRec] = useState(null);          // the offboarding record (HR)
   const [busy, setBusy] = useState(null);        // "provisioning" or "revoking" while a Claude call runs
-  const [modal, setModal] = useState(null);      // "edit" | "laptop"
+  const [params, setParams] = useSearchParams();
+  const [modal, setModal] = useState(() => (params.get("edit") === "1" && isHr && p.status !== "offboarded" ? "edit" : null));   // "edit" | "laptop"; the directory's Edit sends people here with ?edit=1
+  useEffect(() => { if (params.get("edit")) { const n = new URLSearchParams(params); n.delete("edit"); setParams(n, { replace: true }); } }, []);   // clean the address so a refresh does not reopen it
 
   const loadRec = useCallback(async () => {
     if (!isHr) return;
@@ -213,10 +215,9 @@ function EmployeeView({ p }) {
         </div>
       </div>
       {isHr && status !== "offboarded" && <AppLoginCard person={{ ...e, email: p.email }} personalEmail={record && record.personalEmail} />}
-      <LaptopCard key={p.email + (loc.laptop ? "1" : "0")} e={e} isHr={isHr} />
       <RecordCard e={e} record={record} docs={docs} isMe={isMe} isHr={isHr} />
       <OffCard e={e} rec={rec} scheduled={scheduled} isHr={isHr} onChanged={() => { loadRec(); reload(); }} />
-      <TeamCard e={e} />
+      <TeamCard e={e} isHr={isHr} isMe={isMe} />
       <ProjectsCard e={e} />
       <LeaveCard e={e} isHr={isHr} />
       {isHr && <ReimbCard e={e} />}

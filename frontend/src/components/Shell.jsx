@@ -6,6 +6,7 @@ import { useData } from "../data.jsx";
 import { applyTheme, currentTheme, toggleTheme } from "../theme.js";
 import { initials } from "./ui.jsx";
 import NotificationBell from "./NotificationBell.jsx";
+import NextHolidayPopup from "./NextHolidayPopup.jsx";
 
 /* Pages still in the older single page app are plain links (hash routes under /). Pages already in React stay in the app. */
 const HR_LINKS = [["dashboard", "Dashboard"], ["employees", "Employees"], ["onboard", "Onboarding"], ["offboard", "Offboarding"], ["leave", "Leave"], ["attendance", "Attendance"], ["reimb", "Reimbursements"], ["payroll", "Payroll"], ["audit", "Audit log"]];
@@ -99,6 +100,7 @@ export default function Shell() {
         </nav>
       </div>
       <main className="wrap view"><Outlet /></main>
+      <NextHolidayPopup />
       <footer className="wrap"><div className="foot">
         <a className="logo" href="/app/dashboard" style={{ textDecoration: "none" }}><img className="lg lg-light" src="/wohlig-logo.png" alt="wohlig" /><img className="lg lg-dark" src="/wohlig-logo-dark.png" alt="" /></a>
         <span>HR Access Hub · People Ops</span>

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Link, Navigate, useParams, useSearchParams } from "react-router-dom";
+import { Link, Navigate, useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { api, apiMsg } from "../../api.js";
 import { useAuth } from "../../auth.jsx";
 import { useData } from "../../data.jsx";
@@ -94,6 +94,9 @@ function EmployeeView({ p }) {
   const [rec, setRec] = useState(null);          // the offboarding record (HR)
   const [busy, setBusy] = useState(null);        // "provisioning" or "revoking" while a Claude call runs
   const [params, setParams] = useSearchParams();
+  const nav = useNavigate(), here = useLocation();
+  // Back goes to wherever you came from (the directory, My team, a manager's Team card...); with no earlier page it goes to the directory.
+  const goBack = () => (here.key !== "default" ? nav(-1) : nav("/app/employees"));
   const [modal, setModal] = useState(() => (params.get("edit") === "1" && isHr && p.status !== "offboarded" ? "edit" : null));   // "edit" | "laptop"; the directory's Edit sends people here with ?edit=1
   useEffect(() => { if (params.get("edit")) { const n = new URLSearchParams(params); n.delete("edit"); setParams(n, { replace: true }); } }, []);   // clean the address so a refresh does not reopen it
 
@@ -173,7 +176,7 @@ function EmployeeView({ p }) {
 
   return (
     <section className="section" style={{ gap: 22 }}>
-      <Link className="back" to="/app/employees">← All employees</Link>
+      <button type="button" className="back" onClick={goBack}>← Back</button>
       <div className="card">
         <div className="profile"><Avatar person={e} /><div style={{ flex: 1, minWidth: 0 }}><div className="eyebrow">{e.dept}</div><h2 style={{ marginTop: 6 }}>{e.name}</h2><div style={{ color: "var(--ink-dim)", marginTop: 2 }}>{e.title}</div></div>
           <div className="row"><EmpPill e={e} />

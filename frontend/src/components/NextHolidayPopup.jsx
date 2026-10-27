@@ -1,11 +1,13 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 import { useAuth } from "../auth.jsx";
 import { useLeave } from "../lib/useLeave.js";
 import { Icon } from "./ui.jsx";
 
-/* A small pop-up that names the next company holiday. It appears once a day (the first time the app is opened that day),
-   for everyone, and closes by itself after a while or when dismissed. */
+/* A small pop-up that names the next company holiday. It appears every time someone opens a Leave page (Leave for HR, My leave,
+   Team leave), and closes when dismissed, after a while, or when they go to another page. It is for everyone. */
+const LEAVE_PAGES = ["/app/leave", "/app/my-leave", "/app/team-leave"];
+export const isLeavePage = (path) => LEAVE_PAGES.includes(String(path || "").replace(/\/+$/, ""));
 const SHOW_MS = 15000;
 const dayNumber = (s) => { const [y, m, d] = s.split("-").map(Number); return Date.UTC(y, m - 1, d) / 86400000; };
 
@@ -36,17 +38,18 @@ export function HolidayCard({ next, isHr, onClose }) {
 
 export default function NextHolidayPopup() {
   const { user, isHr } = useAuth();
+  const { pathname } = useLocation();
   const lv = useLeave();
   const next = useMemo(() => nextHoliday(lv.holidays, lv.today), [lv.holidays, lv.today]);
+  const onLeave = isLeavePage(pathname);
   const [open, setOpen] = useState(false);
-  const key = `holiday-popup:${user && user.email}`;
 
+  // Each time a Leave page is opened (or the holiday list arrives while you are on it) the pop-up shows; leaving the page hides it.
   useEffect(() => {
-    if (!next || !user) return;
-    try { if (localStorage.getItem(key) === lv.today) return; } catch { /* no storage: show it each visit */ }
-    const show = setTimeout(() => { setOpen(true); try { localStorage.setItem(key, lv.today); } catch { /* ignore */ } }, 800);
+    if (!onLeave || !next || !user) { setOpen(false); return; }
+    const show = setTimeout(() => setOpen(true), 600);
     return () => clearTimeout(show);
-  }, [next && next.day, lv.today, key]);   // eslint-disable-line react-hooks/exhaustive-deps
+  }, [onLeave, pathname, next && next.day]);   // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => { if (!open) return; const t = setTimeout(() => setOpen(false), SHOW_MS); return () => clearTimeout(t); }, [open]);
   if (!open || !next) return null;

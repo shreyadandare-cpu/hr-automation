@@ -3,21 +3,19 @@ import { Link, useSearchParams } from "react-router-dom";
 import { useData } from "../data.jsx";
 import { useAuth } from "../auth.jsx";
 import { PersonCell, Pill, SectionHead, Stat, shortDate } from "../components/ui.jsx";
-import { CompOffModal, DecideButtons, HolidayCalendar, PayModal } from "../components/leaveParts.jsx";
+import { CompOffModal, DecideButtons, HolidayCalendar } from "../components/leaveParts.jsx";
 import { R } from "../lib/leave.js";
-import { LSTAT, LTYPE, dd, inr, lc, rangeText, useLeave } from "../lib/useLeave.js";
+import { LSTAT, LTYPE, dd, lc, rangeText, useLeave } from "../lib/useLeave.js";
 import MyLeave from "./MyLeave.jsx";
 import Pager, { Paged } from "../components/Pager.jsx";
 
-const monthText = (m) => shortDate(m + "-01").replace(/^1 /, "");
 
 export default function LeaveHr() {
   const { isHr } = useAuth();
   const { people } = useData();
   const lv = useLeave();
-  const [month, setMonth] = useState(lv.today.slice(0, 7));
   const [q, setQ] = useState("");
-  const [modal, setModal] = useState(null);   // "comp" or { pay: email }
+  const [modal, setModal] = useState(null);   // "comp"
   const [params, setParams] = useSearchParams();
   const tab = params.get("tab") === "mine" ? "mine" : "manage";   // "mine": the HR person's own leave
   if (!isHr) return <section className="section"><SectionHead eyebrow="Time off" title="Leave" accent="management." /><div className="empty">Only HR can manage leave.</div></section>;
@@ -40,7 +38,6 @@ export default function LeaveHr() {
   const away = all.filter((r) => r.status === "approved" && r.to >= today).sort((a, b) => (a.from < b.from ? -1 : 1));
   const done = all.filter((r) => r.status !== "pending").sort((a, b) => (a.from < b.from ? 1 : -1));
   const here = people.filter((e) => e.status !== "offboarded" && (!q || lc(e.name + e.email).includes(lc(q))));
-  const cuts = people.map((e) => ({ e, lop: lv.lopDaysIn(month, e.email), g: lv.payOf(e.email).monthlyGross })).filter((x) => x.lop);
   const lopNow = lv.lopDaysIn(today.slice(0, 7));
   const waitingForMe = pend.filter((r) => lv.canDecide(r.email)).length + compPend.filter((c) => lv.canDecide(c.email)).length;
 
@@ -74,29 +71,17 @@ export default function LeaveHr() {
         </div>
       </div>
 
-      <div className="card"><div className="card-h"><h3>Salary cuts</h3><input className="input" type="month" aria-label="Month" value={month} onChange={(e) => e.target.value && setMonth(e.target.value)} style={{ width: "auto", padding: "8px 12px" }} /></div>
-        <Paged items={cuts} resetKey={month}>{(rows, pager) => (<>
-        <div className="tbl-wrap"><table>
-          <thead><tr><th>Employee</th><th>Loss-of-pay days</th><th className="hide-sm">Monthly gross</th><th>Salary cut</th></tr></thead>
-          <tbody>{rows.length ? rows.map((x) => (
-            <tr key={x.e.id}><td><PersonCell person={x.e} sub={x.e.title} /></td><td className="num-cell">{x.lop}</td><td className="num-cell hide-sm">{x.g ? inr(x.g) : "—"}</td>
-              <td className="num-cell">{x.g ? <b>{inr(R.salaryCut(x.g, x.lop))}</b> : <button type="button" className="btn link" onClick={() => setModal({ pay: x.e.email })}>Add salary</button>}</td></tr>))
-            : <tr><td colSpan="4"><div className="empty">No loss-of-pay days in {monthText(month)}.</div></td></tr>}</tbody>
-        </table></div>
-        {pager.total > 10 && <Pager {...pager} />}</>)}</Paged></div>
-
       <div className="card"><div className="card-h"><h3>Balances {year}</h3>
         <input className="input" placeholder="Search people" aria-label="Search balances" value={q} onChange={(e) => setQ(e.target.value)} style={{ width: 220, borderRadius: 999, padding: "8px 14px" }} /></div>
         <div style={{ padding: "0 24px 12px" }}><span className="muted">{LTYPE.casual} {R.POLICY.casualPerYear} days a year, unused days carry over · {LTYPE.sick} {R.POLICY.sickPerYear} days a year, lapses on 31 Dec · {LTYPE.compoff} earned by working a weekend or holiday, lapses on 31 Dec · {LTYPE.unpaid} is always a salary cut · Half days count as 0.5</span></div>
         <Paged items={here} resetKey={q}>{(rows, pager) => (<>
         <div className="tbl-wrap"><table>
-          <thead><tr><th>Employee</th><th>Casual left</th><th className="hide-sm">Carried + quota − used</th><th>Sick left</th><th>Comp off left</th><th>Loss of pay ({year})</th><th></th></tr></thead>
+          <thead><tr><th>Employee</th><th>Casual left</th><th className="hide-sm">Carried + quota − used</th><th>Sick left</th><th>Comp off left</th><th>Loss of pay ({year})</th></tr></thead>
           <tbody>{rows.length ? rows.map((e) => { const b = lv.bal(e, year);
             return (
               <tr key={e.id}><td><PersonCell person={e} sub={e.title} /></td><td className="num-cell"><b>{b.casual.left}</b></td>
-                <td className="num-cell hide-sm muted">{b.casual.carried} + {b.casual.quota} − {b.casual.used}</td><td className="num-cell">{b.sick.left}</td><td className="num-cell">{b.compoff.left}</td><td className="num-cell">{b.lopDays || "—"}</td>
-                <td><button type="button" className="btn glass sm" onClick={() => setModal({ pay: e.email })}>Pay &amp; balance</button></td></tr>); })
-            : <tr><td colSpan="7"><div className="empty">No one matches “{q}”.</div></td></tr>}</tbody>
+                <td className="num-cell hide-sm muted">{b.casual.carried} + {b.casual.quota} − {b.casual.used}</td><td className="num-cell">{b.sick.left}</td><td className="num-cell">{b.compoff.left}</td><td className="num-cell">{b.lopDays || "—"}</td> </tr>); })
+            : <tr><td colSpan="6"><div className="empty">No one matches “{q}”.</div></td></tr>}</tbody>
         </table></div>
         <Pager {...pager} /></>)}</Paged></div>
 
@@ -113,7 +98,6 @@ export default function LeaveHr() {
           {pager.total > 10 && <Pager {...pager} />}</>)}</Paged></div>
       <HolidayCalendar editable />
       {modal === "comp" && <CompOffModal onClose={() => setModal(null)} />}
-      {modal && modal.pay && <PayModal email={modal.pay} onClose={() => setModal(null)} />}
     </section>
   );
 }

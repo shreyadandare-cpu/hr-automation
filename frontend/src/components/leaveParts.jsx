@@ -103,7 +103,7 @@ export function PolicyModal({ onClose }) {
   );
 }
 
-/* HR sets someone's monthly salary (for loss-of-pay cuts) and the casual leave they bring in. */
+/* HR sets someone's monthly gross salary (the pay on payroll and payslips, and the base for loss-of-pay cuts) and the casual leave they bring in. */
 export function PayModal({ email, onClose }) {
   const lv = useLeave(), { reloadLeave } = useData(), toast = useToast();
   const p = lv.payOf(email), e = lv.empBy(email);
@@ -122,7 +122,7 @@ export function PayModal({ email, onClose }) {
     <Modal onClose={onClose}><form onSubmit={submit} noValidate>
       <div className="card-h" style={{ paddingTop: 24 }}><h3>Pay &amp; balance: {e.name}</h3></div>
       <div className="card-b">
-        <Field id="lp-gross" label="Monthly gross salary (₹)" hint="Used only to work out the salary cut for loss-of-pay days." error={er.monthlyGross}>
+        <Field id="lp-gross" label="Monthly gross salary (₹)" hint="The monthly pay on payroll and payslips. A loss-of-pay day cuts this amount ÷ 30." error={er.monthlyGross}>
           <input className="input" type="number" min="1" step="1" inputMode="numeric" id="lp-gross" value={f.monthlyGross} onChange={(ev) => setF({ ...f, monthlyGross: ev.target.value })} /></Field>
         <Field id="lp-open" label={`Casual leave carried into ${R.POLICY.startYear}`} hint="Unused casual days from before this system started. They carry over like any other casual days." error={er.casualOpening}>
           <input className="input" type="number" min="0" max="365" step="0.5" id="lp-open" value={f.casualOpening} onChange={(ev) => setF({ ...f, casualOpening: ev.target.value })} /></Field>

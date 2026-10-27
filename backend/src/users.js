@@ -2,7 +2,7 @@ import express from "express";
 import { pool } from "./db.js";
 import {
   verifyPassword, hashPassword, startSession, endSession, requireAuth, requireHr,
-  getDefaultPassword, setDefaultPassword, createUser,
+  getDefaultPassword, setDefaultPassword, createUser, lockedFor, noteFailure, clearFailures,
 } from "./auth.js";
 import { V, isCompanyEmail, COMPANY_EMAIL_MESSAGE } from "./validate.js";
 import { sendInvite, acceptInvitation, tooMany } from "./invites.js";
@@ -10,10 +10,29 @@ import { mailConfigured, sendTestEmail } from "./mail.js";
 import { googleEnabled } from "./google-signin.js";
 
 const wrap = (fn) => (req, res, next) => fn(req, res, next).catch(next);
+/** Email and password sign-in is for testing: it works only when ALLOW_PASSWORD_LOGIN=true. Google sign-in is the normal way in. */
+const passwordLoginOn = () => String(process.env.ALLOW_PASSWORD_LOGIN || "").toLowerCase() === "true";
 const ROLES = ["hr", "employee"];
 
-/* Public: Google sign-in is the only way to sign in (see google-signin.js); an invitation also signs the person in once. Sign out is here. */
+/* Public: sign in and out. */
 export const sessionRouter = express.Router();
+
+sessionRouter.post("/login", wrap(async (req, res) => {
+  if (!passwordLoginOn()) return res.status(403).json({ error: "Password sign-in is turned off. Use Continue with Google." });
+  const email = String(req.body?.email || "").trim().toLowerCase();
+  const password = String(req.body?.password || "");
+  if (email && !isCompanyEmail(email)) return res.status(403).json({ error: COMPANY_EMAIL_MESSAGE.replace("have an account", "sign in") });
+  const key = email || req.ip;
+  const mins = lockedFor(key);
+  if (mins) return res.status(429).json({ error: `Too many wrong passwords. Try again in ${mins} minute${mins === 1 ? "" : "s"}.` });
+  const { rows } = await pool.query("SELECT * FROM users WHERE lower(email)=$1", [email]);
+  const ok = await verifyPassword(password, rows[0]?.password_hash);
+  if (!rows[0] || !ok) { noteFailure(key); return res.status(401).json({ error: "Wrong email or password." }); }
+  clearFailures(key);
+  await pool.query("UPDATE users SET last_login=now() WHERE lower(email)=$1", [email]);
+  await startSession(res, rows[0].email);
+  res.json({ ok: true });
+}));
 
 // The new employee opens the emailed link, picks a password and is signed in. Public, so it is rate limited.
 sessionRouter.post("/auth/accept-invitation", wrap(async (req, res) => {
@@ -38,7 +57,7 @@ sessionRouter.post("/auth/resend-invitation", requireHr, wrap(async (req, res) =
 }));
 
 // What the sign-in page can offer.
-sessionRouter.get("/login-options", (_req, res) => res.json({ google: googleEnabled() }));
+sessionRouter.get("/login-options", (_req, res) => res.json({ google: googleEnabled(), password: passwordLoginOn() }));
 
 sessionRouter.post("/logout", wrap(async (req, res) => {
   await endSession(req, res);

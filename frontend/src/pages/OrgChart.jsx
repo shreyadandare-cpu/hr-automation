@@ -1,21 +1,21 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { useData } from "../data.jsx";
 import { SectionHead } from "../components/ui.jsx";
 import { byEmployeeNo, deptOf, isTop } from "../lib/people.js";
 
 const lc = (s) => String(s || "").trim().toLowerCase();
-const initials = (name) => String(name || "?").split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]).join("").toUpperCase();
+const initials = (name) => (String(name || "?").match(/[A-Za-z0-9]+/g) || ["?"]).slice(0, 2).map((w) => w[0]).join("").toUpperCase();
 
 /* The colour of a person's label: leadership, HR, someone with a team, or a team member. */
 const roleOf = (p, hasTeam) => (isTop(p) ? "leader" : deptOf(p.title) === "HR" ? "hr" : hasTeam ? "lead" : "member");
 const ROLE_NAME = { leader: "Leadership", hr: "HR", lead: "Manager / team lead", member: "Team member" };
 
-/* Round avatar: the person's photo when they have one, their initials otherwise. */
-function Face({ p }) {
+/* Round avatar: the person's photo when they have one, their initials otherwise, on the colour of their role. */
+function Face({ p, role }) {
   const [bad, setBad] = useState(false);
   return (
-    <span className="org-av" style={{ background: p.color }}>
+    <span className={`org-av r-${role}`}>
       {p.photoV && !bad ? <img src={`/api/profile/photo?email=${encodeURIComponent(p.email)}&v=${p.photoV}`} alt="" onError={() => setBad(true)} /> : initials(p.name)}
     </span>
   );
@@ -43,7 +43,7 @@ export function buildTree(people) {
   for (const p of tops.filter((p) => !isTop(p))) { const d = deptOf(p.title); groups.set(d, [...(groups.get(d) || []), p]); }
   const order = ["HR", "Engineering", "DevOps & Cloud", "Data", "Gen AI", "Sales", "Finance & Admin"];
   const groupNodes = [...groups.entries()].sort((a, b) => (order.indexOf(a[0]) + 99) % 99 - (order.indexOf(b[0]) + 99) % 99 || a[0].localeCompare(b[0]))
-    .map(([d, list]) => ({ key: `g${d}`, kind: "group", label: d, sub: `${list.length} ${list.length === 1 ? "person" : "people"}, no manager set`, children: list.map((p) => person(p, true)), dashed: true }));
+    .map(([d, list]) => ({ key: `g${d}`, kind: "group", label: d, sub: `${list.length} ${list.length === 1 ? "person" : "people"}`, children: list.map((p) => person(p, true)), dashed: true }));
   const rest = active.filter((p) => !seen.has(p.id)); // only if the data ever loops
   if (rest.length) groupNodes.push({ key: "g-other", kind: "group", label: "Other", sub: `${rest.length} not placed`, dashed: true, children: rest.map((p) => ({ key: `p${p.id}`, kind: "person", p, dashed: true, children: [], role: roleOf(p, false) })) });
   return { key: "root", kind: "root", label: "Wohlig Transformations", sub: `${active.length} people`, children: [...leaders, ...groupNodes] };
@@ -61,7 +61,7 @@ function Card({ n, hit }) {
   if (n.kind === "person") {
     return (
       <Link className={`ht-card${hit ? " hit" : ""}`} to={`/app/employees/${encodeURIComponent(n.p.email)}`} title={`${n.p.name}, ${n.p.title}`}>
-        <Face p={n.p} />
+        <Face p={n.p} role={n.role} />
         <span className="ht-txt"><b>{n.p.name}</b><span className={`org-role r-${n.role}`}>{n.p.title}</span></span>
       </Link>
     );
@@ -92,11 +92,19 @@ export default function OrgChart() {
   const tree = useMemo(() => (people ? buildTree(people) : null), [people]);
   const [q, setQ] = useState("");
   const [custom, setCustom] = useState(null);
+  const box = useRef(null);
+  const [centerTick, setCenterTick] = useState(0);   // bumped to scroll the company root back into the middle
+  useEffect(() => {
+    const el = box.current, root = el && el.querySelector(".ht-card.root");
+    if (!el || !root) return;
+    const r = root.getBoundingClientRect(), c = el.getBoundingClientRect();
+    el.scrollLeft += (r.left + r.width / 2) - (c.left + c.width / 2);
+  }, [centerTick, tree]);
 
   const base = useMemo(() => {
     if (!tree) return new Set();
-    // Start with the company, its leaders and the department groups open: two levels deep.
-    return new Set(["root", ...tree.children.map((c) => c.key)]);
+    // Start with just the company and its first level showing. Open any branch with the + button, so the first screen is the whole picture.
+    return new Set(["root"]);
   }, [tree]);
   const found = useMemo(() => (tree && q.trim() ? search(tree, lc(q)) : null), [tree, q]);
   const open = found ? new Set([...(custom || base), ...found.open]) : custom || base;
@@ -112,14 +120,14 @@ export default function OrgChart() {
         sub="One chart for the whole company, built from the reporting managers set on the Employees page. Open a branch with +, and click anyone to see their page."
         actions={<div className="org-tools">
           <input className="input" placeholder="Find a person or role" aria-label="Find in the chart" value={q} onChange={(e) => setQ(e.target.value)} />
-          <button type="button" className="btn glass sm" onClick={() => setCustom(allKeys())}>Expand all</button>
-          <button type="button" className="btn glass sm" onClick={() => setCustom(new Set(["root"]))}>Collapse all</button>
+          <button type="button" className="btn glass sm" onClick={() => { setCustom(allKeys()); setCenterTick((t) => t + 1); }}>Expand all</button>
+          <button type="button" className="btn glass sm" onClick={() => { setCustom(new Set(["root"])); setCenterTick((t) => t + 1); }}>Collapse all</button>
         </div>} />
       <div className="org-legend" aria-label="Key">
         {Object.entries(ROLE_NAME).map(([k, v]) => <span key={k}><i className={`r-${k}`} />{v}</span>)}
         <span><i className="dash" />No reporting manager set yet</span>
       </div>
-      <div className="card"><div className="ht-scroll"><div className="ht"><ul><Branch n={tree} open={open} toggle={toggle} hits={hits} /></ul></div></div></div>
+      <div className="card"><div className="ht-scroll" ref={box}><div className="ht"><ul><Branch n={tree} open={open} toggle={toggle} hits={hits} /></ul></div></div></div>
     </section>
   );
 }

@@ -1,8 +1,10 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { api, apiMsg } from "../api.js";
 import { useAuth } from "../auth.jsx";
 import { Callout, SectionHead } from "../components/ui.jsx";
 import { useToast } from "../components/toast.jsx";
+import Pager, { usePaged } from "../components/Pager.jsx";
+import { byEmployeeNo } from "../lib/people.js";
 
 const COMPANY = /^[^@\s]+@wohlig\.com$/i;
 const hrConfirm = (who) => confirm(`Give ${who} full HR rights?\n\nHR can see and change everything in the app: onboarding, offboarding, leave, the audit log and everyone's logins. Only do this for someone who works in HR.`);
@@ -16,6 +18,7 @@ export default function Users() {
   const [testTo, setTestTo] = useState("");
   const [testNote, setTestNote] = useState("");
   const [testBusy, setTestBusy] = useState(false);
+  const [q, setQ] = useState("");
 
   const load = useCallback(async () => {
     const r = await api("GET", "/api/users");
@@ -23,6 +26,14 @@ export default function Users() {
     else { toast(apiMsg(r)); setD({ users: [], withoutAccount: 0, defaultPassword: "" }); }
   }, [toast]);
   useEffect(() => { if (isHr) load(); }, [isHr, load]);
+
+  const everyone = useMemo(() => {
+    if (!d) return [];
+    const s = q.trim().toLowerCase();
+    const all = [...d.users.map((u) => ({ ...u, login: true })), ...(d.noLogin || []).map((p) => ({ ...p, login: false }))];
+    return all.filter((r) => !s || `${r.no} ${r.name} ${r.email} ${r.title}`.toLowerCase().includes(s)).sort(byEmployeeNo);
+  }, [d, q]);
+  const { rows: pageRows, pager } = usePaged(everyone, q);
 
   if (!isHr) return <section className="section"><SectionHead eyebrow="People" title="Logins and" accent="roles." /><div className="empty">Only HR can manage logins.</div></section>;
 
@@ -38,6 +49,12 @@ export default function Users() {
     const sent = r.data.invite && r.data.invite.mode === "email";
     toast(sent ? "Employee created successfully. Invitation email sent." : "Employee created, but the invitation email could not be sent. Use “Resend invite” on their row to try again.");
     setCreate({ email: "", role: "employee" });
+    load();
+  };
+  const makeLogin = async (p) => {
+    const r = await api("POST", "/api/users", { email: p.email, role: "employee", sendInvite: true });
+    if (!r.ok) { toast(apiMsg(r)); return; }
+    toast(r.data.invite && r.data.invite.mode === "email" ? `Login created for ${p.name}. Invitation email sent.` : `Login created for ${p.name}, but the invitation email could not be sent. Use "Send invite" to try again.`);
     load();
   };
   const resend = async (u) => {
@@ -94,13 +111,16 @@ export default function Users() {
             {!d.mailConfigured && <p className="muted" style={{ margin: "12px 0 0", fontSize: "12.5px" }}>Email isn't set up on the server yet. Add the SMTP settings to <span className="mono">backend/.env</span> and restart, then this will send for real.</p>}
           </div></div>
 
-          <div className="card"><div className="card-h"><h3>Accounts</h3><span className="muted">{d.users.length}</span></div>
+          <div className="card"><div className="card-h"><h3>Everyone</h3>
+              <div className="row"><span className="muted">{d.users.length} with a login · {(d.noLogin || []).length} without</span>
+                <input className="input" placeholder="Search by name, ID or email" aria-label="Search people" value={q} onChange={(e) => setQ(e.target.value)} style={{ maxWidth: 260 }} /></div></div>
             <div className="tbl-wrap"><table>
-              <thead><tr><th>Person</th><th>Role</th><th className="hide-sm">Last sign-in</th><th></th></tr></thead>
+              <thead><tr><th>ID</th><th>Person</th><th>Role</th><th className="hide-sm">Last sign-in</th><th></th></tr></thead>
               <tbody>
-                {d.users.length === 0 && <tr><td colSpan="4"><div className="empty">No accounts yet.</div></td></tr>}
-                {d.users.map((u) => (
+                {pageRows.length === 0 && <tr><td colSpan="5"><div className="empty">{q ? `No one matches “${q}”.` : "No people yet."}</div></td></tr>}
+                {pageRows.map((u) => u.login ? (
                   <tr key={u.email}>
+                    <td className="num-cell"><span className="emp-no">{u.no}</span></td>
                     <td><b>{u.name || u.email}</b><div className="muted">{u.email}</div></td>
                     <td><select className="input" style={{ maxWidth: 140 }} aria-label={`Role for ${u.email}`} value={u.role} onChange={(e) => changeRole(u, e.target.value)}><option value="employee">Employee</option><option value="hr">HR</option></select></td>
                     <td className="hide-sm">{u.lastLogin ? new Date(u.lastLogin).toLocaleString() : "Never"}</td>
@@ -111,9 +131,18 @@ export default function Users() {
                         onClick={() => confirm(`Delete the account for ${u.email}? They will no longer be able to sign in.`) && act(api("DELETE", `/api/users/${encodeURIComponent(u.email)}`), "Account deleted.")}>Delete</button>
                     </div></td>
                   </tr>
+                ) : (
+                  <tr key={u.email}>
+                    <td className="num-cell"><span className="emp-no">{u.no}</span></td>
+                    <td><b>{u.name}</b><div className="muted">{u.email}</div></td>
+                    <td><span className="muted">No login yet</span></td>
+                    <td className="hide-sm"><span className="muted">—</span></td>
+                    <td><button type="button" className="btn primary sm" onClick={() => makeLogin(u)}>Create login &amp; send invite</button></td>
+                  </tr>
                 ))}
               </tbody>
             </table></div>
+            <Pager {...pager} />
           </div>
         </>
       )}

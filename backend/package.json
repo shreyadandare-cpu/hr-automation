@@ -7,7 +7,9 @@
     "start": "node src/index.js",
     "dev": "node --watch src/index.js",
     "build:ui": "cd ../frontend && npm install && npm run build",
-    "test:invites": "node test/invite-flow.mjs"
+    "test:invites": "node test/invite-flow.mjs",
+    "migrate": "node scripts/migrate.mjs",
+    "migrate:sql": "node scripts/migrate.mjs --write-sql"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.135.0",

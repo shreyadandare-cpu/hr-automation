@@ -100,19 +100,17 @@ export default function LeaveHr() {
         </table></div>
         <Pager {...pager} /></>)}</Paged></div>
 
-      <div className="grid g-main">
-        <div className="card"><div className="card-h"><h3>Decided</h3></div>
+      <div className="card"><div className="card-h"><h3>Decided</h3></div>
           <Paged items={done}>{(rows, pager) => (<>
           <div className="tbl-wrap"><table>
           <thead><tr><th>Employee</th><th>Type</th><th className="hide-sm">Dates</th><th>Paid</th><th>Loss of pay</th><th>Status</th></tr></thead>
           <tbody>{rows.length ? rows.map((r) => (
-            <tr key={r.id}><td><PersonCell person={r.emp} sub={r.emp.title} /></td><td>{LTYPE[r.type]}</td><td className="num-cell hide-sm">{rangeText(r, shortDate)}</td>
+            <tr key={r.id}><td><PersonCell person={r.emp} sub={r.emp.title} /></td><td style={{ whiteSpace: "nowrap" }}>{LTYPE[r.type]}</td><td className="num-cell hide-sm">{rangeText(r, shortDate)}</td>
               <td className="num-cell">{r.status === "approved" ? r.paidDays : "—"}</td><td className="num-cell">{r.status === "approved" ? (r.lopDays || "—") : "—"}</td>
               <td><Pill tone={LSTAT[r.status][1]}>{LSTAT[r.status][0]}</Pill></td></tr>))
             : <tr><td colSpan="6"><div className="empty">Nothing decided yet.</div></td></tr>}</tbody>
         </table></div>
           {pager.total > 10 && <Pager {...pager} />}</>)}</Paged></div>
-      </div>
       <HolidayCalendar editable />
       {modal === "comp" && <CompOffModal onClose={() => setModal(null)} />}
       {modal && modal.pay && <PayModal email={modal.pay} onClose={() => setModal(null)} />}

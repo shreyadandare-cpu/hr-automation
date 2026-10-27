@@ -146,18 +146,3 @@ export const requireHr = (req, res, next) =>
   !req.user ? res.status(401).json({ error: "Please sign in." })
   : req.user.role !== "hr" ? res.status(403).json({ error: "HR only." })
   : next();
-
-/* ---------- brute-force guard: 5 wrong passwords lock an email for 15 minutes ---------- */
-const fails = new Map();
-const LIMIT = 5, LOCK_MS = 15 * 60 * 1000;
-
-export function lockedFor(key) {
-  const f = fails.get(key);
-  return f && f.n >= LIMIT && f.until > Date.now() ? Math.ceil((f.until - Date.now()) / 60000) : 0;
-}
-export function noteFailure(key) {
-  const f = fails.get(key);
-  const n = f && f.until > Date.now() ? f.n + 1 : 1;
-  fails.set(key, { n, until: Date.now() + LOCK_MS });
-}
-export const clearFailures = (key) => fails.delete(key);

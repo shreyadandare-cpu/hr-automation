@@ -5,7 +5,8 @@ import assert from "node:assert/strict";
 import crypto from "node:crypto";
 import { spawn } from "node:child_process";
 import { pool } from "../src/db.js";
-import { createUser, getDefaultPassword } from "../src/auth.js";
+import { createUser } from "../src/auth.js";
+import { sessionCookie } from "./session.mjs";
 
 const PORT = 3101, base = `http://localhost:${PORT}`, KEY = process.env.ATTENDANCE_DEVICE_KEY;
 assert.ok(KEY && KEY.length >= 32, "Set ATTENDANCE_DEVICE_KEY (32+ characters) in backend/.env first");
@@ -16,15 +17,14 @@ const day = "2026-10-20";
 const stored = async (id) => (await pool.query("SELECT to_char(punch_time,'HH24:MI:SS') t, direction d, source FROM attendance_punches WHERE employee_id=$1 ORDER BY work_date, punch_time", [id])).rows;
 
 const before = (await pool.query("SELECT value FROM settings WHERE key='device_last_sync'")).rows[0];
-const server = spawn("node", ["src/index.js"], { env: { ...process.env, PORT: String(PORT), ALLOW_PASSWORD_LOGIN: "true" }, stdio: "ignore" });
+const server = spawn("node", ["src/index.js"], { env: { ...process.env, PORT: String(PORT) }, stdio: "ignore" });
 let n = 0, empId;
 const ok = (name) => console.log(`  ✓ ${++n}. ${name}`);
 try {
   for (let i = 0; i < 40; i++) { try { await fetch(base + "/login"); break; } catch { await new Promise((r) => setTimeout(r, 250)); } }
   empId = (await pool.query("INSERT INTO employees (emp_no, name, work_email, status) VALUES ($1,'Device Test','" + empEmail + "','active') RETURNING id", [`TST/${devId}`])).rows[0].id;
   await createUser(pool, hrEmail, "hr");
-  const login = await fetch(`${base}/api/login`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email: hrEmail, password: await getDefaultPassword() }) });
-  const cookie = login.headers.get("set-cookie").split(";")[0];
+  const cookie = await sessionCookie(hrEmail);
   const hr = (method, path, body) => fetch(`${base}${path}`, { method, headers: { "Content-Type": "application/json", cookie }, body: body ? JSON.stringify(body) : undefined }).then(async (r) => ({ status: r.status, body: await r.json() }));
   console.log(`Testing with device ID ${devId} and ${empEmail}`);
 

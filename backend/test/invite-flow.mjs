@@ -5,7 +5,7 @@ import assert from "node:assert/strict";
 import crypto from "node:crypto";
 import { spawn } from "node:child_process";
 import { pool } from "../src/db.js";
-import { createUser } from "../src/auth.js";
+import { createUser, verifyPassword } from "../src/auth.js";
 import { createInvite } from "../src/invites.js";
 import { COMPANY_DOMAIN } from "../src/validate.js";
 
@@ -14,10 +14,11 @@ const email = `invite.test.${crypto.randomBytes(3).toString("hex")}@${COMPANY_DO
 const tokenOf = (link) => link.split("/invite/")[1];
 const accept = (token, password) => fetch(`${base}/api/auth/accept-invitation`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ token, password }) })
   .then(async (r) => ({ status: r.status, body: await r.json() }));
-const login = (password) => fetch(`${base}/api/login`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email, password }) }).then((r) => r.status);
+// whether this password opens the account (the stored hash is checked, as there is no password sign-in route any more)
+const login = async (password) => ((await verifyPassword(password, (await pool.query("SELECT password_hash FROM users WHERE lower(email)=$1", [email])).rows[0].password_hash)) ? 200 : 401);
 const setExpiry = (token, sql) => pool.query(`UPDATE invites SET expires_at = ${sql} WHERE token_hash = $1`, [crypto.createHash("sha256").update(token).digest("hex")]);
 
-const server = spawn("node", ["src/index.js"], { env: { ...process.env, PORT: String(PORT), ALLOW_PASSWORD_LOGIN: "true" }, stdio: "ignore" });
+const server = spawn("node", ["src/index.js"], { env: { ...process.env, PORT: String(PORT) }, stdio: "ignore" });
 let n = 0;
 const ok = (name) => console.log(`  ✓ ${++n}. ${name}`);
 try {

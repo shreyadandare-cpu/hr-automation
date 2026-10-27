@@ -52,7 +52,7 @@ export default function Invite() {
             <input id="pw2" type="password" autoComplete="new-password" value={again} onChange={(e) => setAgain(e.target.value)} /></div>
           <button type="submit" disabled={busy}>{busy ? "Activating…" : "Accept invitation"}</button>
         </form>
-        <p className="hint">At least 8 characters. Next time, sign in with your work email and this password, or use “Continue with Google”.</p>
+        <p className="hint">Next time, sign in with “Continue with Google” using your @wohlig.com account.</p>
       </>}
     </main>
   );

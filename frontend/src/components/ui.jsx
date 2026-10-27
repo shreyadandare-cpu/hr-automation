@@ -77,11 +77,14 @@ export const Icon = ({ name }) => (
 
 export const Avatar = ({ person }) => <span className="avatar" style={{ background: person.color }}>{initials(person.name)}</span>;
 
+/* Lets a long email wrap at a dot or the @ (never in the middle of a word). */
+const breakable = (s) => String(s).split(/(?=[.@])/).flatMap((part, i) => (i ? [<wbr key={`w${i}`} />, part] : [part]));
+
 export function PersonCell({ person, sub }) {
   return (
     <div className="person">
       <Avatar person={person} />
-      <div style={{ minWidth: 0 }}><b>{person.name}</b><span>{sub ?? person.email}</span></div>
+      <div style={{ minWidth: 0 }}><b>{person.name}</b><span>{breakable(sub ?? person.email)}</span></div>
     </div>
   );
 }

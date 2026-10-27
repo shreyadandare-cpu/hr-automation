@@ -767,3 +767,15 @@ tr.att-detail td{background:var(--paper-2);padding:10px 26px}
 .pf-trash:hover{background:var(--bad-soft)}
 .pf-trash:focus-visible{outline:2px solid var(--purple);outline-offset:2px}
 .pf-trash svg{width:18px;height:18px}
+
+/* Employee directory: a wide Employee column so a long email shows in full, and minimum widths so the other columns are not squeezed.
+   On a narrow screen the table scrolls sideways instead of crushing the text. */
+.dir-table th:nth-child(2),.dir-table td:nth-child(2){min-width:305px}
+.dir-table .person{min-width:265px}
+.dir-table .person b,.dir-table .person span:not(.avatar){white-space:normal;overflow:visible;text-overflow:clip;overflow-wrap:break-word}
+.dir-table th:nth-child(3),.dir-table td:nth-child(3){min-width:175px}
+.dir-table th:nth-child(4),.dir-table td:nth-child(4){min-width:112px}
+.dir-table th:nth-child(5),.dir-table td:nth-child(5){min-width:110px}
+.dir-table th:nth-child(6),.dir-table td:nth-child(6){min-width:132px}
+.dir-table td:nth-child(6) .cell-sub{white-space:nowrap}
+@media (max-width:900px){.dir-table th:nth-child(2),.dir-table td:nth-child(2){min-width:220px}.dir-table .person{min-width:200px}}

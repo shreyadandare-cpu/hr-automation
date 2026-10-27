@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { useData } from "../data.jsx";
 import { SectionHead } from "../components/ui.jsx";
@@ -57,32 +57,39 @@ function search(node, q, path = [], out = { hits: new Set(), open: new Set() }) 
   return out;
 }
 
-function Card({ n, hit }) {
+/* A person (or the company, or a group): avatar on top, then a label with the name band in the role colour and the
+   designation underneath, like a printed org chart. `row` is the compact side-by-side form used in a stacked team. */
+function Card({ n, hit, row = false }) {
+  const cls = `vt-card${row ? " row" : ""}${hit ? " hit" : ""}`;
   if (n.kind === "person") {
     return (
-      <Link className={`ht-card${hit ? " hit" : ""}`} to={`/app/employees/${encodeURIComponent(n.p.email)}`} title={`${n.p.name}, ${n.p.title}`}>
+      <Link className={cls} data-role={n.role} to={`/app/employees/${encodeURIComponent(n.p.email)}`} title={`${n.p.name}, ${n.p.title}`}>
         <Face p={n.p} />
-        <span className="ht-txt"><b>{n.p.name}</b><span className={`org-role r-${n.role}`}>{n.p.title}</span></span>
+        <span className="vt-label"><b>{n.p.name}</b><span>{n.p.title}</span></span>
       </Link>
     );
   }
   return (
-    <div className={`ht-card ${n.kind === "root" ? "root" : "group"}`}>
-      <span className="org-av grp" style={n.kind === "root" ? { background: "var(--purple)", color: "#fff", border: 0 } : undefined}>{n.kind === "root" ? "W" : initials(n.label)}</span>
-      <span className="ht-txt"><b>{n.label}</b><small>{n.sub}</small></span>
+    <div className={`${cls} ${n.kind}`} data-role={n.kind === "root" ? "root" : "group"}>
+      <span className="org-av grp">{n.kind === "root" ? "W" : initials(n.label)}</span>
+      <span className="vt-label"><b>{n.label}</b><span>{n.sub}</span></span>
     </div>
   );
 }
 
+/* One node and, when open, the people under it. A team with no sub-teams stacks in a column so the chart stays narrow. */
 export function Branch({ n, open, toggle, hits }) {
   const isOpen = open.has(n.key), has = n.children.length > 0;
+  const stack = has && n.children.length > 2 && n.children.every((c) => !c.children.length);
   return (
     <li className={n.dashed ? "dsh" : ""}>
-      <div className="ht-node">
+      <div className="vt-node">
         <Card n={n} hit={hits.has(n.key)} />
         {has && <button type="button" className="ht-toggle" aria-expanded={isOpen} aria-label={`${isOpen ? "Hide" : "Show"} ${n.children.length} under ${n.p ? n.p.name : n.label}`} onClick={() => toggle(n.key)}>{isOpen ? "−" : "+"} {n.children.length}</button>}
       </div>
-      {has && isOpen && <ul className="ht-kids">{n.children.map((c) => <Branch key={c.key} n={c} open={open} toggle={toggle} hits={hits} />)}</ul>}
+      {has && isOpen && (stack
+        ? <div className={`vt-stack${n.children.some((c) => c.dashed) ? " dsh" : ""}`}>{n.children.map((c) => <Card key={c.key} n={c} hit={hits.has(c.key)} row />)}</div>
+        : <ul>{n.children.map((c) => <Branch key={c.key} n={c} open={open} toggle={toggle} hits={hits} />)}</ul>)}
     </li>
   );
 }
@@ -101,6 +108,10 @@ export default function OrgChart() {
   const found = useMemo(() => (tree && q.trim() ? search(tree, lc(q)) : null), [tree, q]);
   const open = found ? new Set([...(custom || base), ...found.open]) : custom || base;
   const hits = found ? found.hits : new Set();
+  // The chart is wider than the screen: start scrolled to the middle, where the company sits, and bring a search hit into view.
+  const scroller = useRef(null);
+  useEffect(() => { const el = scroller.current; if (el) el.scrollLeft = (el.scrollWidth - el.clientWidth) / 2; }, [tree]);
+  useEffect(() => { const hit = scroller.current && scroller.current.querySelector(".vt-card.hit"); if (hit) hit.scrollIntoView({ block: "nearest", inline: "center", behavior: "smooth" }); }, [q]);
 
   const allKeys = () => { const s = new Set(); const w = (n) => { if (n.children.length) s.add(n.key); n.children.forEach(w); }; w(tree); return s; };
   const toggle = (key) => { const s = new Set(open); s.has(key) ? s.delete(key) : s.add(key); setCustom(s); };
@@ -109,7 +120,7 @@ export default function OrgChart() {
   return (
     <section className="section">
       <SectionHead eyebrow="People" title="Who reports" accent="to whom."
-        sub="One chart for the whole company, built from the reporting managers set on the Employees page. Open a branch with +, and click anyone to see their page."
+        sub="The whole company from the top down, built from the reporting managers set on the Employees page. Open or close a team with its + / − button, and click anyone to see their page."
         actions={<div className="org-tools">
           <input className="input" placeholder="Find a person or role" aria-label="Find in the chart" value={q} onChange={(e) => setQ(e.target.value)} />
           <button type="button" className="btn glass sm" onClick={() => setCustom(allKeys())}>Expand all</button>
@@ -119,7 +130,7 @@ export default function OrgChart() {
         {Object.entries(ROLE_NAME).map(([k, v]) => <span key={k}><i className={`r-${k}`} />{v}</span>)}
         <span><i className="dash" />No reporting manager set yet</span>
       </div>
-      <div className="card"><div className="ht-scroll"><div className="ht"><ul><Branch n={tree} open={open} toggle={toggle} hits={hits} /></ul></div></div></div>
+      <div className="card vt-wrap org-bleed"><div className="vt-scroll" ref={scroller}><div className="vt"><ul><Branch n={tree} open={open} toggle={toggle} hits={hits} /></ul></div></div></div>
     </section>
   );
 }

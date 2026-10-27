@@ -628,28 +628,57 @@ tr.former td{opacity:.6}
 .dir-table td:first-child,.dir-table th:first-child{padding-right:6px;width:1%}
 
 /* Org chart: one tree, drawn left to right. Each level is a column of rounded cards joined by elbow lines. */
-.ht-scroll{overflow:auto;padding:26px 28px 30px;max-height:76vh}
-.ht{width:max-content;min-width:100%}
-.ht ul{list-style:none;margin:0;padding:0}
-.ht li{position:relative;display:flex;align-items:center}
-.ht-kids{position:relative;margin-left:30px}
-.ht-kids::before{content:"";position:absolute;left:-30px;top:50%;width:30px;border-top:2px solid var(--line-2)}
-.ht-kids>li{padding:7px 0 7px 34px}
-.ht-kids>li::before{content:"";position:absolute;left:0;top:50%;width:34px;border-top:2px solid var(--line-2)}
-.ht-kids>li::after{content:"";position:absolute;left:0;top:0;bottom:0;border-left:2px solid var(--line-2)}
-.ht-kids>li:first-child::after{top:50%}
-.ht-kids>li:last-child::after{bottom:50%}
-.ht-kids>li:only-child::after{display:none}
-.ht-kids>li.dsh::before,.ht-kids>li.dsh::after{border-style:dashed}
-.ht-node{display:flex;align-items:center;gap:8px}
-.ht-card{display:flex;align-items:center;gap:12px;min-width:236px;max-width:290px;padding:8px 18px 8px 8px;border-radius:999px;border:1px solid var(--line-2);background:var(--paper-2);text-decoration:none;color:var(--ink);transition:box-shadow .15s,transform .15s}
+/* Team tree: top-down, like a printed org chart. Each <li> draws its own share of the connector above it with
+   ::before/::after (left and right halves of the sibling line, plus the drop to the card). */
+.vt-scroll{overflow:auto;padding:28px 24px 34px;max-height:80vh;outline:none}
+.vt{width:max-content;min-width:100%}
+.vt ul{list-style:none;margin:0;padding:26px 0 0;display:flex;justify-content:center;position:relative}
+.vt>ul{padding-top:0}
+.vt li{position:relative;display:flex;flex-direction:column;align-items:center;padding:26px 7px 0}
+.vt>ul>li{padding-top:0}
+.vt li::before,.vt li::after{content:"";position:absolute;top:0;right:50%;width:50%;height:26px;border:0 solid var(--line-2);border-top-width:2px}
+.vt li::after{right:auto;left:50%;border-left-width:2px}
+.vt>ul>li::before,.vt>ul>li::after{display:none}
+.vt li:first-child::before,.vt li:last-child::after{border-top-width:0}
+.vt li:last-child::before{border-right-width:2px;border-radius:0 12px 0 0}
+.vt li:first-child::after{border-radius:12px 0 0 0}
+.vt li:only-child::before{display:none}
+.vt li:only-child::after{border-top-width:0;border-radius:0;margin-left:-1px}
+.vt ul ul::before,.vt li>.vt-stack::before{content:"";position:absolute;top:0;left:50%;margin-left:-1px;height:26px;border-left:2px solid var(--line-2)}
+.vt li.dsh::before,.vt li.dsh::after{border-style:dashed}
+.vt-stack.dsh::before,.vt ul.dsh::before{border-left-style:dashed}
+.vt-node{position:relative;display:flex;flex-direction:column;align-items:center}
+.vt-node:has(.ht-toggle){padding-bottom:30px}
+.vt-node:has(.ht-toggle)::after{content:"";position:absolute;left:50%;bottom:0;height:30px;margin-left:-1px;border-left:2px solid var(--line-2)}
+.vt-node .ht-toggle{position:absolute;bottom:4px;left:50%;transform:translateX(-50%);z-index:2;min-width:44px;padding:4px 9px;background:var(--surface);box-shadow:0 2px 6px rgba(77,73,221,.12)}
+/* Card: avatar above a two-band label (name in the role colour, designation beneath). */
+.vt-card{--rc:#6b7189;position:relative;z-index:1;display:flex;flex-direction:column;align-items:center;width:172px;text-decoration:none;color:var(--ink)}
+.vt-card[data-role=leader]{--rc:#7d6ee8}.vt-card[data-role=hr]{--rc:#0e8a5f}.vt-card[data-role=lead]{--rc:#3a6ea5}.vt-card[data-role=member]{--rc:#6b7189}
+.vt-card[data-role=root]{--rc:var(--purple)}.vt-card[data-role=group]{--rc:var(--ink-faint)}
+.vt-card .org-av{width:56px;height:56px;font-size:18px;margin-bottom:-10px;z-index:1;box-shadow:0 0 0 3px var(--surface),0 4px 12px rgba(14,10,56,.18)}
+.vt-card[data-role=root] .org-av{background:var(--purple);color:#fff;border:0}
+.vt-label{display:flex;flex-direction:column;width:100%;border-radius:10px;overflow:hidden;background:var(--surface);box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--rc) 45%,transparent),0 4px 14px rgba(14,10,56,.08)}
+.vt-label b{padding:14px 10px 6px;background:var(--rc);color:#fff;font:600 13px/1.25 var(--body);text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.vt-label>span{padding:6px 10px 8px;background:color-mix(in srgb,var(--rc) 12%,var(--surface));color:var(--ink-dim);font-size:11.5px;line-height:1.3;text-align:center;overflow-wrap:anywhere}
+.vt-card.group .vt-label{background:var(--surface);box-shadow:none;border:1.5px dashed var(--line-2)}
+.vt-card.group .vt-label b{background:var(--paper-2);color:var(--ink)}
+.vt-card.group .vt-label>span{background:transparent}
+a.vt-card:hover .vt-label{box-shadow:inset 0 0 0 2px var(--rc),0 8px 20px rgba(14,10,56,.14)}
+a.vt-card:focus-visible{outline:none}
+a.vt-card:focus-visible .vt-label{outline:2px solid var(--purple);outline-offset:3px}
+.vt-card.hit .vt-label{outline:3px solid var(--purple);outline-offset:3px}
+/* A team with no sub-teams: one column, joined by a line down the middle that shows in the gaps. */
+.vt-stack{position:relative;display:flex;flex-direction:column;align-items:center;gap:12px;padding-top:26px}
+.vt-stack>.vt-card::before{content:"";position:absolute;z-index:-1;left:50%;top:-12px;height:12px;border-left:2px solid var(--line-2);margin-left:-1px}
+.vt-stack.dsh>.vt-card::before{border-left-style:dashed}
+.vt-stack>.vt-card:first-child::before{display:none}
+.vt-card.row{flex-direction:row;align-items:center;width:232px;gap:0}
+.vt-card.row .org-av{width:44px;height:44px;font-size:14px;margin:0 -12px 0 0;flex:none}
+.vt-card.row .vt-label{flex:1;min-width:0;width:auto}
+.vt-card.row .vt-label{border-radius:10px}
+.vt-card.row .vt-label b{padding:7px 10px 4px 18px;text-align:left}
+.vt-card.row .vt-label>span{padding:4px 10px 6px 18px;text-align:left}
 a.ht-card:hover,a.ht-card:focus-visible{box-shadow:0 8px 22px rgba(77,73,221,.18);transform:translateY(-1px)}
-.ht-card.hit{outline:3px solid var(--purple);outline-offset:2px}
-.ht-card.group{border-style:dashed;background:transparent}
-.ht-card.root{background:var(--tint);border-color:var(--purple)}
-.ht-txt{display:flex;flex-direction:column;gap:5px;min-width:0}
-.ht-txt b{font-size:14px;line-height:1.2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.ht-txt small{color:var(--ink-faint);font-size:12px}
 .org-av{display:grid;place-items:center;flex:none;width:52px;height:52px;border-radius:50%;overflow:hidden;color:#fff;font:600 17px/1 var(--body);box-shadow:0 0 0 3px var(--tint),0 0 0 4px var(--line-2)}
 .org-av img{width:100%;height:100%;object-fit:cover;display:block}
 .org-av.grp{background:var(--paper);color:var(--purple);border:2px dashed var(--line-2);box-shadow:none}

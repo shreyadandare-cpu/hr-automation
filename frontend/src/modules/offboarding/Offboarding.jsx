@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import BackButton from "../../components/BackButton.jsx";
 import { api, apiMsg } from "../../api.js";
 import { useAuth } from "../../auth.jsx";
 import { useData } from "../../data.jsx";
@@ -241,6 +242,7 @@ function Wizard({ people, offs, initial }) {
 
   return (
     <section className="section">
+      <BackButton to="/app/offboarding" />
       <SectionHead eyebrow="Offboarding" title="Remove access," accent="step by step." sub="Pick who is leaving, confirm the access to remove, set the last day, then review. Nothing happens until you submit." />
       {busy.length > 0 && <Info>{busy.map((b, i) => <span key={b.id}>{i > 0 && ", "}<b>{b.name}</b></span>)} {busy.length > 1 ? "are" : "is"} still being offboarded. <Link className="btn link" to={link(busy[0])}>Open checklist</Link></Info>}
       {schedPeople.length > 0 && <Info>Scheduled: {schedPeople.map((b, i) => <span key={b.id}>{i > 0 && " · "}<Link className="btn link" to={link(b)}>{b.name}, {shortDate(b.lastDay)}</Link></span>)}</Info>}

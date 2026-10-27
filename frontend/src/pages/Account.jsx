@@ -1,3 +1,4 @@
+import BackButton from "../components/BackButton.jsx";
 import { useState } from "react";
 import { api, apiMsg } from "../api.js";
 import { useAuth } from "../auth.jsx";
@@ -19,6 +20,7 @@ export default function Account() {
   const signOut = async () => { await api("POST", "/api/logout"); location.href = "/login"; };
   return (
     <section className="section">
+      <BackButton />
       <SectionHead eyebrow="Account" title="Your" accent="account." sub={`${user.email} · ${isHr ? "HR" : "Employee"}`} />
       <div className="card"><div className="card-h"><h3>Change password</h3></div><div className="card-b">
         <form className="form" onSubmit={submit} noValidate>

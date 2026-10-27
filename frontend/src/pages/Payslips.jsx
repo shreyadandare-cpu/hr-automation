@@ -1,3 +1,4 @@
+import BackButton from "../components/BackButton.jsx";
 import { useEffect, useState } from "react";
 import { api, apiMsg } from "../api.js";
 import { Callout, Pill, SectionHead, shortDate } from "../components/ui.jsx";
@@ -14,6 +15,7 @@ export default function Payslips() {
   }, []);
   return (
     <section className="section">
+      <BackButton />
       <SectionHead eyebrow="Me" title="My" accent="payslips." sub="Download the payslip for any month that payroll has been processed. Each one is a PDF." />
       {error && <Callout>{error}</Callout>}
       <div className="card">

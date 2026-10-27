@@ -1,5 +1,6 @@
 import { useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
+import BackButton from "../components/BackButton.jsx";
 import { api, apiMsg } from "../api.js";
 import { useAuth } from "../auth.jsx";
 import { useData } from "../data.jsx";
@@ -155,6 +156,7 @@ export default function Profile() {
 
   return (
     <section className="section" style={{ gap: 18 }}>
+      <BackButton />
       <div className="sec-head"><div><div className="eyebrow">Me</div><h2>My <span className="grad">profile.</span></h2><Smile /></div></div>
       <div className="pf2">
         <aside className="pf2-rail">

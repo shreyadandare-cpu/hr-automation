@@ -1,3 +1,4 @@
+import BackButton from "../components/BackButton.jsx";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { api, apiMsg } from "../api.js";
 import { useAuth } from "../auth.jsx";
@@ -79,6 +80,7 @@ export default function Users() {
 
   return (
     <section className="section">
+      <BackButton />
       <SectionHead eyebrow="People" title="Logins and" accent="roles." sub="HR creates every account. New accounts start with the default password, and people can change it on their Account page." />
       {!d ? <div className="card"><div className="card-b muted">Loading…</div></div> : (
         <>

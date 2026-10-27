@@ -77,20 +77,38 @@ function Card({ n, hit, row = false }) {
   );
 }
 
-/* One node and, when open, the people under it. A team with no sub-teams stacks in a column so the chart stays narrow. */
-export function Branch({ n, open, toggle, hits }) {
-  const isOpen = open.has(n.key), has = n.children.length > 0;
-  const stack = has && n.children.length > 2 && n.children.every((c) => !c.children.length);
+const Toggle = ({ n, open, toggle }) => (
+  <button type="button" className="ht-toggle" aria-expanded={open} aria-label={`${open ? "Hide" : "Show"} ${n.children.length} under ${n.p ? n.p.name : n.label}`}
+    onClick={() => toggle(n.key)}>{open ? "−" : "+"} {n.children.length}</button>
+);
+
+/* The people under someone, one per line, joined to them by a rail and elbow lines. Anyone with a team of their own
+   has it listed under them the same way, one step further in. */
+function Rows({ list, open, toggle, hits }) {
   return (
-    <li className={n.dashed ? "dsh" : ""}>
-      <div className="vt-node">
-        <Card n={n} hit={hits.has(n.key)} />
-        {has && <button type="button" className="ht-toggle" aria-expanded={isOpen} aria-label={`${isOpen ? "Hide" : "Show"} ${n.children.length} under ${n.p ? n.p.name : n.label}`} onClick={() => toggle(n.key)}>{isOpen ? "−" : "+"} {n.children.length}</button>}
-      </div>
-      {has && isOpen && (stack
-        ? <div className={`vt-stack${n.children.some((c) => c.dashed) ? " dsh" : ""}`}>{n.children.map((c) => <Card key={c.key} n={c} hit={hits.has(c.key)} row />)}</div>
-        : <ul>{n.children.map((c) => <Branch key={c.key} n={c} open={open} toggle={toggle} hits={hits} />)}</ul>)}
-    </li>
+    <ul className="vt-list">{list.map((c) => {
+      const has = c.children.length > 0, isOpen = has && open.has(c.key);
+      return (
+        <li key={c.key} className={c.dashed ? "dsh" : ""}>
+          <div className="vt-row"><Card n={c} hit={hits.has(c.key)} row />{has && <Toggle n={c} open={isOpen} toggle={toggle} />}</div>
+          {isOpen && <Rows list={c.children} open={open} toggle={toggle} hits={hits} />}
+        </li>
+      );
+    })}</ul>
+  );
+}
+
+/* One branch under the company: the lead (or department) as a full card on the bus line, everyone under them
+   branching downwards beneath it. */
+export function Column({ n, open, toggle, hits }) {
+  const has = n.children.length > 0, isOpen = has && open.has(n.key);
+  // Deeper teams step further in on each level, so they get a wider share of the row.
+  const depth = (x) => (x.children.length && open.has(x.key) ? 1 + Math.max(...x.children.map(depth)) : 0);
+  return (
+    <div style={{ flexGrow: 2 + depth(n) }} className={`vt-col${n.dashed || n.kind === "group" ? " dsh" : ""}${has ? " has" : ""}`}>
+      <div className="vt-head"><Card n={n} hit={hits.has(n.key)} />{has && <Toggle n={n} open={isOpen} toggle={toggle} />}</div>
+      {isOpen && <Rows list={n.children} open={open} toggle={toggle} hits={hits} />}
+    </div>
   );
 }
 
@@ -100,20 +118,16 @@ export default function OrgChart() {
   const [q, setQ] = useState("");
   const [custom, setCustom] = useState(null);
 
-  const base = useMemo(() => {
-    if (!tree) return new Set();
-    // Start with the company, its leaders and the department groups open: two levels deep.
-    return new Set(["root", ...tree.children.map((c) => c.key)]);
-  }, [tree]);
+  const allKeys = () => { const s = new Set(); const w = (n) => { if (n.children.length) s.add(n.key); n.children.forEach(w); }; w(tree); return s; };
+  // Everyone starts open; the page only grows downwards.
+  const base = useMemo(() => (tree ? allKeys() : new Set()), [tree]);
   const found = useMemo(() => (tree && q.trim() ? search(tree, lc(q)) : null), [tree, q]);
   const open = found ? new Set([...(custom || base), ...found.open]) : custom || base;
   const hits = found ? found.hits : new Set();
-  // The chart is wider than the screen: start scrolled to the middle, where the company sits, and bring a search hit into view.
-  const scroller = useRef(null);
-  useEffect(() => { const el = scroller.current; if (el) el.scrollLeft = (el.scrollWidth - el.clientWidth) / 2; }, [tree]);
-  useEffect(() => { const hit = scroller.current && scroller.current.querySelector(".vt-card.hit"); if (hit) hit.scrollIntoView({ block: "nearest", inline: "center", behavior: "smooth" }); }, [q]);
+  // Bring the first search hit into view.
+  const board = useRef(null);
+  useEffect(() => { const hit = board.current && board.current.querySelector(".vt-card.hit"); if (hit) hit.scrollIntoView({ block: "center", behavior: "smooth" }); }, [q]);
 
-  const allKeys = () => { const s = new Set(); const w = (n) => { if (n.children.length) s.add(n.key); n.children.forEach(w); }; w(tree); return s; };
   const toggle = (key) => { const s = new Set(open); s.has(key) ? s.delete(key) : s.add(key); setCustom(s); };
 
   if (!tree) return <section className="section"><div className="empty">Loading…</div></section>;
@@ -124,13 +138,16 @@ export default function OrgChart() {
         actions={<div className="org-tools">
           <input className="input" placeholder="Find a person or role" aria-label="Find in the chart" value={q} onChange={(e) => setQ(e.target.value)} />
           <button type="button" className="btn glass sm" onClick={() => setCustom(allKeys())}>Expand all</button>
-          <button type="button" className="btn glass sm" onClick={() => setCustom(new Set(["root"]))}>Collapse all</button>
+          <button type="button" className="btn glass sm" onClick={() => setCustom(new Set())}>Collapse all</button>
         </div>} />
       <div className="org-legend" aria-label="Key">
         {Object.entries(ROLE_NAME).map(([k, v]) => <span key={k}><i className={`r-${k}`} />{v}</span>)}
         <span><i className="dash" />No reporting manager set yet</span>
       </div>
-      <div className="card vt-wrap org-bleed"><div className="vt-scroll" ref={scroller}><div className="vt"><ul><Branch n={tree} open={open} toggle={toggle} hits={hits} /></ul></div></div></div>
+      <div className="card vt-board org-bleed" ref={board}>
+        <div className="vt-top"><Card n={tree} /></div>
+        <div className="vt-cols">{tree.children.map((c) => <Column key={c.key} n={c} open={open} toggle={toggle} hits={hits} />)}</div>
+      </div>
     </section>
   );
 }

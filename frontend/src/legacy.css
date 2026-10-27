@@ -628,29 +628,50 @@ tr.former td{opacity:.6}
 .dir-table td:first-child,.dir-table th:first-child{padding-right:6px;width:1%}
 
 /* Org chart: one tree, drawn left to right. Each level is a column of rounded cards joined by elbow lines. */
-/* Team tree: top-down, like a printed org chart. Each <li> draws its own share of the connector above it with
-   ::before/::after (left and right halves of the sibling line, plus the drop to the card). */
-.vt-scroll{overflow:auto;padding:28px 24px 34px;max-height:80vh;outline:none}
-.vt{width:max-content;min-width:100%}
-.vt ul{list-style:none;margin:0;padding:26px 0 0;display:flex;justify-content:center;position:relative}
-.vt>ul{padding-top:0}
-.vt li{position:relative;display:flex;flex-direction:column;align-items:center;padding:26px 7px 0}
-.vt>ul>li{padding-top:0}
-.vt li::before,.vt li::after{content:"";position:absolute;top:0;right:50%;width:50%;height:26px;border:0 solid var(--line-2);border-top-width:2px}
-.vt li::after{right:auto;left:50%;border-left-width:2px}
-.vt>ul>li::before,.vt>ul>li::after{display:none}
-.vt li:first-child::before,.vt li:last-child::after{border-top-width:0}
-.vt li:last-child::before{border-right-width:2px;border-radius:0 12px 0 0}
-.vt li:first-child::after{border-radius:12px 0 0 0}
-.vt li:only-child::before{display:none}
-.vt li:only-child::after{border-top-width:0;border-radius:0;margin-left:-1px}
-.vt ul ul::before,.vt li>.vt-stack::before{content:"";position:absolute;top:0;left:50%;margin-left:-1px;height:26px;border-left:2px solid var(--line-2)}
-.vt li.dsh::before,.vt li.dsh::after{border-style:dashed}
-.vt-stack.dsh::before,.vt ul.dsh::before{border-left-style:dashed}
-.vt-node{position:relative;display:flex;flex-direction:column;align-items:center}
-.vt-node:has(.ht-toggle){padding-bottom:30px}
-.vt-node:has(.ht-toggle)::after{content:"";position:absolute;left:50%;bottom:0;height:30px;margin-left:-1px;border-left:2px solid var(--line-2)}
-.vt-node .ht-toggle{position:absolute;bottom:4px;left:50%;transform:translateX(-50%);z-index:2;min-width:44px;padding:4px 9px;background:var(--surface);box-shadow:0 2px 6px rgba(77,73,221,.12)}
+/* Team tree: a top-down org chart. The company sits on top; a bus line drops to each lead (or department) below it,
+   and everyone under a lead branches downwards from them on a rail, a step further in per level. Only the leads
+   spread across, so the chart fits the page width; on narrower screens the leads stack along one trunk line. */
+.vt-board{display:flex;flex-direction:column;align-items:center;padding:28px 16px 32px}
+.vt-top{position:relative;padding-bottom:26px}
+.vt-top::after{content:"";position:absolute;left:50%;bottom:0;height:26px;margin-left:-1px;border-left:2px solid var(--line-2)}
+.vt-cols{display:flex;width:100%;align-items:flex-start}
+.vt-col{position:relative;flex:1 1 0;min-width:0;padding:26px 6px 0;display:flex;flex-direction:column}
+/* Each column draws its share of the bus: the left and right halves of the line above it, plus the drop to its card. */
+.vt-col::before,.vt-col::after{content:"";position:absolute;top:0;right:50%;width:50%;height:26px;border:0 solid var(--line-2);border-top-width:2px}
+.vt-col::after{right:auto;left:50%;border-left-width:2px}
+.vt-col:first-child::before,.vt-col:last-child::after{border-top-width:0}
+.vt-col:last-child::before{border-right-width:2px;border-radius:0 12px 0 0}
+.vt-col:first-child::after{border-radius:12px 0 0 0}
+.vt-col:only-child::before{display:none}
+.vt-col.dsh::after{border-left-style:dashed}
+.vt-head{position:relative;display:flex;flex-direction:column;align-items:center}
+.vt-head>.vt-card{width:min(172px,100%)}
+/* The line from a lead down to their people, with the +/- button sitting on it. */
+.vt-col.has>.vt-head::after{content:"";position:absolute;left:50%;top:100%;height:24px;margin-left:-1px;border-left:2px solid var(--line-2)}
+.vt-col.dsh>.vt-head::after{border-left-style:dashed}
+.vt-head>.ht-toggle{position:absolute;top:calc(100% + 1px);left:50%;transform:translateX(-50%);z-index:2;padding:3px 8px;background:var(--surface);box-shadow:0 2px 6px rgba(77,73,221,.12)}
+/* From the bottom of that line, an elbow across to the rail the people hang from (14px in from the column edge). */
+.vt-col>.vt-list{position:relative;margin:40px 0 0 14px}
+.vt-col>.vt-list::before{content:"";position:absolute;top:-16px;left:0;width:calc((100% + 14px) / 2 - 14px);height:16px;border:0 solid var(--line-2);border-top-width:2px;border-left-width:2px;border-radius:10px 0 0 0}
+.vt-col.dsh>.vt-list::before{border-style:dashed}
+.vt-row{display:flex;align-items:center;gap:6px;min-width:0}
+.vt-row>.vt-card.row{flex:1;width:auto;min-width:0}
+.vt-row>.vt-card.row .vt-label b{white-space:normal;overflow-wrap:anywhere}
+.vt-row>.ht-toggle{min-width:0;padding:4px 7px}
+@media (max-width:1279px){
+  .vt-cols{flex-direction:column;align-items:center}
+  .vt-col{width:min(100%,460px);flex:none;padding:26px 0 8px}
+  .vt-col::before{display:none}
+  .vt-col::after{left:50%;width:0;border-top-width:0;border-radius:0;margin-left:-1px}
+}
+/* The rail sits under the avatar centre of the row above (26px for the 52px head avatar, 22px for a 44px row avatar). */
+.vt-list{list-style:none;margin:6px 0 0 21px;padding:0}
+.vt-list .vt-list{margin-left:21px}
+.vt-list>li{position:relative;padding:6px 0 6px 18px}
+.vt-list>li::before{content:"";position:absolute;left:0;top:0;bottom:0;border-left:2px solid var(--line-2)}
+.vt-list>li:last-child::before{bottom:auto;height:29px}
+.vt-list>li::after{content:"";position:absolute;left:0;top:28px;width:14px;border-top:2px solid var(--line-2)}
+.vt-list>li.dsh::before,.vt-list>li.dsh::after{border-left-style:dashed;border-top-style:dashed}
 /* Card: avatar above a two-band label (name in the role colour, designation beneath). */
 .vt-card{--rc:#6b7189;position:relative;z-index:1;display:flex;flex-direction:column;align-items:center;width:172px;text-decoration:none;color:var(--ink)}
 .vt-card[data-role=leader]{--rc:#7d6ee8}.vt-card[data-role=hr]{--rc:#0e8a5f}.vt-card[data-role=lead]{--rc:#3a6ea5}.vt-card[data-role=member]{--rc:#6b7189}
@@ -667,11 +688,6 @@ a.vt-card:hover .vt-label{box-shadow:inset 0 0 0 2px var(--rc),0 8px 20px rgba(1
 a.vt-card:focus-visible{outline:none}
 a.vt-card:focus-visible .vt-label{outline:2px solid var(--purple);outline-offset:3px}
 .vt-card.hit .vt-label{outline:3px solid var(--purple);outline-offset:3px}
-/* A team with no sub-teams: one column, joined by a line down the middle that shows in the gaps. */
-.vt-stack{position:relative;display:flex;flex-direction:column;align-items:center;gap:12px;padding-top:26px}
-.vt-stack>.vt-card::before{content:"";position:absolute;z-index:-1;left:50%;top:-12px;height:12px;border-left:2px solid var(--line-2);margin-left:-1px}
-.vt-stack.dsh>.vt-card::before{border-left-style:dashed}
-.vt-stack>.vt-card:first-child::before{display:none}
 .vt-card.row{flex-direction:row;align-items:center;width:232px;gap:0}
 .vt-card.row .org-av{width:44px;height:44px;font-size:14px;margin:0 -12px 0 0;flex:none}
 .vt-card.row .vt-label{flex:1;min-width:0;width:auto}

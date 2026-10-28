@@ -75,8 +75,14 @@ async function readNewest(zk, want) {
     const startByte = 4 + Math.max(0, total - want) * RECORD;
     const firstChunk = Math.floor(startByte / MAX_CHUNK), lastFull = Math.floor(size / MAX_CHUNK), remain = size % MAX_CHUNK;
     const parts = [];
-    for (let c = firstChunk; c < lastFull; c++) parts.push(await chunk(c * MAX_CHUNK, MAX_CHUNK));
-    if (remain > 0) parts.push(await chunk(lastFull * MAX_CHUNK, remain));
+    const get = async (start, size) => {   // one chunk at a time; a chunk that does not arrive is simply asked for again
+      for (let n = 1; ; n++) {
+        try { return await chunk(start, size); }
+        catch (e) { if (n >= 3) throw e; await new Promise((r) => setTimeout(r, 1500)); }
+      }
+    };
+    for (let c = firstChunk; c < lastFull; c++) parts.push(await get(c * MAX_CHUNK, MAX_CHUNK));
+    if (remain > 0) parts.push(await get(lastFull * MAX_CHUNK, remain));
     stream = Buffer.concat(parts); base = firstChunk * MAX_CHUNK;
   } else throw new Error(`the device answered with an unexpected reply (${head.commandId})`);
   try { await t.freeData(); } catch {}
@@ -88,9 +94,9 @@ async function readNewest(zk, want) {
 }
 
 /** The punches from `since` on, reading only the newest part of the log (widening it until it reaches back past `since`). Retries on errors. */
-async function readSince(since) {
+async function readSince(since, startWant = 4000) {
   const ZKLib = createRequire(import.meta.url)("node-zklib");
-  let want = 4000, lastError = "";
+  let want = startWant, lastError = "";
   for (let attempt = 1; attempt <= 3; attempt++) {
     const zk = new ZKLib(cfg.ip, cfg.port, 30000, 4000);
     try {
@@ -119,10 +125,10 @@ async function readDevice() {
   const file = arg("--from-file");
   if (file) return JSON.parse(fs.readFileSync(file, "utf8")).map((p) => ({ userId: String(p.userId), time: String(p.time) }));
   if (!cfg.ip) throw new Error("Set DEVICE_IP in .env");
-  if (process.env.TAIL_READ === "true") {   // experimental: reading only the newest chunks. Off by default, because it returned blank records on the office device.
-    try { return await readSince(startPoint()); }
-    catch (e) { log(`Could not read just the newest punches (${e.message}). Reading the whole log instead.`); }
-  }
+  // The library asks for every chunk of the log at once, and this device gives up after about a third of them. Asking one chunk at a time is gentler.
+  // TAIL_READ=true asks only for the newest chunks (experimental: it returned blank records on the office device).
+  try { return await readSince(startPoint(), process.env.TAIL_READ === "true" ? 4000 : Number.MAX_SAFE_INTEGER); }
+  catch (e) { log(`Reading the log one chunk at a time did not work (${e.message}). Trying the library's way.`); }
   const ZKLib = createRequire(import.meta.url)("node-zklib");
   // A big log (tens of thousands of punches) is often cut short on the way. The library reports that in `err` ("TIME OUT !! n PACKETS REMAIN")
   // but still hands back what it got, so a read with an error is thrown away and tried again, never trusted. The device's own count is a second check.

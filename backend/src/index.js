@@ -177,7 +177,10 @@ app.patch("/api/projects/:id", requireAuth, wrap(async (req, res) => {
   if (raw && !/^\d{4}-\d{2}-\d{2}$/.test(raw)) return res.status(400).json({ error: "Give the end date as a valid date." });
   if (raw && project.start && raw < project.start) return res.status(400).json({ error: "The end date cannot be before the start date." });
   const today = new Date().toISOString().slice(0, 10);
-  await pool.query("UPDATE projects SET end_date=$2, status=$3 WHERE id=$1", [project.id, raw || null, raw && raw <= today ? "Completed" : "Active"]);
+  const done = !!raw && raw <= today;
+  await pool.query("UPDATE projects SET end_date=$2, status=$3 WHERE id=$1", [project.id, raw || null, done ? "Completed" : "Active"]);
+  // Closing a project ends everyone's current allocation on it, so it drops off their Employees entry too.
+  if (done) await pool.query("UPDATE employee_project_allocations SET status='Ended', end_date=coalesce(end_date, $2) WHERE project_id=$1 AND status='Active'", [project.id, raw]);
   await pool.query("INSERT INTO audit_log (action, work_email) VALUES ($1,$2)", [raw ? `Project "${project.name}" end date set to ${raw}` : `Project "${project.name}" end date cleared`, req.user.email]);
   res.json({ ok: true });
 }));

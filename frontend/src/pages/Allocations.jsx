@@ -238,6 +238,9 @@ export default function Allocations() {
     if (r.ok) setData(r.data); else { setError(apiMsg(r)); setData((d) => d || { rows: [], projects: [], canCreate: false }); }
   };
   useEffect(() => { reload(); }, []);
+  /* After a change, also refresh the company roster so the Employees page shows the same projects. */
+  const { reload: reloadPeople } = useData();
+  const refresh = async () => { await reload(); reloadPeople(); };
   const rows = data ? data.rows : null;
   return (
     <section className="section">
@@ -247,7 +250,7 @@ export default function Allocations() {
         <button type="button" role="tab" aria-selected={tab === "projects"} className={tab === "projects" ? "on" : ""} onClick={() => setTab("projects")}>Projects</button>
         <button type="button" role="tab" aria-selected={tab === "people"} className={tab === "people" ? "on" : ""} onClick={() => setTab("people")}>Allocations</button>
       </div>
-      {tab === "projects" ? <ProjectTable rows={rows} list={data && data.projects} canCreate={!!(data && data.canCreate)} reload={reload} /> : <AllocationTable rows={rows} />}
+      {tab === "projects" ? <ProjectTable rows={rows} list={data && data.projects} canCreate={!!(data && data.canCreate)} reload={refresh} /> : <AllocationTable rows={rows} />}
     </section>
   );
 }

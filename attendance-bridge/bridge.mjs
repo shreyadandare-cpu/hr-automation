@@ -30,11 +30,97 @@ const startPoint = () => {
   const d = new Date(Date.now() - 7 * 864e5); return `${wall(d).slice(0, 10)} 00:00:00`;
 };
 
+const RECORD = 40;   // bytes per punch in the device's log
+
+/** Reads only the newest `want` punches from the device, one chunk at a time, instead of downloading the whole log (about 70,000 punches).
+    The log is one long byte stream (a 4-byte header, then 40 bytes per punch, oldest first) that the device hands out in chunks of MAX_CHUNK bytes.
+    This asks for the last few chunks only. It uses the same chunk framing as the node-zklib library. Returns { records, total }. */
+async function readNewest(zk, want) {
+  const req = createRequire(import.meta.url);
+  const { MAX_CHUNK, COMMANDS, REQUEST_DATA } = req("node-zklib/constants");
+  const { createTCPHeader, decodeTCPHeader, decodeRecordData40, checkNotEventTCP } = req("node-zklib/utils");
+  const t = zk.zklibTcp;
+  if (!t || !t.socket) throw new Error("no TCP connection to the device");
+
+  const chunk = (start, size) => new Promise((resolve, reject) => {
+    let total = Buffer.alloc(0), real = Buffer.alloc(0), timer = null;
+    const done = (err, data) => { clearTimeout(timer); t.socket.removeListener("data", onData); err ? reject(err) : resolve(data); };
+    const arm = () => { clearTimeout(timer); timer = setTimeout(() => done(new Error("the device stopped answering")), 20000); };
+    const onData = (reply) => {
+      if (checkNotEventTCP(reply)) return;
+      arm();
+      total = Buffer.concat([total, reply]);
+      const packetLength = total.readUIntLE(4, 2);
+      if (total.length >= 8 + packetLength) {
+        real = Buffer.concat([real, total.subarray(16, 8 + packetLength)]);
+        total = total.subarray(8 + packetLength);
+        if (real.length === size + 8) done(null, real.subarray(8));
+      }
+    };
+    t.socket.on("data", onData);
+    arm();
+    t.sendChunkRequest(start, size);
+  });
+
+  await t.freeData();
+  t.replyId++;
+  const reply = await t.requestData(createTCPHeader(COMMANDS.CMD_DATA_WRRQ, t.sessionId, t.replyId, REQUEST_DATA.GET_ATTENDANCE_LOGS));
+  const head = decodeTCPHeader(reply.subarray(0, 16));
+  let stream, base = 0, total;
+  if (head.commandId === COMMANDS.CMD_DATA) {                // a small log: it all came in one go
+    stream = reply.subarray(16); total = Math.floor((stream.length - 4) / RECORD);
+  } else if (head.commandId === COMMANDS.CMD_ACK_OK || head.commandId === COMMANDS.CMD_PREPARE_DATA) {
+    const size = reply.subarray(16).readUIntLE(1, 4);
+    total = Math.floor((size - 4) / RECORD);
+    const startByte = 4 + Math.max(0, total - want) * RECORD;
+    const firstChunk = Math.floor(startByte / MAX_CHUNK), lastFull = Math.floor(size / MAX_CHUNK), remain = size % MAX_CHUNK;
+    const parts = [];
+    for (let c = firstChunk; c < lastFull; c++) parts.push(await chunk(c * MAX_CHUNK, MAX_CHUNK));
+    if (remain > 0) parts.push(await chunk(lastFull * MAX_CHUNK, remain));
+    stream = Buffer.concat(parts); base = firstChunk * MAX_CHUNK;
+  } else throw new Error(`the device answered with an unexpected reply (${head.commandId})`);
+  try { await t.freeData(); } catch {}
+
+  const first = base === 0 ? 4 : (RECORD - ((base - 4) % RECORD)) % RECORD;   // the first whole punch inside this piece of the stream
+  const records = [];
+  for (let i = first; i + RECORD <= stream.length; i += RECORD) records.push(decodeRecordData40(stream.subarray(i, i + RECORD)));
+  return { records, total };
+}
+
+/** The punches from `since` on, reading only the newest part of the log (widening it until it reaches back past `since`). Retries on errors. */
+async function readSince(since) {
+  const ZKLib = createRequire(import.meta.url)("node-zklib");
+  let want = 4000, lastError = "";
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    const zk = new ZKLib(cfg.ip, cfg.port, 30000, 4000);
+    try {
+      await zk.createSocket();
+      for (;;) {
+        const { records, total } = await readNewest(zk, want);
+        const out = records.map((l) => ({ userId: String(l.deviceUserId), time: wall(new Date(l.recordTime)) }));
+        const oldest = out.reduce((m, p) => (p.time < m ? p.time : m), "9999");
+        if (out.length < total && oldest > since && want < total) { want = Math.min(total, want * 4); continue; }   // not far enough back yet: read more
+        out.expected = total; out.newestOnly = out.length < total;
+        return out;
+      }
+    } catch (e) {
+      lastError = e && e.message ? e.message : String(e);
+      log(`Reading the newest punches failed (attempt ${attempt} of 3): ${lastError}`);
+    } finally { try { await zk.disconnect(); } catch {} }
+    await new Promise((r) => setTimeout(r, 5000));
+  }
+  throw new Error(lastError || "could not read the newest punches");
+}
+
 /** Every punch the device holds: [{ userId, time }]. */
 async function readDevice() {
   const file = arg("--from-file");
   if (file) return JSON.parse(fs.readFileSync(file, "utf8")).map((p) => ({ userId: String(p.userId), time: String(p.time) }));
   if (!cfg.ip) throw new Error("Set DEVICE_IP in .env");
+  if (process.env.FULL_READ !== "true") {
+    try { return await readSince(startPoint()); }
+    catch (e) { log(`Could not read just the newest punches (${e.message}). Reading the whole log instead.`); }
+  }
   const ZKLib = createRequire(import.meta.url)("node-zklib");
   // A big log (tens of thousands of punches) is often cut short on the way. The library reports that in `err` ("TIME OUT !! n PACKETS REMAIN")
   // but still hands back what it got, so a read with an error is thrown away and tried again, never trusted. The device's own count is a second check.
@@ -107,7 +193,7 @@ async function main() {
   if (flag("--users")) { await listUsers(); return; }
   if (flag("--test")) {
     const all = await readDevice();
-    log(`Connected. Read ${all.length} punches${all.expected ? ` (the device says it holds ${all.expected})` : ""}.`);
+    log(all.newestOnly ? `Connected. Read the newest ${all.length} punches (the device holds ${all.expected}).` : `Connected. Read ${all.length} punches${all.expected ? ` (the device says it holds ${all.expected})` : ""}.`);
     const users = new Set(all.map((p) => p.userId));
     log(`${users.size} different device user IDs. The latest 5 punches:`);
     all.sort((a, b) => (a.time < b.time ? 1 : -1)).slice(0, 5).forEach((p) => console.log(`   user ${p.userId}  ${p.time}`));

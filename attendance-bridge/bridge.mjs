@@ -2,6 +2,7 @@
 //   npm start                      keep running, read every INTERVAL_SECONDS
 //   npm run once                   read once and stop
 //   npm run test-device            connect to the device and show what it holds; sends nothing
+//   run.bat --users               list every user on the device (ID and name) and save it to device-users.txt; sends nothing
 //   node bridge.mjs --from-file punches.json --once     send punches from a file instead of the device (to try the app side)
 import "dotenv/config";
 import fs from "node:fs";
@@ -81,7 +82,25 @@ async function syncOnce() {
   if (fresh.length) log(`Sent ${fresh.length}: ${added} added${unmatched.size ? `, waiting for HR to link device IDs: ${[...unmatched].join(", ")}` : ""}.`);
 }
 
+/** Prints every user stored on the device (ID and name) so HR can match IDs to people. Reads only. */
+async function listUsers() {
+  if (!cfg.ip) throw new Error("Set DEVICE_IP in .env");
+  const ZKLib = createRequire(import.meta.url)("node-zklib");
+  const zk = new ZKLib(cfg.ip, cfg.port, 10000, 4000);
+  try {
+    await zk.createSocket();
+    const res = await zk.getUsers();
+    const rows = (res.data || []).map((u) => ({ id: String(u.userId), name: String(u.name || "").replace(/\0/g, "").trim() }))
+      .sort((a, b) => (Number(a.id) || 0) - (Number(b.id) || 0));
+    const text = rows.map((r) => `${r.id}\t${r.name}`).join("\n");
+    fs.writeFileSync(new URL("./device-users.txt", import.meta.url), text + "\n");
+    log(`The device has ${rows.length} users. Saved to device-users.txt. ID, then name:`);
+    console.log(text);
+  } finally { try { await zk.disconnect(); } catch {} }
+}
+
 async function main() {
+  if (flag("--users")) { await listUsers(); return; }
   if (flag("--test")) {
     const all = await readDevice();
     log(`Connected. Read ${all.length} punches${all.expected ? ` (the device says it holds ${all.expected})` : ""}.`);

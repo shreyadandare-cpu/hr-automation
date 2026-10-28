@@ -98,6 +98,8 @@ async function readSince(since) {
       for (;;) {
         const { records, total } = await readNewest(zk, want);
         const out = records.map((l) => ({ userId: String(l.deviceUserId), time: wall(new Date(l.recordTime)) }));
+        const good = out.filter((p) => /^\d+$/.test(p.userId) && p.time >= "2015-01-01");
+        if (out.length && good.length < out.length * 0.9) throw new Error(`the newest part of the log came back unreadable (${out.length - good.length} of ${out.length} records blank or dated before 2015)`);
         const oldest = out.reduce((m, p) => (p.time < m ? p.time : m), "9999");
         if (out.length < total && oldest > since && want < total) { want = Math.min(total, want * 4); continue; }   // not far enough back yet: read more
         out.expected = total; out.newestOnly = out.length < total;
@@ -117,7 +119,7 @@ async function readDevice() {
   const file = arg("--from-file");
   if (file) return JSON.parse(fs.readFileSync(file, "utf8")).map((p) => ({ userId: String(p.userId), time: String(p.time) }));
   if (!cfg.ip) throw new Error("Set DEVICE_IP in .env");
-  if (process.env.FULL_READ !== "true") {
+  if (process.env.TAIL_READ === "true") {   // experimental: reading only the newest chunks. Off by default, because it returned blank records on the office device.
     try { return await readSince(startPoint()); }
     catch (e) { log(`Could not read just the newest punches (${e.message}). Reading the whole log instead.`); }
   }

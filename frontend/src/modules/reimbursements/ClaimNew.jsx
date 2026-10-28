@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
+import BackButton from "../../components/BackButton.jsx";
 import { api, apiMsg } from "../../api.js";
 import { useAuth } from "../../auth.jsx";
 import { useData } from "../../data.jsx";
@@ -328,6 +329,7 @@ export default function ClaimNew() {
 
   return (
     <section className="section">
+      <BackButton to="/app/reimbursements" />
       <Head eyebrow={hr && !resub ? "Finance" : "Me"} title={resub ? "Update and " : w.budget ? "Final " : "New "} accent={resub ? "resubmit." : w.budget ? "bill." : "claim."}
         sub={resub ? "Make the changes HR asked for, check the details, then send it back." : "Upload the invoice, check the details read from it, then submit. HR reviews every claim."} />
       <div className="stepper" role="list">{STEPS.map((s, i) => <div key={s} className={`stp ${w.step === i + 1 ? "on" : w.step > i + 1 ? "done" : ""}`} role="listitem"><b>{w.step > i + 1 ? "✓" : i + 1}</b>{s}</div>)}</div>

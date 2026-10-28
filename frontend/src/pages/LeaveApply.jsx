@@ -1,5 +1,6 @@
 import { useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
+import BackButton from "../components/BackButton.jsx";
 import { api, apiMsg } from "../api.js";
 import { useAuth } from "../auth.jsx";
 import { useData } from "../data.jsx";
@@ -171,6 +172,7 @@ export default function LeaveApply() {
 
   return (
     <section className="section" ref={top}>
+      <BackButton to={self ? "/app/my-leave" : "/app/leave"} />
       <SectionHead eyebrow={self ? "Me" : "Time off"} title={self ? "Request" : "Add leave for"} accent={self ? "leave." : "someone."}
         sub={self ? `Pick your dates and the type of leave, add a note, then review. ${lv.approverOf(w.email) === "hr" ? "You have no reporting manager, so HR approves it." : lv.approverOf(w.email) === "directors" ? `HR's own leave is approved by ${lv.approverName(w.email)}.` : "Your reporting manager approves it."}` : "For when HR enters leave on an employee's behalf. It still goes to the approval list."} />
       <Stepper cur={w.step} />

@@ -107,6 +107,9 @@ async function settle(db, id) {
   await db.query("UPDATE offboardings SET status=$2, completed_at=$3 WHERE id=$1", [id, next, allDone ? new Date() : null]);
   if (allDone) {
     await db.query("UPDATE employees SET status='offboarded' WHERE lower(work_email)=$1", [o[0].work_email.toLowerCase()]);
+    // Someone who has left is no longer on any project: their current allocations end, and stay in the history.
+    await db.query(`UPDATE employee_project_allocations SET status='Ended', end_date=CURRENT_DATE, end_reason='Left the company'
+      WHERE status='Active' AND employee_id=(SELECT id FROM employees WHERE lower(work_email)=$1)`, [o[0].work_email.toLowerCase()]);
     await audit(db, "Offboarding completed", o[0].work_email);
   } else if (toolsDone) {
     await audit(db, "All tool access removed", o[0].work_email);

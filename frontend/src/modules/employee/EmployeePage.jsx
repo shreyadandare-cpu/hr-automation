@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, Navigate, useParams, useSearchParams } from "react-router-dom";
+import BackButton from "../../components/BackButton.jsx";
 import { api, apiMsg } from "../../api.js";
 import { useAuth } from "../../auth.jsx";
 import { useData } from "../../data.jsx";
@@ -173,7 +174,7 @@ function EmployeeView({ p }) {
 
   return (
     <section className="section" style={{ gap: 22 }}>
-      <Link className="back" to="/app/employees">← All employees</Link>
+      <BackButton to="/app/employees" />
       <div className="card">
         <div className="profile"><Avatar person={e} /><div style={{ flex: 1, minWidth: 0 }}><div className="eyebrow">{e.dept}</div><h2 style={{ marginTop: 6 }}>{e.name}</h2><div style={{ color: "var(--ink-dim)", marginTop: 2 }}>{e.title}</div></div>
           <div className="row"><EmpPill e={e} />

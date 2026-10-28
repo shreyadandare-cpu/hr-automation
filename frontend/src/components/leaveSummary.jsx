@@ -213,7 +213,7 @@ export function HolidayTiles({ editable, onEdit }) {
         return (
           <div key={h.day} className={`hol${h.day < lv.today ? " past" : ""}${next && next.day === h.day ? " next" : ""}`}>
             <div className="hol-date" style={{ "--hc": TILE[m] }}><span>{MONTHS[m]}</span><b>{String(d.getDate()).padStart(2, "0")}</b></div>
-            <div className="hol-txt"><b>{h.name}</b><span>{d.toLocaleDateString("en-IN", { weekday: "long" })}{h.type ? ` · ${h.type}` : ""}{next && next.day === h.day ? " · Next holiday" : ""}</span></div>
+            <div className="hol-txt"><b>{h.name}</b><span>{d.toLocaleDateString("en-IN", { weekday: "long" })}{next && next.day === h.day ? " · Next holiday" : ""}</span></div>
             {editable && <div className="hol-act">
               <button type="button" className="btn glass sm" aria-label={`Edit ${h.name}`} onClick={() => onEdit(h)}>Edit</button>
               <button type="button" className="btn glass sm" aria-label={`Remove ${h.name}`} onClick={() => remove(h)}>Remove</button></div>}
@@ -223,7 +223,6 @@ export function HolidayTiles({ editable, onEdit }) {
         <form className="li wrap" noValidate onSubmit={addHoliday}>
           <input className="input" type="date" aria-label="Holiday date" style={{ width: "auto" }} value={add.day} onChange={(e) => setAdd({ ...add, day: e.target.value })} />
           <input className="input grow" maxLength={80} placeholder="Holiday name" aria-label="Holiday name" style={{ minWidth: 140 }} value={add.name} onChange={(e) => setAdd({ ...add, name: e.target.value })} />
-          <input className="input" maxLength={40} placeholder="Type (optional)" aria-label="Holiday type" style={{ width: 150 }} value={add.type} onChange={(e) => setAdd({ ...add, type: e.target.value })} />
           <button type="submit" className="btn primary sm">Add holiday</button>
         </form>
       )}

@@ -2,6 +2,7 @@
 //   npm start                      keep running, read every INTERVAL_SECONDS
 //   npm run once                   read once and stop
 //   npm run test-device            connect to the device and show what it holds; sends nothing
+//   run.bat --users               list every user on the device (ID and name) and save it to device-users.txt; sends nothing
 //   node bridge.mjs --from-file punches.json --once     send punches from a file instead of the device (to try the app side)
 import "dotenv/config";
 import fs from "node:fs";
@@ -35,12 +36,25 @@ async function readDevice() {
   if (file) return JSON.parse(fs.readFileSync(file, "utf8")).map((p) => ({ userId: String(p.userId), time: String(p.time) }));
   if (!cfg.ip) throw new Error("Set DEVICE_IP in .env");
   const ZKLib = createRequire(import.meta.url)("node-zklib");
-  const zk = new ZKLib(cfg.ip, cfg.port, 10000, 4000);
-  try {
-    await zk.createSocket();
-    const logs = await zk.getAttendances();
-    return (logs.data || []).map((l) => ({ userId: String(l.deviceUserId), time: wall(new Date(l.recordTime)) }));
-  } finally { try { await zk.disconnect(); } catch {} }
+  // A big log (tens of thousands of punches) is sometimes cut short on the way, with no error. The device says how many it holds,
+  // so a read that comes back much smaller is thrown away and tried again, rather than trusted.
+  let last = 0, expected = 0;
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    const zk = new ZKLib(cfg.ip, cfg.port, 10000, 4000);
+    try {
+      await zk.createSocket();
+      expected = await zk.getInfo().then((i) => Number(i.logCounts) || 0).catch(() => 0);
+      const logs = await zk.getAttendances();
+      const out = (logs.data || []).map((l) => ({ userId: String(l.deviceUserId), time: wall(new Date(l.recordTime)) }));
+      last = out.length;
+      if (!expected || out.length >= expected * 0.98 || process.env.ALLOW_PARTIAL === "true") { out.expected = expected; return out; }
+      log(`Read ${out.length} of the ${expected} punches the device holds (attempt ${attempt} of 3), trying again.`);
+    } catch (e) {
+      log(`Device read failed (attempt ${attempt} of 3): ${e && e.message ? e.message : e}`);
+    } finally { try { await zk.disconnect(); } catch {} }
+    await new Promise((r) => setTimeout(r, 5000));
+  }
+  throw new Error(`The device read was incomplete (${last} of ${expected || "an unknown number of"} punches), so nothing was sent this round`);
 }
 
 async function send(punches) {
@@ -68,10 +82,28 @@ async function syncOnce() {
   if (fresh.length) log(`Sent ${fresh.length}: ${added} added${unmatched.size ? `, waiting for HR to link device IDs: ${[...unmatched].join(", ")}` : ""}.`);
 }
 
+/** Prints every user stored on the device (ID and name) so HR can match IDs to people. Reads only. */
+async function listUsers() {
+  if (!cfg.ip) throw new Error("Set DEVICE_IP in .env");
+  const ZKLib = createRequire(import.meta.url)("node-zklib");
+  const zk = new ZKLib(cfg.ip, cfg.port, 10000, 4000);
+  try {
+    await zk.createSocket();
+    const res = await zk.getUsers();
+    const rows = (res.data || []).map((u) => ({ id: String(u.userId), name: String(u.name || "").replace(/\0/g, "").trim() }))
+      .sort((a, b) => (Number(a.id) || 0) - (Number(b.id) || 0));
+    const text = rows.map((r) => `${r.id}\t${r.name}`).join("\n");
+    fs.writeFileSync(new URL("./device-users.txt", import.meta.url), text + "\n");
+    log(`The device has ${rows.length} users. Saved to device-users.txt. ID, then name:`);
+    console.log(text);
+  } finally { try { await zk.disconnect(); } catch {} }
+}
+
 async function main() {
+  if (flag("--users")) { await listUsers(); return; }
   if (flag("--test")) {
     const all = await readDevice();
-    log(`Connected. The device holds ${all.length} punches.`);
+    log(`Connected. Read ${all.length} punches${all.expected ? ` (the device says it holds ${all.expected})` : ""}.`);
     const users = new Set(all.map((p) => p.userId));
     log(`${users.size} different device user IDs. The latest 5 punches:`);
     all.sort((a, b) => (a.time < b.time ? 1 : -1)).slice(0, 5).forEach((p) => console.log(`   user ${p.userId}  ${p.time}`));

@@ -28,7 +28,7 @@ function defaultPeriod(runs) {
 function PayTable({ lines, editable, onSetSalary }) {
   const lv = useLeave();
   const rows = lines.slice().sort((a, b) => (b.reimbursementTotal - a.reimbursementTotal) || (a.name < b.name ? -1 : 1));
-  if (!rows.length) return <div className="empty">Nobody has a salary set or a reimbursement for this month. Use “Set a salary breakdown” above.</div>;
+  if (!rows.length) return <div className="empty">No one to pay for this month yet.</div>;
   const sum = (k) => rows.reduce((n, l) => n + (l[k] || 0), 0);
   return (
     <div className="tbl-wrap"><table className="pay-table"><thead><tr><th>Employee</th><th className="num">Salary</th><th className="num">Reimbursements</th><th className="num">Loss of pay</th><th className="num">PF, tax &amp; TDS</th><th className="num">Total to pay</th></tr></thead><tbody>
@@ -46,7 +46,7 @@ function PayTable({ lines, editable, onSetSalary }) {
             <td className="num">{l.lopDeduction ? <>−{money(l.lopDeduction)}<div className="muted">{plural(l.lopDays, "day")}</div></> : "—"}</td>
             <td className="num">{l.statutory ? <>−{money(l.statutory)}{l.tdsApplicable && <div className="muted">incl. TDS {money(l.tds)}</div>}</> : "—"}</td>
             <td className="num"><b className="pay-total">{money(l.payable)}</b><div className="muted">{money(l.baseSalary || 0)} + {money(l.reimbursementTotal)}{l.lopDeduction ? ` − ${money(l.lopDeduction)}` : ""}{l.statutory ? ` − ${money(l.statutory)}` : ""}</div>
-              {l.incomplete && l.incomplete.length > 0 && <div style={{ marginTop: 4 }}><Pill tone="warn">Payslip incomplete</Pill><div className="muted">{l.incomplete.join(" ")}</div></div>}</td>
+              {l.incomplete && l.incomplete.length > 0 && (l.hasStructure || l.baseSalary) && <div style={{ marginTop: 4 }}><Pill tone="warn">Payslip incomplete</Pill><div className="muted">{l.incomplete.join(" ")}</div></div>}</td>
           </tr>
         );
       })}
@@ -112,7 +112,7 @@ export default function Payroll() {
   );
 
   const t = preview && preview.totals, done = preview && preview.existing;
-  const lines = preview ? preview.lines.filter((l) => l.baseSalary || l.reimbursementTotal || l.hasStructure) : [];
+  const lines = preview ? preview.lines : [];
   const staff = preview ? preview.lines.filter((l) => l.empNo || l.baseSalary || l.hasStructure).slice().sort((a, b) => (a.name < b.name ? -1 : 1)) : [];
 
   return (
@@ -152,7 +152,7 @@ export default function Payroll() {
       {run && (
         <div className="card" id="pr-run"><div className="card-h"><h3>{monthLabel(run.run.period)} payroll · per person</h3>
           <div className="row" style={{ gap: 8 }}>{run.run.status === "paid" ? <Pill tone="ok">Paid {dtShort(run.run.paidAt)}</Pill> : <Pill tone="info">Processed</Pill>}<button type="button" className="btn glass sm" onClick={() => setRun(null)}>Close</button></div></div>
-          <PayTable lines={run.items.filter((l) => l.baseSalary || l.reimbursementTotal || l.hasStructure)} editable={false} /></div>
+          <PayTable lines={run.items} editable={false} /></div>
       )}
       {dlg && dlg.kind === "process" && t && (
         <Modal onClose={() => setDlg(null)}>

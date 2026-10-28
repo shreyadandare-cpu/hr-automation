@@ -36,3 +36,10 @@ export default function Pager({ total, page, size, onPage, onSize, sizes = [10, 
     </div>
   );
 }
+
+/* Pages a list wherever it sits in a page. Use it as <Paged items={list} resetKey={search}>{(rows, pager) => ...}</Paged>, and put
+   <Pager {...pager} /> under the table. (A separate component, so it is safe even after an early return in the page.) */
+export function Paged({ items, resetKey = "", size = 10, children }) {
+  const { rows, pager } = usePaged(items, resetKey, size);
+  return children(rows, pager);
+}

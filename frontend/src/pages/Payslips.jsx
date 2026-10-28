@@ -1,3 +1,4 @@
+import BackButton from "../components/BackButton.jsx";
 import { useCallback, useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { api, apiMsg } from "../api.js";
@@ -76,6 +77,7 @@ export default function Payslips() {
 
   return (
     <section className="section">
+      <BackButton />
       <SectionHead eyebrow="Me" title={who ? "Payslips" : "My"} accent={who ? "." : "payslips."} sub="View or download the payslip for any month that payroll has been processed. Each one is also a PDF."
         actions={isHr && others.length > 0 && (
           <select className="input" aria-label="Whose payslips" style={{ width: "auto", maxWidth: "100%" }} value={who || user.email.toLowerCase()}

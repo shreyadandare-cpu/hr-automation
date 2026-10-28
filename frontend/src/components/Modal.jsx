@@ -1,7 +1,7 @@
 import { useEffect } from "react";
 
 /* A dialog over a dimmed page. Escape or a click outside closes it. */
-export default function Modal({ onClose, children }) {
+export default function Modal({ onClose, wide, children }) {
   useEffect(() => {
     const esc = (e) => { if (e.key === "Escape") onClose(); };
     document.addEventListener("keydown", esc);
@@ -9,7 +9,7 @@ export default function Modal({ onClose, children }) {
   }, [onClose]);
   return (
     <div className="scrim" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
-      <div className="modal" role="dialog" aria-modal="true">{children}</div>
+      <div className={`modal${wide ? " wide" : ""}`} role="dialog" aria-modal="true">{children}</div>
     </div>
   );
 }

@@ -23,7 +23,7 @@ function ManagerCell({ person }) {
 }
 
 /* The three dots at the end of a row (HR only). The menu is drawn over the page so the table never clips it. */
-function RowMenu({ person, onEdit }) {
+function RowMenu({ person, canEdit, onView, onEdit }) {
   const [at, setAt] = useState(null);
   const btn = useRef(null);
   useEffect(() => {
@@ -39,7 +39,7 @@ function RowMenu({ person, onEdit }) {
     const r = btn.current.getBoundingClientRect();
     setAt({ top: r.bottom + 6, right: Math.max(8, window.innerWidth - r.right) });
   };
-  const pick = (e) => { e.stopPropagation(); setAt(null); onEdit(person); };
+  const pick = (fn) => (e) => { e.stopPropagation(); setAt(null); fn(person); };
   return (
     <>
       <button ref={btn} type="button" className="dots-btn" aria-label={`Actions for ${person.name}`} aria-haspopup="menu" aria-expanded={!!at} onClick={toggle}>⋯</button>
@@ -47,7 +47,8 @@ function RowMenu({ person, onEdit }) {
         <>
           <div className="row-menu-scrim" onMouseDown={() => setAt(null)} />
           <div className="row-menu" role="menu" style={{ top: at.top, right: at.right }}>
-            <button type="button" role="menuitem" onClick={pick} disabled={person.status === "offboarded"}>Edit</button>
+            <button type="button" role="menuitem" onClick={pick(onView)}>View profile</button>
+            {canEdit && <button type="button" role="menuitem" onClick={pick(onEdit)} disabled={person.status === "offboarded"}>Edit</button>}
           </div>
         </>, document.body)}
     </>
@@ -126,22 +127,20 @@ export default function Employees() {
           {inTeam && <span className="muted">{direct.length} {direct.length === 1 ? "person reports" : "people report"} to you directly{team.length > direct.length ? `, ${team.length - direct.length} more work under them` : ""}.</span>}
         </div>)}
       <div className="card"><div className="tbl-wrap"><table className="dir-table">
-        <thead><tr><th>ID</th><th>Employee</th><th className="hide-sm">Role</th><th className="hide-sm">Reporting manager</th><th className="hide-sm">Projects</th><th>Status</th><th>Tools</th>{isHr && <th aria-label="Actions" />}</tr></thead>
+        <thead><tr><th>ID</th><th>Employee</th><th className="hide-sm">Role</th><th className="hide-sm">Reporting manager</th><th className="hide-sm">Projects</th><th>Status</th><th>Tools</th><th aria-label="Actions" /></tr></thead>
         <tbody>
           {rows.length ? rows.map((p) => (
-            <tr key={p.id} className={`click${p.status === "offboarded" ? " former" : ""}`} tabIndex={0}
-              onClick={() => nav(`/app/employees/${encodeURIComponent(p.email)}`)}
-              onKeyDown={(e) => e.key === "Enter" && nav(`/app/employees/${encodeURIComponent(p.email)}`)}>
+            <tr key={p.id} className={p.status === "offboarded" ? "former" : ""}>
               <td className="num-cell"><span className="emp-no">{p.no}</span></td>
               <td><PersonCell person={p} /></td>
-              <td className="hide-sm"><div className="cell-main">{p.title}</div><div className="cell-sub">{[p.dept, p.location].filter((x) => x && x !== "—").join(" · ")}</div></td>
+              <td className="hide-sm"><div className="cell-main">{p.title}{p.intern && <span className="pill p-info" style={{ marginLeft: 8, verticalAlign: "middle" }}>Intern</span>}</div><div className="cell-sub">{[p.dept, p.location].filter((x) => x && x !== "—").join(" · ")}</div></td>
               <td className="hide-sm"><ManagerCell person={p} /></td>
               <td className="hide-sm"><ProjectsCell person={p} /></td>
               <td><StatusPill person={p} /><div className="cell-sub">Joined {shortDate(p.start)}</div></td>
               <td><div className="apps-row">{toolIds(p).map((id) => <ToolIcon key={id} tool={TOOLS[id]} state={p.grants[id]} />)}</div></td>
-              {isHr && <td className="dots-cell" onKeyDown={(e) => e.stopPropagation()}><RowMenu person={p} onEdit={(x) => nav(`/app/employees/${encodeURIComponent(x.email)}?edit=1`)} /></td>}
+              <td className="dots-cell"><RowMenu person={p} canEdit={isHr} onView={(x) => nav(`/app/employees/${encodeURIComponent(x.email)}`)} onEdit={(x) => nav(`/app/employees/${encodeURIComponent(x.email)}?edit=1`)} /></td>
             </tr>
-          )) : <tr><td colSpan={isHr ? 8 : 7}><div className="empty">{q ? `No one matches “${q}”.` : "No one here yet."}</div></td></tr>}
+          )) : <tr><td colSpan="8"><div className="empty">{q ? `No one matches “${q}”.` : "No one here yet."}</div></td></tr>}
         </tbody>
       </table></div>
       <Pager total={all.length} page={cur} size={size} onPage={setPage} onSize={(n) => { setSize(n); setPage(1); }} /></div>

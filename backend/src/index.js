@@ -114,19 +114,85 @@ app.get("/api/roster", wrap(async (_req, res) => {
     location: r.work_location, manager: r.manager, start: r.start_date, lastDay: r.last_day, status: r.status, projects: r.projects, photoV: r.photo_v })));
 }));
 
-// Every project allocation (one row per employee per project), for everyone signed in. Names, dates, lead, location and status only.
-app.get("/api/allocations", wrap(async (_req, res) => {
+// Who the signed-in person is for project work: HR, a manager (has a team) or a project lead may start projects; HR or a project's lead manages its members.
+async function projectActor(req) {
+  const me = (await pool.query("SELECT name, status FROM employees WHERE lower(work_email)=$1", [req.user.email.toLowerCase()])).rows[0];
+  const isHr = req.user.role === "hr", name = me?.name || "";
+  const lead = name ? (await pool.query("SELECT 1 FROM projects WHERE lower(project_lead)=lower($1) LIMIT 1", [name])).rowCount > 0 : false;
+  const hasTeam = name ? (await pool.query("SELECT 1 FROM employees WHERE lower(manager)=lower($1) AND status <> 'offboarded' LIMIT 1", [name])).rowCount > 0 : false;
+  return { isHr, name, canCreate: isHr || hasTeam || lead };
+}
+const canManageProject = (actor, project) => actor.isHr || (!!actor.name && String(project.project_lead || "").toLowerCase() === actor.name.toLowerCase());
+
+// Every project (even ones nobody is on yet) and every allocation, for everyone signed in. `canManage` says whether this person may add people to a project.
+app.get("/api/allocations", wrap(async (req, res) => {
+  const actor = await projectActor(req);
   const { rows } = await pool.query(
     `SELECT a.id, p.id AS project_id, p.name AS project, e.name AS employee, e.work_email AS email, e.emp_no,
             a.start_date, a.end_date, coalesce(a.project_lead, p.project_lead) AS lead, a.location, a.status,
-            coalesce(a.handover_to, a.transferred_to) AS handed_over_to,
-            p.project_lead AS p_lead, p.start_date AS p_start, p.end_date AS p_end, p.status AS p_status
+            coalesce(a.handover_to, a.transferred_to) AS handed_over_to
      FROM employee_project_allocations a
      JOIN projects p ON p.id = a.project_id JOIN employees e ON e.id = a.employee_id
      ORDER BY p.name, e.name`);
-  res.json(rows.map((r) => ({ id: r.id, projectId: r.project_id, project: r.project, employee: r.employee, email: r.email, no: r.emp_no,
-    start: r.start_date, end: r.end_date, lead: r.lead, location: r.location, status: r.status, handedOverTo: r.handed_over_to,
-    projectLead: r.p_lead, projectStart: r.p_start, projectEnd: r.p_end, projectStatus: r.p_status })));
+  const projects = (await pool.query("SELECT id, name, project_lead, start_date, end_date, status, description FROM projects ORDER BY name")).rows;
+  res.json({
+    canCreate: actor.canCreate,
+    projects: projects.map((p) => ({ id: p.id, name: p.name, lead: p.project_lead, start: p.start_date, end: p.end_date, status: p.status,
+      description: p.description, canManage: canManageProject(actor, p) })),
+    rows: rows.map((r) => ({ id: r.id, projectId: r.project_id, project: r.project, employee: r.employee, email: r.email, no: r.emp_no,
+      start: r.start_date, end: r.end_date, lead: r.lead, location: r.location, status: r.status, handedOverTo: r.handed_over_to })),
+  });
+}));
+
+// Start a project. HR picks the lead; a manager's own projects are led by them.
+app.post("/api/projects", requireAuth, wrap(async (req, res) => {
+  const actor = await projectActor(req);
+  if (!actor.canCreate) return res.status(403).json({ error: "Only HR and managers can add projects." });
+  const name = String(req.body?.name || "").trim();
+  if (!name || name.length > 120) return res.status(400).json({ error: "Give the project a name (up to 120 characters)." });
+  if ((await pool.query("SELECT 1 FROM projects WHERE lower(name)=lower($1)", [name])).rowCount) return res.status(409).json({ error: "A project with this name already exists." });
+  let lead = actor.name;
+  if (actor.isHr) {
+    lead = String(req.body?.lead || "").trim();
+    if (lead && !(await pool.query("SELECT 1 FROM employees WHERE lower(name)=lower($1) AND status <> 'offboarded'", [lead])).rowCount) return res.status(400).json({ error: "The project lead must be a current employee." });
+  }
+  const start = /^\d{4}-\d{2}-\d{2}$/.test(req.body?.start || "") ? req.body.start : null;
+  const description = String(req.body?.description || "").trim().slice(0, 500) || null;
+  const p = (await pool.query("INSERT INTO projects (name, project_lead, start_date, description) VALUES ($1,$2,$3,$4) RETURNING id", [name, lead || null, start, description])).rows[0];
+  await pool.query("INSERT INTO audit_log (action, work_email) VALUES ($1,$2)", [`Project "${name}" added${lead ? `, led by ${lead}` : ""}`, req.user.email]);
+  res.json({ id: p.id });
+}));
+
+// Put someone on a project. HR, or the project's lead.
+app.post("/api/projects/:id/members", requireAuth, wrap(async (req, res) => {
+  const actor = await projectActor(req);
+  const project = (await pool.query("SELECT id, name, project_lead FROM projects WHERE id=$1", [Number(req.params.id) || 0])).rows[0];
+  if (!project) return res.status(404).json({ error: "Project not found." });
+  if (!canManageProject(actor, project)) return res.status(403).json({ error: "Only HR or the project lead can add people to this project." });
+  const emp = (await pool.query("SELECT id, name, status, work_location FROM employees WHERE lower(work_email)=$1", [String(req.body?.email || "").trim().toLowerCase()])).rows[0];
+  if (!emp) return res.status(404).json({ error: "Employee not found." });
+  if (emp.status === "offboarded") return res.status(400).json({ error: `${emp.name} has left, so cannot join a project.` });
+  if ((await pool.query("SELECT 1 FROM employee_project_allocations WHERE project_id=$1 AND employee_id=$2 AND status='Active'", [project.id, emp.id])).rowCount)
+    return res.status(409).json({ error: `${emp.name} is already on ${project.name}.` });
+  const start = /^\d{4}-\d{2}-\d{2}$/.test(req.body?.start || "") ? req.body.start : new Date().toISOString().slice(0, 10);
+  const location = String(req.body?.location || "").trim().slice(0, 80) || emp.work_location || null;
+  await pool.query(`INSERT INTO employee_project_allocations (employee_id, project_id, start_date, project_lead, location, status) VALUES ($1,$2,$3,$4,$5,'Active')`,
+    [emp.id, project.id, start, project.project_lead, location]);
+  await pool.query("INSERT INTO audit_log (action, work_email) VALUES ($1,$2)", [`${emp.name} added to project "${project.name}"`, req.user.email]);
+  res.json({ ok: true });
+}));
+
+// Take someone off a project: the allocation ends today and stays in the history.
+app.delete("/api/allocations/:id", requireAuth, wrap(async (req, res) => {
+  const actor = await projectActor(req);
+  const a = (await pool.query(`SELECT a.id, a.status, e.name AS employee, p.name AS project, p.project_lead FROM employee_project_allocations a
+    JOIN projects p ON p.id=a.project_id JOIN employees e ON e.id=a.employee_id WHERE a.id=$1`, [Number(req.params.id) || 0])).rows[0];
+  if (!a) return res.status(404).json({ error: "Allocation not found." });
+  if (!canManageProject(actor, a)) return res.status(403).json({ error: "Only HR or the project lead can take people off this project." });
+  if (a.status !== "Active") return res.status(400).json({ error: "This allocation has already ended." });
+  await pool.query("UPDATE employee_project_allocations SET status='Ended', end_date=CURRENT_DATE WHERE id=$1", [a.id]);
+  await pool.query("INSERT INTO audit_log (action, work_email) VALUES ($1,$2)", [`${a.employee} taken off project "${a.project}"`, req.user.email]);
+  res.json({ ok: true });
 }));
 
 // Who reports to whom, for everyone. Only the manager's name is sent, so this is safe for employees too.

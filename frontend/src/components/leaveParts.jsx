@@ -5,7 +5,8 @@ import { useToast } from "./toast.jsx";
 import Modal, { Field } from "./Modal.jsx";
 import { Pill, shortDate } from "./ui.jsx";
 import { R } from "../lib/leave.js";
-import { lc, useLeave } from "../lib/useLeave.js";
+import { useLeave } from "../lib/useLeave.js";
+import { HolidayTiles } from "./leaveSummary.jsx";
 
 /* Approve and decline buttons for people who may decide, otherwise who it is waiting for. kind: "requests" or "comp-offs". */
 export function DecideButtons({ kind, id, email }) {
@@ -154,58 +155,8 @@ function HolidayModal({ holiday, onClose }) {
   );
 }
 
-/* The company holiday list. Leave never counts these days, or Saturdays and Sundays. HR can add, edit and remove. */
+/* The company holiday list as calendar tiles. Leave never counts these days, or Saturdays and Sundays. HR can add, edit and remove. */
 export function HolidayCalendar({ editable }) {
-  const lv = useLeave(), { reloadLeave } = useData(), toast = useToast();
-  const [yearPick, setYearPick] = useState(null);
   const [editing, setEditing] = useState(null);
-  const [add, setAdd] = useState({ day: "", name: "", type: "" });
-  const today = lv.today, all = lv.holidays;
-  const years = [...new Set([...all.map((h) => Number(h.day.slice(0, 4))), Number(today.slice(0, 4))])].sort();
-  const y = yearPick && years.includes(yearPick) ? yearPick : Number(today.slice(0, 4));
-  const list = all.filter((h) => h.day.startsWith(String(y))).sort((a, b) => (a.day < b.day ? -1 : 1));
-  const wd = (d) => new Date(d + "T00:00:00").toLocaleDateString("en-IN", { weekday: "long" });
-  const weekend = (d) => [0, 6].includes(new Date(d + "T00:00:00").getDay());
-  const next = list.find((h) => h.day >= today);
-  const remove = async (h) => {
-    const r = await api("DELETE", `/api/leave/holidays/${h.day}`);
-    if (!r.ok) { toast(apiMsg(r)); return; }
-    reloadLeave();
-  };
-  const addHoliday = async (e) => {
-    e.preventDefault();
-    const r = await api("POST", "/api/leave/holidays", add);
-    if (!r.ok) { toast(apiMsg(r)); return; }
-    toast(`${add.name.trim()} added as a holiday.`); setAdd({ day: "", name: "", type: "" }); reloadLeave();
-  };
-  return (
-    <div className="card" id="holiday-calendar">
-      <div className="card-h">
-        <div><h3>Holiday calendar — {y}</h3><span className="muted">{list.length} holiday{list.length === 1 ? "" : "s"} · not counted as leave, like Saturdays and Sundays</span></div>
-        {years.length > 1 && <select className="input" aria-label="Year" style={{ width: "auto" }} value={y} onChange={(e) => setYearPick(Number(e.target.value))}>{years.map((x) => <option key={x}>{x}</option>)}</select>}
-      </div>
-      {list.length ? (
-        <div className="tbl-wrap"><table className="hol-table">
-          <thead><tr><th>Date</th><th>Day</th><th>Holiday</th>{editable && <th><span className="sr">Actions</span></th>}</tr></thead>
-          <tbody>{list.map((h) => (
-            <tr key={h.day} className={`${h.day < today ? "past" : ""}${next && h.day === next.day ? " next" : ""}`}>
-              <td className="num-cell"><b>{new Date(h.day + "T00:00:00").toLocaleDateString("en-IN", { day: "2-digit", month: "short" })}</b></td>
-              <td>{wd(h.day)}{weekend(h.day) && <> <span className="muted" style={{ fontSize: 12 }}>(weekend)</span></>}</td>
-              <td>{h.name}{next && h.day === next.day && <> <Pill tone="info">Next</Pill></>}</td>
-              {editable && <td className="num"><div className="row" style={{ gap: 6, justifyContent: "flex-end" }}>
-                <button type="button" className="btn glass sm" aria-label={`Edit ${h.name}`} onClick={() => setEditing(h)}>Edit</button>
-                <button type="button" className="btn glass sm" aria-label={`Remove ${h.name}`} onClick={() => remove(h)}>Remove</button></div></td>}
-            </tr>))}</tbody>
-        </table></div>
-      ) : <div className="empty">No holidays for {y} yet.</div>}
-      {editable && (
-        <form className="li wrap" noValidate onSubmit={addHoliday}>
-          <input className="input" type="date" aria-label="Holiday date" style={{ width: "auto" }} value={add.day} onChange={(e) => setAdd({ ...add, day: e.target.value })} />
-          <input className="input grow" maxLength={80} placeholder="Holiday name" aria-label="Holiday name" style={{ minWidth: 140 }} value={add.name} onChange={(e) => setAdd({ ...add, name: e.target.value })} />
-          <button type="submit" className="btn primary sm">Add holiday</button>
-        </form>
-      )}
-      {editing && <HolidayModal holiday={editing} onClose={() => setEditing(null)} />}
-    </div>
-  );
+  return <>{<HolidayTiles editable={editable} onEdit={setEditing} />}{editing && <HolidayModal holiday={editing} onClose={() => setEditing(null)} />}</>;
 }

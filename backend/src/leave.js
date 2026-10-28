@@ -13,6 +13,7 @@ const when = (r) => (r.half ? `${r.from} (${L.HALVES[r.half]})` : `${r.from} to 
 const toRequest = (r) => ({
   id: r.id, email: r.work_email, type: r.type, from: r.from_date, to: r.to_date, half: r.half || null, days: num(r.days), reason: r.reason, notify: r.notify || [],
   status: r.status, paidDays: num(r.paid_days), lopDays: num(r.lop_days), decidedAt: r.decided_at, createdAt: r.created_at,
+  createdBy: r.created_by || null, decidedBy: r.decided_by || null,
 });
 const toCompOff = (c) => ({ id: c.id, email: c.work_email, workedOn: c.worked_on, days: num(c.days), reason: c.reason, status: c.status });
 const toEmp = (e) => ({ name: e.name, status: e.status, start: e.start_date, casualOpening: num(e.casual_opening) });
@@ -132,8 +133,8 @@ export function leaveRouter(wrap) {
       const saved = [];
       for (const p of L.planRequest({ type, from, to, half, holidays, bal, existing: hist.requests, today: todayIso() })) {
         const { rows } = await client.query(
-          `INSERT INTO leave_requests (work_email, type, from_date, to_date, half, days, reason, notify) VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *`,
-          [emp.work_email, p.type, p.from, p.to, p.half, p.days, String(reason).trim(), JSON.stringify(notify)]);
+          `INSERT INTO leave_requests (work_email, type, from_date, to_date, half, days, reason, notify, created_by) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *`,
+          [emp.work_email, p.type, p.from, p.to, p.half, p.days, String(reason).trim(), JSON.stringify(notify), req.user.email.toLowerCase()]);
         const lr = toRequest(rows[0]);
         await audit(client, `${L.TYPES[p.type].name} requested: ${when(lr)} (${plural(p.days)})`, emp.work_email);
         saved.push(lr);
@@ -158,7 +159,7 @@ export function leaveRouter(wrap) {
       const name = L.TYPES[lr.type].name;
       if (decision === "declined") {
         const { rows: out } = await client.query(
-          "UPDATE leave_requests SET status='declined', decided_at=now() WHERE id=$1 RETURNING *", [lr.id]);
+          "UPDATE leave_requests SET status='declined', decided_at=now(), decided_by=$2 WHERE id=$1 RETURNING *", [lr.id, self(req)]);
         await audit(client, `${name} declined by ${req.user.email}: ${when(lr)}`, lr.email);
         return [200, toRequest(out[0])];
       }
@@ -168,8 +169,8 @@ export function leaveRouter(wrap) {
       const bal = L.balances(Number(lr.from.slice(0, 4)), emp ? toEmp(emp) : {}, hist.requests, hist.compOffs);
       const { paid, lop } = L.allocate(lr.type, days, bal);
       const { rows: out } = await client.query(
-        `UPDATE leave_requests SET status='approved', days=$2, paid_days=$3, lop_days=$4, decided_at=now() WHERE id=$1 RETURNING *`,
-        [lr.id, days, paid, lop]);
+        `UPDATE leave_requests SET status='approved', days=$2, paid_days=$3, lop_days=$4, decided_at=now(), decided_by=$5 WHERE id=$1 RETURNING *`,
+        [lr.id, days, paid, lop, self(req)]);
       await audit(client, `${name} approved by ${req.user.email}: ${when(lr)} (${plural(paid)} paid${lop ? `, ${plural(lop)} loss of pay` : ""})`, lr.email);
       return [200, toRequest(out[0])];
     });
@@ -183,7 +184,7 @@ export function leaveRouter(wrap) {
       const lr = toRequest(rows[0]);
       if (!isHr(req) && lr.email.toLowerCase() !== self(req)) return [404, { error: "Leave request not found." }];
       if (lr.status !== "pending") return [409, { error: `This request was already ${lr.status}, so it can't be cancelled.` }];
-      const { rows: out } = await client.query("UPDATE leave_requests SET status='cancelled', decided_at=now() WHERE id=$1 RETURNING *", [lr.id]);
+      const { rows: out } = await client.query("UPDATE leave_requests SET status='cancelled', decided_at=now(), decided_by=$2 WHERE id=$1 RETURNING *", [lr.id, self(req)]);
       await audit(client, `${L.TYPES[lr.type].name} cancelled by the employee: ${when(lr)}`, lr.email);
       return [200, toRequest(out[0])];
     });

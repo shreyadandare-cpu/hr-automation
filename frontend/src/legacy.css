@@ -617,7 +617,7 @@ tr.former td{opacity:.6}
 @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
 
 /* Employee directory: calm, two-line cells instead of many small columns */
-.dir-table td,.dir-table th{padding-inline:18px}
+.dir-table td,.dir-table th{padding-inline:12px}
 .dir-table td{padding-block:16px}
 .cell-main{font-weight:500;color:var(--ink)}
 .cell-sub{color:var(--ink-faint);font-size:12.5px;margin-top:3px}
@@ -770,13 +770,13 @@ tr.att-detail td{background:var(--paper-2);padding:10px 26px}
 
 /* Employee directory: a wide Employee column so a long email shows in full, and minimum widths so the other columns are not squeezed.
    On a narrow screen the table scrolls sideways instead of crushing the text. */
-.dir-table th:nth-child(2),.dir-table td:nth-child(2){min-width:305px}
-.dir-table .person{min-width:265px}
+.dir-table th:nth-child(2),.dir-table td:nth-child(2){min-width:285px}
+.dir-table .person{min-width:245px}
 .dir-table .person b,.dir-table .person span:not(.avatar){white-space:normal;overflow:visible;text-overflow:clip;overflow-wrap:break-word}
-.dir-table th:nth-child(3),.dir-table td:nth-child(3){min-width:175px}
-.dir-table th:nth-child(4),.dir-table td:nth-child(4){min-width:112px}
-.dir-table th:nth-child(5),.dir-table td:nth-child(5){min-width:110px}
-.dir-table th:nth-child(6),.dir-table td:nth-child(6){min-width:132px}
+.dir-table th:nth-child(3),.dir-table td:nth-child(3){min-width:150px}
+.dir-table th:nth-child(4),.dir-table td:nth-child(4){min-width:100px}
+.dir-table th:nth-child(5),.dir-table td:nth-child(5){min-width:100px}
+.dir-table th:nth-child(6),.dir-table td:nth-child(6){min-width:124px}
 .dir-table td:nth-child(6) .cell-sub{white-space:nowrap}
 @media (max-width:900px){.dir-table th:nth-child(2),.dir-table td:nth-child(2){min-width:220px}.dir-table .person{min-width:200px}}
 
@@ -800,3 +800,6 @@ tr.att-detail td{background:var(--paper-2);padding:10px 26px}
 .alloc-table td,.alloc-table th{padding-inline:18px}
 .alloc-table td{padding-block:22px}
 .alloc-table td b{font-weight:600}
+
+/* The three-dot column stays in view at the right edge, so it never needs a sideways scroll to reach. */
+.dir-table th:last-child,.dir-table td.dots-cell{position:sticky;right:0;z-index:1;background:var(--surface);padding-inline:8px}

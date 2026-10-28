@@ -248,11 +248,11 @@ function ProjectTable({ rows, list, canCreate, reload }) {
               {page.map((p) => (
                 <tr key={p.id}>
                   <td><b>{p.name}</b></td>
-                  <td style={{ minWidth: 260 }}>
+                  <td style={{ minWidth: 400, width: "38%" }}>
                     <div><b>{p.current.length}</b> <span className="muted">current</span></div>
                     <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 6 }}>
-                      {p.current.slice(0, 5).map((a) => <span key={a.id} className="pill p-mute" style={{ fontWeight: 500 }}>{a.employee}</span>)}
-                      {p.current.length > 5 && <span className="pill p-mute" style={{ fontWeight: 500 }}>+{p.current.length - 5} more</span>}
+                      {p.current.slice(0, 8).map((a) => <span key={a.id} className="pill p-mute" style={{ fontWeight: 500, padding: "5px 12px", fontSize: 13.5 }}>{a.employee}</span>)}
+                      {p.current.length > 8 && <span className="pill p-mute" style={{ fontWeight: 500 }}>+{p.current.length - 8} more</span>}
                     </div>
                   </td>
                   <td style={{ whiteSpace: "nowrap" }}>{p.lead || dash}</td>

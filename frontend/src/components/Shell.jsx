@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { NavLink, Outlet } from "react-router-dom";
+import { NavLink, Outlet, useLocation } from "react-router-dom";
 import { api } from "../api.js";
 import { useAuth } from "../auth.jsx";
 import { useData } from "../data.jsx";
@@ -9,8 +9,8 @@ import NotificationBell from "./NotificationBell.jsx";
 import NextHolidayPopup from "./NextHolidayPopup.jsx";
 
 /* Pages still in the older single page app are plain links (hash routes under /). Pages already in React stay in the app. */
-const HR_LINKS = [["dashboard", "Dashboard"], ["employees", "Employees"], ["allocations", "Allocations"], ["onboard", "Onboarding"], ["offboard", "Offboarding"], ["leave", "Leave"], ["attendance", "Attendance"], ["reimb", "Reimbursements"], ["payroll", "Payroll"], ["audit", "Audit log"]];
-const EMP_LINKS = [["dashboard", "Dashboard"], ["employees", "Employees"], ["allocations", "Allocations"], ["onboard", "Onboarding"], ["offboard", "Offboarding"], ["attendance", "Attendance"], ["reimb", "Reimbursements"], ["myleave", "My leave"]];
+const HR_LINKS = [["dashboard", "Dashboard"], ["employees", "Employees"], ["allocations", "Allocations"], ["onboard", "Onboarding"], ["offboard", "Offboarding"], ["leave", "Leave"], ["attendance", "Attendance"], ["finances", "Finances"], ["audit", "Audit log"]];
+const EMP_LINKS = [["dashboard", "Dashboard"], ["employees", "Employees"], ["allocations", "Allocations"], ["onboard", "Onboarding"], ["offboard", "Offboarding"], ["attendance", "Attendance"], ["finances", "Finances"], ["myleave", "My leave"]];
 const REACT_PAGES = {
   dashboard: "/app/dashboard", employees: "/app/employees", allocations: "/app/allocations", onboard: "/app/onboarding", offboard: "/app/offboarding", leave: "/app/leave", attendance: "/app/attendance",
   reimb: "/app/reimbursements", payroll: "/app/payroll", audit: "/app/audit", myleave: "/app/my-leave", team: "/app/team-leave",
@@ -27,6 +27,39 @@ function ThemeButton() {
         ? <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><circle cx="12" cy="12" r="4" /><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4" /></svg>
         : <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z" /></svg>}
     </button>
+  );
+}
+
+/* Finances opens a small menu with Reimbursements and, for HR, Payroll. Placed with fixed coordinates so the scrolling link row cannot clip it. */
+function FinanceMenu({ isHr }) {
+  const { pathname } = useLocation();
+  const [open, setOpen] = useState(false);
+  const [pos, setPos] = useState({ left: 0, top: 0 });
+  const box = useRef(null), btn = useRef(null);
+  const items = [["/app/reimbursements", "Reimbursements"], ...(isHr ? [["/app/payroll", "Payroll"]] : [])];
+  const on = items.some(([to]) => pathname.startsWith(to));
+  useEffect(() => { setOpen(false); }, [pathname]);
+  useEffect(() => {
+    if (!open) return;
+    const away = (e) => { if (box.current && !box.current.contains(e.target)) setOpen(false); };
+    const esc = (e) => { if (e.key === "Escape") setOpen(false); };
+    const close = () => setOpen(false);
+    document.addEventListener("click", away); document.addEventListener("keydown", esc); window.addEventListener("resize", close);
+    return () => { document.removeEventListener("click", away); document.removeEventListener("keydown", esc); window.removeEventListener("resize", close); };
+  }, [open]);
+  const toggle = () => {
+    if (!open && btn.current) { const r = btn.current.getBoundingClientRect(); setPos({ left: r.left, top: r.bottom + 8 }); }
+    setOpen(!open);
+  };
+  return (
+    <span ref={box} style={{ display: "contents" }}>
+      <a href="#finances" ref={btn} className={`${on || open ? "on" : ""}`} role="button" aria-haspopup="true" aria-expanded={open}
+        onClick={(e) => { e.preventDefault(); toggle(); }}>Finances <span aria-hidden="true" style={{ fontSize: 10 }}>▾</span></a>
+      {open && (
+        <div className="acct-menu fin-menu" role="menu" style={{ position: "fixed", left: pos.left, top: pos.top, right: "auto", minWidth: 190 }}>
+          {items.map(([to, label]) => <NavLink key={to} to={to} role="menuitem">{label}</NavLink>)}
+        </div>)}
+    </span>
   );
 }
 
@@ -91,7 +124,7 @@ export default function Shell() {
             <img className="lg lg-light" src="/wohlig-logo.png" alt="wohlig" /><img className="lg lg-dark" src="/wohlig-logo-dark.png" alt="" /><small>HR Access Hub</small>
           </a>
           <div className="links" ref={linksRef}>
-            {links.map(([k, label]) => <NavLink key={k} to={pathFor(k, isHr)} className={({ isActive }) => (isActive ? "on" : "")}>{label}</NavLink>)}
+            {links.map(([k, label]) => k === "finances" ? <FinanceMenu key={k} isHr={isHr} /> : <NavLink key={k} to={pathFor(k, isHr)} className={({ isActive }) => (isActive ? "on" : "")}>{label}</NavLink>)}
           </div>
           <AccountMenu photoV={photoV} />
           <NotificationBell />

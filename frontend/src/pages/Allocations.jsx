@@ -43,7 +43,7 @@ function AllocationTable({ rows }) {
                   <td style={{ whiteSpace: "nowrap" }}>{a.lead || dash}</td>
                   <td>{a.location || dash}</td>
                   <td><Pill tone={tone(a.status)}>{a.status}</Pill></td>
-                  <td style={{ whiteSpace: "nowrap" }}>{a.handedOverTo || dash}</td>
+                  <td style={{ whiteSpace: "nowrap" }}>{handoverText(a)}</td>
                 </tr>))}
             </tbody>
           </table></div>
@@ -54,6 +54,10 @@ function AllocationTable({ rows }) {
   );
 }
 
+/* Who took over, and the project they moved to, for an ended allocation. */
+const handoverText = (a) => (a.handedOverTo || a.movedTo
+  ? <>{a.handedOverTo || dash}{a.movedTo && <div className="muted" style={{ fontSize: 12 }}>Moved to {a.movedTo}</div>}</>
+  : dash);
 const today = () => new Date().toISOString().slice(0, 10);
 
 /* Start a project. HR chooses the lead; a manager's project is led by them. */
@@ -91,8 +95,52 @@ function AddProjectModal({ onClose, onDone }) {
   );
 }
 
+/* Takes someone off a project, with an optional handover to a colleague and an optional move to another project. */
+function HandoverModal({ project, alloc, others, onClose, onDone }) {
+  const { people } = useData();
+  const toast = useToast();
+  const [reason, setReason] = useState("Moved to another project");
+  const [handoverTo, setHandoverTo] = useState(""), [notes, setNotes] = useState(""), [moveTo, setMoveTo] = useState("");
+  const [busy, setBusy] = useState(false), [error, setError] = useState("");
+  const here = new Set(project.current.map((a) => String(a.email).toLowerCase()));
+  const staff = (people || []).filter((p) => p.status !== "offboarded" && String(p.email).toLowerCase() !== String(alloc.email).toLowerCase()).sort((a, b) => a.name.localeCompare(b.name));
+  const mates = staff.filter((p) => here.has(String(p.email).toLowerCase())), rest = staff.filter((p) => !here.has(String(p.email).toLowerCase()));
+  const save = async () => {
+    setBusy(true); setError("");
+    const r = await api("POST", `/api/allocations/${alloc.id}/end`, { reason, handoverTo, notes, moveToProjectId: reason === "Moved to another project" ? moveTo : "" });
+    setBusy(false);
+    if (!r.ok) { setError(apiMsg(r)); return; }
+    toast(r.data.moved ? `${alloc.employee} moved to ${r.data.movedTo}.`
+      : r.data.movedTo ? `${alloc.employee} is off ${project.name}. They are not on ${r.data.movedTo} yet, so ask its lead to add them.` : `${alloc.employee} is off ${project.name}.`);
+    await onDone();
+  };
+  return (
+    <Modal onClose={onClose}>
+      <div className="card-h" style={{ paddingTop: 24 }}><h3>{alloc.employee} leaves {project.name}</h3></div>
+      <div className="card-b">
+        <Field id="ho-reason" label="Why"><select id="ho-reason" className="input" value={reason} onChange={(e) => setReason(e.target.value)}>
+          <option>Moved to another project</option><option>Leaving the company</option><option>Other</option></select></Field>
+        {reason === "Moved to another project" && (
+          <Field id="ho-move" label="Moving to" hint="Added there straight away if you are HR or that project's lead; otherwise it is only noted.">
+            <select id="ho-move" className="input" value={moveTo} onChange={(e) => setMoveTo(e.target.value)}>
+              <option value="">Choose a project (optional)…</option>{others.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}</select></Field>)}
+        <Field id="ho-who" label="Hand over to" hint="The colleague who takes over their work here.">
+          <select id="ho-who" className="input" value={handoverTo} onChange={(e) => setHandoverTo(e.target.value)}>
+            <option value="">No one in particular</option>
+            {mates.length > 0 && <optgroup label="On this project">{mates.map((p) => <option key={p.id} value={p.email}>{p.name}</option>)}</optgroup>}
+            <optgroup label="Everyone else">{rest.map((p) => <option key={p.id} value={p.email}>{p.name}</option>)}</optgroup></select></Field>
+        <Field id="ho-notes" label="Handover notes (optional)"><textarea id="ho-notes" className="input" rows={3} maxLength={1000} value={notes} onChange={(e) => setNotes(e.target.value)} /></Field>
+        <p className="muted" style={{ margin: 0, fontSize: 13 }}>Their time on {project.name} ends today and stays in the history.</p>
+        {error && <p className="ferr" role="alert">{error}</p>}
+      </div>
+      <div className="modal-f"><button type="button" className="btn glass" onClick={onClose}>Cancel</button>
+        <button type="button" className="btn primary" disabled={busy} onClick={save}>{busy ? "Saving…" : "Take off project"}</button></div>
+    </Modal>
+  );
+}
+
 /* A project's people. HR and the project's lead can add someone or take them off. */
-function ProjectModal({ project, onClose, reload }) {
+function ProjectModal({ project, others, onClose, reload }) {
   const { people } = useData();
   const toast = useToast();
   const [who, setWho] = useState(""), [start, setStart] = useState(today()), [location, setLocation] = useState("");
@@ -115,25 +163,21 @@ function ProjectModal({ project, onClose, reload }) {
     toast(end ? `End date set to ${shortDate(end)}.` : "End date cleared."); await reload();
   };
   const endChanged = end !== (project.end ? String(project.end).slice(0, 10) : "");
-  const remove = async (a) => {
-    if (!window.confirm(`Take ${a.employee} off ${project.name}? The allocation ends today.`)) return;
-    const r = await api("DELETE", `/api/allocations/${a.id}`);
-    if (!r.ok) { toast(apiMsg(r)); return; }
-    toast(`${a.employee} is off ${project.name}.`); await reload();
-  };
+  const [leaving, setLeaving] = useState(null);
   return (
+    <>
     <Modal onClose={onClose} wide>
       <div className="card-h" style={{ paddingTop: 24 }}><h3>{project.name}</h3></div>
       <div className="card-b">
         <p className="muted" style={{ margin: "0 0 12px" }}>Lead: {project.lead || "—"} · {project.current.length} current · {project.all.length} {project.all.length === 1 ? "allocation" : "allocations"} in total</p>
         <div className="tbl-wrap"><table>
-          <thead><tr><th>Employee</th><th>Start</th><th>End</th><th>Location</th><th>Status</th>{project.canManage && <th></th>}</tr></thead>
+          <thead><tr><th>Employee</th><th>Start</th><th>End</th><th>Location</th><th>Status</th><th>Handover</th>{project.canManage && <th></th>}</tr></thead>
           <tbody>
-            {!project.all.length && <tr><td colSpan="6"><div className="empty">No one is on this project yet.</div></td></tr>}
+            {!project.all.length && <tr><td colSpan="7"><div className="empty">No one is on this project yet.</div></td></tr>}
             {project.all.map((a) => (
               <tr key={a.id}><td style={{ whiteSpace: "nowrap" }}>{a.employee}</td><td style={{ whiteSpace: "nowrap" }}>{a.start ? shortDate(a.start) : dash}</td><td style={{ whiteSpace: "nowrap" }}>{a.end ? shortDate(a.end) : dash}</td>
-                <td>{a.location || dash}</td><td><Pill tone={tone(a.status)}>{a.status}</Pill></td>
-                {project.canManage && <td>{a.status === "Active" && <button type="button" className="btn glass sm" onClick={() => remove(a)}>Remove</button>}</td>}</tr>))}
+                <td>{a.location || dash}</td><td><Pill tone={tone(a.status)}>{a.status}</Pill></td><td style={{ whiteSpace: "nowrap" }}>{handoverText(a)}</td>
+                {project.canManage && <td>{a.status === "Active" && <button type="button" className="btn glass sm" onClick={() => setLeaving(a)}>Remove / hand over</button>}</td>}</tr>))}
           </tbody>
         </table></div>
         {project.canManage && (
@@ -159,6 +203,8 @@ function ProjectModal({ project, onClose, reload }) {
       <div className="modal-f"><button type="button" className="btn glass" onClick={onClose}>Close</button>
         {project.canManage && <button type="button" className="btn primary" disabled={!who || busy} onClick={add}>{busy ? "Adding…" : "Add to project"}</button>}</div>
     </Modal>
+    {leaving && <HandoverModal project={project} alloc={leaving} others={others} onClose={() => setLeaving(null)} onDone={async () => { setLeaving(null); await reload(); }} />}
+    </>
   );
 }
 
@@ -223,7 +269,7 @@ function ProjectTable({ rows, list, canCreate, reload }) {
         </div>)}
       </Paged>
       {adding && <AddProjectModal onClose={() => setAdding(false)} onDone={reload} />}
-      {open && <ProjectModal project={open} onClose={() => setOpenId(null)} reload={reload} />}
+      {open && <ProjectModal project={open} others={projects.filter((p) => !p.closed && p.id !== open.id)} onClose={() => setOpenId(null)} reload={reload} />}
     </>
   );
 }

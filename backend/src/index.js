@@ -133,7 +133,7 @@ app.get("/api/allocations", wrap(async (req, res) => {
   const { rows } = await pool.query(
     `SELECT a.id, p.id AS project_id, p.name AS project, e.name AS employee, e.work_email AS email, e.emp_no,
             a.start_date, a.end_date, coalesce(a.project_lead, p.project_lead) AS lead, a.location, a.status,
-            coalesce(a.handover_to, a.transferred_to) AS handed_over_to
+            a.handover_to AS handed_over_to, a.transferred_to AS moved_to, a.end_reason
      FROM employee_project_allocations a
      JOIN projects p ON p.id = a.project_id JOIN employees e ON e.id = a.employee_id
      ORDER BY p.name, e.name`);
@@ -143,7 +143,7 @@ app.get("/api/allocations", wrap(async (req, res) => {
     projects: projects.map((p) => ({ id: p.id, name: p.name, lead: p.project_lead, start: p.start_date, end: p.end_date, status: p.status,
       description: p.description, closed: isClosed(p), canManage: !isClosed(p) && canManageProject(actor, p) })),
     rows: rows.map((r) => ({ id: r.id, projectId: r.project_id, project: r.project, employee: r.employee, email: r.email, no: r.emp_no,
-      start: r.start_date, end: r.end_date, lead: r.lead, location: r.location, status: r.status, handedOverTo: r.handed_over_to })),
+      start: r.start_date, end: r.end_date, lead: r.lead, location: r.location, status: r.status, handedOverTo: r.handed_over_to, movedTo: r.moved_to, endReason: r.end_reason })),
   });
 }));
 
@@ -205,18 +205,40 @@ app.post("/api/projects/:id/members", requireAuth, wrap(async (req, res) => {
   res.json({ ok: true });
 }));
 
-// Take someone off a project: the allocation ends today and stays in the history.
-app.delete("/api/allocations/:id", requireAuth, wrap(async (req, res) => {
+// Take someone off a project: the allocation ends today and stays in the history. They can be handed over to a colleague
+// (with notes) and/or moved to another project. Moving adds them there too when the caller manages that project.
+app.post("/api/allocations/:id/end", requireAuth, wrap(async (req, res) => {
   const actor = await projectActor(req);
-  const a = (await pool.query(`SELECT a.id, a.status, e.name AS employee, p.name AS project, p.project_lead, p.status AS pstatus, p.end_date FROM employee_project_allocations a
-    JOIN projects p ON p.id=a.project_id JOIN employees e ON e.id=a.employee_id WHERE a.id=$1`, [Number(req.params.id) || 0])).rows[0];
+  const a = (await pool.query(`SELECT a.id, a.status, a.employee_id, a.location, e.name AS employee, p.name AS project, p.project_lead, p.status AS pstatus, p.end_date
+    FROM employee_project_allocations a JOIN projects p ON p.id=a.project_id JOIN employees e ON e.id=a.employee_id WHERE a.id=$1`, [Number(req.params.id) || 0])).rows[0];
   if (!a) return res.status(404).json({ error: "Allocation not found." });
   if (!canManageProject(actor, a)) return res.status(403).json({ error: "Only HR or the project lead can take people off this project." });
   if (isClosed({ status: a.pstatus, end_date: a.end_date })) return res.status(400).json({ error: CLOSED_MSG });
   if (a.status !== "Active") return res.status(400).json({ error: "This allocation has already ended." });
-  await pool.query("UPDATE employee_project_allocations SET status='Ended', end_date=CURRENT_DATE WHERE id=$1", [a.id]);
-  await pool.query("INSERT INTO audit_log (action, work_email) VALUES ($1,$2)", [`${a.employee} taken off project "${a.project}"`, req.user.email]);
-  res.json({ ok: true });
+  const reason = ["Moved to another project", "Leaving the company", "Other"].includes(req.body?.reason) ? req.body.reason : null;
+  const notes = String(req.body?.notes || "").trim().slice(0, 1000) || null;
+  let handoverTo = null;
+  if (req.body?.handoverTo) {
+    const h = (await pool.query("SELECT name FROM employees WHERE lower(work_email)=$1 AND status <> 'offboarded'", [String(req.body.handoverTo).trim().toLowerCase()])).rows[0];
+    if (!h) return res.status(400).json({ error: "The person taking over must be a current employee." });
+    if (h.name.toLowerCase() === a.employee.toLowerCase()) return res.status(400).json({ error: "Choose someone other than the person leaving the project." });
+    handoverTo = h.name;
+  }
+  let target = null;
+  if (req.body?.moveToProjectId) {
+    target = (await pool.query("SELECT id, name, project_lead, status, end_date FROM projects WHERE id=$1", [Number(req.body.moveToProjectId) || 0])).rows[0];
+    if (!target) return res.status(400).json({ error: "The project to move to was not found." });
+    if (isClosed(target)) return res.status(400).json({ error: `${target.name} is closed.` });
+  }
+  const added = !!target && canManageProject(actor, target)
+    && !(await pool.query("SELECT 1 FROM employee_project_allocations WHERE project_id=$1 AND employee_id=$2 AND status='Active'", [target.id, a.employee_id])).rowCount;
+  await pool.query(`UPDATE employee_project_allocations SET status='Ended', end_date=CURRENT_DATE, end_reason=$2, handover_to=$3, handover_notes=$4, transferred_to=$5 WHERE id=$1`,
+    [a.id, reason, handoverTo, notes, target ? target.name : null]);
+  if (added) await pool.query(`INSERT INTO employee_project_allocations (employee_id, project_id, start_date, project_lead, location, status) VALUES ($1,$2,CURRENT_DATE,$3,$4,'Active')`,
+    [a.employee_id, target.id, target.project_lead, a.location]);
+  await pool.query("INSERT INTO audit_log (action, work_email) VALUES ($1,$2)",
+    [`${a.employee} taken off project "${a.project}"${handoverTo ? `, handed over to ${handoverTo}` : ""}${target ? `, moving to "${target.name}"` : ""}`, req.user.email]);
+  res.json({ ok: true, moved: added, movedTo: target ? target.name : null });
 }));
 
 // Who reports to whom, for everyone. Only the manager's name is sent, so this is safe for employees too.

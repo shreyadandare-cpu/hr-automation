@@ -119,12 +119,14 @@ app.get("/api/allocations", wrap(async (_req, res) => {
   const { rows } = await pool.query(
     `SELECT a.id, p.id AS project_id, p.name AS project, e.name AS employee, e.work_email AS email, e.emp_no,
             a.start_date, a.end_date, coalesce(a.project_lead, p.project_lead) AS lead, a.location, a.status,
-            coalesce(a.handover_to, a.transferred_to) AS handed_over_to
+            coalesce(a.handover_to, a.transferred_to) AS handed_over_to,
+            p.project_lead AS p_lead, p.start_date AS p_start, p.end_date AS p_end, p.status AS p_status
      FROM employee_project_allocations a
      JOIN projects p ON p.id = a.project_id JOIN employees e ON e.id = a.employee_id
      ORDER BY p.name, e.name`);
   res.json(rows.map((r) => ({ id: r.id, projectId: r.project_id, project: r.project, employee: r.employee, email: r.email, no: r.emp_no,
-    start: r.start_date, end: r.end_date, lead: r.lead, location: r.location, status: r.status, handedOverTo: r.handed_over_to })));
+    start: r.start_date, end: r.end_date, lead: r.lead, location: r.location, status: r.status, handedOverTo: r.handed_over_to,
+    projectLead: r.p_lead, projectStart: r.p_start, projectEnd: r.p_end, projectStatus: r.p_status })));
 }));
 
 // Who reports to whom, for everyone. Only the manager's name is sent, so this is safe for employees too.

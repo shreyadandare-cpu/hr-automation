@@ -794,3 +794,9 @@ tr.att-detail td{background:var(--paper-2);padding:10px 26px}
 .hol-pop-x:hover{background:var(--paper-2);color:var(--ink)}
 @keyframes hol-in{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
 @media (prefers-reduced-motion:reduce){.hol-pop{animation:none}}
+
+/* Allocations tables: roomy rows like the Employees directory. */
+.alloc-table{font-size:15px}
+.alloc-table td,.alloc-table th{padding-inline:18px}
+.alloc-table td{padding-block:22px}
+.alloc-table td b{font-weight:600}

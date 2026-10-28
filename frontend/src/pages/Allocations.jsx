@@ -29,7 +29,7 @@ function AllocationTable({ rows }) {
               <option value="current">Current allocations</option><option value="ended">Ended allocations</option><option value="all">All allocations</option>
             </select>
           </div>
-          <div className="tbl-wrap"><table>
+          <div className="tbl-wrap"><table className="alloc-table">
             <thead><tr><th>Project</th><th>Employee</th><th>Start</th><th>End</th><th>Project lead</th><th>Location</th><th>Status</th><th>Handed over to</th></tr></thead>
             <tbody>
               {rows === null && <tr><td colSpan="8"><div className="empty">Loading…</div></td></tr>}
@@ -240,7 +240,7 @@ function ProjectTable({ rows, list, canCreate, reload }) {
             </select>
             {canCreate && <button type="button" className="btn primary sm" onClick={() => setAdding(true)}>+ Add project</button>}
           </div>
-          <div className="tbl-wrap"><table>
+          <div className="tbl-wrap"><table className="alloc-table">
             <thead><tr><th>Project name</th><th>Employees</th><th>Project lead</th><th>Start date</th><th>End date</th><th>Status</th><th>Action</th></tr></thead>
             <tbody>
               {rows === null && <tr><td colSpan="7"><div className="empty">Loading…</div></td></tr>}

@@ -43,6 +43,7 @@ function DeviceCard({ say }) {
   const [d, setD] = useState(null);
   const [pick, setPick] = useState({});   // deviceUserId -> chosen email
   const [busy, setBusy] = useState(false);
+  const [manual, setManual] = useState({ id: "", email: "" });   // link a device ID by hand, before it has punched
   const load = useCallback(async () => { const r = await api("GET", "/api/attendance/device/users"); if (r.ok) setD(r.data); }, []);
   useEffect(() => { load(); }, [load]);
   const staff = useMemo(() => (people || []).filter((p) => p.status !== "offboarded").sort((a, b) => a.name.localeCompare(b.name)), [people]);
@@ -70,6 +71,16 @@ function DeviceCard({ say }) {
               : <>Portal sync is on. Last ran {new Date(d.portalSync.last.at).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })}; the portal holds {d.portalSync.last.portal} punches{d.portalSync.last.added ? `, ${d.portalSync.last.added} new copied` : ", nothing new"}.</>}
           </p>)}
         {!d.keySet && <Callout>Add <span className="mono">ATTENDANCE_DEVICE_KEY</span> to the server's <span className="mono">.env</span> and restart. The same key goes into the office connector.</Callout>}
+        <div>
+          <div className="muted" style={{ marginBottom: 8 }}>Match a device ID to a person by hand. Use it for someone who has not punched yet, or when the suggestion is wrong.</div>
+          <div className="row" style={{ gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+            <input className="input" style={{ width: 150 }} aria-label="Device ID" placeholder="Device ID, e.g. 17" inputMode="numeric" maxLength={40} value={manual.id} onChange={(e) => setManual({ ...manual, id: e.target.value })} />
+            <select className="input" style={{ width: "auto", minWidth: 240 }} aria-label="Person" value={manual.email} onChange={(e) => setManual({ ...manual, email: e.target.value })}>
+              <option value="">Choose a person…</option>{staff.map((p) => <option key={p.email} value={p.email}>{p.name} ({p.no})</option>)}</select>
+            <button type="button" className="btn glass sm" disabled={busy || !manual.id.trim() || !manual.email}
+              onClick={async () => { await link([{ deviceUserId: manual.id.trim(), email: manual.email }]); setManual({ id: "", email: "" }); }}>Match</button>
+          </div>
+        </div>
         {d.unmatched.length === 0 && d.keySet && <p className="muted" style={{ margin: 0 }}>{d.mapped.length ? "Every device ID that has punched is linked to a person." : "No punches have arrived yet. Once the connector runs, the device's user IDs show up here to be linked to people."}</p>}
         {d.unmatched.length > 0 && <>
           <p style={{ margin: 0 }}><b>{d.unmatched.length}</b> device {d.unmatched.length === 1 ? "ID has" : "IDs have"} punched but {d.unmatched.length === 1 ? "is" : "are"} not linked to a person. Their punches are held and added as soon as you link them.</p>

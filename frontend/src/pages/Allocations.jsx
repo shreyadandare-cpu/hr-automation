@@ -104,7 +104,7 @@ function HandoverModal({ project, alloc, others, onClose, onDone }) {
   const [busy, setBusy] = useState(false), [error, setError] = useState("");
   const here = new Set(project.current.map((a) => String(a.email).toLowerCase()));
   const staff = (people || []).filter((p) => p.status !== "offboarded" && String(p.email).toLowerCase() !== String(alloc.email).toLowerCase()).sort((a, b) => a.name.localeCompare(b.name));
-  const mates = staff.filter((p) => here.has(String(p.email).toLowerCase())), rest = staff.filter((p) => !here.has(String(p.email).toLowerCase()));
+  const mates = staff.filter((p) => here.has(String(p.email).toLowerCase()));
   const save = async () => {
     setBusy(true); setError("");
     const r = await api("POST", `/api/allocations/${alloc.id}/end`, { reason, handoverTo, notes, moveToProjectId: reason === "Moved to another project" ? moveTo : "" });
@@ -124,11 +124,9 @@ function HandoverModal({ project, alloc, others, onClose, onDone }) {
           <Field id="ho-move" label="Moving to" hint="Added there straight away if you are HR or that project's lead; otherwise it is only noted.">
             <select id="ho-move" className="input" value={moveTo} onChange={(e) => setMoveTo(e.target.value)}>
               <option value="">Choose a project (optional)…</option>{others.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}</select></Field>)}
-        <Field id="ho-who" label="Hand over to" hint="The colleague who takes over their work here.">
-          <select id="ho-who" className="input" value={handoverTo} onChange={(e) => setHandoverTo(e.target.value)}>
-            <option value="">No one in particular</option>
-            {mates.length > 0 && <optgroup label="On this project">{mates.map((p) => <option key={p.id} value={p.email}>{p.name}</option>)}</optgroup>}
-            <optgroup label="Everyone else">{rest.map((p) => <option key={p.id} value={p.email}>{p.name}</option>)}</optgroup></select></Field>
+        <Field id="ho-who" label="Hand over to" hint={mates.length ? "Only people currently working on this project can take over." : "No one else is working on this project, so there is no one to hand over to."}>
+          <select id="ho-who" className="input" value={handoverTo} disabled={!mates.length} onChange={(e) => setHandoverTo(e.target.value)}>
+            <option value="">No one in particular</option>{mates.map((p) => <option key={p.id} value={p.email}>{p.name}</option>)}</select></Field>
         <Field id="ho-notes" label="Handover notes (optional)"><textarea id="ho-notes" className="input" rows={3} maxLength={1000} value={notes} onChange={(e) => setNotes(e.target.value)} /></Field>
         <p className="muted" style={{ margin: 0, fontSize: 13 }}>Their time on {project.name} ends today and stays in the history.</p>
         {error && <p className="ferr" role="alert">{error}</p>}

@@ -219,8 +219,9 @@ app.post("/api/allocations/:id/end", requireAuth, wrap(async (req, res) => {
   const notes = String(req.body?.notes || "").trim().slice(0, 1000) || null;
   let handoverTo = null;
   if (req.body?.handoverTo) {
-    const h = (await pool.query("SELECT name FROM employees WHERE lower(work_email)=$1 AND status <> 'offboarded'", [String(req.body.handoverTo).trim().toLowerCase()])).rows[0];
-    if (!h) return res.status(400).json({ error: "The person taking over must be a current employee." });
+    const h = (await pool.query(`SELECT e.name FROM employees e JOIN employee_project_allocations x ON x.employee_id=e.id AND x.project_id=(SELECT project_id FROM employee_project_allocations WHERE id=$2) AND x.status='Active'
+      WHERE lower(e.work_email)=$1 AND e.status <> 'offboarded'`, [String(req.body.handoverTo).trim().toLowerCase(), a.id])).rows[0];
+    if (!h) return res.status(400).json({ error: "Only someone currently working on this project can take over." });
     if (h.name.toLowerCase() === a.employee.toLowerCase()) return res.status(400).json({ error: "Choose someone other than the person leaving the project." });
     handoverTo = h.name;
   }

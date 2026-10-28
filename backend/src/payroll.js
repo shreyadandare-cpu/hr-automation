@@ -3,10 +3,13 @@ import L from "../../frontend/leave-rules.cjs";
 import { pool } from "./db.js";
 import { event } from "./reimbursements.js";
 import { notify } from "./notify.js";
+import { buildSlip, cleanStructure, grossOf } from "./payroll-calc.js";
 
 /*
  * Monthly payroll. Processing a month creates one line per current employee:
  *   base salary (monthly gross, never changed here) − loss-of-pay deduction for that month + approved reimbursements
+ * With a salary breakdown set, the line also stores the full payslip (earnings, PF, professional tax, TDS) and its net pay
+ * is what is paid. Without one, the payslip is marked incomplete and is not issued.
  * Automation 5: every approved reimbursement waiting for this month (or an earlier one) is attached to the line and
  *               moves Payroll pending -> Included in payroll.
  * Automation 6: marking the run paid moves those claims to Paid, with the payment date, run and amount stored.
@@ -21,7 +24,7 @@ const monthName = (p) => new Date(p + "-01T00:00:00").toLocaleDateString("en-IN"
 /** What a run for this month would contain, per person. Used for the preview and for processing. */
 async function lines(db, period) {
   const { rows: emps } = await db.query(
-    `SELECT work_email, name, emp_no, monthly_gross FROM employees
+    `SELECT work_email, name, emp_no, monthly_gross, title, dept, start_date, last_day, pan_masked, acct_masked, pf_number FROM employees
      WHERE status <> 'offboarded' AND (start_date IS NULL OR start_date <= $1::date + interval '1 month' - interval '1 day')
      ORDER BY name`, [period + "-01"]);
   const { rows: claims } = await db.query(
@@ -29,6 +32,7 @@ async function lines(db, period) {
   const { rows: lop } = await db.query(
     "SELECT * FROM leave_requests WHERE status='approved' AND lop_days > 0 AND from_date < $1::date + interval '1 month'", [period + "-01"]);
   const holidays = (await db.query("SELECT day FROM holidays")).rows.map((h) => h.day);
+  const structures = new Map((await structuresFor(db, period)).map((x) => [x.work_email.toLowerCase(), toStructure(x)]));
   const byEmail = new Map(emps.map((e) => [e.work_email.toLowerCase(), { ...e, claims: [], lopDays: 0 }]));
   for (const c of claims) {
     const k = c.work_email.toLowerCase();
@@ -42,17 +46,73 @@ async function lines(db, period) {
     byEmail.get(k).lopDays += d;
   }
   return [...byEmail.values()].map((e) => {
-    const base = num(e.monthly_gross);
+    const structure = structures.get(e.work_email.toLowerCase()) || null;
+    const base = structure ? grossOf(structure.earnings) : num(e.monthly_gross);
     const lopDeduction = base ? L.salaryCut(base, e.lopDays) : 0;
     const pay = (c) => Number(c.approved_amount ?? c.amount);   // only what HR approved is paid
     const reimb = Math.round(e.claims.reduce((n, c) => n + pay(c), 0) * 100) / 100;
+    const slip = buildSlip({ period, structure, start: e.start_date, lastDay: e.last_day, lopDays: e.lopDays, lopDeduction, reimbursement: reimb,
+      employee: { name: e.name, empNo: e.emp_no, title: e.title, dept: e.dept, start: e.start_date, pan: e.pan_masked, pfNumber: e.pf_number,
+        paymentMode: e.acct_masked ? "Bank Transfer" : null } });
+    const complete = !slip.incomplete.length;
     return { email: e.work_email, name: e.name, empNo: e.emp_no, baseSalary: base, lopDays: e.lopDays, lopDeduction,
-      reimbursementTotal: reimb, payable: Math.round(((base || 0) - lopDeduction + reimb) * 100) / 100,
+      reimbursementTotal: reimb, payable: complete ? slip.totals.net : Math.round(((base || 0) - lopDeduction + reimb) * 100) / 100,
+      hasStructure: !!structure, tdsApplicable: slip.tds.applicable, tds: slip.tds.amount,
+      statutory: complete ? Math.round((slip.totals.contributions + slip.totals.deductions - lopDeduction) * 100) / 100 : 0,
+      incomplete: slip.incomplete, slip,
       claims: e.claims.map((c) => ({ id: c.id, claimNo: c.claim_no, amount: pay(c), requestedAmount: num(c.requested_amount ?? c.amount), category: c.category })) };
   });
 }
 
+/** Each person's salary breakdown in force for the month: the latest one starting on or before it. */
+const structuresFor = (db, period, email = null) => db.query(
+  `SELECT DISTINCT ON (lower(work_email)) * FROM salary_structures WHERE effective_from <= $1 ${email ? "AND lower(work_email)=$2" : ""}
+   ORDER BY lower(work_email), effective_from DESC`, email ? [period, email] : [period]).then((r) => r.rows);
+const toStructure = (x) => ({ id: x.id, effectiveFrom: x.effective_from, earnings: x.earnings, pfEmployee: num(x.pf_employee), professionalTax: num(x.professional_tax),
+  otherDeductions: x.other_deductions, tdsMonthly: num(x.tds_monthly), updatedBy: x.updated_by, updatedAt: x.updated_at });
+
 export const payrollRouter = express.Router();
+
+// One person's salary breakdowns, newest first, and their PF number.
+payrollRouter.get("/structures/:email", wrap(async (req, res) => {
+  const email = String(req.params.email).toLowerCase();
+  const { rows: [emp] } = await pool.query("SELECT name, pf_number, monthly_gross FROM employees WHERE lower(work_email)=$1", [email]);
+  if (!emp) return res.status(404).json({ error: "Employee not found." });
+  const { rows } = await pool.query("SELECT * FROM salary_structures WHERE lower(work_email)=$1 ORDER BY effective_from DESC", [email]);
+  res.json({ name: emp.name, pfNumber: emp.pf_number, monthlyGross: num(emp.monthly_gross), structures: rows.map(toStructure) });
+}));
+
+// Save the breakdown that applies from a month on. Saving the same month again replaces it. Months already processed keep their payslips.
+payrollRouter.put("/structures/:email", wrap(async (req, res) => {
+  const email = String(req.params.email).toLowerCase();
+  const { errors, value: v } = cleanStructure(req.body || {});
+  if (errors) return res.status(400).json({ error: "Please check the highlighted fields.", errors });
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const { rows: [emp] } = await client.query("SELECT id, name FROM employees WHERE lower(work_email)=$1 FOR UPDATE", [email]);
+    if (!emp) { await client.query("ROLLBACK"); return res.status(404).json({ error: "Employee not found." }); }
+    await client.query(
+      `INSERT INTO salary_structures (work_email, effective_from, earnings, pf_employee, professional_tax, other_deductions, tds_monthly, updated_by)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+       ON CONFLICT (lower(work_email), effective_from) DO UPDATE SET earnings=EXCLUDED.earnings, pf_employee=EXCLUDED.pf_employee,
+         professional_tax=EXCLUDED.professional_tax, other_deductions=EXCLUDED.other_deductions, tds_monthly=EXCLUDED.tds_monthly,
+         updated_by=EXCLUDED.updated_by, updated_at=now()`,
+      [email, v.effectiveFrom, JSON.stringify(v.earnings), v.pfEmployee, v.professionalTax, JSON.stringify(v.otherDeductions), v.tdsMonthly, req.user.email]);
+    // The monthly gross (used for loss-of-pay cuts and exit settlements) follows the breakdown now in force.
+    const [current] = await structuresFor(client, new Date(Date.now() + 5.5 * 3600e3).toISOString().slice(0, 7), email);
+    await client.query("UPDATE employees SET pf_number=CASE WHEN $4 THEN $2 ELSE pf_number END, monthly_gross=coalesce($3, monthly_gross) WHERE id=$1",
+      [emp.id, v.pfNumber ?? null, current ? grossOf(current.earnings) : null, v.pfNumber !== undefined]);
+    await client.query("INSERT INTO audit_log (action, work_email) VALUES ($1,$2)", [`Salary breakdown from ${monthName(v.effectiveFrom)} saved by ${req.user.email}`, email]);
+    await client.query("COMMIT");
+  } catch (err) {
+    await client.query("ROLLBACK");
+    throw err;
+  } finally {
+    client.release();
+  }
+  res.json({ ok: true });
+}));
 
 payrollRouter.get("/runs", wrap(async (_req, res) => {
   const { rows } = await pool.query(
@@ -73,7 +133,8 @@ payrollRouter.get("/preview", wrap(async (req, res) => {
   res.json({ period, existing: rows[0] || null, lines: ls,
     totals: { people: ls.length, withSalary: ls.filter((l) => l.baseSalary).length,
       reimbursementTotal: ls.reduce((n, l) => n + l.reimbursementTotal, 0), claims: ls.reduce((n, l) => n + l.claims.length, 0),
-      lopTotal: ls.reduce((n, l) => n + l.lopDeduction, 0), payableTotal: ls.reduce((n, l) => n + l.payable, 0) } });
+      lopTotal: ls.reduce((n, l) => n + l.lopDeduction, 0), payableTotal: ls.reduce((n, l) => n + l.payable, 0),
+      incomplete: ls.filter((l) => l.incomplete.length && (l.baseSalary || l.hasStructure)).length } });
 }));
 
 payrollRouter.get("/runs/:id", wrap(async (req, res) => {
@@ -87,6 +148,9 @@ payrollRouter.get("/runs/:id", wrap(async (req, res) => {
   res.json({ run: { id: run[0].id, period: run[0].period, status: run[0].status, processedAt: run[0].processed_at, processedBy: run[0].processed_by, paidAt: run[0].paid_at, paidBy: run[0].paid_by },
     items: items.map((i) => ({ email: i.work_email, name: i.name || i.work_email, empNo: i.emp_no, baseSalary: num(i.base_salary), lopDays: num(i.lop_days),
       lopDeduction: num(i.lop_deduction), reimbursementTotal: num(i.reimbursement_total), payable: num(i.payable),
+      hasStructure: !!(i.slip && i.slip.earnings.length), tdsApplicable: !!(i.slip && i.slip.tds.applicable), tds: i.slip ? i.slip.tds.amount : 0,
+      statutory: i.slip && !i.slip.incomplete.length ? Math.round((i.slip.totals.contributions + i.slip.totals.deductions - num(i.lop_deduction)) * 100) / 100 : 0,
+      incomplete: i.slip ? i.slip.incomplete : [],
       claims: claims.filter((c) => c.work_email.toLowerCase() === i.work_email.toLowerCase()).map((c) => ({ id: c.id, claimNo: c.claim_no, amount: num(c.amount), status: c.status })) })) });
 }));
 
@@ -105,8 +169,8 @@ payrollRouter.post("/runs", wrap(async (req, res) => {
     ({ rows: [run] } = await client.query("INSERT INTO payroll_runs (period, status, processed_by) VALUES ($1,'processed',$2) RETURNING *", [period, req.user.email]));
     for (const l of ls) {
       await client.query(
-        `INSERT INTO payroll_items (run_id, work_email, base_salary, lop_days, lop_deduction, reimbursement_total, payable) VALUES ($1,$2,$3,$4,$5,$6,$7)`,
-        [run.id, l.email, l.baseSalary, l.lopDays, l.lopDeduction, l.reimbursementTotal, l.payable]);
+        `INSERT INTO payroll_items (run_id, work_email, base_salary, lop_days, lop_deduction, reimbursement_total, payable, slip) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
+        [run.id, l.email, l.baseSalary, l.lopDays, l.lopDeduction, l.reimbursementTotal, l.payable, JSON.stringify(l.slip)]);
       for (const c of l.claims) {
         const { rows: [claim] } = await client.query(
           "UPDATE reimbursements SET status='in_payroll', payroll_run_id=$2, updated_at=now() WHERE id=$1 AND status='payroll_pending' RETURNING *", [c.id, run.id]);

@@ -113,6 +113,9 @@ CREATE TABLE IF NOT EXISTS leave_requests (
 -- Allowed leave types and half days. Re-applied on every start so existing databases pick up new types.
 ALTER TABLE leave_requests ADD COLUMN IF NOT EXISTS half TEXT;
 ALTER TABLE leave_requests ADD COLUMN IF NOT EXISTS notify JSONB NOT NULL DEFAULT '[]';
+-- Who asked for it (the employee, or HR on their behalf) and who approved, declined or cancelled it. Empty on older rows.
+ALTER TABLE leave_requests ADD COLUMN IF NOT EXISTS created_by TEXT;
+ALTER TABLE leave_requests ADD COLUMN IF NOT EXISTS decided_by TEXT;
 ALTER TABLE leave_requests DROP CONSTRAINT IF EXISTS leave_requests_status_check;
 ALTER TABLE leave_requests ADD CONSTRAINT leave_requests_status_check CHECK (status IN ('pending','approved','declined','cancelled'));
 ALTER TABLE leave_requests DROP CONSTRAINT IF EXISTS leave_requests_type_check;
@@ -264,6 +267,25 @@ CREATE TABLE IF NOT EXISTS payroll_items (
   payable             NUMERIC(12,2) NOT NULL
 );
 CREATE UNIQUE INDEX IF NOT EXISTS payroll_items_once ON payroll_items (run_id, lower(work_email));
+
+-- Payslips. HR enters each person's salary breakdown with the first month it applies to; a new row for a raise keeps the old one.
+-- Processing a month stores the whole payslip in payroll_items.slip, so a later salary change never alters a past payslip.
+-- How the amounts are worked out (TDS included) is in payroll-calc.js.
+CREATE TABLE IF NOT EXISTS salary_structures (
+  id               SERIAL PRIMARY KEY,
+  work_email       TEXT NOT NULL,
+  effective_from   TEXT NOT NULL CHECK (effective_from ~ '^[0-9]{4}-(0[1-9]|1[0-2])$'),
+  earnings         JSONB NOT NULL,
+  pf_employee      NUMERIC(12,2) NOT NULL DEFAULT 0,
+  professional_tax NUMERIC(12,2) NOT NULL DEFAULT 0,
+  other_deductions JSONB NOT NULL DEFAULT '[]',
+  tds_monthly      NUMERIC(12,2),
+  updated_by       TEXT NOT NULL,
+  updated_at       TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE UNIQUE INDEX IF NOT EXISTS salary_structures_once ON salary_structures (lower(work_email), effective_from);
+ALTER TABLE employees ADD COLUMN IF NOT EXISTS pf_number TEXT;
+ALTER TABLE payroll_items ADD COLUMN IF NOT EXISTS slip JSONB;
 
 CREATE TABLE IF NOT EXISTS reimbursements (
   id               SERIAL PRIMARY KEY,

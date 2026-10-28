@@ -113,6 +113,9 @@ CREATE TABLE IF NOT EXISTS leave_requests (
 -- Allowed leave types and half days. Re-applied on every start so existing databases pick up new types.
 ALTER TABLE leave_requests ADD COLUMN IF NOT EXISTS half TEXT;
 ALTER TABLE leave_requests ADD COLUMN IF NOT EXISTS notify JSONB NOT NULL DEFAULT '[]';
+-- Who asked for it (the employee, or HR on their behalf) and who approved, declined or cancelled it. Empty on older rows.
+ALTER TABLE leave_requests ADD COLUMN IF NOT EXISTS created_by TEXT;
+ALTER TABLE leave_requests ADD COLUMN IF NOT EXISTS decided_by TEXT;
 ALTER TABLE leave_requests DROP CONSTRAINT IF EXISTS leave_requests_status_check;
 ALTER TABLE leave_requests ADD CONSTRAINT leave_requests_status_check CHECK (status IN ('pending','approved','declined','cancelled'));
 ALTER TABLE leave_requests DROP CONSTRAINT IF EXISTS leave_requests_type_check;

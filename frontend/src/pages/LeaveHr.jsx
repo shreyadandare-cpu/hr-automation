@@ -4,11 +4,21 @@ import { useData } from "../data.jsx";
 import { useAuth } from "../auth.jsx";
 import { PersonCell, Pill, SectionHead, Stat, shortDate } from "../components/ui.jsx";
 import { CompOffModal, DecideButtons, HolidayCalendar } from "../components/leaveParts.jsx";
+import { LeaveHistory, ViewTabs } from "../components/leaveSummary.jsx";
 import { R } from "../lib/leave.js";
 import { LSTAT, LTYPE, dd, lc, rangeText, useLeave } from "../lib/useLeave.js";
 import MyLeave from "./MyLeave.jsx";
-import Pager, { Paged } from "../components/Pager.jsx";
+import Pager, { usePaged } from "../components/Pager.jsx";
 
+
+const VIEWS = [["requests", "Requests"], ["balances", "Balances"], ["history", "History"], ["holidays", "Holidays"]];
+
+/* A table's rows a page at a time, with the page controls under it once there are more than 10. */
+function PagedTable({ items, reset, head, row, cols, empty }) {
+  const { rows, pager } = usePaged(items, reset);
+  return <><div className="tbl-wrap"><table><thead>{head}</thead><tbody>{rows.length ? rows.map(row) : <tr><td colSpan={cols}><div className="empty">{empty}</div></td></tr>}</tbody></table></div>
+    {items.length > 10 && <Pager {...pager} />}</>;
+}
 
 export default function LeaveHr() {
   const { isHr } = useAuth();
@@ -18,6 +28,8 @@ export default function LeaveHr() {
   const [modal, setModal] = useState(null);   // "comp"
   const [params, setParams] = useSearchParams();
   const tab = params.get("tab") === "mine" ? "mine" : "manage";   // "mine": the HR person's own leave
+  const view = VIEWS.some(([k]) => k === params.get("view")) ? params.get("view") : "requests";
+  const setView = (k) => setParams(k === "requests" ? {} : { view: k }, { replace: true });
   if (!isHr) return <section className="section"><SectionHead eyebrow="Time off" title="Leave" accent="management." /><div className="empty">Only HR can manage leave.</div></section>;
   if (!people) return <section className="section"><div className="empty">Loading…</div></section>;
 
@@ -36,7 +48,6 @@ export default function LeaveHr() {
   const pend = all.filter((r) => r.status === "pending").sort((a, b) => (a.from < b.from ? -1 : 1));
   const compPend = lv.compOffs.filter((c) => c.status === "pending").map((c) => ({ ...c, emp: lv.empBy(c.email) })).filter((c) => c.emp);
   const away = all.filter((r) => r.status === "approved" && r.to >= today).sort((a, b) => (a.from < b.from ? -1 : 1));
-  const done = all.filter((r) => r.status !== "pending").sort((a, b) => (a.from < b.from ? 1 : -1));
   const here = people.filter((e) => e.status !== "offboarded" && (!q || lc(e.name + e.email).includes(lc(q))));
   const lopNow = lv.lopDaysIn(today.slice(0, 7));
   const waitingForMe = pend.filter((r) => lv.canDecide(r.email)).length + compPend.filter((c) => lv.canDecide(c.email)).length;
@@ -53,7 +64,9 @@ export default function LeaveHr() {
         <Stat value={away.filter((r) => r.from > today).length} label="Upcoming leave" />
         <Stat value={lopNow} label="Loss-of-pay days this month" alert={lopNow > 0} />
       </div>
-      <div className="grid g-main">
+      <ViewTabs views={VIEWS} view={view} onView={setView} />
+
+      {view === "requests" && <div className="grid g-main">
         <div className="card"><div className="card-h"><h3>Requests waiting</h3><span className="muted">{pend.length + compPend.length} open · approved by each person's reporting manager</span></div>
           {compPend.map((c) => (
             <div key={`c${c.id}`} className="li wrap"><div className="grow"><PersonCell person={c.emp} sub={`Comp off credit · worked on ${shortDate(c.workedOn)}`} /><div className="meta" style={{ margin: "6px 0 0 48px" }}>“{c.reason}”</div></div>
@@ -67,36 +80,23 @@ export default function LeaveHr() {
           {!pend.length && !compPend.length && <div className="empty">No requests waiting. New ones show up here.</div>}
         </div>
         <div className="card"><div className="card-h"><h3>Away now &amp; coming up</h3></div>
-          {away.length ? away.map((r) => <div key={r.id} className="li"><PersonCell person={r.emp} sub={`${LTYPE[r.type]} · ${rangeText(r, shortDate)}`} /></div>) : <div className="empty">No one is on approved leave.</div>}
+          {away.length ? away.slice(0, 12).map((r) => <div key={r.id} className="li"><PersonCell person={r.emp} sub={`${LTYPE[r.type]} · ${rangeText(r, shortDate)}`} /></div>) : <div className="empty">No one is on approved leave.</div>}
+          {away.length > 12 && <div className="li"><button type="button" className="btn link" onClick={() => setView("history")}>See all {away.length} in History</button></div>}
         </div>
-      </div>
+      </div>}
 
-      <div className="card"><div className="card-h"><h3>Balances {year}</h3>
+      {view === "balances" && <div className="card"><div className="card-h"><h3>Balances {year}</h3>
         <input className="input" placeholder="Search people" aria-label="Search balances" value={q} onChange={(e) => setQ(e.target.value)} style={{ width: 220, borderRadius: 999, padding: "8px 14px" }} /></div>
         <div style={{ padding: "0 24px 12px" }}><span className="muted">{LTYPE.casual} {R.POLICY.casualPerYear} days a year, unused days carry over · {LTYPE.sick} {R.POLICY.sickPerYear} days a year, lapses on 31 Dec · {LTYPE.compoff} earned by working a weekend or holiday, lapses on 31 Dec · {LTYPE.unpaid} is always a salary cut · Half days count as 0.5</span></div>
-        <Paged items={here} resetKey={q}>{(rows, pager) => (<>
-        <div className="tbl-wrap"><table>
-          <thead><tr><th>Employee</th><th>Casual left</th><th className="hide-sm">Carried + quota − used</th><th>Sick left</th><th>Comp off left</th><th>Loss of pay ({year})</th></tr></thead>
-          <tbody>{rows.length ? rows.map((e) => { const b = lv.bal(e, year);
+        <PagedTable items={here} reset={q} cols={6} empty={`No one matches “${q}”.`}
+          head={<tr><th>Employee</th><th>Casual left</th><th className="hide-sm" title="Carried over + quota − used">Breakdown</th><th>Sick left</th><th>Comp off</th><th>Loss of pay</th></tr>}
+          row={(e) => { const b = lv.bal(e, year);
             return (
               <tr key={e.id}><td><PersonCell person={e} sub={e.title} /></td><td className="num-cell"><b>{b.casual.left}</b></td>
-                <td className="num-cell hide-sm muted">{b.casual.carried} + {b.casual.quota} − {b.casual.used}</td><td className="num-cell">{b.sick.left}</td><td className="num-cell">{b.compoff.left}</td><td className="num-cell">{b.lopDays || "—"}</td> </tr>); })
-            : <tr><td colSpan="6"><div className="empty">No one matches “{q}”.</div></td></tr>}</tbody>
-        </table></div>
-        <Pager {...pager} /></>)}</Paged></div>
+                <td className="num-cell hide-sm muted">{b.casual.carried} + {b.casual.quota} − {b.casual.used}</td><td className="num-cell">{b.sick.left}</td><td className="num-cell">{b.compoff.left}</td><td className="num-cell">{b.lopDays || "—"}</td></tr>); }} /></div>}
 
-      <div className="card"><div className="card-h"><h3>Decided</h3></div>
-          <Paged items={done}>{(rows, pager) => (<>
-          <div className="tbl-wrap"><table>
-          <thead><tr><th>Employee</th><th>Type</th><th className="hide-sm">Dates</th><th>Paid</th><th>Loss of pay</th><th>Status</th></tr></thead>
-          <tbody>{rows.length ? rows.map((r) => (
-            <tr key={r.id}><td><PersonCell person={r.emp} sub={r.emp.title} /></td><td style={{ whiteSpace: "nowrap" }}>{LTYPE[r.type]}</td><td className="num-cell hide-sm">{rangeText(r, shortDate)}</td>
-              <td className="num-cell">{r.status === "approved" ? r.paidDays : "—"}</td><td className="num-cell">{r.status === "approved" ? (r.lopDays || "—") : "—"}</td>
-              <td><Pill tone={LSTAT[r.status][1]}>{LSTAT[r.status][0]}</Pill></td></tr>))
-            : <tr><td colSpan="6"><div className="empty">Nothing decided yet.</div></td></tr>}</tbody>
-        </table></div>
-          {pager.total > 10 && <Pager {...pager} />}</>)}</Paged></div>
-      <HolidayCalendar editable />
+      {view === "history" && <LeaveHistory list={all} who title="All leave" />}
+      {view === "holidays" && <HolidayCalendar editable />}
       {modal === "comp" && <CompOffModal onClose={() => setModal(null)} />}
     </section>
   );

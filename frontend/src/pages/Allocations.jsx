@@ -115,16 +115,16 @@ function ProjectModal({ project, onClose, reload }) {
     toast(`${a.employee} is off ${project.name}.`); await reload();
   };
   return (
-    <Modal onClose={onClose}>
+    <Modal onClose={onClose} wide>
       <div className="card-h" style={{ paddingTop: 24 }}><h3>{project.name}</h3></div>
       <div className="card-b">
-        <p className="muted" style={{ margin: "0 0 12px" }}>Lead: {project.lead || "—"} · {project.current.length} current · {project.all.length} in total</p>
+        <p className="muted" style={{ margin: "0 0 12px" }}>Lead: {project.lead || "—"} · {project.current.length} current · {project.all.length} {project.all.length === 1 ? "allocation" : "allocations"} in total</p>
         <div className="tbl-wrap"><table>
           <thead><tr><th>Employee</th><th>Start</th><th>End</th><th>Location</th><th>Status</th>{project.canManage && <th></th>}</tr></thead>
           <tbody>
             {!project.all.length && <tr><td colSpan="6"><div className="empty">No one is on this project yet.</div></td></tr>}
             {project.all.map((a) => (
-              <tr key={a.id}><td>{a.employee}</td><td style={{ whiteSpace: "nowrap" }}>{a.start ? shortDate(a.start) : dash}</td><td style={{ whiteSpace: "nowrap" }}>{a.end ? shortDate(a.end) : dash}</td>
+              <tr key={a.id}><td style={{ whiteSpace: "nowrap" }}>{a.employee}</td><td style={{ whiteSpace: "nowrap" }}>{a.start ? shortDate(a.start) : dash}</td><td style={{ whiteSpace: "nowrap" }}>{a.end ? shortDate(a.end) : dash}</td>
                 <td>{a.location || dash}</td><td><Pill tone={tone(a.status)}>{a.status}</Pill></td>
                 {project.canManage && <td>{a.status === "Active" && <button type="button" className="btn glass sm" onClick={() => remove(a)}>Remove</button>}</td>}</tr>))}
           </tbody>

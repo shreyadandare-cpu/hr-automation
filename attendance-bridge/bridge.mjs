@@ -36,25 +36,29 @@ async function readDevice() {
   if (file) return JSON.parse(fs.readFileSync(file, "utf8")).map((p) => ({ userId: String(p.userId), time: String(p.time) }));
   if (!cfg.ip) throw new Error("Set DEVICE_IP in .env");
   const ZKLib = createRequire(import.meta.url)("node-zklib");
-  // A big log (tens of thousands of punches) is sometimes cut short on the way, with no error. The device says how many it holds,
-  // so a read that comes back much smaller is thrown away and tried again, rather than trusted.
-  let last = 0, expected = 0;
-  for (let attempt = 1; attempt <= 3; attempt++) {
-    const zk = new ZKLib(cfg.ip, cfg.port, 10000, 4000);
+  // A big log (tens of thousands of punches) is often cut short on the way. The library reports that in `err` ("TIME OUT !! n PACKETS REMAIN")
+  // but still hands back what it got, so a read with an error is thrown away and tried again, never trusted. The device's own count is a second check.
+  let last = 0, expected = 0, why = "";
+  for (let attempt = 1; attempt <= 5; attempt++) {
+    const zk = new ZKLib(cfg.ip, cfg.port, 30000, 4000);
     try {
       await zk.createSocket();
       expected = await zk.getInfo().then((i) => Number(i.logCounts) || 0).catch(() => 0);
       const logs = await zk.getAttendances();
       const out = (logs.data || []).map((l) => ({ userId: String(l.deviceUserId), time: wall(new Date(l.recordTime)) }));
       last = out.length;
-      if (!expected || out.length >= expected * 0.98 || process.env.ALLOW_PARTIAL === "true") { out.expected = expected; return out; }
-      log(`Read ${out.length} of the ${expected} punches the device holds (attempt ${attempt} of 3), trying again.`);
+      if (logs.err) why = `the device stopped sending: ${logs.err.message || logs.err}`;
+      else if (expected && out.length < expected * 0.98) why = `only ${out.length} of the ${expected} punches the device holds arrived`;
+      else { out.expected = expected; return out; }
+      if (process.env.ALLOW_PARTIAL === "true" && out.length) { out.expected = expected; return out; }
+      log(`Incomplete read (attempt ${attempt} of 5): ${why}. Trying again.`);
     } catch (e) {
-      log(`Device read failed (attempt ${attempt} of 3): ${e && e.message ? e.message : e}`);
+      why = e && e.message ? e.message : String(e);
+      log(`Device read failed (attempt ${attempt} of 5): ${why}`);
     } finally { try { await zk.disconnect(); } catch {} }
-    await new Promise((r) => setTimeout(r, 5000));
+    await new Promise((r) => setTimeout(r, 10000));
   }
-  throw new Error(`The device read was incomplete (${last} of ${expected || "an unknown number of"} punches), so nothing was sent this round`);
+  throw new Error(`The device read was incomplete (${last} punches arrived; ${why}), so nothing was sent this round`);
 }
 
 async function send(punches) {

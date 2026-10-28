@@ -163,6 +163,21 @@ app.post("/api/projects", requireAuth, wrap(async (req, res) => {
   res.json({ id: p.id });
 }));
 
+// Change a project's end date (empty clears it). HR, or the project's lead. A date that has passed marks the project Completed.
+app.patch("/api/projects/:id", requireAuth, wrap(async (req, res) => {
+  const actor = await projectActor(req);
+  const project = (await pool.query("SELECT id, name, project_lead, to_char(start_date,'YYYY-MM-DD') AS start FROM projects WHERE id=$1", [Number(req.params.id) || 0])).rows[0];
+  if (!project) return res.status(404).json({ error: "Project not found." });
+  if (!canManageProject(actor, project)) return res.status(403).json({ error: "Only HR or the project lead can change the end date." });
+  const raw = String(req.body?.end || "").trim();
+  if (raw && !/^\d{4}-\d{2}-\d{2}$/.test(raw)) return res.status(400).json({ error: "Give the end date as a valid date." });
+  if (raw && project.start && raw < project.start) return res.status(400).json({ error: "The end date cannot be before the start date." });
+  const today = new Date().toISOString().slice(0, 10);
+  await pool.query("UPDATE projects SET end_date=$2, status=$3 WHERE id=$1", [project.id, raw || null, raw && raw <= today ? "Completed" : "Active"]);
+  await pool.query("INSERT INTO audit_log (action, work_email) VALUES ($1,$2)", [raw ? `Project "${project.name}" end date set to ${raw}` : `Project "${project.name}" end date cleared`, req.user.email]);
+  res.json({ ok: true });
+}));
+
 // Put someone on a project. HR, or the project's lead.
 app.post("/api/projects/:id/members", requireAuth, wrap(async (req, res) => {
   const actor = await projectActor(req);

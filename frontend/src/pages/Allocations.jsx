@@ -108,6 +108,13 @@ function ProjectModal({ project, onClose, reload }) {
     toast(`${chosen.name} added to ${project.name}.`);
     setWho(""); setLocation(""); await reload();
   };
+  const [end, setEnd] = useState(project.end ? String(project.end).slice(0, 10) : "");
+  const saveEnd = async () => {
+    const r = await api("PATCH", `/api/projects/${project.id}`, { end });
+    if (!r.ok) { toast(apiMsg(r)); return; }
+    toast(end ? `End date set to ${shortDate(end)}.` : "End date cleared."); await reload();
+  };
+  const endChanged = end !== (project.end ? String(project.end).slice(0, 10) : "");
   const remove = async (a) => {
     if (!window.confirm(`Take ${a.employee} off ${project.name}? The allocation ends today.`)) return;
     const r = await api("DELETE", `/api/allocations/${a.id}`);
@@ -129,6 +136,12 @@ function ProjectModal({ project, onClose, reload }) {
                 {project.canManage && <td>{a.status === "Active" && <button type="button" className="btn glass sm" onClick={() => remove(a)}>Remove</button>}</td>}</tr>))}
           </tbody>
         </table></div>
+        {project.canManage && (
+          <div style={{ marginTop: 18, display: "flex", gap: 10, alignItems: "flex-end", flexWrap: "wrap" }}>
+            <Field id="pm-end" label="Project end date" hint="Leave empty if it has no end yet. A date that has passed marks the project Completed.">
+              <input id="pm-end" type="date" className="input" min={project.start ? String(project.start).slice(0, 10) : undefined} value={end} onChange={(e) => setEnd(e.target.value)} /></Field>
+            <button type="button" className="btn glass" disabled={!endChanged} onClick={saveEnd}>Save end date</button>
+          </div>)}
         {project.canManage && (
           <div style={{ marginTop: 18 }}>
             <Field id="pm-who" label="Add a person">

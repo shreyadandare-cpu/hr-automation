@@ -154,7 +154,7 @@ function ProjectModal({ project, onClose, reload }) {
             </div>
             {error && <p className="ferr" role="alert" style={{ marginTop: 8 }}>{error}</p>}
           </div>)}
-        {!project.canManage && <p className="muted" style={{ margin: "14px 0 0", fontSize: 13 }}>Only HR or the project lead can change who is on this project.</p>}
+        {!project.canManage && <p className="muted" style={{ margin: "14px 0 0", fontSize: 13 }}>{project.closed ? "This project is closed, so it can no longer be changed." : "Only HR or the project lead can change who is on this project."}</p>}
       </div>
       <div className="modal-f"><button type="button" className="btn glass" onClick={onClose}>Close</button>
         {project.canManage && <button type="button" className="btn primary" disabled={!who || busy} onClick={add}>{busy ? "Adding…" : "Add to project"}</button>}</div>

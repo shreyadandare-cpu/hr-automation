@@ -122,6 +122,9 @@ async function projectActor(req) {
   const hasTeam = name ? (await pool.query("SELECT 1 FROM employees WHERE lower(manager)=lower($1) AND status <> 'offboarded' LIMIT 1", [name])).rowCount > 0 : false;
   return { isHr, name, canCreate: isHr || hasTeam || lead };
 }
+// A project is closed once it is marked Completed or its end date has passed. Closed projects cannot be changed by anyone.
+const isClosed = (p) => p.status === "Completed" || (!!p.end_date && String(p.end_date instanceof Date ? p.end_date.toISOString() : p.end_date).slice(0, 10) < new Date().toISOString().slice(0, 10));
+const CLOSED_MSG = "This project is closed, so it can no longer be changed.";
 const canManageProject = (actor, project) => actor.isHr || (!!actor.name && String(project.project_lead || "").toLowerCase() === actor.name.toLowerCase());
 
 // Every project (even ones nobody is on yet) and every allocation, for everyone signed in. `canManage` says whether this person may add people to a project.
@@ -138,7 +141,7 @@ app.get("/api/allocations", wrap(async (req, res) => {
   res.json({
     canCreate: actor.canCreate,
     projects: projects.map((p) => ({ id: p.id, name: p.name, lead: p.project_lead, start: p.start_date, end: p.end_date, status: p.status,
-      description: p.description, canManage: canManageProject(actor, p) })),
+      description: p.description, closed: isClosed(p), canManage: !isClosed(p) && canManageProject(actor, p) })),
     rows: rows.map((r) => ({ id: r.id, projectId: r.project_id, project: r.project, employee: r.employee, email: r.email, no: r.emp_no,
       start: r.start_date, end: r.end_date, lead: r.lead, location: r.location, status: r.status, handedOverTo: r.handed_over_to })),
   });
@@ -166,9 +169,10 @@ app.post("/api/projects", requireAuth, wrap(async (req, res) => {
 // Change a project's end date (empty clears it). HR, or the project's lead. A date that has passed marks the project Completed.
 app.patch("/api/projects/:id", requireAuth, wrap(async (req, res) => {
   const actor = await projectActor(req);
-  const project = (await pool.query("SELECT id, name, project_lead, to_char(start_date,'YYYY-MM-DD') AS start FROM projects WHERE id=$1", [Number(req.params.id) || 0])).rows[0];
+  const project = (await pool.query("SELECT id, name, project_lead, status, end_date, to_char(start_date,'YYYY-MM-DD') AS start FROM projects WHERE id=$1", [Number(req.params.id) || 0])).rows[0];
   if (!project) return res.status(404).json({ error: "Project not found." });
   if (!canManageProject(actor, project)) return res.status(403).json({ error: "Only HR or the project lead can change the end date." });
+  if (isClosed(project)) return res.status(400).json({ error: CLOSED_MSG });
   const raw = String(req.body?.end || "").trim();
   if (raw && !/^\d{4}-\d{2}-\d{2}$/.test(raw)) return res.status(400).json({ error: "Give the end date as a valid date." });
   if (raw && project.start && raw < project.start) return res.status(400).json({ error: "The end date cannot be before the start date." });
@@ -181,9 +185,10 @@ app.patch("/api/projects/:id", requireAuth, wrap(async (req, res) => {
 // Put someone on a project. HR, or the project's lead.
 app.post("/api/projects/:id/members", requireAuth, wrap(async (req, res) => {
   const actor = await projectActor(req);
-  const project = (await pool.query("SELECT id, name, project_lead FROM projects WHERE id=$1", [Number(req.params.id) || 0])).rows[0];
+  const project = (await pool.query("SELECT id, name, project_lead, status, end_date FROM projects WHERE id=$1", [Number(req.params.id) || 0])).rows[0];
   if (!project) return res.status(404).json({ error: "Project not found." });
   if (!canManageProject(actor, project)) return res.status(403).json({ error: "Only HR or the project lead can add people to this project." });
+  if (isClosed(project)) return res.status(400).json({ error: CLOSED_MSG });
   const emp = (await pool.query("SELECT id, name, status, work_location FROM employees WHERE lower(work_email)=$1", [String(req.body?.email || "").trim().toLowerCase()])).rows[0];
   if (!emp) return res.status(404).json({ error: "Employee not found." });
   if (emp.status === "offboarded") return res.status(400).json({ error: `${emp.name} has left, so cannot join a project.` });
@@ -200,10 +205,11 @@ app.post("/api/projects/:id/members", requireAuth, wrap(async (req, res) => {
 // Take someone off a project: the allocation ends today and stays in the history.
 app.delete("/api/allocations/:id", requireAuth, wrap(async (req, res) => {
   const actor = await projectActor(req);
-  const a = (await pool.query(`SELECT a.id, a.status, e.name AS employee, p.name AS project, p.project_lead FROM employee_project_allocations a
+  const a = (await pool.query(`SELECT a.id, a.status, e.name AS employee, p.name AS project, p.project_lead, p.status AS pstatus, p.end_date FROM employee_project_allocations a
     JOIN projects p ON p.id=a.project_id JOIN employees e ON e.id=a.employee_id WHERE a.id=$1`, [Number(req.params.id) || 0])).rows[0];
   if (!a) return res.status(404).json({ error: "Allocation not found." });
   if (!canManageProject(actor, a)) return res.status(403).json({ error: "Only HR or the project lead can take people off this project." });
+  if (isClosed({ status: a.pstatus, end_date: a.end_date })) return res.status(400).json({ error: CLOSED_MSG });
   if (a.status !== "Active") return res.status(400).json({ error: "This allocation has already ended." });
   await pool.query("UPDATE employee_project_allocations SET status='Ended', end_date=CURRENT_DATE WHERE id=$1", [a.id]);
   await pool.query("INSERT INTO audit_log (action, work_email) VALUES ($1,$2)", [`${a.employee} taken off project "${a.project}"`, req.user.email]);

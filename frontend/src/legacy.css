@@ -800,9 +800,7 @@ tr.att-detail td{background:var(--paper-2);padding:10px 26px}
 .alloc-table td,.alloc-table th{padding-inline:18px}
 .alloc-table td{padding-block:22px}
 .alloc-table td b{font-weight:600}
-
-/* The three-dot column stays in view at the right edge, so it never needs a sideways scroll to reach. */
-.dir-table th:last-child,.dir-table td.dots-cell{position:sticky;right:0;z-index:1;background:var(--surface);padding-inline:8px}
+.dir-table th:last-child,.dir-table td.dots-cell{padding-inline:8px}
 
 /* Stops the browser's swipe-to-go-back/forward arrow when scrolling sideways on a trackpad. */
 html,body{overscroll-behavior-x:none}

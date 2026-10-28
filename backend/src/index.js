@@ -125,6 +125,8 @@ async function projectActor(req) {
 // A project is closed once it is marked Completed or its end date has passed. Closed projects cannot be changed by anyone.
 const isClosed = (p) => p.status === "Completed" || (!!p.end_date && String(p.end_date instanceof Date ? p.end_date.toISOString() : p.end_date).slice(0, 10) < new Date().toISOString().slice(0, 10));
 const CLOSED_MSG = "This project is closed, so it can no longer be changed.";
+// Taking people off a project, or handing their work over, is the project lead's call alone (HR included does not do it).
+const isProjectLead = (actor, project) => !!actor.name && String(project.project_lead || "").toLowerCase() === actor.name.toLowerCase();
 const canManageProject = (actor, project) => actor.isHr || (!!actor.name && String(project.project_lead || "").toLowerCase() === actor.name.toLowerCase());
 
 // Every project (even ones nobody is on yet) and every allocation, for everyone signed in. `canManage` says whether this person may add people to a project.
@@ -141,7 +143,7 @@ app.get("/api/allocations", wrap(async (req, res) => {
   res.json({
     canCreate: actor.canCreate,
     projects: projects.map((p) => ({ id: p.id, name: p.name, lead: p.project_lead, start: p.start_date, end: p.end_date, status: p.status,
-      description: p.description, closed: isClosed(p), canManage: !isClosed(p) && canManageProject(actor, p) })),
+      description: p.description, closed: isClosed(p), canManage: !isClosed(p) && canManageProject(actor, p), canHandover: !isClosed(p) && isProjectLead(actor, p) })),
     rows: rows.map((r) => ({ id: r.id, projectId: r.project_id, project: r.project, employee: r.employee, email: r.email, no: r.emp_no,
       start: r.start_date, end: r.end_date, lead: r.lead, location: r.location, status: r.status, handedOverTo: r.handed_over_to, movedTo: r.moved_to, endReason: r.end_reason })),
   });
@@ -212,7 +214,7 @@ app.post("/api/allocations/:id/end", requireAuth, wrap(async (req, res) => {
   const a = (await pool.query(`SELECT a.id, a.status, a.employee_id, a.location, e.name AS employee, p.name AS project, p.project_lead, p.status AS pstatus, p.end_date
     FROM employee_project_allocations a JOIN projects p ON p.id=a.project_id JOIN employees e ON e.id=a.employee_id WHERE a.id=$1`, [Number(req.params.id) || 0])).rows[0];
   if (!a) return res.status(404).json({ error: "Allocation not found." });
-  if (!canManageProject(actor, a)) return res.status(403).json({ error: "Only HR or the project lead can take people off this project." });
+  if (!isProjectLead(actor, a)) return res.status(403).json({ error: "Only the project lead can take people off this project or hand their work over." });
   if (isClosed({ status: a.pstatus, end_date: a.end_date })) return res.status(400).json({ error: CLOSED_MSG });
   if (a.status !== "Active") return res.status(400).json({ error: "This allocation has already ended." });
   const reason = ["Moved to another project", "Leaving the company", "Other"].includes(req.body?.reason) ? req.body.reason : null;

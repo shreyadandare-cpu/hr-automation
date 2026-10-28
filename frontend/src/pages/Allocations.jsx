@@ -175,7 +175,7 @@ function ProjectModal({ project, others, onClose, reload }) {
             {project.all.map((a) => (
               <tr key={a.id}><td style={{ whiteSpace: "nowrap" }}>{a.employee}</td><td style={{ whiteSpace: "nowrap" }}>{a.start ? shortDate(a.start) : dash}</td><td style={{ whiteSpace: "nowrap" }}>{a.end ? shortDate(a.end) : dash}</td>
                 <td>{a.location || dash}</td><td><Pill tone={tone(a.status)}>{a.status}</Pill></td><td style={{ whiteSpace: "nowrap" }}>{handoverText(a)}</td>
-                {project.canManage && <td>{a.status === "Active" && <button type="button" className="btn glass sm" onClick={() => setLeaving(a)}>Remove / hand over</button>}</td>}</tr>))}
+                {project.canManage && <td>{a.status === "Active" && project.canHandover && <button type="button" className="btn glass sm" onClick={() => setLeaving(a)}>Remove / hand over</button>}</td>}</tr>))}
           </tbody>
         </table></div>
         {project.canManage && (

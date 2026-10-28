@@ -10,7 +10,7 @@ import { ACCESS_HELP, ACCESS_LABEL, DEPTS, DOMAIN, DocRows, ObTabs, ON_TOOLS, V,
 
 const OB_STEPS = ["Details and work email", "Create login", "Tools and review"];
 const OB_DRAFT_KEY = "hr_ob_draft";
-const newDetails = () => ({ first: "", last: "", pemail: "", phone: "", address: "", dept: "Engineering", title: "", mgr: "", start: "" });
+const newDetails = () => ({ first: "", last: "", pemail: "", phone: "", address: "", dept: "Engineering", kind: "Employee", title: "", mgr: "", start: "" });
 const newOb = () => ({ step: 1, fromReview: false, email: null, d: newDetails(), work: null, login: null, busy: false, apps: null, reviewed: false, errors: {}, role: null, sendInvite: true });
 
 /* Step 1 asks only for personal and job details. Documents come from the employee, so none are required here. */
@@ -283,6 +283,7 @@ export default function Onboarding() {
           </div></div>
           <div className="card"><div className="card-h"><h3>Job details</h3><span className="muted">Filled in by HR</span></div><div className="card-b form">
             <div className="field"><label htmlFor="ob-dept">Department</label><select className="input" id="ob-dept" value={d.dept} onChange={(e) => setD("dept", e.target.value)}>{DEPTS.map((x) => <option key={x}>{x}</option>)}</select></div>
+            <div className="field"><label htmlFor="ob-kind">Joining as</label><select className="input" id="ob-kind" value={d.kind || "Employee"} onChange={(e) => setD("kind", e.target.value)}><option>Employee</option><option>Intern</option></select></div>
             <Fld label="Job title" id="title" value={d.title} onChange={(v) => setD("title", v)} err={er.title} ph="e.g. Software Development Engineer" />
             <div className="field"><label htmlFor="ob-mgr">Reporting manager</label><select className="input" id="ob-mgr" value={d.mgr} onChange={(e) => setD("mgr", e.target.value)}><option value="">None</option>{mgrs.map((m) => <option key={m.id}>{m.name}</option>)}</select></div>
             <Fld label="Start date" id="start" type="date" value={d.start} onChange={(v) => setD("start", v)} err={er.start} />
@@ -311,7 +312,7 @@ export default function Onboarding() {
         )}
         {ob.step === 3 && w && <>
           {reviewCard("Personal details", 1, [["Name", d.first + " " + d.last], ["Personal email", d.pemail], ["Phone", d.phone], ["Address", d.address]])}
-          {reviewCard("Job details", 1, [["Department", d.dept], ["Job title", d.title], ["Reporting manager", d.mgr], ["Start date", fdate(d.start)]])}
+          {reviewCard("Job details", 1, [["Department", d.dept], ["Joining as", d.kind || "Employee"], ["Job title", d.title], ["Reporting manager", d.mgr], ["Start date", fdate(d.start)]])}
           <div className="card"><div className="card-h"><h3>Work email and login</h3></div><div className="card-b"><dl className="rv">
             <div><dt>Work email</dt><dd><span className="mono">{w.email}</span></dd></div>
             <div><dt>Google</dt><dd>{{ active: "Active in Google Workspace", simulated: "Active (simulated)", existing: "Already in the employee list" }[w.google] || w.google}</dd></div>

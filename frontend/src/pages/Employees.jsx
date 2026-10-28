@@ -133,7 +133,7 @@ export default function Employees() {
             <tr key={p.id} className={p.status === "offboarded" ? "former" : ""}>
               <td className="num-cell"><span className="emp-no">{p.no}</span></td>
               <td><PersonCell person={p} /></td>
-              <td className="hide-sm"><div className="cell-main">{p.title}</div><div className="cell-sub">{[p.dept, p.location].filter((x) => x && x !== "—").join(" · ")}</div></td>
+              <td className="hide-sm"><div className="cell-main">{p.title}{p.intern && <span className="pill p-info" style={{ marginLeft: 8, verticalAlign: "middle" }}>Intern</span>}</div><div className="cell-sub">{[p.dept, p.location].filter((x) => x && x !== "—").join(" · ")}</div></td>
               <td className="hide-sm"><ManagerCell person={p} /></td>
               <td className="hide-sm"><ProjectsCell person={p} /></td>
               <td><StatusPill person={p} /><div className="cell-sub">Joined {shortDate(p.start)}</div></td>

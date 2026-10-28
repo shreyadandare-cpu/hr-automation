@@ -103,7 +103,7 @@ app.get("/api/directory", wrap(async (_req, res) => {
 // The company roster, for everyone signed in. Only non-personal fields are sent, so this is safe for employees too.
 app.get("/api/roster", wrap(async (_req, res) => {
   const { rows } = await pool.query(
-    `SELECT e.id, e.emp_no, e.name, e.work_email, e.title, e.sub_title, e.work_location, e.manager, e.start_date, e.last_day, e.status,
+    `SELECT e.id, e.emp_no, e.name, e.work_email, e.title, e.sub_title, e.work_location, e.manager, e.start_date, e.last_day, e.status, e.employment_type,
        (SELECT COALESCE(json_agg(json_build_object('project', p.name, 'lead', a.project_lead, 'location', a.location,
                                                    'status', a.status, 'start', a.start_date, 'end', a.end_date)
                                  ORDER BY (a.status = 'Active') DESC, p.name), '[]'::json)
@@ -111,7 +111,7 @@ app.get("/api/roster", wrap(async (_req, res) => {
        (SELECT extract(epoch FROM ph.updated_at)::bigint FROM profile_photos ph WHERE lower(ph.email) = lower(e.work_email)) AS photo_v
      FROM employees e ORDER BY e.id`);
   res.json(rows.map((r) => ({ id: r.id, no: r.emp_no, name: r.name, email: r.work_email, title: r.title, subTitle: r.sub_title,
-    location: r.work_location, manager: r.manager, start: r.start_date, lastDay: r.last_day, status: r.status, projects: r.projects, photoV: r.photo_v })));
+    location: r.work_location, manager: r.manager, start: r.start_date, lastDay: r.last_day, status: r.status, employmentType: r.employment_type, projects: r.projects, photoV: r.photo_v })));
 }));
 
 // Who the signed-in person is for project work: HR, a manager (has a team) or a project lead may start projects; HR or a project's lead manages its members.
@@ -317,10 +317,12 @@ app.get("/api/onboarding/draft", wrap(async (req, res) => {
   res.json(rows[0] ? rows[0].data : null);
 }));
 
+const kindOf = (d) => (d && d.kind === "Intern" ? "Intern" : "Employee");
+
 // Drafts hold name, contact and job details only. ID numbers are never saved.
 app.put("/api/onboarding/draft", wrap(async (req, res) => {
   const d = req.body && typeof req.body === "object" ? req.body : {};
-  const keep = ["first", "last", "pemail", "phone", "address", "dept", "title", "mgr", "start"];
+  const keep = ["first", "last", "pemail", "phone", "address", "dept", "title", "mgr", "start", "kind"];
   const data = Object.fromEntries(keep.map((k) => [k, String(d[k] ?? "")]));
   await pool.query(
     `INSERT INTO onboarding_drafts (id,data) VALUES ($1,$2)
@@ -369,6 +371,7 @@ app.post("/api/onboarding/work-email", wrap(async (req, res) => {
          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'onboarding','pending')`, [...fields, email]);
       await client.query("INSERT INTO audit_log (action, work_email) VALUES ($1,$2)", ["Work email reserved", email]);
     }
+    await client.query("UPDATE employees SET employment_type=$1 WHERE lower(work_email)=$2", [kindOf(d), email.toLowerCase()]);
     await client.query("COMMIT");
   } catch (err) {
     await client.query("ROLLBACK");
@@ -431,7 +434,8 @@ app.post("/api/onboarding", wrap(async (req, res) => {
       `UPDATE employees SET name=$1, dept=$2, title=$3, manager=$4, start_date=$5, personal_email=$6, phone=$7,
        address=$8, dob=$9, aadhaar_masked=$10, pan_masked=$11, acct_masked=$12, ifsc=$13, apps=$14, onboarded_at=now()
        WHERE lower(work_email)=$15`, [full, ...fields, row.work_email.toLowerCase()]);
-    await client.query("INSERT INTO audit_log (action, work_email) VALUES ($1,$2)", ["Onboarding completed", row.work_email]);
+    await client.query("UPDATE employees SET employment_type=$1 WHERE lower(work_email)=$2", [kindOf(d), row.work_email.toLowerCase()]);
+    await client.query("INSERT INTO audit_log (action, work_email) VALUES ($1,$2)", [`Onboarding completed${kindOf(d) === "Intern" ? " (intern)" : ""}`, row.work_email]);
     await client.query("DELETE FROM onboarding_drafts WHERE id=$1", [draftId(req)]);
     await client.query("COMMIT");
     res.status(201).json(toApi(await loadRecord(row.work_email)));

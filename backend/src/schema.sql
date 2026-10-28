@@ -532,3 +532,6 @@ CREATE TABLE IF NOT EXISTS tool_access (
 -- People who have already left are not on any project any more.
 UPDATE employee_project_allocations a SET status='Ended', end_date=coalesce(a.end_date, e.last_day, CURRENT_DATE), end_reason=coalesce(a.end_reason, 'Left the company')
   FROM employees e WHERE e.id = a.employee_id AND e.status = 'offboarded' AND a.status = 'Active';
+
+-- Whether someone joined as a regular employee or an intern.
+ALTER TABLE employees ADD COLUMN IF NOT EXISTS employment_type TEXT NOT NULL DEFAULT 'Employee';

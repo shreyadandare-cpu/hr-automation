@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api, apiMsg } from "../api.js";
+import Modal from "./Modal.jsx";
 
 /* The employee's attendance page, laid out like a standard HR attendance screen: stats, today's shift and the punch button on top,
    then a log of every day with a 24-hour bar, break time and gross hours, and a calendar. Times are Indian time. */
@@ -138,6 +139,38 @@ export function TimingsCard({ today, punches, minutesToday, now, h24 }) {
   );
 }
 
+/* The attendance policy, in two tabs: how lateness and missing days are penalised, and how time is tracked. */
+const POLICY = {
+  penal: { label: "Penalisation Policy", intro: "Below are the details of your Penalisation Policy", note: "Penalisation policy is effective 02 Feb 2023", items: [
+    ["No Attendance", "You won't be penalized for any leave if there is no attendance logged by you."],
+    ["Late Arrival", "You won't be penalized for any late arrival incidents."],
+    ["Work Hours", "There is no penalization for number of work hours you spend in office."],
+    ["Missing Swipes", "There is no penalization for Missing Swipes, but it is recommended to regularize your attendance."],
+  ] },
+  track: { label: "Time tracking policy", intro: "Below are the details of time tracking policy assigned to you", items: [
+    ["Bio-Metric & Web Clock-In", "Your attendance is automatically tracked using biometric device(s)."],
+    ["On-duty (OD)", "You can request for only full day OD."],
+    ["How days are counted", `The shift is ${clock(SHIFT.start)} to ${clock(SHIFT.end)}. Hours come from your punches, each IN with the next OUT. Six hours or more is a present day and three to six hours is a half day. Weekends and holidays are not expected working days.`],
+  ] },
+};
+export function PolicyModal({ onClose }) {
+  const [tab, setTab] = useState("penal");
+  const p = POLICY[tab];
+  return (
+    <Modal onClose={onClose} wide>
+      <div className="card-h" style={{ paddingTop: 24 }}><h3>Attendance Policy</h3><button type="button" className="btn glass sm" onClick={onClose} aria-label="Close">Close</button></div>
+      <div className="card-b">
+        <div className="att-tabs" role="tablist" style={{ padding: 0 }}>
+          {Object.entries(POLICY).map(([k, v]) => <button key={k} type="button" role="tab" aria-selected={tab === k} className={tab === k ? "on" : ""} onClick={() => setTab(k)}>{v.label}</button>)}
+        </div>
+        <p style={{ margin: 0 }}>{p.intro}</p>
+        {p.note && <p className="muted" style={{ margin: 0 }}>{p.note}</p>}
+        {p.items.map(([h, t]) => <div key={h}><h4 style={{ margin: "0 0 4px", fontSize: 16 }}>{h}</h4><p className="muted" style={{ margin: 0 }}>{t}</p></div>)}
+      </div>
+    </Modal>
+  );
+}
+
 export function ActionsCard({ today, state, punches, onPunch, busy, now, h24 }) {
   const [policy, setPolicy] = useState(false);
   const t = now.time.slice(0, 5);
@@ -151,8 +184,8 @@ export function ActionsCard({ today, state, punches, onPunch, busy, now, h24 }) 
         {onPunch && <button type="button" className={`btn ${state === "in" ? "glass" : "primary"}`} disabled={busy} onClick={onPunch}>{state === "in" ? "Punch out" : "Punch in"}</button>}
         <span className="muted">{state === "in" ? `${onPunch ? "Punched in" : "In"}${first ? ` since ${clock(first.time, h24)}` : ""}` : punches.length ? `${onPunch ? "Punched out" : "Out"} at ${clock(punches[punches.length - 1].time, h24)}` : onPunch ? "You have not punched in today" : "No punches yet today"}</span>
       </div>
-      <button type="button" className="btn link sm" aria-expanded={policy} onClick={() => setPolicy(!policy)}>Attendance policy</button>
-      {policy && <p className="muted att-policy">Shift {clock(SHIFT.start)} to {clock(SHIFT.end)}. Present is 6 hours worked or more; a half day is 3 to 6 hours. Hours are counted from your punches (each IN with the next OUT). Weekends and holidays are not counted as absent. Missed a punch? Ask HR to add it.</p>}
+      <button type="button" className="btn link sm" aria-haspopup="dialog" onClick={() => setPolicy(true)}>Attendance policy</button>
+      {policy && <PolicyModal onClose={() => setPolicy(false)} />}
     </div>
   );
 }

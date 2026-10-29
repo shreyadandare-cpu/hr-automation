@@ -215,6 +215,7 @@ export function ActionsCard({ today, state, punches, onPunch, busy, now, h24 }) 
 const LOG_ICON = { ok: "On track", warn: "Check", live: "Live" };
 function logIcon(d, today) {
   if (d.missingOut) return ["warn", "No punch out"];
+  if (d.missingSwipe) return ["warn", "A punch in the middle has no matching return: ask HR to check the day"];
   if (d.status === "Working") return ["live", "Still working"];
   if (/^(Present|Worked on)/.test(d.status)) return ["ok", d.status];
   return ["warn", d.status];

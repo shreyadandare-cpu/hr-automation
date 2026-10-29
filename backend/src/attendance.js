@@ -31,6 +31,18 @@ function worked(punches, until) {
   return { minutes: total + (open !== null && until !== null ? Math.max(0, until - open) : 0), missingOut: open !== null };
 }
 
+/** The office machine does not say IN or OUT, so the stored direction is only a guess made as punches arrive. For a finished day the people's habit
+    is clearer: the first punch is the way in, the last punch is the way out, and the ones in between are breaks (out, then back in).
+    Hours are then first to last, less the completed breaks. A leftover break punch with no return is flagged as a missing swipe, not guessed at. */
+function deriveDay(ps) {
+  const n = ps.length;
+  const punches = ps.map((p, i) => ({ ...p, direction: i === 0 ? "IN" : i === n - 1 ? "OUT" : i % 2 === 1 ? "OUT" : "IN" }));
+  if (n < 2) return { punches, minutes: 0, missingOut: true, missingSwipe: false };
+  let brk = 0;
+  for (let i = 1; i + 1 <= n - 2; i += 2) brk += Math.max(0, mins(ps[i + 1].time) - mins(ps[i].time));
+  return { punches, minutes: Math.max(0, mins(ps[n - 1].time) - mins(ps[0].time) - brk), missingOut: false, missingSwipe: (n - 2) % 2 === 1 };
+}
+
 /** One person's days for a month. Past days get a status; days before they joined and in the future get none. */
 function monthDays(month, punches, leave, holidays, emp, today, nowMin) {
   const [y, m] = month.split("-").map(Number);
@@ -39,9 +51,12 @@ function monthDays(month, punches, leave, holidays, emp, today, nowMin) {
   const days = [];
   for (let d = 1; d <= last; d++) {
     const date = `${month}-${String(d).padStart(2, "0")}`;
-    const ps = punches.filter((p) => p.date === date).sort((a, b) => (a.time < b.time ? -1 : 1));
+    let ps = punches.filter((p) => p.date === date).sort((a, b) => (a.time < b.time ? -1 : 1));
+    // A finished day with punches from the office machine: work out in and out from the order of the punches (see deriveDay).
+    const dd = date !== today && ps.some((p) => p.source === "device") ? deriveDay(ps) : null;
+    if (dd) ps = dd.punches;
     const ins = ps.filter((p) => p.direction === "IN"), outs = ps.filter((p) => p.direction === "OUT");
-    const w = worked(ps, date === today ? nowMin : null);
+    const w = dd ? { minutes: dd.minutes, missingOut: dd.missingOut } : worked(ps, date === today ? nowMin : null);
     const lv = leave.find((r) => r.from <= date && r.to >= date);
     const off = L.isWeekend(date) ? "Weekend" : hol.has(date) ? "Holiday" : null;
     let status = null;
@@ -51,7 +66,7 @@ function monthDays(month, punches, leave, holidays, emp, today, nowMin) {
     else status = off || "Absent";
     if (status === "Present" && off) status = "Worked on " + off.toLowerCase();
     days.push({ date, status, off, holiday: hol.get(date) || null, firstIn: ins[0] ? ins[0].time : null, lastOut: outs.length ? outs[outs.length - 1].time : null,
-      minutes: w.minutes, missingOut: w.missingOut && date !== today, punches: ps });
+      minutes: w.minutes, missingOut: w.missingOut && date !== today, missingSwipe: !!(dd && dd.missingSwipe), punches: ps });
   }
   return days;
 }
@@ -144,8 +159,10 @@ export function attendanceRouter(wrap) {
     const off = L.isWeekend(date) ? "Weekend" : hol.rows[0] ? "Holiday" : null;
     const people = emps.rows.filter((e) => (!team || team.includes(e.work_email.toLowerCase())))
       .filter((e) => (!e.start_date || String(e.start_date).slice(0, 10) <= date) && (!e.last_day || String(e.last_day).slice(0, 10) >= date)).map((e) => {
-      const mine = ps.rows.filter((p) => p.employee_id === e.id).map(toPunch);
-      const w = worked(mine, date === now.day ? mins(now.time) : null), l = lv.rows.find((x) => x.e === e.work_email.toLowerCase());
+      let mine = ps.rows.filter((p) => p.employee_id === e.id).map(toPunch);
+      const dd = date !== now.day && mine.some((p) => p.source === "device") ? deriveDay(mine) : null;   // same in/out rule as a person's own month
+      if (dd) mine = dd.punches;
+      const w = dd ? { minutes: dd.minutes, missingOut: dd.missingOut } : worked(mine, date === now.day ? mins(now.time) : null), l = lv.rows.find((x) => x.e === e.work_email.toLowerCase());
       const ins = mine.filter((p) => p.direction === "IN"), outs = mine.filter((p) => p.direction === "OUT");
       let status;
       if (date > now.day) status = null;

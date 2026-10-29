@@ -202,7 +202,6 @@ export default function Attendance() {
   const [date, setDate] = useState("");
   const [person, setPerson] = useState(null);    // { email, name } while looking at someone
   const [error, setError] = useState("");
-  const [busy, setBusy] = useState(false);
   const [toast, setToast] = useState("");
   const now = useNow(1000);
   const [h24] = useH24();

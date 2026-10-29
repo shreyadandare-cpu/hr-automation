@@ -167,7 +167,8 @@ export function attendanceRouter(wrap) {
       if (date > now.day) status = null;
       else if (mine.length) status = w.minutes >= PRESENT_MIN ? "Present" : w.minutes >= HALF_MIN ? "Half day" : date === now.day ? "Working" : "Short hours";
       else status = l ? (l.half ? "Half day leave" : "On leave") : off || (offSite(e.work_location) ? "Off-site" : "Absent");
-      return { email: e.work_email, name: e.name, title: e.title, status, firstIn: ins[0] ? ins[0].time : null, lastOut: outs.length ? outs[outs.length - 1].time : null,
+      return { email: e.work_email, name: e.name, title: e.title, status, firstIn: ins[0] ? ins[0].time : mine.length ? mine[0].time : null, lastOut: outs.length ? outs[outs.length - 1].time : null,
+        lastPunch: mine.length ? mine[mine.length - 1].time : null, punchCount: mine.length,
         minutes: w.minutes, missingOut: w.missingOut && date !== now.day, in: mine.length > 0 && mine[mine.length - 1].direction === "IN" };
     });
     res.json({ date, today: now.day, off, holiday: hol.rows[0] ? hol.rows[0].name : null, people });

@@ -32,13 +32,13 @@ function DayTable({ day, onOpen }) {
         <div className="filters"><input className="input grow" type="search" placeholder="Search any employee by name, email or role" aria-label="Search employees" value={q} onChange={(e) => setQ(e.target.value)} />
           {q.trim() && <span className="muted" style={{ whiteSpace: "nowrap" }}>{shown.length} of {people.length}</span>}</div>
         <div className="tbl-wrap"><table>
-        <thead><tr><th>Employee</th><th>Status</th><th>First in</th><th>Last out</th><th className="hide-sm">Attendance visual</th><th>Hours</th></tr></thead>
+        <thead><tr><th>Employee</th><th>Status</th><th>First punch</th><th>Last punch</th><th className="hide-sm">Attendance visual</th><th>Hours</th></tr></thead>
         <tbody>{!rows.length && <tr><td colSpan="6"><div className="empty">{q.trim() ? `No one matches “${q.trim()}”.` : "No one to show."}</div></td></tr>}
           {rows.map((x) => (
           <tr key={x.email} className="click" tabIndex={0} onClick={() => onOpen(x)} onKeyDown={(e) => e.key === "Enter" && onOpen(x)}>
             <td><Person name={x.name} sub={x.title || x.email} /></td>
             <td><StatusPill status={x.status} />{x.missingOut && <> <Pill tone="warn">No punch out</Pill></>}</td>
-            <td>{x.firstIn || "—"}</td><td>{x.lastOut || "—"}</td><td className="hide-sm"><DayCell x={x} /></td><td>{hours(x.minutes)}</td>
+            <td>{x.firstIn || "—"}</td><td>{x.lastPunch ? <>{x.lastPunch}{x.punchCount > 1 ? "" : <span className="muted"> · only punch</span>}</> : "—"}</td><td className="hide-sm"><DayCell x={x} /></td><td>{x.minutes ? hours(x.minutes) : x.punchCount ? <span className="muted">{x.missingOut ? "No punch out" : "Just started"}</span> : "—"}</td>
           </tr>
         ))}</tbody>
       </table></div><Pager {...pager} /></div>

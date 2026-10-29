@@ -122,3 +122,55 @@ export function cleanStructure(body = {}) {
   return Object.keys(errors).length ? { errors }
     : { value: { effectiveFrom, earnings, otherDeductions, pfEmployee: pfEmployee || 0, professionalTax: professionalTax || 0, tdsMonthly, pfNumber } };
 }
+
+/** The month (YYYY-MM) a moment falls in, India time. */
+export const istMonth = (d = new Date()) => new Date(d.getTime() + 5.5 * 3600e3).toISOString().slice(0, 7);
+export const previousMonth = (p) => { const [y, m] = p.split("-").map(Number); return m === 1 ? `${y - 1}-12` : `${y}-${String(m - 1).padStart(2, "0")}`; };
+
+const MON = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"];
+/** "2026-09", "2026-09-01", "09/2026", "Sep 2026" or "Sep-26" (how a spreadsheet may show the month) as "2026-09". */
+export function monthOf(v) {
+  const s = String(v ?? "").trim().toLowerCase();
+  let m;
+  if ((m = s.match(/^(\d{4})-(\d{1,2})(-\d{1,2})?$/))) return `${m[1]}-${m[2].padStart(2, "0")}`;
+  if ((m = s.match(/^(\d{1,2})[/-](\d{4})$/))) return `${m[2]}-${m[1].padStart(2, "0")}`;
+  if ((m = s.match(/^([a-z]{3})[a-z]*[\s/-]+(\d{2}|\d{4})$/)) && MON.includes(m[1])) return `${m[2].length === 2 ? "20" + m[2] : m[2]}-${String(MON.indexOf(m[1]) + 1).padStart(2, "0")}`;
+  return s;   // left as typed, so cleanStructure reports it
+}
+
+const COLUMNS = {
+  email: ["email", "work email", "employee email", "email id"],
+  effectiveFrom: ["applies from", "effective from", "month", "from month"],
+  pfEmployee: ["pf employee", "pf", "pf contribution", "employee pf"],
+  professionalTax: ["professional tax", "pt"],
+  tdsMonthly: ["monthly tds", "tds", "tds monthly", "income tax", "total income tax"],
+  pfNumber: ["pf number", "pf no", "uan"],
+  skip: ["name", "employee name", "employee", "emp no", "employee no", "employee id", "designation", "department"],
+};
+const colKey = (h) => String(h).trim().toLowerCase().replace(/[_\s]+/g, " ");
+const amountText = (v) => String(v ?? "").replace(/[₹,\s]/g, "");
+
+/**
+ * One spreadsheet row ({ header: value }) as { email, body }, where body is what cleanStructure checks.
+ * Known columns are above (any of the listed headers, any case). A column starting "Deduction:" is another deduction.
+ * Every other column with a value is an earning named by its header: Basic, HRA, Special Allowance… An empty PF number
+ * cell keeps the PF number on file.
+ */
+export function structureFromRow(row = {}) {
+  const body = { earnings: [], otherDeductions: [] };
+  let email = "";
+  for (const [h, raw] of Object.entries(row)) {
+    const k = colKey(h), v = String(raw ?? "").trim();
+    const is = (field) => COLUMNS[field].includes(k);
+    if (is("email")) email = v.toLowerCase();
+    else if (is("effectiveFrom")) body.effectiveFrom = monthOf(v);
+    else if (is("pfNumber")) { if (v) body.pfNumber = v; }
+    else if (is("pfEmployee")) body.pfEmployee = amountText(v);
+    else if (is("professionalTax")) body.professionalTax = amountText(v);
+    else if (is("tdsMonthly")) body.tdsMonthly = amountText(v);
+    else if (is("skip") || !k) continue;
+    else if (k.startsWith("deduction:")) { if (v) body.otherDeductions.push({ name: String(h).trim().slice(10).trim(), amount: amountText(v) }); }
+    else if (v) body.earnings.push({ name: String(h).trim(), amount: amountText(v) });
+  }
+  return { email, body };
+}

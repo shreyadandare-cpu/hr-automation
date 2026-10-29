@@ -8,6 +8,7 @@ import { requireAuth } from "./auth.js";
 /* Payslips: everyone can see and download their own for any month HR has processed payroll for.
    HR can see anyone's with ?email=. Anyone else asking for another person's payslip gets 403.
    A payslip is the one stored with the payroll run (payroll_items.slip), so it never changes after the month is processed.
+   Payslips made automatically are a draft until published (payslip-auto.js): only HR sees a draft.
    The amounts are worked out in payroll-calc.js; nothing here calculates or accepts an amount from the browser. */
 const PERIOD = /^\d{4}-(0[1-9]|1[0-2])$/;
 const EMAIL = /^[^@\s]+@[^@\s]+$/;
@@ -41,18 +42,18 @@ function legacySlip(x) {
 }
 
 /** The stored payslip for one person and month: { slip } or { status, error }. */
-async function payslipOf(email, period) {
+async function payslipOf(email, period, drafts) {
   const { rows } = await pool.query(
-    `SELECT i.*, r.period, r.status, r.paid_at, e.name, e.emp_no, e.title, e.dept, e.start_date, e.pan_masked, e.pf_number
+    `SELECT i.*, r.period, r.status, r.paid_at, r.published_at, r.publish_at, e.name, e.emp_no, e.title, e.dept, e.start_date, e.pan_masked, e.pf_number
      FROM payroll_items i JOIN payroll_runs r ON r.id=i.run_id LEFT JOIN employees e ON lower(e.work_email)=lower(i.work_email)
-     WHERE lower(i.work_email)=$1 AND r.period=$2`, [email, period]);
+     WHERE lower(i.work_email)=$1 AND r.period=$2 ${drafts ? "" : "AND r.published_at IS NOT NULL"}`, [email, period]);
   const x = rows[0];
   if (!x) return { status: 404, error: `Payslip is not available for ${monthName(period)}.` };
   const s = x.slip || legacySlip(x);
   if (s.incomplete && s.incomplete.length) return { status: 422, error: INCOMPLETE };
   const e = s.employee || {};
   return { slip: {
-    period, status: x.status, paidAt: x.paid_at,
+    period, status: x.status, paidAt: x.paid_at, draft: !x.published_at, publishAt: x.published_at ? null : x.publish_at,
     employee: { name: e.name || x.name || email, empNo: e.empNo || x.emp_no, title: e.title || x.title, dept: e.dept || x.dept,
       start: e.start || x.start_date, pan: e.pan || x.pan_masked, pfNumber: e.pfNumber || x.pf_number, paymentMode: e.paymentMode || null, email },
     days: s.days, earnings: s.earnings, contributions: s.contributions, deductions: s.deductions, totals: s.totals,
@@ -86,7 +87,7 @@ export function inWords(amount) {
   return `${parts.join(" ")}${rupees ? " Rupees" : ""}${paise ? `${rupees ? " and " : ""}${two(paise)} Paise` : ""} only`;
 }
 
-function drawPdf(doc, p) {
+export function drawPdf(doc, p) {
   const L = 45, R = 550, W = R - L, ink = "#000000", grey = "#6b6b6b", rule = "#d5d5d5";
   const [y0, m0] = p.period.split("-");
   doc.font("Helvetica-Bold").fontSize(20).fillColor(ink).text("PAYSLIP ", L, 48, { continued: true }).font("Helvetica").text(`${MON[Number(m0) - 1].toUpperCase()} ${y0}`);
@@ -161,13 +162,13 @@ export function payslipsRouter(wrap) {
     const { rows: [emp] } = await pool.query("SELECT name, emp_no, title, dept FROM employees WHERE lower(work_email)=$1", [email]);
     if (!emp && email !== req.user.email.toLowerCase()) return res.status(404).json({ error: "Employee not found." });
     const { rows } = await pool.query(
-      `SELECT r.period, r.status, r.paid_at, i.payable, i.base_salary, i.slip FROM payroll_items i JOIN payroll_runs r ON r.id=i.run_id
-       WHERE lower(i.work_email)=$1 ORDER BY r.period DESC`, [email]);
+      `SELECT r.period, r.status, r.paid_at, r.published_at, r.publish_at, i.payable, i.base_salary, i.slip FROM payroll_items i JOIN payroll_runs r ON r.id=i.run_id
+       WHERE lower(i.work_email)=$1 ${isHr(req) ? "" : "AND r.published_at IS NOT NULL"} ORDER BY r.period DESC`, [email]);
     res.json({
       employee: emp ? { name: emp.name, empNo: emp.emp_no, title: emp.title, dept: emp.dept, email } : { name: req.user.email, email },
       payslips: rows.map((x) => {
         const ready = x.slip ? !x.slip.incomplete.length : x.base_salary !== null;
-        return { period: x.period, status: x.status, paidAt: x.paid_at, available: ready, net: ready ? num(x.payable) : null, message: ready ? null : INCOMPLETE };
+        return { period: x.period, status: x.status, paidAt: x.paid_at, draft: !x.published_at, publishAt: x.published_at ? null : x.publish_at, available: ready, net: ready ? num(x.payable) : null, message: ready ? null : INCOMPLETE };
       }),
     });
   }));
@@ -177,7 +178,7 @@ export function payslipsRouter(wrap) {
     if (!PERIOD.test(period)) return res.status(400).json({ error: "Choose a month like 2026-10." });
     const email = targetOf(req, res);
     if (!email) return;
-    const p = await payslipOf(email, period);
+    const p = await payslipOf(email, period, isHr(req));
     if (!p.slip) return res.status(p.status).json({ error: p.error });
     res.json(p.slip);
   }));
@@ -187,7 +188,7 @@ export function payslipsRouter(wrap) {
     if (!PERIOD.test(period)) return res.status(400).json({ error: "Choose a month like 2026-10." });
     const email = targetOf(req, res);
     if (!email) return;
-    const p = await payslipOf(email, period);
+    const p = await payslipOf(email, period, isHr(req));
     if (!p.slip) return res.status(p.status).json({ error: p.error });
     const s = p.slip;
     res.setHeader("Content-Type", "application/pdf");

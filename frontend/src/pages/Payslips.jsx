@@ -34,6 +34,7 @@ function SlipView({ s, pdf, onClose }) {
         </section>
       </div>
       <div className="ps-net"><span>Net salary payable (A − B − C)</span><b>{money(s.totals.net)}</b></div>
+      {s.draft && <div className="card-b" style={{ paddingTop: 0 }}><Callout>Draft: the employee can't see this payslip yet. It is published {s.publishAt ? `on ${shortDate(String(s.publishAt).slice(0, 10))}` : "when HR publishes it"}.</Callout></div>}
       <div className="card-b muted" style={{ paddingTop: 0 }}>{s.status === "paid" ? `Paid${s.paidAt ? ` on ${shortDate(String(s.paidAt).slice(0, 10))}` : ""}.` : "Payroll for this month is processed. Payment is not marked as made yet."} All amounts are in INR.</div>
     </div>
   );
@@ -78,7 +79,7 @@ export default function Payslips() {
   return (
     <section className="section">
       <BackButton />
-      <SectionHead eyebrow="Me" title={who ? "Payslips" : "My"} accent={who ? "." : "payslips."} sub="View or download the payslip for any month that payroll has been processed. Each one is also a PDF."
+      <SectionHead eyebrow="Me" title={who ? "Payslips" : "My"} accent={who ? "." : "payslips."} sub="Your payslip for each month appears here early the next month. View it or download the PDF any time."
         actions={isHr && others.length > 0 && (
           <select className="input" aria-label="Whose payslips" style={{ width: "auto", maxWidth: "100%" }} value={who || user.email.toLowerCase()}
             onChange={(e) => { const v = e.target.value.toLowerCase(); const n = new URLSearchParams(params); if (v === user.email.toLowerCase()) n.delete("email"); else n.set("email", v); setParams(n, { replace: true }); }}>
@@ -121,7 +122,7 @@ export default function Payslips() {
                 <tr key={x.period}>
                   <td><b>{label(x.period)}</b></td>
                   <td className="num">{x.available ? money(x.net) : "—"}</td>
-                  <td>{!x.available ? <Pill tone="warn">Incomplete</Pill> : x.status === "paid" ? <Pill tone="ok">Paid{x.paidAt ? ` ${shortDate(String(x.paidAt).slice(0, 10))}` : ""}</Pill> : <Pill tone="info">Processed</Pill>}</td>
+                  <td>{x.draft ? <Pill tone="warn">Draft</Pill> : !x.available ? <Pill tone="warn">Incomplete</Pill> : x.status === "paid" ? <Pill tone="ok">Paid{x.paidAt ? ` ${shortDate(String(x.paidAt).slice(0, 10))}` : ""}</Pill> : <Pill tone="info">Processed</Pill>}</td>
                   <td style={{ textAlign: "right" }}>{x.available
                     ? <div className="row" style={{ gap: 8, justifyContent: "flex-end" }}><button type="button" className="btn glass sm" onClick={() => view(x.period)}>View</button><a className="btn primary sm" href={pdf(x.period)} download>Download PDF</a></div>
                     : <span className="muted">{x.message}</span>}</td>

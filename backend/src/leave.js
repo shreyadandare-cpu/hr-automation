@@ -3,6 +3,7 @@ import L from "../../frontend/leave-rules.cjs";
 import { pool } from "./db.js";
 import { requireAuth, requireHr } from "./auth.js";
 import { DIRECTORS, approverOf, approverMap, approves, hrLeaveApprovers } from "./teams.js";
+import { tellLeave } from "./leave-mail.js";
 
 const num = (v) => (v === null || v === undefined ? null : Number(v));
 // Today in India (UTC+5:30), so "today" turns over at midnight IST, not 5:30 am.
@@ -52,13 +53,16 @@ async function historyOf(client, email) {
 }
 const audit = (client, action, email) => client.query("INSERT INTO audit_log (action, work_email) VALUES ($1,$2)", [action, email]);
 
-/** Runs fn inside a transaction; fn returns [status, body]. */
+/** Runs fn inside a transaction; fn returns [status, body, after]. `after` (optional) runs once the change is saved:
+ *  the emails, so nobody is told about something that was rolled back. */
 async function tx(res, fn) {
   const client = await pool.connect();
+  let after = null;
   try {
     await client.query("BEGIN");
-    const [status, body] = await fn(client);
+    const [status, body, then] = await fn(client);
     await client.query(status < 400 ? "COMMIT" : "ROLLBACK");
+    if (status < 400) after = then;
     res.status(status).json(body);
   } catch (err) {
     await client.query("ROLLBACK");
@@ -66,6 +70,7 @@ async function tx(res, fn) {
   } finally {
     client.release();
   }
+  if (after) await after();
 }
 
 export function leaveRouter(wrap) {
@@ -139,7 +144,7 @@ export function leaveRouter(wrap) {
         await audit(client, `${L.TYPES[p.type].name} requested: ${when(lr)} (${plural(p.days)})`, emp.work_email);
         saved.push(lr);
       }
-      return [201, { ...saved[0], requests: saved }];
+      return [201, { ...saved[0], requests: saved }, () => Promise.all(saved.map((request) => tellLeave("requested", { request, actor: self(req) })))];
     });
   }));
 
@@ -161,7 +166,8 @@ export function leaveRouter(wrap) {
         const { rows: out } = await client.query(
           "UPDATE leave_requests SET status='declined', decided_at=now(), decided_by=$2 WHERE id=$1 RETURNING *", [lr.id, self(req)]);
         await audit(client, `${name} declined by ${req.user.email}: ${when(lr)}`, lr.email);
-        return [200, toRequest(out[0])];
+        const request = toRequest(out[0]);
+        return [200, request, () => tellLeave("decided", { request, actor: self(req), decision: "declined" })];
       }
       const holidays = await holidayDays(client);
       const days = L.requestDays(lr.from, lr.to, lr.half, holidays);   // recount in case holidays changed since the request
@@ -172,7 +178,8 @@ export function leaveRouter(wrap) {
         `UPDATE leave_requests SET status='approved', days=$2, paid_days=$3, lop_days=$4, decided_at=now(), decided_by=$5 WHERE id=$1 RETURNING *`,
         [lr.id, days, paid, lop, self(req)]);
       await audit(client, `${name} approved by ${req.user.email}: ${when(lr)} (${plural(paid)} paid${lop ? `, ${plural(lop)} loss of pay` : ""})`, lr.email);
-      return [200, toRequest(out[0])];
+      const request = toRequest(out[0]);
+      return [200, request, () => tellLeave("decided", { request, actor: self(req), decision: "approved" })];
     });
   }));
 
@@ -186,7 +193,8 @@ export function leaveRouter(wrap) {
       if (lr.status !== "pending") return [409, { error: `This request was already ${lr.status}, so it can't be cancelled.` }];
       const { rows: out } = await client.query("UPDATE leave_requests SET status='cancelled', decided_at=now(), decided_by=$2 WHERE id=$1 RETURNING *", [lr.id, self(req)]);
       await audit(client, `${L.TYPES[lr.type].name} cancelled by the employee: ${when(lr)}`, lr.email);
-      return [200, toRequest(out[0])];
+      const request = toRequest(out[0]);
+      return [200, request, () => tellLeave("cancelled", { request, actor: self(req) })];
     });
   }));
 
@@ -204,7 +212,8 @@ export function leaveRouter(wrap) {
         "INSERT INTO comp_off_credits (work_email, worked_on, reason, status, decided_at) VALUES ($1,$2,$3,$4,$5) RETURNING *",
         [emp.work_email, workedOn, String(reason).trim(), final, final === "approved" ? new Date() : null]);
       await audit(client, final === "approved" ? `Comp off earned for working on ${workedOn}` : `Comp off credit requested for working on ${workedOn}`, emp.work_email);
-      return [201, toCompOff(rows[0])];
+      const compOff = toCompOff(rows[0]);
+      return [201, compOff, () => tellLeave(final === "approved" ? "compoff_decided" : "compoff_requested", { compOff, actor: self(req), decision: "approved" })];
     });
   });
   r.post("/api/leave/comp-off-requests", addCompOff("pending"));
@@ -220,7 +229,8 @@ export function leaveRouter(wrap) {
       if (rows[0].status !== "pending") return [409, { error: `This comp off was already ${rows[0].status}.` }];
       const { rows: out } = await client.query("UPDATE comp_off_credits SET status=$2, decided_at=now() WHERE id=$1 RETURNING *", [rows[0].id, decision]);
       await audit(client, `Comp off credit ${decision} by ${req.user.email} for working on ${rows[0].worked_on}`, rows[0].work_email);
-      return [200, toCompOff(out[0])];
+      const compOff = toCompOff(out[0]);
+      return [200, compOff, () => tellLeave("compoff_decided", { compOff, actor: self(req), decision })];
     });
   }));
 

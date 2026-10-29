@@ -9,6 +9,7 @@ import { isCompanyEmail } from "./validate.js";
 import { mailConfigured, sendMail, frontendUrl, maskEmail } from "./mail.js";
 
 const VALID_MINUTES = 30;   // an invite not accepted in this time is cancelled
+export const INVITE_MINUTES = VALID_MINUTES;
 const sha = (s) => crypto.createHash("sha256").update(s).digest("hex");
 const escHtml = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const REACT_PAGE = fileURLToPath(new URL("../../frontend/dist/login.html", import.meta.url));

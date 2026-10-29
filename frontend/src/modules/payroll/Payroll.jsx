@@ -5,6 +5,7 @@ import { useAuth } from "../../auth.jsx";
 import { Callout, Person, Pill, SectionHead } from "../../components/ui.jsx";
 import Modal from "../../components/Modal.jsx";
 import SalaryModal from "./SalaryModal.jsx";
+import ImportModal from "./ImportModal.jsx";
 import { useToast } from "../../components/toast.jsx";
 import { useLeave } from "../../lib/useLeave.js";
 
@@ -17,6 +18,14 @@ const dtShort = (s) => {
   return `${d.getDate()} ${MON[d.getMonth()]}, ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
 };
 const plural = (n, w) => `${n} ${w}${n === 1 ? "" : "s"}`;
+const dayMonth = (s) => new Date(s).toLocaleDateString("en-IN", { day: "numeric", month: "short" });
+
+/* Processed, paid, or a draft made automatically that employees can't see yet. */
+function RunPill({ r }) {
+  if (r.status === "paid") return <Pill tone="ok">Paid{r.paidAt ? ` ${dtShort(r.paidAt)}` : ""}</Pill>;
+  if (!r.publishedAt) return <Pill tone="warn">Draft · employees see it {r.publishAt ? dayMonth(r.publishAt) : "when published"}</Pill>;
+  return <Pill tone="info">Processed</Pill>;
+}
 
 function defaultPeriod(runs) {
   let p = new Date(Date.now() + 5.5 * 3600e3).toISOString().slice(0, 7);
@@ -63,7 +72,7 @@ export default function Payroll() {
   const [period, setPeriod] = useState("");
   const [preview, setPreview] = useState(null);
   const [run, setRun] = useState(null);
-  const [dlg, setDlg] = useState(null);   // { kind: "process" } | { kind: "pay", run } | { kind: "salary", email }
+  const [dlg, setDlg] = useState(null);   // { kind: "process" } | { kind: "pay", run } | { kind: "publish", run } | { kind: "salary", email } | { kind: "import" }
   const [busy, setBusy] = useState(false);
 
   const load = useCallback(async (per) => {
@@ -97,6 +106,14 @@ export default function Payroll() {
     toast(`Payroll processed. ${plural(r.data.included, "reimbursement")} included.`);
     load(period);
   };
+  const publish = async (id) => {
+    setBusy(true);
+    const r = await api("POST", `/api/payroll/runs/${id}/publish`);
+    setBusy(false); setDlg(null);
+    if (!r.ok) return toast(apiMsg(r));
+    toast(`Published. ${plural(r.data.published, "person")} can now download their payslip.`);
+    load(period);
+  };
   const pay = async (id) => {
     setBusy(true);
     const r = await api("POST", `/api/payroll/runs/${id}/pay`);
@@ -118,13 +135,14 @@ export default function Payroll() {
   return (
     <section className="section">
       <SectionHead eyebrow="Finance" title={<>Pay<span className="grad">roll.</span></>}
-        sub="Approved reimbursements are added to the month's payroll on top of salary. Processing the month includes them; marking it paid marks them paid."
+        sub="Last month's payslips are made automatically on the 1st as a draft for everyone whose salary breakdown is complete. You have 2 days to check them; then employees can download them. Approved reimbursements are added on top of salary."
         actions={<div className="row" style={{ gap: 8, flexWrap: "wrap" }}>
+          <button type="button" className="btn glass" onClick={() => setDlg({ kind: "import" })}>Upload salaries (CSV)</button>
           {staff.length > 0 && <select className="input" aria-label="Set a salary breakdown" style={{ width: "auto", maxWidth: "100%" }} value="" onChange={(e) => { if (e.target.value) setDlg({ kind: "salary", email: e.target.value }); }}>
             <option value="">Set a salary breakdown…</option>{staff.map((l) => <option key={l.email} value={l.email}>{l.name}{l.hasStructure ? "" : " (not set)"}</option>)}</select>}
           <input className="input" type="month" value={period} aria-label="Payroll month" style={{ width: "auto" }} onChange={(e) => { if (e.target.value) load(e.target.value); }} /></div>} />
       <div className="card">
-        <div className="card-h"><h3>{monthLabel(period)}</h3>{done ? <Pill tone={done.status === "paid" ? "ok" : "info"}>{done.status === "paid" ? "Paid" : "Processed"}</Pill> : <Pill>Not processed</Pill>}</div>
+        <div className="card-h"><h3>{monthLabel(period)}</h3>{done ? <RunPill r={done} /> : <Pill>Not processed</Pill>}</div>
         {state !== "ready" && !preview ? <div className="card-b"><span className="skel" style={{ width: "60%" }} /><span className="skel" style={{ width: "40%" }} /></div> : t && <>
           <div className="rb-stats four" style={{ padding: "0 24px 18px" }}>
             <div className="rb-stat"><span className="lbl">People</span><b>{t.people}</b><span className="sub">{t.withSalary} with salary set</span></div>
@@ -140,18 +158,19 @@ export default function Payroll() {
       </div>
       <div className="card"><div className="card-h"><h3>Payroll runs</h3></div><div className="tbl-wrap"><table><thead><tr><th>Month</th><th>Status</th><th className="num">People</th><th className="num">Reimbursements</th><th className="num">Payable</th><th className="hide-sm">Processed</th><th></th></tr></thead><tbody>
         {runs.length ? runs.map((r) => (
-          <tr key={r.id}><td><b>{monthLabel(r.period)}</b></td><td>{r.status === "paid" ? <Pill tone="ok">Paid</Pill> : <Pill tone="info">Processed</Pill>}</td>
+          <tr key={r.id}><td><b>{monthLabel(r.period)}</b></td><td><RunPill r={r} /></td>
             <td className="num">{r.people}</td><td className="num">{money(r.reimbursementTotal)}</td><td className="num">{money(r.payableTotal)}</td>
-            <td className="hide-sm">{dtShort(r.processedAt)}{r.paidAt && <div className="muted">Paid {dtShort(r.paidAt)}</div>}</td>
+            <td className="hide-sm">{dtShort(r.processedAt)}{r.processedBy === "automatic" && <div className="muted">Made automatically</div>}{r.paidAt && <div className="muted">Paid {dtShort(r.paidAt)}</div>}</td>
             <td className="num"><div className="row" style={{ gap: 8, justifyContent: "flex-end" }}>
               <button type="button" className="btn glass sm" onClick={() => viewRun(r.id)}>View</button>
-              {r.status !== "paid" && <button type="button" className="btn primary sm" onClick={() => setDlg({ kind: "pay", run: r })}>Mark as paid</button>}
+              {!r.publishedAt && <button type="button" className="btn primary sm" onClick={() => setDlg({ kind: "publish", run: r })}>Publish now</button>}
+              {r.status !== "paid" && r.publishedAt && <button type="button" className="btn primary sm" onClick={() => setDlg({ kind: "pay", run: r })}>Mark as paid</button>}
             </div></td></tr>
         )) : <tr><td colSpan={7}><div className="empty">No payroll processed yet.</div></td></tr>}
       </tbody></table></div></div>
       {run && (
         <div className="card" id="pr-run"><div className="card-h"><h3>{monthLabel(run.run.period)} payroll · per person</h3>
-          <div className="row" style={{ gap: 8 }}>{run.run.status === "paid" ? <Pill tone="ok">Paid {dtShort(run.run.paidAt)}</Pill> : <Pill tone="info">Processed</Pill>}<button type="button" className="btn glass sm" onClick={() => setRun(null)}>Close</button></div></div>
+          <div className="row" style={{ gap: 8 }}><RunPill r={run.run} /><button type="button" className="btn glass sm" onClick={() => setRun(null)}>Close</button></div></div>
           <PayTable lines={run.items} editable={false} /></div>
       )}
       {dlg && dlg.kind === "process" && t && (
@@ -172,6 +191,14 @@ export default function Payroll() {
           <div className="modal-f"><button type="button" className="btn glass" onClick={() => setDlg(null)}>Cancel</button><button type="button" className="btn primary" disabled={busy} onClick={() => pay(dlg.run.id)}>Mark as paid</button></div>
         </Modal>
       )}
+      {dlg && dlg.kind === "publish" && (
+        <Modal onClose={() => setDlg(null)}>
+          <div className="card-h" style={{ paddingTop: 24 }}><h3>Publish {monthLabel(dlg.run.period)} payslips now?</h3></div>
+          <div className="card-b"><Callout>{plural(dlg.run.people, "person")} can then view and download their payslip, and each is told. A published payslip can't be changed.</Callout></div>
+          <div className="modal-f"><button type="button" className="btn glass" onClick={() => setDlg(null)}>Cancel</button><button type="button" className="btn primary" disabled={busy} onClick={() => publish(dlg.run.id)}>Publish now</button></div>
+        </Modal>
+      )}
+      {dlg && dlg.kind === "import" && <ImportModal onClose={(saved) => { setDlg(null); if (saved) load(period); }} />}
       {dlg && dlg.kind === "salary" && <SalaryModal email={dlg.email} onClose={(saved) => { setDlg(null); if (saved) load(period); }} />}
     </section>
   );

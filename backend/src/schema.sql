@@ -286,6 +286,19 @@ CREATE TABLE IF NOT EXISTS salary_structures (
 CREATE UNIQUE INDEX IF NOT EXISTS salary_structures_once ON salary_structures (lower(work_email), effective_from);
 ALTER TABLE employees ADD COLUMN IF NOT EXISTS pf_number TEXT;
 ALTER TABLE payroll_items ADD COLUMN IF NOT EXISTS slip JSONB;
+-- Payslips made automatically start as a draft HR can check; employees see them from published_at (set at publish_at, or by HR).
+-- Runs HR processes by hand, and every run from before this, are published.
+ALTER TABLE payroll_runs ADD COLUMN IF NOT EXISTS publish_at TIMESTAMPTZ;
+-- Links in automatic emails work for a short time (email-links.js). Only a hash of each link's token is kept.
+CREATE TABLE IF NOT EXISTS email_links (
+  id         SERIAL PRIMARY KEY,
+  token_hash TEXT NOT NULL UNIQUE,
+  path       TEXT NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  expires_at TIMESTAMPTZ NOT NULL
+);
+ALTER TABLE payroll_runs ADD COLUMN IF NOT EXISTS published_at TIMESTAMPTZ;
+UPDATE payroll_runs SET published_at = processed_at WHERE published_at IS NULL AND publish_at IS NULL;
 
 CREATE TABLE IF NOT EXISTS reimbursements (
   id               SERIAL PRIMARY KEY,

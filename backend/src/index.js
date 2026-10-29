@@ -5,11 +5,11 @@ import { fileURLToPath } from "node:url";
 import express from "express";
 import { pool, initDb } from "./db.js";
 import { documentsRouter } from "./documents.js";
-import { bootstrapAuth, loadSession, requireAuth, requireHr } from "./auth.js";
+import { bootstrapAuth, loadSession, requireAuth, requireHr, createGoogleUser as createLogin } from "./auth.js";
 import { sessionRouter, accountRouter, usersRouter } from "./users.js";
 import { profileRouter } from "./profile.js";
 import { googleRouter } from "./google-signin.js";
-import { inviteRouter, expireInvites } from "./invites.js";
+import { inviteRouter, expireInvites, createInvite, INVITE_MINUTES } from "./invites.js";
 import { leaveRouter } from "./leave.js";
 import { attendanceRouter } from "./attendance.js";
 import { deviceRouter } from "./device.js";
@@ -23,6 +23,8 @@ import { mailConfigured, sendWorkAccountEmail } from "./mail.js";
 import { reimbursementsRouter, runReimbursementReminders } from "./reimbursements.js";
 import { budgetsRouter, runBudgetReminders } from "./budgets.js";
 import { payrollRouter } from "./payroll.js";
+import { payslipAutoRouter, runPayslips } from "./payslip-auto.js";
+import { emailLinkRouter } from "./email-links.js";
 import { notificationsRouter, emailMode } from "./notify.js";
 
 const DOMAIN = "wohlig.com";
@@ -397,7 +399,13 @@ app.post("/api/onboarding/work-email", wrap(async (req, res) => {
     }
   }
   if (workPassword && mailConfigured()) {
-    try { await sendWorkAccountEmail({ to: d.pemail.trim(), name: full, workEmail: email, password: workPassword }); emailed = true; }
+    try {
+      // Their HR Access Hub login, and a one-time 30-minute link (invites.js) where they choose its password.
+      await createLogin(pool, email, "employee");
+      const link = await createInvite(email, req.user.email);
+      await sendWorkAccountEmail({ to: d.pemail.trim(), name: full, workEmail: email, password: workPassword, link, minutes: INVITE_MINUTES });
+      emailed = true;
+    }
     catch (err) { await pool.query("INSERT INTO audit_log (action, work_email) VALUES ($1,$2)", [`Could not email the work account details: ${err.message}`, email]); }
   }
   if (workPassword) await pool.query("INSERT INTO audit_log (action, work_email) VALUES ($1,$2)",
@@ -491,13 +499,14 @@ app.post("/api/tool-access/claude", requireHr, wrap(async (req, res) => {
 }));
 app.use("/api/reimbursements", requireAuth, reimbursementsRouter);   // own claims for everyone; review actions are HR-only inside
 app.use("/api/budget-requests", requireAuth, budgetsRouter);   // own requests for everyone; decisions are HR-only inside
-app.use("/api/payroll", requireHr, payrollRouter);
+app.use("/api/payroll", requireHr, payslipAutoRouter, payrollRouter);
 app.use("/api/notifications", requireAuth, notificationsRouter);
 app.use(offboardingRouter(wrap));
 
 // The page itself, so one command serves everything on the same origin.
 app.use("/auth", googleRouter);       // "Continue with Google" (public: it is how people sign in)
 app.use("/invite", inviteRouter);     // the link in the invite email
+app.use("/l", emailLinkRouter);       // short-lived links in automatic emails
 for (const f of ["wohlig-logo.png", "wohlig-logo-dark.png"]) app.get("/" + f, (_req, res) => res.sendFile(path.join(frontendDir, "public", f)));
 app.get("/favicon.ico", (_req, res) => res.status(204).end());
 // The whole interface is React (frontend/src), built into frontend/dist with `npm run build:ui`.
@@ -535,6 +544,11 @@ else {
   const checkReminders = () => Promise.all([runReimbursementReminders(), runBudgetReminders()]).catch((err) => console.error("Reimbursement reminder check failed:", err));
   checkReminders();
   setInterval(checkReminders, 60 * 60_000);
+  // Last month's payslips: a draft from the 1st, published to employees after HR's review window (payslip-auto.js); checked hourly.
+  const checkPayslips = () => runPayslips().then((r) => { if (r.created || r.made || r.told) console.log("Payslips:", JSON.stringify(r)); })
+    .catch((err) => console.error("Automatic payslips failed:", err));
+  checkPayslips();
+  setInterval(checkPayslips, 60 * 60_000);
   startPortalAttendanceSync();   // copies the office device punches the Employee Portal received (only when PORTAL_ATTENDANCE_SYNC=true)
 }
 console.log(`Email: ${emailMode() === "smtp" ? "sending through SMTP" : "SMTP not configured, emails are logged and skipped"}`);

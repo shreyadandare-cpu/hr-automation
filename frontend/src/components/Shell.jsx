@@ -30,13 +30,13 @@ function ThemeButton() {
   );
 }
 
-/* Finances opens a small menu with Reimbursements and, for HR, Payroll. Placed with fixed coordinates so the scrolling link row cannot clip it. */
+/* Finances opens a small menu with Reimbursements, My payslips and, for HR, Payroll. Placed with fixed coordinates so the scrolling link row cannot clip it. */
 function FinanceMenu({ isHr }) {
   const { pathname } = useLocation();
   const [open, setOpen] = useState(false);
   const [pos, setPos] = useState({ left: 0, top: 0 });
   const box = useRef(null), btn = useRef(null);
-  const items = [["/app/reimbursements", "Reimbursements"], ...(isHr ? [["/app/payroll", "Payroll"]] : [])];
+  const items = [["/app/reimbursements", "Reimbursements"], ["/app/payslips", "My payslips"], ...(isHr ? [["/app/payroll", "Payroll"]] : [])];
   const on = items.some(([to]) => pathname.startsWith(to));
   useEffect(() => { setOpen(false); }, [pathname]);
   useEffect(() => {

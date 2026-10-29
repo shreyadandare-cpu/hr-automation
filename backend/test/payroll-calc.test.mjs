@@ -97,3 +97,29 @@ test("net pay in words, Indian numbering, as on the samples", async () => {
   assert.equal(inWords(133800), "One Lakh Thirty Three Thousand Eight Hundred Rupees only");
   assert.equal(inWords(1250.5), "One Thousand Two Hundred and Fifty Rupees and Fifty Paise only");
 });
+
+test("months: India time, and the month before", async () => {
+  const { istMonth, previousMonth, monthOf } = await import("../src/payroll-calc.js");
+  assert.equal(istMonth(new Date("2026-09-30T19:00:00Z")), "2026-10");   // 00:30 on 1 Oct in India
+  assert.equal(istMonth(new Date("2026-09-30T18:00:00Z")), "2026-09");
+  assert.equal(previousMonth("2026-01"), "2025-12");
+  assert.equal(previousMonth("2026-10"), "2026-09");
+  for (const v of ["2026-09", "2026-09-01", "09/2026", "Sep 2026", "September 2026", "Sep-26"]) assert.equal(monthOf(v), "2026-09", v);
+});
+
+test("a spreadsheet row becomes a salary structure (Sample 2 for the dummy employee)", async () => {
+  const { structureFromRow } = await import("../src/payroll-calc.js");
+  const { email, body } = structureFromRow({
+    Email: "XYZ.Dummy@wohlig.com", "Employee Name": "XYZ (Dummy)", applies_from: "Sep-26", Basic: "75,000", HRA: "37500", "Medical Allowance": "1250",
+    "Conveyance Allowance": "1600", "Special Allowance": "17754", "Fuel Reimbursement": "1800", LTA: "6248", "Driver Salary Reimbursement": "900",
+    "Books & Periodicals": "1200", "Statutory Bonus": "6248", "Mobile/Data Reimbursement": "500", "PF Employee": "3000", "Professional Tax": "200",
+    "Monthly TDS": "₹13,000", "PF Number": "", "Deduction: Canteen": "",
+  });
+  assert.equal(email, "xyz.dummy@wohlig.com");
+  assert.equal(body.pfNumber, undefined);   // empty cell: keep the PF number on file
+  const { value } = cleanStructure(body);
+  assert.equal(value.effectiveFrom, "2026-09");
+  assert.equal(value.earnings.length, 11);
+  const s = buildSlip({ period: "2026-09", structure: value, start: "2026-09-01" });
+  assert.equal(s.totals.net, 133800);
+});

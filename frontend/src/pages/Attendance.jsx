@@ -12,7 +12,12 @@ const StatusPill = ({ status }) => (status ? <Pill tone={TONE[status] || (/^Work
 /* Everyone for one day: HR sees all, a reporting manager sees their team. */
 function DayTable({ day, onOpen }) {
   const people = day.people;
-  const { rows, pager } = usePaged(people, day.date);
+  const [q, setQ] = useState("");
+  const shown = useMemo(() => {
+    const t = q.trim().toLowerCase();
+    return t ? people.filter((x) => `${x.name} ${x.email} ${x.title || ""} ${x.no || ""}`.toLowerCase().includes(t)) : people;
+  }, [people, q]);
+  const { rows, pager } = usePaged(shown, `${day.date}|${q}`);
   const count = (s) => people.filter((x) => x.status === s).length;
   return (
     <>
@@ -23,9 +28,13 @@ function DayTable({ day, onOpen }) {
         <Stat value={people.filter((x) => x.missingOut).length} label="No punch out" />
       </div>
       {day.off && <p className="muted">{day.holiday || day.off}: no attendance is expected on this day.</p>}
-      <div className="card"><div className="tbl-wrap"><table>
+      <div className="card">
+        <div className="filters"><input className="input grow" type="search" placeholder="Search any employee by name, email or role" aria-label="Search employees" value={q} onChange={(e) => setQ(e.target.value)} />
+          {q.trim() && <span className="muted" style={{ whiteSpace: "nowrap" }}>{shown.length} of {people.length}</span>}</div>
+        <div className="tbl-wrap"><table>
         <thead><tr><th>Employee</th><th>Status</th><th>First in</th><th>Last out</th><th className="hide-sm">Attendance visual</th><th>Hours</th></tr></thead>
-        <tbody>{rows.map((x) => (
+        <tbody>{!rows.length && <tr><td colSpan="6"><div className="empty">{q.trim() ? `No one matches “${q.trim()}”.` : "No one to show."}</div></td></tr>}
+          {rows.map((x) => (
           <tr key={x.email} className="click" tabIndex={0} onClick={() => onOpen(x)} onKeyDown={(e) => e.key === "Enter" && onOpen(x)}>
             <td><Person name={x.name} sub={x.title || x.email} /></td>
             <td><StatusPill status={x.status} />{x.missingOut && <> <Pill tone="warn">No punch out</Pill></>}</td>

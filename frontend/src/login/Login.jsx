@@ -45,11 +45,11 @@ export default function Login() {
       </div>
       <div className="app-name">HR Access Hub</div>
       <h1>Sign in</h1>
-      <p className="sub">{passwordOn ? "Sign in with Google, or with your work email and password." : "Sign in with your @wohlig.com Google account."}</p>
+      <p className="sub">{passwordOn ? "Sign in with Google, or with your username (work email) and password." : "Sign in with your @wohlig.com Google account."}</p>
       {error && <div className="err" role="alert">{error}</div>}
       {passwordOn && <>
         <form onSubmit={submit} noValidate>
-          <div className="field"><label htmlFor="email">Work email</label>
+          <div className="field"><label htmlFor="email">Username (your work email)</label>
             <input id="email" type="email" autoComplete="username" placeholder="name.surname@wohlig.com" required value={email} onChange={(e) => setEmail(e.target.value)} /></div>
           <div className="field"><label htmlFor="pw">Password</label>
             <input id="pw" type="password" autoComplete="current-password" required value={password} onChange={(e) => setPassword(e.target.value)} /></div>

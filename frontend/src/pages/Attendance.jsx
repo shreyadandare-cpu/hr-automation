@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { api, apiMsg } from "../api.js";
 import { useAuth } from "../auth.jsx";
 import { Callout, Person, Pill, SectionHead, Stat, hours, shortDate } from "../components/ui.jsx";
-import { ActionsCard, AttendanceLog, DayCell, StatsCard, TimingsCard, istNow, useH24, useMonths, useNow } from "../components/attendance.jsx";
+import { ActionsCard, AttendanceLog, DayCell, ForgotPunchPopup, StatsCard, TimingsCard, istNow, useH24, useMonths, useNow } from "../components/attendance.jsx";
 import Pager, { usePaged } from "../components/Pager.jsx";
 import { useData } from "../data.jsx";
 
@@ -38,7 +38,7 @@ function DayTable({ day, onOpen }) {
           <tr key={x.email} className="click" tabIndex={0} onClick={() => onOpen(x)} onKeyDown={(e) => e.key === "Enter" && onOpen(x)}>
             <td><Person name={x.name} sub={x.title || x.email} /></td>
             <td><StatusPill status={x.status} />{x.missingOut && <> <Pill tone="warn">No punch out</Pill></>}</td>
-            <td>{x.firstIn || "—"}</td><td>{x.lastPunch ? <>{x.lastPunch}{x.punchCount > 1 ? "" : <span className="muted"> · only punch</span>}</> : "—"}</td><td className="hide-sm"><DayCell x={x} /></td><td>{x.minutes ? hours(x.minutes) : x.punchCount ? <span className="muted">{x.missingOut ? "No punch out" : "Just started"}</span> : "—"}</td>
+            <td>{x.firstIn || "—"}</td><td>{x.lastPunch ? <>{x.lastPunch}{x.punchCount > 1 ? "" : <span className="muted"> · only punch</span>}</> : "—"}</td><td className="hide-sm"><DayCell x={x} /></td><td>{x.forgotOut ? <>{hours(x.minutes)}<div className="muted" style={{ fontSize: 12 }}>forgot to punch out</div></> : x.minutes ? hours(x.minutes) : x.punchCount ? <span className="muted">{x.missingOut ? "No punch out" : "Just started"}</span> : "—"}</td>
           </tr>
         ))}</tbody>
       </table></div><Pager {...pager} /></div>
@@ -252,6 +252,7 @@ export default function Attendance() {
             <div className="att-col"><h3 className="att-h">Today's shift</h3><TimingsCard today={today.date} punches={today.punches} minutesToday={today.minutes} now={now} h24={h24} byMonth={mine.byMonth} /></div>
             <div className="att-col"><h3 className="att-h">Punch clock</h3><ActionsCard today={today.date} state={today.state} punches={today.punches} now={now} h24={h24} /></div>
           </div>
+          <ForgotPunchPopup byMonth={mine.byMonth} today={today.date} h24={h24} />
           <AttendanceLog months={mine} today={today.date} />
         </>
       ) : <div className="empty">{error || "Loading…"}</div>}

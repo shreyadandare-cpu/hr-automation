@@ -57,6 +57,9 @@ function monthDays(month, punches, leave, holidays, emp, today, nowMin) {
     if (dd) ps = dd.punches;
     const ins = ps.filter((p) => p.direction === "IN"), outs = ps.filter((p) => p.direction === "OUT");
     const w = dd ? { minutes: dd.minutes, missingOut: dd.missingOut } : worked(ps, date === today ? nowMin : null);
+    // Forgot to punch out: once the day is over (midnight has passed), the hours are counted up to the end of the shift instead of being lost.
+    const forgot = date < today && ps.length > 0 && w.missingOut;
+    if (forgot) w.minutes = Math.max(0, SHIFT_END_MIN - mins(ps[0].time));
     const lv = leave.find((r) => r.from <= date && r.to >= date);
     const off = L.isWeekend(date) ? "Weekend" : hol.has(date) ? "Holiday" : null;
     let status = null;
@@ -66,7 +69,7 @@ function monthDays(month, punches, leave, holidays, emp, today, nowMin) {
     else status = off || (offSite(emp.location) ? "Off-site" : "Absent");
     if (status === "Present" && off) status = "Worked on " + off.toLowerCase();
     days.push({ date, status, off, holiday: hol.get(date) || null, firstIn: ins[0] ? ins[0].time : null, lastOut: outs.length ? outs[outs.length - 1].time : null,
-      minutes: w.minutes, missingOut: w.missingOut && date !== today, missingSwipe: !!(dd && dd.missingSwipe), site: status === "Off-site" ? emp.location : null, punches: ps });
+      minutes: w.minutes, missingOut: w.missingOut && date !== today && !forgot, forgotOut: forgot, countedTo: forgot ? "18:30" : null, missingSwipe: !!(dd && dd.missingSwipe), site: status === "Off-site" ? emp.location : null, punches: ps });
   }
   return days;
 }
@@ -163,6 +166,8 @@ export function attendanceRouter(wrap) {
       const dd = date !== now.day && mine.some((p) => p.source === "device") ? deriveDay(mine) : null;   // same in/out rule as a person's own month
       if (dd) mine = dd.punches;
       const w = dd ? { minutes: dd.minutes, missingOut: dd.missingOut } : worked(mine, date === now.day ? mins(now.time) : null), l = lv.rows.find((x) => x.e === e.work_email.toLowerCase());
+      const forgot = date < now.day && mine.length > 0 && w.missingOut;   // forgot to punch out: counted to the end of the shift once the day is over
+      if (forgot) w.minutes = Math.max(0, SHIFT_END_MIN - mins(mine[0].time));
       const ins = mine.filter((p) => p.direction === "IN"), outs = mine.filter((p) => p.direction === "OUT");
       let status;
       if (date > now.day) status = null;
@@ -170,7 +175,7 @@ export function attendanceRouter(wrap) {
       else status = l ? (l.half ? "Half day leave" : "On leave") : off || (offSite(e.work_location) ? "Off-site" : "Absent");
       return { email: e.work_email, name: e.name, title: e.title, status, firstIn: ins[0] ? ins[0].time : mine.length ? mine[0].time : null, lastOut: outs.length ? outs[outs.length - 1].time : null,
         lastPunch: mine.length ? mine[mine.length - 1].time : null, punchCount: mine.length,
-        minutes: w.minutes, missingOut: w.missingOut && date !== now.day, in: mine.length > 0 && mine[mine.length - 1].direction === "IN" };
+        minutes: w.minutes, missingOut: w.missingOut && date !== now.day && !forgot, forgotOut: forgot, in: mine.length > 0 && mine[mine.length - 1].direction === "IN" };
     });
     res.json({ date, today: now.day, off, holiday: hol.rows[0] ? hol.rows[0].name : null, people });
   }));

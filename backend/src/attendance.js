@@ -97,6 +97,7 @@ export function attendanceRouter(wrap) {
 
   // One tap: punches IN when you are out, OUT when you are in. The server's clock is used, never the browser's.
   r.post("/api/attendance/punch", wrap(async (req, res) => {
+    if (!isHr(req)) return res.status(403).json({ error: "Attendance is recorded by the office machine. If a punch is missing, ask HR to add it." });
     const client = await pool.connect();
     try {
       await client.query("BEGIN");

@@ -931,3 +931,5 @@ tr.att-off td{background:var(--paper-2)}tr.att-hol td{background:var(--tint-2)}
 .att-dow button:disabled{opacity:.45;cursor:not-allowed}
 .att-dow button[aria-current="date"]:not(.on){box-shadow:inset 0 0 0 1.5px var(--purple)}
 .att-shift-n{margin-top:10px;font-size:13.5px}
+/* Attendance: the name in a row reads as a link, since a click opens the person's full attendance. */
+tr.click:hover .person b{color:var(--purple);text-decoration:underline;text-underline-offset:3px}

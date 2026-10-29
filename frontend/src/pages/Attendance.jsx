@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { api, apiMsg } from "../api.js";
 import { useAuth } from "../auth.jsx";
-import { Callout, Person, Pill, SectionHead, Stat, hours } from "../components/ui.jsx";
+import { Callout, Person, Pill, SectionHead, Stat, hours, shortDate } from "../components/ui.jsx";
 import { ActionsCard, AttendanceLog, DayCell, StatsCard, TimingsCard, istNow, useH24, useMonths, useNow } from "../components/attendance.jsx";
 import Pager, { usePaged } from "../components/Pager.jsx";
 import { useData } from "../data.jsx";
@@ -155,12 +155,32 @@ function PersonView({ person, canEdit, onBack, say }) {
     if (!r.ok) { say(apiMsg(r)); return; }
     say("Punch added."); months.refresh();
   };
+  const { people } = useData();
+  const info = (people || []).find((x) => String(x.email).toLowerCase() === String(person.email).toLowerCase());
+  const sum = months.byMonth[now.date.slice(0, 7)]?.summary;
+  const details = (
+    <div className="card" style={{ padding: "16px 22px", display: "flex", flexDirection: "column", gap: 14 }}>
+      {info && <div className="muted" style={{ display: "flex", flexWrap: "wrap", gap: "6px 22px" }}>
+        <span>ID <b style={{ color: "var(--ink)" }}>{info.no}</b></span><span>{info.title}</span>
+        <span>Reports to <b style={{ color: "var(--ink)" }}>{info.manager || "no one"}</b></span>{info.location && <span>{info.location}</span>}
+        <span>Joined <b style={{ color: "var(--ink)" }}>{info.start ? shortDate(info.start) : "—"}</b></span>
+        <span>{info.status === "offboarded" ? "Has left" : info.status}</span></div>}
+      {sum && <div className="grid g4">
+        <Stat value={sum.present} label="Days present this month" />
+        <Stat value={sum.half + sum.short} label="Half days or short" alert={sum.half + sum.short > 0} />
+        <Stat value={sum.leave} label="Days on leave" />
+        <Stat value={sum.absent} label="Days absent" alert={sum.absent > 0} />
+      </div>}
+      {sum && <div className="muted">Hours worked this month: <b style={{ color: "var(--ink)" }}>{hours(sum.minutes)}</b></div>}
+    </div>
+  );
   return (
     <section className="section">
       <SectionHead eyebrow={canEdit ? "Attendance" : "My team"} title={name}
         sub={canEdit ? "Every day, with the punches behind it. Open a day to see its punches, add a missed one with a reason, or remove a wrong one. Both are recorded in the audit log." : "Their attendance. Only HR can change punches."}
         actions={<button type="button" className="btn glass sm" onClick={onBack}>{canEdit ? "Back to everyone" : "Back"}</button>} />
       {months.error && <Callout>{months.error}</Callout>}
+      {details}
       <div className="att-top">
         <div className="att-col"><h3 className="att-h">Your numbers</h3><StatsCard byMonth={months.byMonth} today={now.date} name={name.split(" ")[0]} /></div>
         {todayDay ? <>
@@ -200,14 +220,6 @@ export default function Attendance() {
     if (isHr || isManager) loadDay();
   }, [isHr, isManager, loadToday, loadDay]);
 
-  const punch = async () => {
-    setBusy(true);
-    const r = await api("POST", "/api/attendance/punch");
-    setBusy(false);
-    say(r.ok ? `Punched ${r.data.direction === "IN" ? "in" : "out"} at ${r.data.time}.` : apiMsg(r));
-    loadToday(); mine.refresh();
-  };
-
   // Looking at one person.
   if (person) return <PersonView key={person.email} person={person} canEdit={isHr} onBack={() => setPerson(null)} say={say} />;
 
@@ -230,14 +242,14 @@ export default function Attendance() {
   const inNow = today && today.state === "in";
   return (
     <section className="section">
-      <SectionHead eyebrow="Me" title="My" accent="attendance." sub="Punch in when you start and out when you finish. Your hours and days are counted from these punches. You see only your own attendance here." />
+      <SectionHead eyebrow="Me" title="My" accent="attendance." sub="Your attendance is recorded by the office biometric machine, and your hours and days are counted from those punches. You see only your own attendance here. If a punch is missing, ask HR to add it." />
       {(error || mine.error) && <Callout>{error || mine.error}</Callout>}
       {today ? (
         <>
           <div className="att-top">
             <div className="att-col"><h3 className="att-h">Your numbers</h3><StatsCard byMonth={mine.byMonth} today={today.date} name={(user && user.name ? user.name.split(" ")[0] : "Me")} /></div>
             <div className="att-col"><h3 className="att-h">Today's shift</h3><TimingsCard today={today.date} punches={today.punches} minutesToday={today.minutes} now={now} h24={h24} byMonth={mine.byMonth} /></div>
-            <div className="att-col"><h3 className="att-h">Punch clock</h3><ActionsCard today={today.date} state={today.state} punches={today.punches} onPunch={punch} busy={busy} now={now} h24={h24} /></div>
+            <div className="att-col"><h3 className="att-h">Punch clock</h3><ActionsCard today={today.date} state={today.state} punches={today.punches} now={now} h24={h24} /></div>
           </div>
           <AttendanceLog months={mine} today={today.date} />
         </>

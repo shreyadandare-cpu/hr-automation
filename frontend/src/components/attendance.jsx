@@ -129,14 +129,14 @@ export function TimingsCard({ today, punches, minutesToday, now, h24, byMonth = 
   const isToday = pick === today;
   const rec = byMonth[pick.slice(0, 7)]?.days.find((d) => d.date === pick);
   // The bar and the numbers for the picked day.
-  let from = null, to = null, worked = 0, brk = 0, note = "";
+  let from = null, to = null, worked = 0, note = "";   // stepping out to eat is not a break, so there is none to show
   if (isToday) {
     const first = punches.find((p) => p.direction === "IN");
     if (first) { from = mins(first.time); to = now.minutes; }
-    worked = minutesToday || 0; brk = first ? Math.max(0, now.minutes - mins(first.time) - worked) : 0;
+    worked = minutesToday || 0;
   } else if (rec && rec.firstIn) {
     from = mins(rec.firstIn); to = rec.lastOut ? mins(rec.lastOut) : null;
-    worked = rec.minutes; brk = to !== null ? Math.max(0, to - from - worked) : 0;
+    worked = rec.minutes;
     if (to === null) note = "No punch out";
   } else if (rec) note = rec.holiday || (rec.off === "Weekend" ? "Weekly off" : /leave$/i.test(rec.status || "") ? rec.status : rec.status === "Absent" ? "Absent" : "No time entries");
   const fillFrom = from === null ? 0 : pct(from), fillTo = from === null ? 0 : to === null ? Math.min(100, fillFrom + 2) : pct(to);
@@ -151,7 +151,7 @@ export function TimingsCard({ today, punches, minutesToday, now, h24, byMonth = 
       <div className="att-shift">
         <div className="att-shift-t">{title} ({clock(SHIFT.start, h24)} - {clock(SHIFT.end, h24)})</div>
         <div className="att-track"><i style={{ left: `${fillFrom}%`, width: `${Math.max(0, fillTo - fillFrom)}%` }} /></div>
-        <div className="att-shift-b"><span>Duration: {dur(span)}</span><span title="Time out between punches">☕ {brk} min</span></div>
+        <div className="att-shift-b"><span>Duration: {dur(span)}</span><span title="Stepping out is not counted as a break">☕ 0 min</span></div>
         <div className="att-shift-n">{note ? <span className="muted">{note}</span> : from !== null
           ? <span>In <b>{clock(`${Math.floor(from / 60)}:${String(from % 60).padStart(2, "0")}`, h24)}</b>{!isToday && to !== null && <> · Out <b>{clock(`${Math.floor(to / 60)}:${String(to % 60).padStart(2, "0")}`, h24)}</b></>} · <b>{dur(worked)}</b> worked</span>
           : <span className="muted">{isToday ? "No punches yet today" : "No time entries"}</span>}</div>
@@ -228,7 +228,7 @@ function Row({ d, today, nowMin, h24, canEdit, onRemove }) {
   const rowClass = k === "weekend" ? "att-off" : k === "holiday" ? "att-hol" : "";
   const date = <td><span className="att-date">{dayText(d.date)}</span> {tag}</td>;
   if (k === "worked") {
-    const gross = grossOf(d, today, nowMin), brk = gross === null ? 0 : Math.max(0, gross - d.minutes);
+    const gross = grossOf(d, today, nowMin), brk = 0;   // stepping out to eat is not counted as a break
     const [tone, tip] = logIcon(d, today);
     return (
       <>

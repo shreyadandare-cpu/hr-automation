@@ -32,15 +32,12 @@ function worked(punches, until) {
 }
 
 /** The office machine does not say IN or OUT, so the stored direction is only a guess made as punches arrive. For a finished day the people's habit
-    is clearer: the first punch is the way in, the last punch is the way out, and the ones in between are breaks (out, then back in).
-    Hours are then first to last, less the completed breaks. A leftover break punch with no return is flagged as a missing swipe, not guessed at. */
+    is clearer: the first punch is the way in and the last punch is the way out. Hours are first to last. Punches in between (stepping out to eat,
+    for example) are not counted as a break and do not reduce the hours. */
 function deriveDay(ps) {
   const n = ps.length;
   const punches = ps.map((p, i) => ({ ...p, direction: i === 0 ? "IN" : i === n - 1 ? "OUT" : i % 2 === 1 ? "OUT" : "IN" }));
-  if (n < 2) return { punches, minutes: 0, missingOut: true, missingSwipe: false };
-  let brk = 0;
-  for (let i = 1; i + 1 <= n - 2; i += 2) brk += Math.max(0, mins(ps[i + 1].time) - mins(ps[i].time));
-  return { punches, minutes: Math.max(0, mins(ps[n - 1].time) - mins(ps[0].time) - brk), missingOut: false, missingSwipe: (n - 2) % 2 === 1 };
+  return { punches, minutes: n < 2 ? 0 : Math.max(0, mins(ps[n - 1].time) - mins(ps[0].time)), missingOut: n < 2, missingSwipe: false };
 }
 
 /** One person's days for a month. Past days get a status; days before they joined and in the future get none. */

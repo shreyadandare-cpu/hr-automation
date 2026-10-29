@@ -80,7 +80,7 @@ export default function Users() {
           <div className="card"><div className="card-h"><h3>Everyone</h3>
               <div className="row"><span className="muted">{d.users.length} with a login · {(d.noLogin || []).length} without</span>
                 <input className="input" placeholder="Search by name, ID or email" aria-label="Search people" value={q} onChange={(e) => setQ(e.target.value)} style={{ maxWidth: 260 }} /></div></div>
-            <div className="tbl-wrap"><table>
+            <div className="tbl-wrap"><table className="users-table">
               <thead><tr><th>ID</th><th>Person</th><th>Role</th><th className="hide-sm">Last sign-in</th><th></th></tr></thead>
               <tbody>
                 {pageRows.length === 0 && <tr><td colSpan="5"><div className="empty">{q ? `No one matches “${q}”.` : "No people yet."}</div></td></tr>}
@@ -88,9 +88,9 @@ export default function Users() {
                   <tr key={u.email}>
                     <td className="num-cell"><span className="emp-no">{u.no}</span></td>
                     <WhoCell name={u.name} title={u.title} email={u.email} />
-                    <td><select className="input" style={{ maxWidth: 140 }} aria-label={`Role for ${u.email}`} value={u.role} onChange={(e) => changeRole(u, e.target.value)}><option value="employee">Employee</option><option value="hr">HR</option></select></td>
-                    <td className="hide-sm">{u.lastLogin ? new Date(u.lastLogin).toLocaleString() : "Never"}</td>
-                    <td><div className="row">
+                    <td><select className="input" aria-label={`Role for ${u.email}`} value={u.role} onChange={(e) => changeRole(u, e.target.value)}><option value="employee">Employee</option><option value="hr">HR</option></select></td>
+                    <td className="hide-sm u-last">{u.lastLogin ? new Date(u.lastLogin).toLocaleString("en-IN", { day: "numeric", month: "short", year: "numeric", hour: "numeric", minute: "2-digit" }) : "Never"}</td>
+                    <td><div className="u-actions">
                       <button type="button" className="btn glass sm" onClick={() => resend(u)}>{u.inviteExpires ? "Resend invite" : "Send invite"}</button>
                       <button type="button" className="btn glass sm" onClick={() => confirm(`Reset ${u.email} to the default password? They will be signed out.`) && act(api("POST", `/api/users/${encodeURIComponent(u.email)}/reset`), `${u.email} was reset to the default password.`, () => {})}>Reset password</button>
                       <button type="button" className="btn glass sm" disabled={u.email.toLowerCase() === user.email.toLowerCase()}

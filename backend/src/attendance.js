@@ -10,8 +10,11 @@ const teamEmails = async (email) => Object.entries(await managerMap(pool)).filte
 /* Attendance: people punch in and out on the web page; HR sees everyone and can add or remove a punch with a reason.
    Days are counted in Indian time. A day is Present from 6 hours worked, a Half day from 3 hours. */
 const PRESENT_MIN = 360, HALF_MIN = 180;
+const SHIFT_END_MIN = 18 * 60 + 30;   // until the shift ends, today is still in progress, so it is "Working", never Half day or Short hours yet
 const IST = "Asia/Kolkata";
 const isHr = (req) => req.user && req.user.role === "hr";
+/** People who work from a place other than the office (a client site, another city) do not use the office machine, so no punches is not absent for them. */
+const offSite = (loc) => !!loc && !/office/i.test(String(loc));
 const hhmm = (t) => String(t).slice(0, 5);
 const mins = (t) => { const [h, m] = String(t).split(":").map(Number); return h * 60 + m; };
 const MONTH = /^\d{4}-(0[1-9]|1[0-2])$/;
@@ -31,6 +34,15 @@ function worked(punches, until) {
   return { minutes: total + (open !== null && until !== null ? Math.max(0, until - open) : 0), missingOut: open !== null };
 }
 
+/** The office machine does not say IN or OUT, so the stored direction is only a guess made as punches arrive. For a finished day the people's habit
+    is clearer: the first punch is the way in and the last punch is the way out. Hours are first to last. Punches in between (stepping out to eat,
+    for example) are not counted as a break and do not reduce the hours. */
+function deriveDay(ps) {
+  const n = ps.length;
+  const punches = ps.map((p, i) => ({ ...p, direction: i === 0 ? "IN" : i === n - 1 ? "OUT" : i % 2 === 1 ? "OUT" : "IN" }));
+  return { punches, minutes: n < 2 ? 0 : Math.max(0, mins(ps[n - 1].time) - mins(ps[0].time)), missingOut: n < 2, missingSwipe: false };
+}
+
 /** One person's days for a month. Past days get a status; days before they joined and in the future get none. */
 function monthDays(month, punches, leave, holidays, emp, today, nowMin) {
   const [y, m] = month.split("-").map(Number);
@@ -39,30 +51,33 @@ function monthDays(month, punches, leave, holidays, emp, today, nowMin) {
   const days = [];
   for (let d = 1; d <= last; d++) {
     const date = `${month}-${String(d).padStart(2, "0")}`;
-    const ps = punches.filter((p) => p.date === date).sort((a, b) => (a.time < b.time ? -1 : 1));
+    let ps = punches.filter((p) => p.date === date).sort((a, b) => (a.time < b.time ? -1 : 1));
+    // A finished day with punches from the office machine: work out in and out from the order of the punches (see deriveDay).
+    const dd = date !== today && ps.some((p) => p.source === "device") ? deriveDay(ps) : null;
+    if (dd) ps = dd.punches;
     const ins = ps.filter((p) => p.direction === "IN"), outs = ps.filter((p) => p.direction === "OUT");
-    const w = worked(ps, date === today ? nowMin : null);
+    const w = dd ? { minutes: dd.minutes, missingOut: dd.missingOut } : worked(ps, date === today ? nowMin : null);
     const lv = leave.find((r) => r.from <= date && r.to >= date);
     const off = L.isWeekend(date) ? "Weekend" : hol.has(date) ? "Holiday" : null;
     let status = null;
     if (date > today || (emp.start && date < emp.start) || (emp.lastDay && date > emp.lastDay)) status = null;
-    else if (ps.length) status = w.minutes >= PRESENT_MIN ? "Present" : w.minutes >= HALF_MIN ? "Half day" : (date === today ? "Working" : "Short hours");
+    else if (ps.length) status = date === today && nowMin < SHIFT_END_MIN ? "Working" : w.minutes >= PRESENT_MIN ? "Present" : w.minutes >= HALF_MIN ? "Half day" : (date === today ? "Working" : "Short hours");
     else if (lv) status = lv.half ? "Half day leave" : "On leave";
-    else status = off || "Absent";
+    else status = off || (offSite(emp.location) ? "Off-site" : "Absent");
     if (status === "Present" && off) status = "Worked on " + off.toLowerCase();
     days.push({ date, status, off, holiday: hol.get(date) || null, firstIn: ins[0] ? ins[0].time : null, lastOut: outs.length ? outs[outs.length - 1].time : null,
-      minutes: w.minutes, missingOut: w.missingOut && date !== today, punches: ps });
+      minutes: w.minutes, missingOut: w.missingOut && date !== today, missingSwipe: !!(dd && dd.missingSwipe), site: status === "Off-site" ? emp.location : null, punches: ps });
   }
   return days;
 }
 const summarize = (days) => {
   const c = (f) => days.filter(f).length;
   return { present: c((d) => /^(Present|Worked on)/.test(d.status || "")), half: c((d) => d.status === "Half day"), leave: c((d) => /leave$/i.test(d.status || "")),
-    absent: c((d) => d.status === "Absent"), short: c((d) => d.status === "Short hours"), minutes: days.reduce((n, d) => n + d.minutes, 0) };
+    absent: c((d) => d.status === "Absent"), offsite: c((d) => d.status === "Off-site"), short: c((d) => d.status === "Short hours"), minutes: days.reduce((n, d) => n + d.minutes, 0) };
 };
 
 async function employeeByEmail(db, email) {
-  return (await db.query("SELECT id, name, work_email, start_date, last_day, status FROM employees WHERE lower(work_email)=$1", [String(email || "").toLowerCase()])).rows[0] || null;
+  return (await db.query("SELECT id, name, work_email, start_date, last_day, status, work_location FROM employees WHERE lower(work_email)=$1", [String(email || "").toLowerCase()])).rows[0] || null;
 }
 async function monthOf(emp, month) {
   const from = `${month}-01`, to = `${month}-31`;
@@ -75,7 +90,7 @@ async function monthOf(emp, month) {
     nowIst(pool),
   ]);
   const days = monthDays(month, p.rows.map(toPunch), l.rows.map((r) => ({ from: r.f, to: r.t, half: r.half })), h.rows,
-    { start: emp.start_date && String(emp.start_date).slice(0, 10), lastDay: emp.last_day && String(emp.last_day).slice(0, 10) }, now.day, mins(now.time));
+    { start: emp.start_date && String(emp.start_date).slice(0, 10), lastDay: emp.last_day && String(emp.last_day).slice(0, 10), location: emp.work_location }, now.day, mins(now.time));
   return { email: emp.work_email, name: emp.name, month, days, summary: summarize(days), today: now.day };
 }
 
@@ -97,6 +112,7 @@ export function attendanceRouter(wrap) {
 
   // One tap: punches IN when you are out, OUT when you are in. The server's clock is used, never the browser's.
   r.post("/api/attendance/punch", wrap(async (req, res) => {
+    if (!isHr(req)) return res.status(403).json({ error: "Attendance is recorded by the office machine. If a punch is missing, ask HR to add it." });
     const client = await pool.connect();
     try {
       await client.query("BEGIN");
@@ -135,7 +151,7 @@ export function attendanceRouter(wrap) {
     const date = String(req.query.date || now.day);
     if (!L.validDate(date)) return res.status(400).json({ error: "Date must look like 2026-10-21." });
     const [emps, ps, lv, hol] = await Promise.all([
-      pool.query("SELECT id, name, work_email, title, start_date, last_day FROM employees WHERE status <> 'offboarded' ORDER BY name"),
+      pool.query("SELECT id, name, work_email, title, start_date, last_day, work_location FROM employees WHERE status <> 'offboarded' ORDER BY name"),
       pool.query(`SELECT employee_id, to_char(work_date,'YYYY-MM-DD') AS work_date, punch_time, direction, source, note, id FROM attendance_punches WHERE work_date=$1 ORDER BY punch_time, id`, [date]),
       pool.query("SELECT lower(work_email) AS e, half FROM leave_requests WHERE status='approved' AND from_date<=$1 AND to_date>=$1", [date]),
       pool.query("SELECT name FROM holidays WHERE day=$1", [date]),
@@ -143,14 +159,17 @@ export function attendanceRouter(wrap) {
     const off = L.isWeekend(date) ? "Weekend" : hol.rows[0] ? "Holiday" : null;
     const people = emps.rows.filter((e) => (!team || team.includes(e.work_email.toLowerCase())))
       .filter((e) => (!e.start_date || String(e.start_date).slice(0, 10) <= date) && (!e.last_day || String(e.last_day).slice(0, 10) >= date)).map((e) => {
-      const mine = ps.rows.filter((p) => p.employee_id === e.id).map(toPunch);
-      const w = worked(mine, date === now.day ? mins(now.time) : null), l = lv.rows.find((x) => x.e === e.work_email.toLowerCase());
+      let mine = ps.rows.filter((p) => p.employee_id === e.id).map(toPunch);
+      const dd = date !== now.day && mine.some((p) => p.source === "device") ? deriveDay(mine) : null;   // same in/out rule as a person's own month
+      if (dd) mine = dd.punches;
+      const w = dd ? { minutes: dd.minutes, missingOut: dd.missingOut } : worked(mine, date === now.day ? mins(now.time) : null), l = lv.rows.find((x) => x.e === e.work_email.toLowerCase());
       const ins = mine.filter((p) => p.direction === "IN"), outs = mine.filter((p) => p.direction === "OUT");
       let status;
       if (date > now.day) status = null;
-      else if (mine.length) status = w.minutes >= PRESENT_MIN ? "Present" : w.minutes >= HALF_MIN ? "Half day" : date === now.day ? "Working" : "Short hours";
-      else status = l ? (l.half ? "Half day leave" : "On leave") : off || "Absent";
-      return { email: e.work_email, name: e.name, title: e.title, status, firstIn: ins[0] ? ins[0].time : null, lastOut: outs.length ? outs[outs.length - 1].time : null,
+      else if (mine.length) status = date === now.day && mins(now.time) < SHIFT_END_MIN ? "Working" : w.minutes >= PRESENT_MIN ? "Present" : w.minutes >= HALF_MIN ? "Half day" : date === now.day ? "Working" : "Short hours";
+      else status = l ? (l.half ? "Half day leave" : "On leave") : off || (offSite(e.work_location) ? "Off-site" : "Absent");
+      return { email: e.work_email, name: e.name, title: e.title, status, firstIn: ins[0] ? ins[0].time : mine.length ? mine[0].time : null, lastOut: outs.length ? outs[outs.length - 1].time : null,
+        lastPunch: mine.length ? mine[mine.length - 1].time : null, punchCount: mine.length,
         minutes: w.minutes, missingOut: w.missingOut && date !== now.day, in: mine.length > 0 && mine[mine.length - 1].direction === "IN" };
     });
     res.json({ date, today: now.day, off, holiday: hol.rows[0] ? hol.rows[0].name : null, people });

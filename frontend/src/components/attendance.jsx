@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api, apiMsg } from "../api.js";
+import Modal from "./Modal.jsx";
 
 /* The employee's attendance page, laid out like a standard HR attendance screen: stats, today's shift and the punch button on top,
    then a log of every day with a 24-hour bar, break time and gross hours, and a calendar. Times are Indian time. */
@@ -71,6 +72,7 @@ function kind(d, today) {
   if (d.holiday || d.off === "Holiday") return "holiday";
   if (d.off === "Weekend") return "weekend";
   if (/leave$/i.test(d.status)) return "leave";
+  if (d.status === "Off-site") return "offsite";
   return d.date === today ? "nolog" : "absent";
 }
 /** Break = time between an OUT and the next IN. Gross hours = first in to last out (to now for today). */
@@ -118,23 +120,76 @@ export function StatsCard({ byMonth, today, name = "Me" }) {
   );
 }
 
-export function TimingsCard({ today, punches, minutesToday, now, h24 }) {
-  const wd = (dow(today) + 6) % 7;
+/** The week's days are buttons: today shows the live shift bar, any earlier day of the week shows that day's first in, last out and hours. */
+export function TimingsCard({ today, punches, minutesToday, now, h24, byMonth = {} }) {
+  const [pick, setPick] = useState(today);
+  const monday = addDays(today, -((dow(today) + 6) % 7));
+  const week = [0, 1, 2, 3, 4, 5, 6].map((i) => addDays(monday, i));
   const s = mins(SHIFT.start), e = mins(SHIFT.end), span = e - s;
-  const first = punches.find((p) => p.direction === "IN");
   const pct = (m) => Math.max(0, Math.min(100, ((m - s) / span) * 100));
-  const fillFrom = first ? pct(mins(first.time)) : 0, fillTo = first ? pct(now.minutes) : 0;
-  const worked = minutesToday || 0;
-  const brk = first ? Math.max(0, now.minutes - mins(first.time) - worked) : 0;
+  const isToday = pick === today;
+  const rec = byMonth[pick.slice(0, 7)]?.days.find((d) => d.date === pick);
+  // The bar and the numbers for the picked day.
+  let from = null, to = null, worked = 0, note = "";   // stepping out to eat is not a break, so there is none to show
+  if (isToday) {
+    const first = punches.find((p) => p.direction === "IN");
+    if (first) { from = mins(first.time); to = now.minutes; }
+    worked = minutesToday || 0;
+  } else if (rec && rec.firstIn) {
+    from = mins(rec.firstIn); to = rec.lastOut ? mins(rec.lastOut) : null;
+    worked = rec.minutes;
+    if (to === null) note = "No punch out";
+  } else if (rec) note = rec.holiday || (rec.off === "Weekend" ? "Weekly off" : /leave$/i.test(rec.status || "") ? rec.status : rec.status === "Absent" ? "Absent" : "No time entries");
+  const fillFrom = from === null ? 0 : pct(from), fillTo = from === null ? 0 : to === null ? Math.min(100, fillFrom + 2) : pct(to);
+  const title = isToday ? "Today" : dayText(pick);
   return (
     <div className="card att-timings">
-      <div className="att-dow">{["M", "T", "W", "T", "F", "S", "S"].map((l, i) => <span key={i} className={i === wd ? "on" : ""} aria-current={i === wd ? "date" : undefined}>{l}</span>)}</div>
+      <div className="att-dow" role="group" aria-label="Pick a day of this week">
+        {week.map((d, i) => (
+          <button key={d} type="button" className={d === pick ? "on" : ""} disabled={d > today} aria-pressed={d === pick} aria-current={d === today ? "date" : undefined}
+            title={d > today ? "Not yet" : dayText(d)} onClick={() => setPick(d)}>{["M", "T", "W", "T", "F", "S", "S"][i]}</button>))}
+      </div>
       <div className="att-shift">
-        <div className="att-shift-t">Today ({clock(SHIFT.start, h24)} - {clock(SHIFT.end, h24)})</div>
+        <div className="att-shift-t">{title} ({clock(SHIFT.start, h24)} - {clock(SHIFT.end, h24)})</div>
         <div className="att-track"><i style={{ left: `${fillFrom}%`, width: `${Math.max(0, fillTo - fillFrom)}%` }} /></div>
-        <div className="att-shift-b"><span>Duration: {dur(span)}</span><span title="Time out between punches today">☕ {brk} min</span></div>
+        <div className="att-shift-b"><span>Duration: {dur(span)}</span><span title="Stepping out is not counted as a break">☕ 0 min</span></div>
+        <div className="att-shift-n">{note ? <span className="muted">{note}</span> : from !== null
+          ? <span>In <b>{clock(`${Math.floor(from / 60)}:${String(from % 60).padStart(2, "0")}`, h24)}</b>{!isToday && to !== null && <> · Out <b>{clock(`${Math.floor(to / 60)}:${String(to % 60).padStart(2, "0")}`, h24)}</b></>} · <b>{dur(worked)}</b> worked</span>
+          : <span className="muted">{isToday ? "No punches yet today" : "No time entries"}</span>}</div>
       </div>
     </div>
+  );
+}
+
+/* The attendance policy, in two tabs: how lateness and missing days are penalised, and how time is tracked. */
+const POLICY = {
+  penal: { label: "Penalisation Policy", intro: "Below are the details of your Penalisation Policy", note: "Penalisation policy is effective 02 Feb 2023", items: [
+    ["No Attendance", "You won't be penalized for any leave if there is no attendance logged by you."],
+    ["Late Arrival", "You won't be penalized for any late arrival incidents."],
+    ["Work Hours", "There is no penalization for number of work hours you spend in office."],
+    ["Missing Swipes", "There is no penalization for Missing Swipes, but it is recommended to regularize your attendance."],
+  ] },
+  track: { label: "Time tracking policy", intro: "Below are the details of time tracking policy assigned to you", items: [
+    ["Bio-Metric & Web Clock-In", "Your attendance is automatically tracked using biometric device(s)."],
+    ["On-duty (OD)", "You can request for only full day OD."],
+    ["How days are counted", `The shift is ${clock(SHIFT.start)} to ${clock(SHIFT.end)}. Hours come from your punches, each IN with the next OUT. Six hours or more is a present day and three to six hours is a half day. Weekends and holidays are not expected working days.`],
+  ] },
+};
+export function PolicyModal({ onClose }) {
+  const [tab, setTab] = useState("penal");
+  const p = POLICY[tab];
+  return (
+    <Modal onClose={onClose} wide>
+      <div className="card-h" style={{ paddingTop: 24 }}><h3>Attendance Policy</h3><button type="button" className="btn glass sm" onClick={onClose} aria-label="Close">Close</button></div>
+      <div className="card-b">
+        <div className="att-tabs" role="tablist" style={{ padding: 0 }}>
+          {Object.entries(POLICY).map(([k, v]) => <button key={k} type="button" role="tab" aria-selected={tab === k} className={tab === k ? "on" : ""} onClick={() => setTab(k)}>{v.label}</button>)}
+        </div>
+        <p style={{ margin: 0 }}>{p.intro}</p>
+        {p.note && <p className="muted" style={{ margin: 0 }}>{p.note}</p>}
+        {p.items.map(([h, t]) => <div key={h}><h4 style={{ margin: "0 0 4px", fontSize: 16 }}>{h}</h4><p className="muted" style={{ margin: 0 }}>{t}</p></div>)}
+      </div>
+    </Modal>
   );
 }
 
@@ -148,19 +203,20 @@ export function ActionsCard({ today, state, punches, onPunch, busy, now, h24 }) 
       <div className="att-clock" aria-live="off">{label}</div>
       <div className="muted">{dayText(now.date)} {now.date.slice(0, 4)}</div>
       <div className="att-punch">
-        <button type="button" className={`btn ${state === "in" ? "glass" : "primary"}`} disabled={busy} onClick={onPunch}>{state === "in" ? "Punch out" : "Punch in"}</button>
-        <span className="muted">{state === "in" ? `Punched in${first ? ` since ${clock(first.time, h24)}` : ""}` : punches.length ? `Punched out at ${clock(punches[punches.length - 1].time, h24)}` : "You have not punched in today"}</span>
+        {onPunch && <button type="button" className={`btn ${state === "in" ? "glass" : "primary"}`} disabled={busy} onClick={onPunch}>{state === "in" ? "Punch out" : "Punch in"}</button>}
+        <span className="muted">{state === "in" ? `${onPunch ? "Punched in" : "In"}${first ? ` since ${clock(first.time, h24)}` : ""}` : punches.length ? `${onPunch ? "Punched out" : "Out"} at ${clock(punches[punches.length - 1].time, h24)}` : onPunch ? "You have not punched in today" : "No punches yet today"}</span>
       </div>
-      <button type="button" className="btn link sm" aria-expanded={policy} onClick={() => setPolicy(!policy)}>Attendance policy</button>
-      {policy && <p className="muted att-policy">Shift {clock(SHIFT.start)} to {clock(SHIFT.end)}. Present is 6 hours worked or more; a half day is 3 to 6 hours. Hours are counted from your punches (each IN with the next OUT). Weekends and holidays are not counted as absent. Missed a punch? Ask HR to add it.</p>}
+      <button type="button" className="btn link sm" aria-haspopup="dialog" onClick={() => setPolicy(true)}>Attendance policy</button>
+      {policy && <PolicyModal onClose={() => setPolicy(false)} />}
     </div>
   );
 }
 
 /* ---- the log, and the calendar ---- */
-const LOG_ICON = { ok: "✓", warn: "!", live: "●" };
+const LOG_ICON = { ok: "On track", warn: "Check", live: "Live" };
 function logIcon(d, today) {
   if (d.missingOut) return ["warn", "No punch out"];
+  if (d.missingSwipe) return ["warn", "A punch in the middle has no matching return: ask HR to check the day"];
   if (d.status === "Working") return ["live", "Still working"];
   if (/^(Present|Worked on)/.test(d.status)) return ["ok", d.status];
   return ["warn", d.status];
@@ -173,7 +229,7 @@ function Row({ d, today, nowMin, h24, canEdit, onRemove }) {
   const rowClass = k === "weekend" ? "att-off" : k === "holiday" ? "att-hol" : "";
   const date = <td><span className="att-date">{dayText(d.date)}</span> {tag}</td>;
   if (k === "worked") {
-    const gross = grossOf(d, today, nowMin), brk = gross === null ? 0 : Math.max(0, gross - d.minutes);
+    const gross = grossOf(d, today, nowMin), brk = 0;   // stepping out to eat is not counted as a break
     const [tone, tip] = logIcon(d, today);
     return (
       <>
@@ -182,7 +238,7 @@ function Row({ d, today, nowMin, h24, canEdit, onRemove }) {
           <td><DayBar firstIn={d.firstIn} lastOut={d.lastOut} open={!d.lastOut} /></td>
           <td className="num-cell">{dur(brk)}</td>
           <td className="num-cell">{gross === null ? <span className="muted">No punch out</span> : dur(gross)}</td>
-          <td><span className={`att-ic ${tone}`} title={tip}>{LOG_ICON[tone]}</span></td>
+          <td><span className={`att-chip ${tone}`} title={tip}>{/^Half day/.test(d.status || "") ? "Half day" : LOG_ICON[tone]}</span></td>
         </tr>
         {open && <tr className="att-detail"><td colSpan="5">
           <div className="att-punches">{d.punches.map((p) => (
@@ -193,9 +249,9 @@ function Row({ d, today, nowMin, h24, canEdit, onRemove }) {
       </>
     );
   }
-  const msg = { weekend: "Full day Weekly-off", holiday: d.holiday || "Holiday", leave: d.status, nolog: "No Time Entries Logged", absent: "Absent", none: "" }[k];
+  const msg = { weekend: "Full day Weekly-off", holiday: d.holiday || "Holiday", leave: d.status, offsite: `Working from ${d.site || "another location"}: no office punch expected`, nolog: "No Time Entries Logged", absent: "Absent", none: "" }[k];
   return (
-    <tr className={rowClass}>{date}<td colSpan="3" className={`att-msg${k === "absent" ? " bad" : ""}`}>{msg}</td><td>{k === "absent" ? <span className="att-ic warn" title="Absent">!</span> : <span className="att-dots" aria-hidden="true">···</span>}</td></tr>
+    <tr className={rowClass}>{date}<td colSpan="3" className={`att-msg${k === "absent" ? " bad" : ""}`}>{msg}</td><td>{k === "absent" ? <span className="att-chip bad" title="Absent">Absent</span> : <span className="att-dots" aria-hidden="true">···</span>}</td></tr>
   );
 }
 
@@ -205,7 +261,7 @@ function Calendar({ byMonth, ensure, today, h24 }) {
   const data = byMonth[month];
   const first = `${month}-01`, lead = (dow(first) + 6) % 7;
   const cells = [...Array(lead).fill(null), ...(data ? data.days : [])];
-  const cls = (d) => { const k = kind(d, today); return k === "worked" ? (/^(Present|Worked on)/.test(d.status) ? "ok" : "warn") : k === "holiday" ? "hol" : k === "weekend" ? "off" : k === "leave" ? "lv" : k === "absent" ? "bad" : ""; };
+  const cls = (d) => { const k = kind(d, today); return k === "worked" ? (/^(Present|Worked on)/.test(d.status) ? "ok" : "warn") : k === "holiday" ? "hol" : k === "weekend" ? "off" : k === "leave" ? "lv" : k === "offsite" ? "lv" : k === "absent" ? "bad" : ""; };
   return (
     <div className="att-cal">
       <div className="att-cal-h"><button type="button" className="btn glass sm" aria-label="Previous month" onClick={() => setMonth(prevMonth(month))}>‹</button>
@@ -238,23 +294,23 @@ export function AttendanceLog({ months, today, canEdit = false, onRemove = () =>
   const loading = range === "d30" ? !byMonth[thisMonth] : !byMonth[range];
   return (
     <div>
-      <div className="att-logs-h"><h3 className="att-h">Logs &amp; Requests</h3>
+      <div className="att-logs-h"><h3 className="att-h">Day by day</h3>
         <label className="att-toggle"><input type="checkbox" checked={h24} onChange={(e) => setH24(e.target.checked)} />24 hour format</label></div>
       <div className="card att-logs">
         <div className="att-tabs" role="tablist">
-          <button type="button" role="tab" aria-selected={tab === "log"} className={tab === "log" ? "on" : ""} onClick={() => setTab("log")}>Attendance Log</button>
-          <button type="button" role="tab" aria-selected={tab === "cal"} className={tab === "cal" ? "on" : ""} onClick={() => setTab("cal")}>Calendar</button>
+          <button type="button" role="tab" aria-selected={tab === "log"} className={tab === "log" ? "on" : ""} onClick={() => setTab("log")}>Daily log</button>
+          <button type="button" role="tab" aria-selected={tab === "cal"} className={tab === "cal" ? "on" : ""} onClick={() => setTab("cal")}>Month view</button>
         </div>
         {error && <div className="att-err">{error}</div>}
         {tab === "cal" ? <Calendar byMonth={byMonth} ensure={ensure} today={today} h24={h24} /> : (
           <>
-            <div className="att-range-h"><b>{range === "d30" ? "Last 30 Days" : monthLabel(range)}</b>
+            <div className="att-range-h"><b>{range === "d30" ? "Last 30 days" : monthLabel(range)}</b>
               <div className="att-range" role="group" aria-label="Period">
-                <button type="button" className={range === "d30" ? "on" : ""} onClick={() => setRange("d30")}>30 DAYS</button>
-                {tabs.map((m) => <button key={m} type="button" className={range === m ? "on" : ""} onClick={() => setRange(m)}>{MON[Number(m.slice(5)) - 1]}</button>)}
+                <button type="button" className={range === "d30" ? "on" : ""} onClick={() => setRange("d30")}>Last 30 days</button>
+                {tabs.map((m) => <button key={m} type="button" className={range === m ? "on" : ""} onClick={() => setRange(m)}>{monTitle(m + "-01")}</button>)}
               </div></div>
             <div className="tbl-wrap att-table"><table>
-              <thead><tr><th>Date</th><th>Attendance visual</th><th className="num-cell">Break taken</th><th className="num-cell">Gross hours</th><th>Log</th></tr></thead>
+              <thead><tr><th>Date</th><th>Time on site</th><th className="num-cell">Break</th><th className="num-cell">Hours</th><th>Log</th></tr></thead>
               <tbody>
                 {loading && <tr><td colSpan="5"><div className="empty">Loading…</div></td></tr>}
                 {days.filter((d) => kind(d, today) !== "none").map((d) => <Row key={d.date} d={d} today={today} nowMin={now.minutes} h24={h24} canEdit={canEdit} onRemove={onRemove} />)}

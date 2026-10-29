@@ -37,6 +37,7 @@ function EditModal({ e, people, onClose }) {
   const [manager, setManager] = useState(curMgr);
   const mgrNames = people.filter((m) => m.id !== e.id && m.status !== "offboarded").map((m) => m.name).sort((a, b) => a.localeCompare(b));
   if (curMgr && !mgrNames.includes(curMgr)) mgrNames.unshift(curMgr);   // keep a manager who has since left visible
+  const [empNo, setEmpNo] = useState(e.no && e.no !== "Not assigned" ? e.no : "");
   const [f, setF] = useState({ name: e.name || "", email: e.email || "", title: e.title === "—" ? "" : e.title || "", start: e.start || "", dept: e.dept });
   const [emailErr, setEmailErr] = useState("");
   const taken = (email) => people.find((x) => x.id !== e.id && lc(x.email) === lc(email.trim()));
@@ -53,7 +54,16 @@ function EditModal({ e, people, onClose }) {
     const bad = problem(v.email); if (bad) { setEmailErr(bad); document.getElementById("e-email").focus(); return; }
     const diff = Object.keys(v).filter((k) => (e[k] || "") !== v[k]);
     const mgrChanged = isHr && !top && manager !== curMgr;
-    if (!diff.length && !mgrChanged) { onClose(); toast("No changes to save."); return; }
+    const noChanged = isHr && empNo.trim() !== (e.no && e.no !== "Not assigned" ? e.no : "");
+    if (!diff.length && !mgrChanged && !noChanged) { onClose(); toast("No changes to save."); return; }
+    if (noChanged) {   // the employee ID is saved on the server first; if it is refused (empty, a duplicate) nothing else is saved
+      if (!empNo.trim()) { document.getElementById("e-no").focus(); toast("Enter the employee ID, for example WT/17."); return; }
+      setSaving(true);
+      const r = await api("PUT", "/api/employees/number", { email: e.baseEmail, number: empNo.trim() });
+      setSaving(false);
+      if (!r.ok) { toast(apiMsg(r)); return; }
+      setRoster((rs) => rs.map((x) => (x.email === e.baseEmail ? { ...x, no: empNo.trim() } : x)));
+    }
     if (mgrChanged) {   // saved on the server first; if it is refused (a loop, someone who left) nothing else is saved
       setSaving(true);
       const r = await api("PUT", "/api/employees/manager", { email: e.baseEmail, manager });
@@ -62,13 +72,16 @@ function EditModal({ e, people, onClose }) {
       setRoster((rs) => rs.map((x) => (x.email === e.baseEmail ? { ...x, manager } : x)));
     }
     if (diff.length) patchLocal(e.baseEmail, { edits: { ...(getLocal(e.baseEmail).edits || {}), ...Object.fromEntries(diff.map((k) => [k, v[k]])) } });
-    onClose(); toast(mgrChanged ? (manager ? `${e.name} now reports to ${manager}.` : `${e.name} has no reporting manager now.`) : `Saved changes for ${e.name}.`);
+    onClose(); toast(mgrChanged && !noChanged ? (manager ? `${e.name} now reports to ${manager}.` : `${e.name} has no reporting manager now.`) : `Saved changes for ${e.name}.`);
   };
   const F = [["name", "Full name", "text"], ["email", "Work email", "email"], ["title", "Job title", "text"], ["start", "Date of joining", "date"]];
   return (
     <Modal onClose={onClose}><form onSubmit={submit} noValidate>
       <div className="card-h" style={{ paddingTop: 24 }}><h3>Edit {e.name}</h3></div>
       <div className="card-b">
+        {isHr && <div className="field"><label htmlFor="e-no">Employee ID</label>
+          <input className="input mono" id="e-no" value={empNo} maxLength={20} placeholder="e.g. WT/17" onChange={(ev) => setEmpNo(ev.target.value)} />
+          <span className="hint">Saved for everyone. It must be different from every other employee's ID. Device IDs are matched to people by this number.</span></div>}
         {F.map(([k, l, ty]) => (
           <div className="field" key={k}><label htmlFor={`e-${k}`}>{l}</label>
             <input className={`input${k === "email" ? " mono" : ""}`} id={`e-${k}`} type={ty} value={f[k]} onChange={set(k)} {...(k === "email" ? { "aria-describedby": "e-email-err", "aria-invalid": !!emailErr } : {})} />

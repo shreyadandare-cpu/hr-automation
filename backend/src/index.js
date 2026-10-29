@@ -289,6 +289,21 @@ app.put("/api/employees/manager", requireHr, wrap(async (req, res) => {
   res.json({ email, manager });
 }));
 
+// HR corrects someone's employee ID (for example WT/17). It must be unique, and the change is recorded in the audit log.
+app.put("/api/employees/number", requireHr, wrap(async (req, res) => {
+  const email = String(req.body?.email || "").trim().toLowerCase();
+  const no = String(req.body?.number || "").trim();
+  if (!/^[A-Za-z0-9][A-Za-z0-9/._-]{0,19}$/.test(no)) return res.status(400).json({ error: "Use letters, numbers and / . _ - only, up to 20 characters, for example WT/17." });
+  const emp = (await pool.query("SELECT id, name, emp_no FROM employees WHERE lower(work_email)=$1", [email])).rows[0];
+  if (!emp) return res.status(404).json({ error: "Employee not found." });
+  if (emp.emp_no === no) return res.json({ email, number: no });
+  const dup = (await pool.query("SELECT name FROM employees WHERE lower(emp_no)=lower($1) AND id<>$2", [no, emp.id])).rows[0];
+  if (dup) return res.status(409).json({ error: `${no} already belongs to ${dup.name}. Employee IDs must be different.` });
+  await pool.query("UPDATE employees SET emp_no=$2 WHERE id=$1", [emp.id, no]);
+  await pool.query("INSERT INTO audit_log (action, work_email) VALUES ($1,$2)", [`Employee ID of ${emp.name} changed from ${emp.emp_no || "none"} to ${no} by ${req.user.email}`, email]);
+  res.json({ email, number: no });
+}));
+
 // A manager adds someone to their OWN team. Allowed for anyone who already has people reporting to them (and for HR). The person
 // must have no manager yet: taking someone out of another manager's team is HR's call. The same checks apply (no loops, no top of the company).
 app.post("/api/team/members", requireAuth, wrap(async (req, res) => {

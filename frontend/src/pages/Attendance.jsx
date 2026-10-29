@@ -165,9 +165,10 @@ function PersonView({ person, canEdit, onBack, say }) {
         <span>Reports to <b style={{ color: "var(--ink)" }}>{info.manager || "no one"}</b></span>{info.location && <span>{info.location}</span>}
         <span>Joined <b style={{ color: "var(--ink)" }}>{info.start ? shortDate(info.start) : "—"}</b></span>
         <span>{info.status === "offboarded" ? "Has left" : info.status}</span></div>}
-      {sum && <div className="grid g4">
-        <Stat value={sum.present} label="Days present this month" />
-        <Stat value={sum.half + sum.short} label="Half days or short" alert={sum.half + sum.short > 0} />
+      {sum && <div className="grid g3">
+        <div><Stat value={sum.present + sum.half} label="Days present this month" />
+          {(sum.half > 0 || sum.short > 0) && <div className="muted" style={{ fontSize: 13, marginTop: 6 }}>
+            {[sum.half > 0 && `includes ${sum.half} half day${sum.half === 1 ? "" : "s"}`, sum.short > 0 && `${sum.short} short day${sum.short === 1 ? "" : "s"} under 3 hours not counted`].filter(Boolean).join(" · ")}</div>}</div>
         <Stat value={sum.leave} label="Days on leave" />
         <Stat value={sum.absent} label="Days absent" alert={sum.absent > 0} />
       </div>}

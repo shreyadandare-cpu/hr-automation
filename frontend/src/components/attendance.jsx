@@ -237,7 +237,7 @@ function Row({ d, today, nowMin, h24, canEdit, onRemove }) {
           <td><DayBar firstIn={d.firstIn} lastOut={d.lastOut} open={!d.lastOut} /></td>
           <td className="num-cell">{dur(brk)}</td>
           <td className="num-cell">{gross === null ? <span className="muted">No punch out</span> : dur(gross)}</td>
-          <td><span className={`att-chip ${tone}`} title={tip}>{LOG_ICON[tone]}</span></td>
+          <td><span className={`att-chip ${tone}`} title={tip}>{/^Half day/.test(d.status || "") ? "Half day" : LOG_ICON[tone]}</span></td>
         </tr>
         {open && <tr className="att-detail"><td colSpan="5">
           <div className="att-punches">{d.punches.map((p) => (

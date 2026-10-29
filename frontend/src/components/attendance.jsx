@@ -148,8 +148,8 @@ export function ActionsCard({ today, state, punches, onPunch, busy, now, h24 }) 
       <div className="att-clock" aria-live="off">{label}</div>
       <div className="muted">{dayText(now.date)} {now.date.slice(0, 4)}</div>
       <div className="att-punch">
-        <button type="button" className={`btn ${state === "in" ? "glass" : "primary"}`} disabled={busy} onClick={onPunch}>{state === "in" ? "Punch out" : "Punch in"}</button>
-        <span className="muted">{state === "in" ? `Punched in${first ? ` since ${clock(first.time, h24)}` : ""}` : punches.length ? `Punched out at ${clock(punches[punches.length - 1].time, h24)}` : "You have not punched in today"}</span>
+        {onPunch && <button type="button" className={`btn ${state === "in" ? "glass" : "primary"}`} disabled={busy} onClick={onPunch}>{state === "in" ? "Punch out" : "Punch in"}</button>}
+        <span className="muted">{state === "in" ? `${onPunch ? "Punched in" : "In"}${first ? ` since ${clock(first.time, h24)}` : ""}` : punches.length ? `${onPunch ? "Punched out" : "Out"} at ${clock(punches[punches.length - 1].time, h24)}` : onPunch ? "You have not punched in today" : "No punches yet today"}</span>
       </div>
       <button type="button" className="btn link sm" aria-expanded={policy} onClick={() => setPolicy(!policy)}>Attendance policy</button>
       {policy && <p className="muted att-policy">Shift {clock(SHIFT.start)} to {clock(SHIFT.end)}. Present is 6 hours worked or more; a half day is 3 to 6 hours. Hours are counted from your punches (each IN with the next OUT). Weekends and holidays are not counted as absent. Missed a punch? Ask HR to add it.</p>}

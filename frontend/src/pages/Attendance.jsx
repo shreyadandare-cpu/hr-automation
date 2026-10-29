@@ -129,6 +129,11 @@ function AddPunch({ today, onAdd }) {
 function PersonView({ person, canEdit, onBack, say }) {
   const months = useMonths(person.email);
   const now = istNow();
+  const clockNow = useNow(1000);
+  const [h24] = useH24();
+  useEffect(() => { months.ensure(now.date.slice(0, 7)); }, [months.ensure, now.date]);   // today's month, for the Timings and Today cards
+  const todayDay = months.byMonth[now.date.slice(0, 7)]?.days.find((d) => d.date === now.date);
+  const todayState = todayDay && todayDay.punches.length && todayDay.punches[todayDay.punches.length - 1].direction === "IN" ? "in" : "out";
   const name = Object.values(months.byMonth)[0]?.name || person.name;
   const removePunch = async (id) => {
     if (!confirm("Remove this punch? This is recorded in the audit log.")) return;
@@ -147,7 +152,13 @@ function PersonView({ person, canEdit, onBack, say }) {
         sub={canEdit ? "Every day, with the punches behind it. Open a day to see its punches, add a missed one with a reason, or remove a wrong one. Both are recorded in the audit log." : "Their attendance. Only HR can change punches."}
         actions={<button type="button" className="btn glass sm" onClick={onBack}>{canEdit ? "Back to everyone" : "Back"}</button>} />
       {months.error && <Callout>{months.error}</Callout>}
-      <div className="att-top"><div className="att-col"><h3 className="att-h">Attendance Stats</h3><StatsCard byMonth={months.byMonth} today={now.date} name={name.split(" ")[0]} /></div></div>
+      <div className="att-top">
+        <div className="att-col"><h3 className="att-h">Attendance Stats</h3><StatsCard byMonth={months.byMonth} today={now.date} name={name.split(" ")[0]} /></div>
+        {todayDay ? <>
+          <div className="att-col"><h3 className="att-h">Timings</h3><TimingsCard today={now.date} punches={todayDay.punches} minutesToday={todayDay.minutes} now={clockNow} h24={h24} /></div>
+          <div className="att-col"><h3 className="att-h">Today</h3><ActionsCard today={now.date} state={todayState} punches={todayDay.punches} now={clockNow} h24={h24} /></div>
+        </> : null}
+      </div>
       <AttendanceLog months={months} today={now.date} canEdit={canEdit} onRemove={removePunch} />
       {canEdit && <AddPunch today={now.date} onAdd={addPunch} />}
     </section>

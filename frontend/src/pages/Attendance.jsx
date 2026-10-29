@@ -6,7 +6,7 @@ import { ActionsCard, AttendanceLog, DayCell, StatsCard, TimingsCard, istNow, us
 import Pager, { usePaged } from "../components/Pager.jsx";
 import { useData } from "../data.jsx";
 
-const TONE = { Present: "ok", "Half day": "warn", Working: "info", "Short hours": "warn", Absent: "bad", "On leave": "info", "Half day leave": "info", Weekend: "mute", Holiday: "mute" };
+const TONE = { Present: "ok", "Half day": "warn", Working: "info", "Short hours": "warn", Absent: "bad", "On leave": "info", "Half day leave": "info", Weekend: "mute", Holiday: "mute", "Off-site": "info" };
 const StatusPill = ({ status }) => (status ? <Pill tone={TONE[status] || (/^Worked/.test(status) ? "ok" : "mute")}>{status}</Pill> : <span className="muted">—</span>);
 
 /* Everyone for one day: HR sees all, a reporting manager sees their team. */
@@ -172,6 +172,7 @@ function PersonView({ person, canEdit, onBack, say }) {
         <Stat value={sum.leave} label="Days on leave" />
         <Stat value={sum.absent} label="Days absent" alert={sum.absent > 0} />
       </div>}
+      {sum && sum.offsite > 0 && <div className="muted">Works from {info && info.location ? info.location : "another location"}: {sum.offsite} day{sum.offsite === 1 ? "" : "s"} with no office punch, not marked absent.</div>}
       {sum && <div className="muted">Hours worked this month: <b style={{ color: "var(--ink)" }}>{hours(sum.minutes)}</b></div>}
     </div>
   );

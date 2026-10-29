@@ -72,6 +72,7 @@ function kind(d, today) {
   if (d.holiday || d.off === "Holiday") return "holiday";
   if (d.off === "Weekend") return "weekend";
   if (/leave$/i.test(d.status)) return "leave";
+  if (d.status === "Off-site") return "offsite";
   return d.date === today ? "nolog" : "absent";
 }
 /** Break = time between an OUT and the next IN. Gross hours = first in to last out (to now for today). */
@@ -248,7 +249,7 @@ function Row({ d, today, nowMin, h24, canEdit, onRemove }) {
       </>
     );
   }
-  const msg = { weekend: "Full day Weekly-off", holiday: d.holiday || "Holiday", leave: d.status, nolog: "No Time Entries Logged", absent: "Absent", none: "" }[k];
+  const msg = { weekend: "Full day Weekly-off", holiday: d.holiday || "Holiday", leave: d.status, offsite: `Working from ${d.site || "another location"}: no office punch expected`, nolog: "No Time Entries Logged", absent: "Absent", none: "" }[k];
   return (
     <tr className={rowClass}>{date}<td colSpan="3" className={`att-msg${k === "absent" ? " bad" : ""}`}>{msg}</td><td>{k === "absent" ? <span className="att-chip bad" title="Absent">Absent</span> : <span className="att-dots" aria-hidden="true">···</span>}</td></tr>
   );
@@ -260,7 +261,7 @@ function Calendar({ byMonth, ensure, today, h24 }) {
   const data = byMonth[month];
   const first = `${month}-01`, lead = (dow(first) + 6) % 7;
   const cells = [...Array(lead).fill(null), ...(data ? data.days : [])];
-  const cls = (d) => { const k = kind(d, today); return k === "worked" ? (/^(Present|Worked on)/.test(d.status) ? "ok" : "warn") : k === "holiday" ? "hol" : k === "weekend" ? "off" : k === "leave" ? "lv" : k === "absent" ? "bad" : ""; };
+  const cls = (d) => { const k = kind(d, today); return k === "worked" ? (/^(Present|Worked on)/.test(d.status) ? "ok" : "warn") : k === "holiday" ? "hol" : k === "weekend" ? "off" : k === "leave" ? "lv" : k === "offsite" ? "lv" : k === "absent" ? "bad" : ""; };
   return (
     <div className="att-cal">
       <div className="att-cal-h"><button type="button" className="btn glass sm" aria-label="Previous month" onClick={() => setMonth(prevMonth(month))}>‹</button>

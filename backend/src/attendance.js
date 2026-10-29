@@ -12,6 +12,8 @@ const teamEmails = async (email) => Object.entries(await managerMap(pool)).filte
 const PRESENT_MIN = 360, HALF_MIN = 180;
 const IST = "Asia/Kolkata";
 const isHr = (req) => req.user && req.user.role === "hr";
+/** People who work from a place other than the office (a client site, another city) do not use the office machine, so no punches is not absent for them. */
+const offSite = (loc) => !!loc && !/office/i.test(String(loc));
 const hhmm = (t) => String(t).slice(0, 5);
 const mins = (t) => { const [h, m] = String(t).split(":").map(Number); return h * 60 + m; };
 const MONTH = /^\d{4}-(0[1-9]|1[0-2])$/;
@@ -60,21 +62,21 @@ function monthDays(month, punches, leave, holidays, emp, today, nowMin) {
     if (date > today || (emp.start && date < emp.start) || (emp.lastDay && date > emp.lastDay)) status = null;
     else if (ps.length) status = w.minutes >= PRESENT_MIN ? "Present" : w.minutes >= HALF_MIN ? "Half day" : (date === today ? "Working" : "Short hours");
     else if (lv) status = lv.half ? "Half day leave" : "On leave";
-    else status = off || "Absent";
+    else status = off || (offSite(emp.location) ? "Off-site" : "Absent");
     if (status === "Present" && off) status = "Worked on " + off.toLowerCase();
     days.push({ date, status, off, holiday: hol.get(date) || null, firstIn: ins[0] ? ins[0].time : null, lastOut: outs.length ? outs[outs.length - 1].time : null,
-      minutes: w.minutes, missingOut: w.missingOut && date !== today, missingSwipe: !!(dd && dd.missingSwipe), punches: ps });
+      minutes: w.minutes, missingOut: w.missingOut && date !== today, missingSwipe: !!(dd && dd.missingSwipe), site: status === "Off-site" ? emp.location : null, punches: ps });
   }
   return days;
 }
 const summarize = (days) => {
   const c = (f) => days.filter(f).length;
   return { present: c((d) => /^(Present|Worked on)/.test(d.status || "")), half: c((d) => d.status === "Half day"), leave: c((d) => /leave$/i.test(d.status || "")),
-    absent: c((d) => d.status === "Absent"), short: c((d) => d.status === "Short hours"), minutes: days.reduce((n, d) => n + d.minutes, 0) };
+    absent: c((d) => d.status === "Absent"), offsite: c((d) => d.status === "Off-site"), short: c((d) => d.status === "Short hours"), minutes: days.reduce((n, d) => n + d.minutes, 0) };
 };
 
 async function employeeByEmail(db, email) {
-  return (await db.query("SELECT id, name, work_email, start_date, last_day, status FROM employees WHERE lower(work_email)=$1", [String(email || "").toLowerCase()])).rows[0] || null;
+  return (await db.query("SELECT id, name, work_email, start_date, last_day, status, work_location FROM employees WHERE lower(work_email)=$1", [String(email || "").toLowerCase()])).rows[0] || null;
 }
 async function monthOf(emp, month) {
   const from = `${month}-01`, to = `${month}-31`;
@@ -87,7 +89,7 @@ async function monthOf(emp, month) {
     nowIst(pool),
   ]);
   const days = monthDays(month, p.rows.map(toPunch), l.rows.map((r) => ({ from: r.f, to: r.t, half: r.half })), h.rows,
-    { start: emp.start_date && String(emp.start_date).slice(0, 10), lastDay: emp.last_day && String(emp.last_day).slice(0, 10) }, now.day, mins(now.time));
+    { start: emp.start_date && String(emp.start_date).slice(0, 10), lastDay: emp.last_day && String(emp.last_day).slice(0, 10), location: emp.work_location }, now.day, mins(now.time));
   return { email: emp.work_email, name: emp.name, month, days, summary: summarize(days), today: now.day };
 }
 
@@ -148,7 +150,7 @@ export function attendanceRouter(wrap) {
     const date = String(req.query.date || now.day);
     if (!L.validDate(date)) return res.status(400).json({ error: "Date must look like 2026-10-21." });
     const [emps, ps, lv, hol] = await Promise.all([
-      pool.query("SELECT id, name, work_email, title, start_date, last_day FROM employees WHERE status <> 'offboarded' ORDER BY name"),
+      pool.query("SELECT id, name, work_email, title, start_date, last_day, work_location FROM employees WHERE status <> 'offboarded' ORDER BY name"),
       pool.query(`SELECT employee_id, to_char(work_date,'YYYY-MM-DD') AS work_date, punch_time, direction, source, note, id FROM attendance_punches WHERE work_date=$1 ORDER BY punch_time, id`, [date]),
       pool.query("SELECT lower(work_email) AS e, half FROM leave_requests WHERE status='approved' AND from_date<=$1 AND to_date>=$1", [date]),
       pool.query("SELECT name FROM holidays WHERE day=$1", [date]),
@@ -164,7 +166,7 @@ export function attendanceRouter(wrap) {
       let status;
       if (date > now.day) status = null;
       else if (mine.length) status = w.minutes >= PRESENT_MIN ? "Present" : w.minutes >= HALF_MIN ? "Half day" : date === now.day ? "Working" : "Short hours";
-      else status = l ? (l.half ? "Half day leave" : "On leave") : off || "Absent";
+      else status = l ? (l.half ? "Half day leave" : "On leave") : off || (offSite(e.work_location) ? "Off-site" : "Absent");
       return { email: e.work_email, name: e.name, title: e.title, status, firstIn: ins[0] ? ins[0].time : null, lastOut: outs.length ? outs[outs.length - 1].time : null,
         minutes: w.minutes, missingOut: w.missingOut && date !== now.day, in: mine.length > 0 && mine[mine.length - 1].direction === "IN" };
     });

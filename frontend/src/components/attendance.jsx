@@ -139,7 +139,7 @@ export function TimingsCard({ today, punches, minutesToday, now, h24, byMonth = 
     from = mins(rec.firstIn); to = rec.lastOut ? mins(rec.lastOut) : null;
     worked = rec.minutes;
     if (to === null) note = "No punch out";
-  } else if (rec) note = rec.holiday || (rec.off === "Weekend" ? "Weekly off" : /leave$/i.test(rec.status || "") ? rec.status : rec.status === "Absent" ? "Absent" : "No time entries");
+  } else if (rec) note = rec.holiday || (rec.off === "Weekend" ? "Weekly off" : /leave$/i.test(rec.status || "") ? rec.status : "No time entries");
   const fillFrom = from === null ? 0 : pct(from), fillTo = from === null ? 0 : to === null ? Math.min(100, fillFrom + 2) : pct(to);
   const title = isToday ? "Today" : dayText(pick);
   return (
@@ -302,7 +302,7 @@ function Calendar({ byMonth, ensure, today, h24 }) {
           </div>))}
       </div>
       {!data && <div className="empty">Loading…</div>}
-      <div className="att-legend"><span><i className="ok" />Present</span><span><i className="warn" />Half day / short</span><span><i className="lv" />Leave</span><span><i className="hol" />Holiday</span><span><i className="off" />Weekly off</span><span><i className="bad" />Absent</span></div>
+      <div className="att-legend"><span><i className="ok" />Present</span><span><i className="warn" />Half day / short</span><span><i className="lv" />Leave</span><span><i className="hol" />Holiday</span><span><i className="off" />Weekly off</span><span><i className="lv" />Off-site</span></div>
     </div>
   );
 }

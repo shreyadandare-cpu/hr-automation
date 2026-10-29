@@ -6,7 +6,7 @@ import { ActionsCard, AttendanceLog, DayCell, ForgotPunchPopup, StatsCard, Timin
 import Pager, { usePaged } from "../components/Pager.jsx";
 import { useData } from "../data.jsx";
 
-const TONE = { Present: "ok", "Half day": "warn", Working: "info", "Short hours": "warn", Absent: "bad", "On leave": "info", "Half day leave": "info", Weekend: "mute", Holiday: "mute", "Off-site": "info" };
+const TONE = { Present: "ok", "Half day": "warn", Working: "info", "Short hours": "warn", "On leave": "info", "Half day leave": "info", Weekend: "mute", Holiday: "mute", "Off-site": "info" };
 const StatusPill = ({ status }) => (status ? <Pill tone={TONE[status] || (/^Worked/.test(status) ? "ok" : "mute")}>{status}</Pill> : <span className="muted">—</span>);
 
 /* Everyone for one day: HR sees all, a reporting manager sees their team. */
@@ -21,10 +21,9 @@ function DayTable({ day, onOpen }) {
   const count = (s) => people.filter((x) => x.status === s).length;
   return (
     <>
-      <div className="grid g4">
+      <div className="grid g3">
         <Stat value={people.filter((x) => /^(Present|Working|Half day)$/.test(x.status || "")).length} label="Punched in" />
         <Stat value={people.filter((x) => /leave$/i.test(x.status || "")).length} label="On leave" />
-        <Stat value={count("Absent")} label="Absent" alert={count("Absent") > 0} />
         <Stat value={people.filter((x) => x.missingOut).length} label="No punch out" />
       </div>
       {day.off && <p className="muted">{day.holiday || day.off}: no attendance is expected on this day.</p>}
@@ -165,12 +164,11 @@ function PersonView({ person, canEdit, onBack, say }) {
         <span>Reports to <b style={{ color: "var(--ink)" }}>{info.manager || "no one"}</b></span>{info.location && <span>{info.location}</span>}
         <span>Joined <b style={{ color: "var(--ink)" }}>{info.start ? shortDate(info.start) : "—"}</b></span>
         <span>{info.status === "offboarded" ? "Has left" : info.status}</span></div>}
-      {sum && <div className="grid g3">
+      {sum && <div className="grid g2">
         <div><Stat value={sum.present + sum.half} label="Days present this month" />
           {(sum.half > 0 || sum.short > 0) && <div className="muted" style={{ fontSize: 13, marginTop: 6 }}>
             {[sum.half > 0 && `includes ${sum.half} half day${sum.half === 1 ? "" : "s"}`, sum.short > 0 && `${sum.short} short day${sum.short === 1 ? "" : "s"} under 3 hours not counted`].filter(Boolean).join(" · ")}</div>}</div>
         <Stat value={sum.leave} label="Days on leave" />
-        <Stat value={sum.absent} label="Days absent" alert={sum.absent > 0} />
       </div>}
       {sum && sum.offsite > 0 && <div className="muted">Works from {info && info.location ? info.location : "another location"}: {sum.offsite} day{sum.offsite === 1 ? "" : "s"} with no office punch, not marked absent.</div>}
       {sum && <div className="muted">Hours worked this month: <b style={{ color: "var(--ink)" }}>{hours(sum.minutes)}</b></div>}
@@ -230,7 +228,7 @@ export default function Attendance() {
   if (isHr) {
     return (
       <section className="section">
-        <SectionHead eyebrow="Attendance" title="Everyone's" accent="attendance." sub="Who is in, who is on leave and who is absent, for any day. Open a person to see their days, or to fix a missed punch." actions={datePick} />
+        <SectionHead eyebrow="Attendance" title="Everyone's" accent="attendance." sub="Who is in and who is on leave, for any day. Open a person to see their days, or to fix a missed punch." actions={datePick} />
         {error && <Callout>{error}</Callout>}
         {day ? <DayTable day={day} onOpen={(x) => setPerson({ email: x.email, name: x.name })} /> : <div className="empty">{error || "Loading…"}</div>}
         <DeviceCard say={say} />

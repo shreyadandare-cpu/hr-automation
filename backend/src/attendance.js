@@ -66,7 +66,7 @@ function monthDays(month, punches, leave, holidays, emp, today, nowMin) {
     if (date > today || (emp.start && date < emp.start) || (emp.lastDay && date > emp.lastDay)) status = null;
     else if (ps.length) status = date === today && nowMin < SHIFT_END_MIN ? "Working" : w.minutes >= PRESENT_MIN ? "Present" : w.minutes >= HALF_MIN ? "Half day" : (date === today ? "Working" : "Short hours");
     else if (lv) status = lv.half ? "Half day leave" : "On leave";
-    else status = off || (offSite(emp.location) ? "Off-site" : "Absent");
+    else status = off || (offSite(emp.location) ? "Off-site" : "On leave");   // no punch and no approved leave is shown as On leave, never as Absent
     if (status === "Present" && off) status = "Worked on " + off.toLowerCase();
     days.push({ date, status, off, holiday: hol.get(date) || null, firstIn: ins[0] ? ins[0].time : null, lastOut: outs.length ? outs[outs.length - 1].time : null,
       minutes: w.minutes, missingOut: w.missingOut && date !== today && !forgot, forgotOut: forgot, countedTo: forgot ? "18:30" : null, missingSwipe: !!(dd && dd.missingSwipe), site: status === "Off-site" ? emp.location : null, punches: ps });
@@ -76,7 +76,7 @@ function monthDays(month, punches, leave, holidays, emp, today, nowMin) {
 const summarize = (days) => {
   const c = (f) => days.filter(f).length;
   return { present: c((d) => /^(Present|Worked on)/.test(d.status || "")), half: c((d) => d.status === "Half day"), leave: c((d) => /leave$/i.test(d.status || "")),
-    absent: c((d) => d.status === "Absent"), offsite: c((d) => d.status === "Off-site"), short: c((d) => d.status === "Short hours"), minutes: days.reduce((n, d) => n + d.minutes, 0) };
+    absent: 0, offsite: c((d) => d.status === "Off-site"), short: c((d) => d.status === "Short hours"), minutes: days.reduce((n, d) => n + d.minutes, 0) };
 };
 
 async function employeeByEmail(db, email) {
@@ -172,7 +172,7 @@ export function attendanceRouter(wrap) {
       let status;
       if (date > now.day) status = null;
       else if (mine.length) status = date === now.day && mins(now.time) < SHIFT_END_MIN ? "Working" : w.minutes >= PRESENT_MIN ? "Present" : w.minutes >= HALF_MIN ? "Half day" : date === now.day ? "Working" : "Short hours";
-      else status = l ? (l.half ? "Half day leave" : "On leave") : off || (offSite(e.work_location) ? "Off-site" : "Absent");
+      else status = l ? (l.half ? "Half day leave" : "On leave") : off || (offSite(e.work_location) ? "Off-site" : "On leave");
       return { email: e.work_email, name: e.name, title: e.title, status, firstIn: ins[0] ? ins[0].time : mine.length ? mine[0].time : null, lastOut: outs.length ? outs[outs.length - 1].time : null,
         lastPunch: mine.length ? mine[mine.length - 1].time : null, punchCount: mine.length,
         minutes: w.minutes, missingOut: w.missingOut && date !== now.day && !forgot, forgotOut: forgot, in: mine.length > 0 && mine[mine.length - 1].direction === "IN" };

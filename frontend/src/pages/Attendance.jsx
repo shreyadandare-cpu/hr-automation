@@ -164,7 +164,7 @@ function PersonView({ person, canEdit, onBack, say }) {
       <div className="att-top">
         <div className="att-col"><h3 className="att-h">Your numbers</h3><StatsCard byMonth={months.byMonth} today={now.date} name={name.split(" ")[0]} /></div>
         {todayDay ? <>
-          <div className="att-col"><h3 className="att-h">Today's shift</h3><TimingsCard today={now.date} punches={todayDay.punches} minutesToday={todayDay.minutes} now={clockNow} h24={h24} /></div>
+          <div className="att-col"><h3 className="att-h">Today's shift</h3><TimingsCard today={now.date} punches={todayDay.punches} minutesToday={todayDay.minutes} now={clockNow} h24={h24} byMonth={months.byMonth} /></div>
           <div className="att-col"><h3 className="att-h">Right now</h3><ActionsCard today={now.date} state={todayState} punches={todayDay.punches} now={clockNow} h24={h24} /></div>
         </> : null}
       </div>
@@ -236,7 +236,7 @@ export default function Attendance() {
         <>
           <div className="att-top">
             <div className="att-col"><h3 className="att-h">Your numbers</h3><StatsCard byMonth={mine.byMonth} today={today.date} name={(user && user.name ? user.name.split(" ")[0] : "Me")} /></div>
-            <div className="att-col"><h3 className="att-h">Today's shift</h3><TimingsCard today={today.date} punches={today.punches} minutesToday={today.minutes} now={now} h24={h24} /></div>
+            <div className="att-col"><h3 className="att-h">Today's shift</h3><TimingsCard today={today.date} punches={today.punches} minutesToday={today.minutes} now={now} h24={h24} byMonth={mine.byMonth} /></div>
             <div className="att-col"><h3 className="att-h">Punch clock</h3><ActionsCard today={today.date} state={today.state} punches={today.punches} onPunch={punch} busy={busy} now={now} h24={h24} /></div>
           </div>
           <AttendanceLog months={mine} today={today.date} />

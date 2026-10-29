@@ -119,21 +119,42 @@ export function StatsCard({ byMonth, today, name = "Me" }) {
   );
 }
 
-export function TimingsCard({ today, punches, minutesToday, now, h24 }) {
-  const wd = (dow(today) + 6) % 7;
+/** The week's days are buttons: today shows the live shift bar, any earlier day of the week shows that day's first in, last out and hours. */
+export function TimingsCard({ today, punches, minutesToday, now, h24, byMonth = {} }) {
+  const [pick, setPick] = useState(today);
+  const monday = addDays(today, -((dow(today) + 6) % 7));
+  const week = [0, 1, 2, 3, 4, 5, 6].map((i) => addDays(monday, i));
   const s = mins(SHIFT.start), e = mins(SHIFT.end), span = e - s;
-  const first = punches.find((p) => p.direction === "IN");
   const pct = (m) => Math.max(0, Math.min(100, ((m - s) / span) * 100));
-  const fillFrom = first ? pct(mins(first.time)) : 0, fillTo = first ? pct(now.minutes) : 0;
-  const worked = minutesToday || 0;
-  const brk = first ? Math.max(0, now.minutes - mins(first.time) - worked) : 0;
+  const isToday = pick === today;
+  const rec = byMonth[pick.slice(0, 7)]?.days.find((d) => d.date === pick);
+  // The bar and the numbers for the picked day.
+  let from = null, to = null, worked = 0, brk = 0, note = "";
+  if (isToday) {
+    const first = punches.find((p) => p.direction === "IN");
+    if (first) { from = mins(first.time); to = now.minutes; }
+    worked = minutesToday || 0; brk = first ? Math.max(0, now.minutes - mins(first.time) - worked) : 0;
+  } else if (rec && rec.firstIn) {
+    from = mins(rec.firstIn); to = rec.lastOut ? mins(rec.lastOut) : null;
+    worked = rec.minutes; brk = to !== null ? Math.max(0, to - from - worked) : 0;
+    if (to === null) note = "No punch out";
+  } else if (rec) note = rec.holiday || (rec.off === "Weekend" ? "Weekly off" : /leave$/i.test(rec.status || "") ? rec.status : rec.status === "Absent" ? "Absent" : "No time entries");
+  const fillFrom = from === null ? 0 : pct(from), fillTo = from === null ? 0 : to === null ? Math.min(100, fillFrom + 2) : pct(to);
+  const title = isToday ? "Today" : dayText(pick);
   return (
     <div className="card att-timings">
-      <div className="att-dow">{["M", "T", "W", "T", "F", "S", "S"].map((l, i) => <span key={i} className={i === wd ? "on" : ""} aria-current={i === wd ? "date" : undefined}>{l}</span>)}</div>
+      <div className="att-dow" role="group" aria-label="Pick a day of this week">
+        {week.map((d, i) => (
+          <button key={d} type="button" className={d === pick ? "on" : ""} disabled={d > today} aria-pressed={d === pick} aria-current={d === today ? "date" : undefined}
+            title={d > today ? "Not yet" : dayText(d)} onClick={() => setPick(d)}>{["M", "T", "W", "T", "F", "S", "S"][i]}</button>))}
+      </div>
       <div className="att-shift">
-        <div className="att-shift-t">Today ({clock(SHIFT.start, h24)} - {clock(SHIFT.end, h24)})</div>
+        <div className="att-shift-t">{title} ({clock(SHIFT.start, h24)} - {clock(SHIFT.end, h24)})</div>
         <div className="att-track"><i style={{ left: `${fillFrom}%`, width: `${Math.max(0, fillTo - fillFrom)}%` }} /></div>
-        <div className="att-shift-b"><span>Duration: {dur(span)}</span><span title="Time out between punches today">☕ {brk} min</span></div>
+        <div className="att-shift-b"><span>Duration: {dur(span)}</span><span title="Time out between punches">☕ {brk} min</span></div>
+        <div className="att-shift-n">{note ? <span className="muted">{note}</span> : from !== null
+          ? <span>In <b>{clock(`${Math.floor(from / 60)}:${String(from % 60).padStart(2, "0")}`, h24)}</b>{!isToday && to !== null && <> · Out <b>{clock(`${Math.floor(to / 60)}:${String(to % 60).padStart(2, "0")}`, h24)}</b></>} · <b>{dur(worked)}</b> worked</span>
+          : <span className="muted">{isToday ? "No punches yet today" : "No time entries"}</span>}</div>
       </div>
     </div>
   );

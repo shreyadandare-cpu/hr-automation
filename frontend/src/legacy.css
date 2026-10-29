@@ -884,3 +884,9 @@ tr.att-detail td{background:var(--paper-2);padding:10px 26px}
 html,body{overscroll-behavior-x:none}
 /* While the Next holiday card is showing in the corner, the Leave remaining card sits above it. */
 body:has(.hol-pop) .lv-pop{bottom:calc(24px + 150px);transition:bottom .2s}
+
+/* Manage users: everything on one line, with room for the role menu and the three buttons. */
+.users-table td,.users-table th{padding-inline:12px}
+.users-table td select.input{width:auto;min-width:132px}
+.users-table .u-last{white-space:nowrap}
+.users-table .u-actions{display:flex;gap:8px;flex-wrap:nowrap;white-space:nowrap}

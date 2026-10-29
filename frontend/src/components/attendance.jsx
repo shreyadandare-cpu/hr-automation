@@ -191,7 +191,7 @@ export function ActionsCard({ today, state, punches, onPunch, busy, now, h24 }) 
 }
 
 /* ---- the log, and the calendar ---- */
-const LOG_ICON = { ok: "✓", warn: "!", live: "●" };
+const LOG_ICON = { ok: "On track", warn: "Check", live: "Live" };
 function logIcon(d, today) {
   if (d.missingOut) return ["warn", "No punch out"];
   if (d.status === "Working") return ["live", "Still working"];
@@ -215,7 +215,7 @@ function Row({ d, today, nowMin, h24, canEdit, onRemove }) {
           <td><DayBar firstIn={d.firstIn} lastOut={d.lastOut} open={!d.lastOut} /></td>
           <td className="num-cell">{dur(brk)}</td>
           <td className="num-cell">{gross === null ? <span className="muted">No punch out</span> : dur(gross)}</td>
-          <td><span className={`att-ic ${tone}`} title={tip}>{LOG_ICON[tone]}</span></td>
+          <td><span className={`att-chip ${tone}`} title={tip}>{LOG_ICON[tone]}</span></td>
         </tr>
         {open && <tr className="att-detail"><td colSpan="5">
           <div className="att-punches">{d.punches.map((p) => (
@@ -228,7 +228,7 @@ function Row({ d, today, nowMin, h24, canEdit, onRemove }) {
   }
   const msg = { weekend: "Full day Weekly-off", holiday: d.holiday || "Holiday", leave: d.status, nolog: "No Time Entries Logged", absent: "Absent", none: "" }[k];
   return (
-    <tr className={rowClass}>{date}<td colSpan="3" className={`att-msg${k === "absent" ? " bad" : ""}`}>{msg}</td><td>{k === "absent" ? <span className="att-ic warn" title="Absent">!</span> : <span className="att-dots" aria-hidden="true">···</span>}</td></tr>
+    <tr className={rowClass}>{date}<td colSpan="3" className={`att-msg${k === "absent" ? " bad" : ""}`}>{msg}</td><td>{k === "absent" ? <span className="att-chip bad" title="Absent">Absent</span> : <span className="att-dots" aria-hidden="true">···</span>}</td></tr>
   );
 }
 
@@ -271,23 +271,23 @@ export function AttendanceLog({ months, today, canEdit = false, onRemove = () =>
   const loading = range === "d30" ? !byMonth[thisMonth] : !byMonth[range];
   return (
     <div>
-      <div className="att-logs-h"><h3 className="att-h">Logs &amp; Requests</h3>
+      <div className="att-logs-h"><h3 className="att-h">Day by day</h3>
         <label className="att-toggle"><input type="checkbox" checked={h24} onChange={(e) => setH24(e.target.checked)} />24 hour format</label></div>
       <div className="card att-logs">
         <div className="att-tabs" role="tablist">
-          <button type="button" role="tab" aria-selected={tab === "log"} className={tab === "log" ? "on" : ""} onClick={() => setTab("log")}>Attendance Log</button>
-          <button type="button" role="tab" aria-selected={tab === "cal"} className={tab === "cal" ? "on" : ""} onClick={() => setTab("cal")}>Calendar</button>
+          <button type="button" role="tab" aria-selected={tab === "log"} className={tab === "log" ? "on" : ""} onClick={() => setTab("log")}>Daily log</button>
+          <button type="button" role="tab" aria-selected={tab === "cal"} className={tab === "cal" ? "on" : ""} onClick={() => setTab("cal")}>Month view</button>
         </div>
         {error && <div className="att-err">{error}</div>}
         {tab === "cal" ? <Calendar byMonth={byMonth} ensure={ensure} today={today} h24={h24} /> : (
           <>
-            <div className="att-range-h"><b>{range === "d30" ? "Last 30 Days" : monthLabel(range)}</b>
+            <div className="att-range-h"><b>{range === "d30" ? "Last 30 days" : monthLabel(range)}</b>
               <div className="att-range" role="group" aria-label="Period">
-                <button type="button" className={range === "d30" ? "on" : ""} onClick={() => setRange("d30")}>30 DAYS</button>
-                {tabs.map((m) => <button key={m} type="button" className={range === m ? "on" : ""} onClick={() => setRange(m)}>{MON[Number(m.slice(5)) - 1]}</button>)}
+                <button type="button" className={range === "d30" ? "on" : ""} onClick={() => setRange("d30")}>Last 30 days</button>
+                {tabs.map((m) => <button key={m} type="button" className={range === m ? "on" : ""} onClick={() => setRange(m)}>{monTitle(m + "-01")}</button>)}
               </div></div>
             <div className="tbl-wrap att-table"><table>
-              <thead><tr><th>Date</th><th>Attendance visual</th><th className="num-cell">Break taken</th><th className="num-cell">Gross hours</th><th>Log</th></tr></thead>
+              <thead><tr><th>Date</th><th>Time on site</th><th className="num-cell">Break</th><th className="num-cell">Hours</th><th>Log</th></tr></thead>
               <tbody>
                 {loading && <tr><td colSpan="5"><div className="empty">Loading…</div></td></tr>}
                 {days.filter((d) => kind(d, today) !== "none").map((d) => <Row key={d.date} d={d} today={today} nowMin={now.minutes} h24={h24} canEdit={canEdit} onRemove={onRemove} />)}

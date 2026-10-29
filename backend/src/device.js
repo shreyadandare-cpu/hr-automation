@@ -99,7 +99,7 @@ export function deviceRouter() {
   // ---- HR: link device user IDs to people.
   r.get("/api/attendance/device/users", requireHr, wrap(async (_req, res) => {
     const mapped = (await pool.query(
-      `SELECT d.device_user_id, e.name, e.work_email, e.emp_no FROM device_users d JOIN employees e ON e.id = d.employee_id ORDER BY nullif(regexp_replace(d.device_user_id, '\\D', '', 'g'), '')::numeric NULLS LAST, d.device_user_id`)).rows;
+      `SELECT d.device_user_id, e.name, e.work_email, e.emp_no FROM device_users d JOIN employees e ON e.id = d.employee_id WHERE e.status <> 'offboarded' ORDER BY nullif(regexp_replace(d.device_user_id, '\\D', '', 'g'), '')::numeric NULLS LAST, d.device_user_id`)).rows;
     const unmatched = (await pool.query(
       `SELECT device_user_id, count(*)::int AS punches, to_char(min(punched_at), 'YYYY-MM-DD') AS first_day, to_char(max(punched_at), 'YYYY-MM-DD') AS last_day
        FROM device_unmatched GROUP BY 1 ORDER BY nullif(regexp_replace(device_user_id, '\\D', '', 'g'), '')::numeric NULLS LAST, 1`)).rows;

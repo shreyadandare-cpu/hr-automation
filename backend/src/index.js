@@ -14,6 +14,7 @@ import { leaveRouter } from "./leave.js";
 import { postsRouter } from "./posts.js";
 import { leaveDigestRouter, runLeaveDigest } from "./leave-digest.js";
 import { attendanceRouter } from "./attendance.js";
+import { assetsRouter } from "./assets.js";
 import { deviceRouter } from "./device.js";
 import { startPortalAttendanceSync } from "./portal-attendance.js";
 import { payslipsRouter } from "./payslips.js";
@@ -21,7 +22,8 @@ import { claudeMode, grantClaude, removeClaude, recordAccess } from "./anthropic
 import { offboardingRouter, runDue } from "./offboarding.js";
 import { clearanceRouter } from "./clearance.js";
 import { onboardingErrors, detailsErrors, maskAadhaar, maskPan, maskAcct } from "./validate.js";
-import { createGoogleUser, generatePassword, googleMode } from "./google.js";
+import { createGoogleUser, generatePassword, googleMode, assignLicense } from "./google.js";
+import { mailPlanOf } from "./mail-plan.js";
 import { mailConfigured, sendWorkAccountEmail } from "./mail.js";
 import { reimbursementsRouter, runReimbursementReminders } from "./reimbursements.js";
 import { budgetsRouter, runBudgetReminders } from "./budgets.js";
@@ -116,7 +118,7 @@ app.get("/api/roster", wrap(async (_req, res) => {
        (SELECT extract(epoch FROM ph.updated_at)::bigint FROM profile_photos ph WHERE lower(ph.email) = lower(e.work_email)) AS photo_v
      FROM employees e ORDER BY e.id`);
   res.json(rows.map((r) => ({ id: r.id, no: r.emp_no, name: r.name, email: r.work_email, title: r.title, subTitle: r.sub_title,
-    location: r.work_location, manager: r.manager, start: r.start_date, lastDay: r.last_day, status: r.status, employmentType: r.employment_type, projects: r.projects, photoV: r.photo_v })));
+    location: r.work_location, manager: r.manager, start: r.start_date, lastDay: r.last_day, status: r.status, employmentType: r.employment_type, mailPlan: mailPlanOf(r.title), projects: r.projects, photoV: r.photo_v })));
 }));
 
 // Who the signed-in person is for project work: HR, a manager (has a team) or a project lead may start projects; HR or a project's lead manages its members.
@@ -130,8 +132,7 @@ async function projectActor(req) {
 // A project is closed once it is marked Completed or its end date has passed. Closed projects cannot be changed by anyone.
 const isClosed = (p) => p.status === "Completed" || (!!p.end_date && String(p.end_date instanceof Date ? p.end_date.toISOString() : p.end_date).slice(0, 10) < new Date().toISOString().slice(0, 10));
 const CLOSED_MSG = "This project is closed, so it can no longer be changed.";
-// Taking people off a project, or handing their work over, is the project lead's call alone (HR included does not do it).
-const isProjectLead = (actor, project) => !!actor.name && String(project.project_lead || "").toLowerCase() === actor.name.toLowerCase();
+// HR and the project's lead can take people off a project or hand their work over.
 const canManageProject = (actor, project) => actor.isHr || (!!actor.name && String(project.project_lead || "").toLowerCase() === actor.name.toLowerCase());
 
 // Every project (even ones nobody is on yet) and every allocation, for everyone signed in. `canManage` says whether this person may add people to a project.
@@ -148,7 +149,7 @@ app.get("/api/allocations", wrap(async (req, res) => {
   res.json({
     canCreate: actor.canCreate,
     projects: projects.map((p) => ({ id: p.id, name: p.name, lead: p.project_lead, start: p.start_date, end: p.end_date, status: p.status,
-      description: p.description, closed: isClosed(p), canManage: !isClosed(p) && canManageProject(actor, p), canHandover: !isClosed(p) && isProjectLead(actor, p) })),
+      description: p.description, closed: isClosed(p), canManage: !isClosed(p) && canManageProject(actor, p), canHandover: !isClosed(p) && canManageProject(actor, p) })),
     rows: rows.map((r) => ({ id: r.id, projectId: r.project_id, project: r.project, employee: r.employee, email: r.email, no: r.emp_no,
       start: r.start_date, end: r.end_date, lead: r.lead, location: r.location, status: r.status, handedOverTo: r.handed_over_to, movedTo: r.moved_to, endReason: r.end_reason })),
   });
@@ -219,7 +220,7 @@ app.post("/api/allocations/:id/end", requireAuth, wrap(async (req, res) => {
   const a = (await pool.query(`SELECT a.id, a.status, a.employee_id, a.location, e.name AS employee, p.name AS project, p.project_lead, p.status AS pstatus, p.end_date
     FROM employee_project_allocations a JOIN projects p ON p.id=a.project_id JOIN employees e ON e.id=a.employee_id WHERE a.id=$1`, [Number(req.params.id) || 0])).rows[0];
   if (!a) return res.status(404).json({ error: "Allocation not found." });
-  if (!isProjectLead(actor, a)) return res.status(403).json({ error: "Only the project lead can take people off this project or hand their work over." });
+  if (!canManageProject(actor, a)) return res.status(403).json({ error: "Only HR or the project lead can take people off this project or hand their work over." });
   if (isClosed({ status: a.pstatus, end_date: a.end_date })) return res.status(400).json({ error: CLOSED_MSG });
   if (a.status !== "Active") return res.status(400).json({ error: "This allocation has already ended." });
   const reason = ["Moved to another project", "Leaving the company", "Other"].includes(req.body?.reason) ? req.body.reason : null;
@@ -410,6 +411,14 @@ app.post("/api/onboarding/work-email", wrap(async (req, res) => {
       await pool.query("UPDATE employees SET google_status=$1, google_error=NULL WHERE lower(work_email)=$2", [status, email.toLowerCase()]);
       await pool.query("INSERT INTO audit_log (action, work_email) VALUES ($1,$2)",
         [status === "simulated" ? "Google account created (simulated)" : "Google account created and active", email]);
+      // The mail plan follows the job title. If a licence cannot be assigned the account still works; the audit log says what to do.
+      const plan = mailPlanOf(d.title);
+      try {
+        const lic = await assignLicense(email, plan);
+        await pool.query("INSERT INTO audit_log (action, work_email) VALUES ($1,$2)", [lic === "assigned" ? `Mail plan ${plan}: licence assigned` : `Mail plan ${plan} (assign the licence in the Google Admin console)`, email]);
+      } catch (err) {
+        await pool.query("INSERT INTO audit_log (action, work_email) VALUES ($1,$2)", [`Mail plan ${plan}: licence could not be assigned (${err.message})`, email]);
+      }
     } catch (err) {
       await pool.query("UPDATE employees SET google_status='failed', google_error=$1 WHERE lower(work_email)=$2", [err.message, email.toLowerCase()]);
       await pool.query("INSERT INTO audit_log (action, work_email) VALUES ($1,$2)", [`Google account failed: ${err.message}`, email]);
@@ -428,7 +437,7 @@ app.post("/api/onboarding/work-email", wrap(async (req, res) => {
   }
   if (workPassword) await pool.query("INSERT INTO audit_log (action, work_email) VALUES ($1,$2)",
     [emailed ? "Work account password emailed to the personal email" : "Work account password generated (not emailed)", email]);
-  res.status(201).json({ ...toApi(await loadRecord(email)), googleMode, workAccount: workPassword ? { emailed, password: emailed ? null : workPassword } : null });
+  res.status(201).json({ ...toApi(await loadRecord(email)), googleMode, mailPlan: mailPlanOf(d.title), workAccount: workPassword ? { emailed, password: emailed ? null : workPassword } : null });
 }));
 
 // Last step: save the tool access and mark the person as onboarded. The work email and the login must exist by now.
@@ -477,6 +486,7 @@ app.use(leaveRouter(wrap));
 app.use(postsRouter(wrap));
 app.use(leaveDigestRouter(wrap));   // HR: preview or test the daily leave digest email
 app.use(attendanceRouter(wrap));
+app.use(assetsRouter(wrap));   // IT admins only
 app.use(payslipsRouter(wrap));
 
 // The audit log: every recorded action, newest first. HR only.

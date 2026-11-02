@@ -2,15 +2,16 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { api, apiMsg } from "../api.js";
 import { useAuth } from "../auth.jsx";
 import { Callout, Person, Pill, SectionHead, Stat, hours, shortDate } from "../components/ui.jsx";
-import { ActionsCard, AttendanceLog, DayCell, StatsCard, TimingsCard, istNow, useH24, useMonths, useNow } from "../components/attendance.jsx";
+import { ActionsCard, AttendanceLog, DayCell, ForgotPunchPopup, StatsCard, TimingsCard, istNow, useH24, useMonths, useNow } from "../components/attendance.jsx";
 import Pager, { usePaged } from "../components/Pager.jsx";
 import { useData } from "../data.jsx";
+import Modal, { Field } from "../components/Modal.jsx";
 
-const TONE = { Present: "ok", "Half day": "warn", Working: "info", "Short hours": "warn", Absent: "bad", "On leave": "info", "Half day leave": "info", Weekend: "mute", Holiday: "mute", "Off-site": "info" };
+const TONE = { Present: "ok", "Half day": "warn", Working: "info", "Short hours": "warn", "On leave": "info", "No punch": "mute", "Half day leave": "info", Weekend: "mute", Holiday: "mute", "Off-site": "info" };
 const StatusPill = ({ status }) => (status ? <Pill tone={TONE[status] || (/^Worked/.test(status) ? "ok" : "mute")}>{status}</Pill> : <span className="muted">—</span>);
 
 /* Everyone for one day: HR sees all, a reporting manager sees their team. */
-function DayTable({ day, onOpen }) {
+function DayTable({ day, onOpen, onFix }) {
   const people = day.people;
   const [q, setQ] = useState("");
   const shown = useMemo(() => {
@@ -21,10 +22,9 @@ function DayTable({ day, onOpen }) {
   const count = (s) => people.filter((x) => x.status === s).length;
   return (
     <>
-      <div className="grid g4">
+      <div className="grid g3">
         <Stat value={people.filter((x) => /^(Present|Working|Half day)$/.test(x.status || "")).length} label="Punched in" />
         <Stat value={people.filter((x) => /leave$/i.test(x.status || "")).length} label="On leave" />
-        <Stat value={count("Absent")} label="Absent" alert={count("Absent") > 0} />
         <Stat value={people.filter((x) => x.missingOut).length} label="No punch out" />
       </div>
       {day.off && <p className="muted">{day.holiday || day.off}: no attendance is expected on this day.</p>}
@@ -32,13 +32,15 @@ function DayTable({ day, onOpen }) {
         <div className="filters"><input className="input grow" type="search" placeholder="Search any employee by name, email or role" aria-label="Search employees" value={q} onChange={(e) => setQ(e.target.value)} />
           {q.trim() && <span className="muted" style={{ whiteSpace: "nowrap" }}>{shown.length} of {people.length}</span>}</div>
         <div className="tbl-wrap"><table>
-        <thead><tr><th>Employee</th><th>Status</th><th>First punch</th><th>Last punch</th><th className="hide-sm">Attendance visual</th><th>Hours</th></tr></thead>
-        <tbody>{!rows.length && <tr><td colSpan="6"><div className="empty">{q.trim() ? `No one matches “${q.trim()}”.` : "No one to show."}</div></td></tr>}
+        <thead><tr><th>Employee</th><th>Status</th><th>First punch</th><th>Last punch</th><th className="hide-sm">Attendance visual</th><th>Hours</th>{onFix && <th></th>}</tr></thead>
+        <tbody>{!rows.length && <tr><td colSpan={onFix ? 7 : 6}><div className="empty">{q.trim() ? `No one matches “${q.trim()}”.` : "No one to show."}</div></td></tr>}
           {rows.map((x) => (
           <tr key={x.email} className="click" tabIndex={0} onClick={() => onOpen(x)} onKeyDown={(e) => e.key === "Enter" && onOpen(x)}>
             <td><Person name={x.name} sub={x.title || x.email} /></td>
             <td><StatusPill status={x.status} />{x.missingOut && <> <Pill tone="warn">No punch out</Pill></>}</td>
-            <td>{x.firstIn || "—"}</td><td>{x.lastPunch ? <>{x.lastPunch}{x.punchCount > 1 ? "" : <span className="muted"> · only punch</span>}</> : "—"}</td><td className="hide-sm"><DayCell x={x} /></td><td>{x.minutes ? hours(x.minutes) : x.punchCount ? <span className="muted">{x.missingOut ? "No punch out" : "Just started"}</span> : "—"}</td>
+            <td>{x.firstIn || "—"}</td><td>{x.lastPunch ? <>{x.lastPunch}{x.punchCount > 1 ? "" : <span className="muted"> · only punch</span>}</> : "—"}</td><td className="hide-sm"><DayCell x={x} /></td><td>{x.forgotOut ? <>{hours(x.minutes)}<div className="muted" style={{ fontSize: 12 }}>forgot to punch out</div></> : x.minutes ? hours(x.minutes) : x.punchCount ? <span className="muted">{x.missingOut ? "No punch out" : "Just started"}</span> : "—"}</td>
+          {onFix && <td>{day.date < day.today && (x.status === "No punch" || x.missingOut || x.forgotOut)
+              ? <button type="button" className="btn glass sm" onClick={(e) => { e.stopPropagation(); onFix(x); }}>Fix</button> : null}</td>}
           </tr>
         ))}</tbody>
       </table></div><Pager {...pager} /></div>
@@ -118,6 +120,77 @@ function DeviceCard({ say }) {
   );
 }
 
+/* HR: fix a past day without opening the person. Adds the missing in and/or out punch, with a reason that goes in the audit log. */
+function FixModal({ person, date, onClose, onDone }) {
+  const noPunch = !person.punchCount;
+  const [tin, setTin] = useState(""), [tout, setTout] = useState("");
+  const [note, setNote] = useState(noPunch ? "Missed punch" : "Forgot to punch out");
+  const [busy, setBusy] = useState(false), [error, setError] = useState("");
+  const save = async () => {
+    setBusy(true); setError("");
+    for (const [direction, time] of [["IN", tin], ["OUT", tout]]) {
+      if (!time) continue;
+      const r = await api("POST", "/api/attendance/punches", { email: person.email, date, time, direction, note });
+      if (!r.ok) { setError(apiMsg(r)); setBusy(false); return; }
+    }
+    setBusy(false);
+    await onDone(`Fixed ${person.name}'s ${shortDate(date)}.`); onClose();
+  };
+  return (
+    <Modal onClose={onClose}>
+      <div className="card-h" style={{ paddingTop: 24 }}><h3>Fix {person.name}'s day</h3></div>
+      <div className="card-b">
+        <p className="muted" style={{ margin: 0 }}>{shortDate(date)} · {noPunch ? "No punch recorded." : <>First punch {person.firstIn}, no punch out.</>}</p>
+        {noPunch && <Field id="fx-in" label="Came in at"><input id="fx-in" type="time" className="input" autoFocus value={tin} onChange={(e) => setTin(e.target.value)} /></Field>}
+        <Field id="fx-out" label="Left at"><input id="fx-out" type="time" className="input" autoFocus={!noPunch} value={tout} onChange={(e) => setTout(e.target.value)} /></Field>
+        <Field id="fx-note" label="Reason" hint="Recorded in the audit log."><input id="fx-note" className="input" maxLength={300} value={note} onChange={(e) => setNote(e.target.value)} /></Field>
+        {error && <p className="ferr" role="alert" style={{ marginTop: 12 }}>{error}</p>}
+      </div>
+      <div className="modal-f"><button type="button" className="btn glass" onClick={onClose}>Cancel</button>
+        <button type="button" className="btn primary" disabled={busy || !note.trim() || !(tin || tout)} onClick={save}>{busy ? "Saving…" : "Save"}</button></div>
+    </Modal>
+  );
+}
+
+/* HR: a month for everyone, one row per person, with a spreadsheet download. */
+function MonthlyReport({ onOpen }) {
+  const [month, setMonth] = useState(istNow().date.slice(0, 7));
+  const [d, setD] = useState(null), [error, setError] = useState(""), [q, setQ] = useState("");
+  useEffect(() => {
+    let live = true; setD(null); setError("");
+    api("GET", `/api/attendance/report?month=${month}`).then((r) => { if (!live) return; if (r.ok) setD(r.data); else setError(apiMsg(r)); });
+    return () => { live = false; };
+  }, [month]);
+  const shown = useMemo(() => {
+    const t = q.trim().toLowerCase();
+    return ((d && d.rows) || []).filter((x) => !t || `${x.no} ${x.name} ${x.email} ${x.title}`.toLowerCase().includes(t));
+  }, [d, q]);
+  const { rows, pager } = usePaged(shown, `${month}|${q}`);
+  return (
+    <div className="card">
+      <div className="filters">
+        <input className="input" type="month" aria-label="Month" value={month} max={istNow().date.slice(0, 7)} style={{ width: "auto" }} onChange={(e) => e.target.value && setMonth(e.target.value)} />
+        <input className="input grow" type="search" placeholder="Search by name, ID or email" aria-label="Search the report" value={q} onChange={(e) => setQ(e.target.value)} />
+        <a className="btn glass sm" href={`/api/attendance/report?month=${month}&format=csv`} download>Download spreadsheet</a>
+      </div>
+      {error && <Callout>{error}</Callout>}
+      <div className="tbl-wrap"><table>
+        <thead><tr><th>Employee</th><th>Working days</th><th>Present</th><th>Half days</th><th>On leave</th><th>Half-day leave</th><th>Off-site</th><th>No punch</th><th>Forgot punch out</th><th>Hours</th></tr></thead>
+        <tbody>
+          {!d && !error && <tr><td colSpan="10"><div className="empty">Loading…</div></td></tr>}
+          {d && !rows.length && <tr><td colSpan="10"><div className="empty">{q.trim() ? `No one matches “${q.trim()}”.` : "No one to show."}</div></td></tr>}
+          {rows.map((x) => (
+            <tr key={x.email} className="click" tabIndex={0} onClick={() => onOpen(x)} onKeyDown={(e) => e.key === "Enter" && onOpen(x)}>
+              <td><Person name={x.name} sub={`${x.no ? `${x.no} · ` : ""}${x.title || x.email}`} /></td>
+              <td>{x.workingDays}</td><td>{x.present}</td><td>{x.half || "—"}</td><td>{x.leave || "—"}</td><td>{x.halfLeave || "—"}</td><td>{x.offsite || "—"}</td><td>{x.noPunch || "—"}</td><td>{x.forgotOut || "—"}</td><td>{hours(x.minutes)}</td>
+            </tr>))}
+        </tbody>
+      </table></div>
+      <Pager {...pager} />
+    </div>
+  );
+}
+
 function AddPunch({ today, onAdd }) {
   const [f, setF] = useState({ date: "", time: "", direction: "IN", note: "" });
   const set = (k) => (e) => setF({ ...f, [k]: e.target.value });
@@ -165,12 +238,11 @@ function PersonView({ person, canEdit, onBack, say }) {
         <span>Reports to <b style={{ color: "var(--ink)" }}>{info.manager || "no one"}</b></span>{info.location && <span>{info.location}</span>}
         <span>Joined <b style={{ color: "var(--ink)" }}>{info.start ? shortDate(info.start) : "—"}</b></span>
         <span>{info.status === "offboarded" ? "Has left" : info.status}</span></div>}
-      {sum && <div className="grid g3">
+      {sum && <div className="grid g2">
         <div><Stat value={sum.present + sum.half} label="Days present this month" />
           {(sum.half > 0 || sum.short > 0) && <div className="muted" style={{ fontSize: 13, marginTop: 6 }}>
             {[sum.half > 0 && `includes ${sum.half} half day${sum.half === 1 ? "" : "s"}`, sum.short > 0 && `${sum.short} short day${sum.short === 1 ? "" : "s"} under 3 hours not counted`].filter(Boolean).join(" · ")}</div>}</div>
         <Stat value={sum.leave} label="Days on leave" />
-        <Stat value={sum.absent} label="Days absent" alert={sum.absent > 0} />
       </div>}
       {sum && sum.offsite > 0 && <div className="muted">Works from {info && info.location ? info.location : "another location"}: {sum.offsite} day{sum.offsite === 1 ? "" : "s"} with no office punch, not marked absent.</div>}
       {sum && <div className="muted">Hours worked this month: <b style={{ color: "var(--ink)" }}>{hours(sum.minutes)}</b></div>}
@@ -180,7 +252,7 @@ function PersonView({ person, canEdit, onBack, say }) {
     <section className="section">
       <SectionHead eyebrow={canEdit ? "Attendance" : "My team"} title={name}
         sub={canEdit ? "Every day, with the punches behind it. Open a day to see its punches, add a missed one with a reason, or remove a wrong one. Both are recorded in the audit log." : "Their attendance. Only HR can change punches."}
-        actions={<button type="button" className="btn glass sm" onClick={onBack}>{canEdit ? "Back to everyone" : "Back"}</button>} />
+        actions={<button type="button" className="back" onClick={onBack}><span className="back-ar" aria-hidden="true">←</span>{canEdit ? "Back to everyone" : "Back"}</button>} />
       {months.error && <Callout>{months.error}</Callout>}
       {details}
       <div className="att-top">
@@ -204,6 +276,8 @@ export default function Attendance() {
   const [date, setDate] = useState("");
   const [person, setPerson] = useState(null);    // { email, name } while looking at someone
   const [error, setError] = useState("");
+  const [tab, setTab] = useState("day");      // HR: the day view or the monthly report
+  const [fixing, setFixing] = useState(null);  // HR: the person whose day is being fixed
   const [toast, setToast] = useState("");
   const now = useNow(1000);
   const [h24] = useH24();
@@ -230,9 +304,15 @@ export default function Attendance() {
   if (isHr) {
     return (
       <section className="section">
-        <SectionHead eyebrow="Attendance" title="Everyone's" accent="attendance." sub="Who is in, who is on leave and who is absent, for any day. Open a person to see their days, or to fix a missed punch." actions={datePick} />
+        <SectionHead eyebrow="Attendance" title="Everyone's" accent="attendance." sub="Who is in and who is on leave, for any day. Open a person to see their days, or to fix a missed punch." actions={tab === "day" ? datePick : null} />
         {error && <Callout>{error}</Callout>}
-        {day ? <DayTable day={day} onOpen={(x) => setPerson({ email: x.email, name: x.name })} /> : <div className="empty">{error || "Loading…"}</div>}
+        <div className="row" style={{ gap: 8 }}>
+          <button type="button" className={`btn sm ${tab === "day" ? "primary" : "glass"}`} onClick={() => setTab("day")}>By day</button>
+          <button type="button" className={`btn sm ${tab === "month" ? "primary" : "glass"}`} onClick={() => setTab("month")}>Monthly report</button>
+        </div>
+        {tab === "month" ? <MonthlyReport onOpen={(x) => setPerson({ email: x.email, name: x.name })} />
+          : day ? <DayTable day={day} onOpen={(x) => setPerson({ email: x.email, name: x.name })} onFix={setFixing} /> : <div className="empty">{error || "Loading…"}</div>}
+        {fixing && day && <FixModal person={fixing} date={day.date} onClose={() => setFixing(null)} onDone={async (m) => { say(m); await loadDay(day.date); }} />}
         <DeviceCard say={say} />
         {toast && <div className="toast" role="status">{toast}</div>}
       </section>
@@ -252,6 +332,7 @@ export default function Attendance() {
             <div className="att-col"><h3 className="att-h">Today's shift</h3><TimingsCard today={today.date} punches={today.punches} minutesToday={today.minutes} now={now} h24={h24} byMonth={mine.byMonth} /></div>
             <div className="att-col"><h3 className="att-h">Punch clock</h3><ActionsCard today={today.date} state={today.state} punches={today.punches} now={now} h24={h24} /></div>
           </div>
+          <ForgotPunchPopup byMonth={mine.byMonth} today={today.date} h24={h24} />
           <AttendanceLog months={mine} today={today.date} />
         </>
       ) : <div className="empty">{error || "Loading…"}</div>}

@@ -12,6 +12,7 @@ import LeaveHr from "./pages/LeaveHr.jsx";
 import MyLeave from "./pages/MyLeave.jsx";
 import TeamLeave from "./pages/TeamLeave.jsx";
 import Allocations from "./pages/Allocations.jsx";
+import Assets from "./pages/Assets.jsx";
 import LeaveApply from "./pages/LeaveApply.jsx";
 
 /* Bigger features live in src/modules/<name>/index.jsx and export `routes = [{ path, element }]`. They are picked up here. */
@@ -27,6 +28,7 @@ export default function App() {
         <Route path="/app/account" element={<Account />} />
         <Route path="/app/users" element={<Users />} />
         <Route path="/app/employees" element={<Employees />} />
+        <Route path="/app/assets" element={<Assets />} />
         <Route path="/app/allocations" element={<Allocations />} />
         <Route path="/app/profile" element={<Profile />} />
         <Route path="/app/dashboard" element={<Dashboard />} />

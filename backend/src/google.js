@@ -65,3 +65,20 @@ export async function createGoogleUser({ email, first, last, password, personalE
     throw new Error(message(err));
   }
 }
+
+/* Optional: give the new Workspace user the licence for their mail plan. It runs only when the SKU ids are set in .env (GOOGLE_SKU_STARTER, GOOGLE_SKU_BUSINESS).
+   It needs its own delegated scope, so it never touches the sign-in used for creating users. Returns "assigned", or "skipped" when no SKU is set. */
+export async function assignLicense(email, plan) {
+  const sku = plan === "Business" ? process.env.GOOGLE_SKU_BUSINESS : process.env.GOOGLE_SKU_STARTER;
+  if (googleMode === "simulated" || !sku) return "skipped";
+  const key = JSON.parse(fs.readFileSync(keyFile, "utf8"));
+  const c = new JWT({ email: key.client_email, key: key.private_key, scopes: ["https://www.googleapis.com/auth/apps.licensing"], subject: adminEmail });
+  const product = process.env.GOOGLE_PRODUCT_ID || "Google-Apps";
+  try {
+    await c.request({ url: `https://licensing.googleapis.com/apps/licensing/v1/product/${encodeURIComponent(product)}/sku/${encodeURIComponent(sku)}/user`, method: "POST", data: { userId: email } });
+    return "assigned";
+  } catch (err) {
+    if (err.response?.status === 409) return "assigned";   // already has it
+    throw new Error(message(err));
+  }
+}

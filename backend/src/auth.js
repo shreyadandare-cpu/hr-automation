@@ -124,13 +124,13 @@ export async function endSession(req, res) {
   res.append("Set-Cookie", `${COOKIE}=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0`);
 }
 
-/** Puts { email, role } on req.user when the cookie holds a live session. */
+/** Puts { email, role, it_admin } on req.user when the cookie holds a live session. */
 export async function loadSession(req, _res, next) {
   try {
     const t = tokenOf(req);
     if (t) {
       const { rows } = await pool.query(
-        `SELECT u.email, u.role FROM sessions s JOIN users u ON lower(u.email)=lower(s.email)
+        `SELECT u.email, u.role, u.it_admin FROM sessions s JOIN users u ON lower(u.email)=lower(s.email)
          WHERE s.token_hash=$1 AND s.expires_at > now()`, [sha(t)]);
       // A session only counts for a company address, whatever else is in the table.
       if (rows[0] && isCompanyEmail(rows[0].email)) req.user = rows[0];

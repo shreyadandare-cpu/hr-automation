@@ -615,3 +615,31 @@ CREATE TABLE IF NOT EXISTS offboarding_clearances (
   month_end_window BOOLEAN NOT NULL DEFAULT false, status TEXT NOT NULL CHECK (status IN ('cleared','recovery_confirmed')),
   details JSONB NOT NULL DEFAULT '{}', completed_by TEXT NOT NULL, completed_at TIMESTAMPTZ NOT NULL DEFAULT now());
 CREATE INDEX IF NOT EXISTS offboarding_clearances_off ON offboarding_clearances (offboarding_id, id DESC);
+
+-- IT admins manage company assets (laptops, phones...). HR can switch this on per login in Manage users. It starts on for anyone whose title is IT Admin.
+ALTER TABLE users ADD COLUMN IF NOT EXISTS it_admin BOOLEAN NOT NULL DEFAULT false;
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM app_migrations WHERE key = 'it-admin-from-title') THEN
+    UPDATE users u SET it_admin = true FROM employees e WHERE lower(e.work_email) = lower(u.email) AND e.title ILIKE '%IT admin%';
+    INSERT INTO app_migrations (key) VALUES ('it-admin-from-title');
+  END IF;
+END $$;
+
+CREATE TABLE IF NOT EXISTS assets (
+  id SERIAL PRIMARY KEY,
+  tag TEXT NOT NULL UNIQUE,
+  category TEXT NOT NULL,
+  name TEXT NOT NULL,
+  serial_no TEXT,
+  purchased_on DATE, warranty_until DATE,
+  status TEXT NOT NULL DEFAULT 'In stock' CHECK (status IN ('In stock','Assigned','In repair','Retired')),
+  assigned_to INTEGER REFERENCES employees(id) ON DELETE SET NULL,
+  assigned_on DATE,
+  notes TEXT,
+  created_by TEXT, created_at TIMESTAMPTZ NOT NULL DEFAULT now(), updated_at TIMESTAMPTZ NOT NULL DEFAULT now());
+CREATE TABLE IF NOT EXISTS asset_events (
+  id SERIAL PRIMARY KEY,
+  asset_id INTEGER NOT NULL REFERENCES assets(id) ON DELETE CASCADE,
+  at TIMESTAMPTZ NOT NULL DEFAULT now(), by_email TEXT, action TEXT NOT NULL);
+CREATE INDEX IF NOT EXISTS asset_events_asset ON asset_events (asset_id, at DESC);

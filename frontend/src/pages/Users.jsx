@@ -81,14 +81,15 @@ export default function Users() {
               <div className="row"><span className="muted">{d.users.length} with a login · {(d.noLogin || []).length} without</span>
                 <input className="input" placeholder="Search by name, ID or email" aria-label="Search people" value={q} onChange={(e) => setQ(e.target.value)} style={{ maxWidth: 260 }} /></div></div>
             <div className="tbl-wrap"><table className="users-table">
-              <thead><tr><th>ID</th><th>Person</th><th>Role</th><th className="hide-sm">Last sign-in</th><th></th></tr></thead>
+              <thead><tr><th>ID</th><th>Person</th><th>Role</th><th>IT admin</th><th className="hide-sm">Last sign-in</th><th></th></tr></thead>
               <tbody>
-                {pageRows.length === 0 && <tr><td colSpan="5"><div className="empty">{q ? `No one matches “${q}”.` : "No people yet."}</div></td></tr>}
+                {pageRows.length === 0 && <tr><td colSpan="6"><div className="empty">{q ? `No one matches “${q}”.` : "No people yet."}</div></td></tr>}
                 {pageRows.map((u) => u.login ? (
                   <tr key={u.email}>
                     <td className="num-cell"><span className="emp-no">{u.no}</span></td>
                     <WhoCell name={u.name} title={u.title} email={u.email} />
                     <td><select className="input" aria-label={`Role for ${u.email}`} value={u.role} onChange={(e) => changeRole(u, e.target.value)}><option value="employee">Employee</option><option value="hr">HR</option></select></td>
+                    <td><label className="row" style={{ gap: 8 }}><input type="checkbox" aria-label={`IT admin: ${u.email}`} checked={!!u.itAdmin} onChange={(e) => act(api("PUT", `/api/users/${encodeURIComponent(u.email)}/it-admin`, { value: e.target.checked }), e.target.checked ? "Made IT admin. They can now see and manage Assets." : "IT admin removed.")} /><span className="muted">Assets</span></label></td>
                     <td className="hide-sm u-last">{u.lastLogin ? new Date(u.lastLogin).toLocaleString("en-IN", { day: "numeric", month: "short", year: "numeric", hour: "numeric", minute: "2-digit" }) : "Never"}</td>
                     <td><div className="u-actions">
                       <button type="button" className="btn glass sm" onClick={() => resend(u)}>{u.inviteExpires ? "Resend invite" : "Send invite"}</button>
@@ -102,6 +103,7 @@ export default function Users() {
                     <td className="num-cell"><span className="emp-no">{u.no}</span></td>
                     <WhoCell name={u.name} title={u.title} email={u.email} />
                     <td><span className="muted">No login yet</span></td>
+                    <td><span className="muted">—</span></td>
                     <td className="hide-sm"><span className="muted">—</span></td>
                     <td><button type="button" className="btn primary sm" onClick={() => makeLogin(u)}>Create login &amp; send invite</button></td>
                   </tr>

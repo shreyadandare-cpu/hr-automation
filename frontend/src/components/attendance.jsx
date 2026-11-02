@@ -73,7 +73,7 @@ function kind(d, today) {
   if (d.off === "Weekend") return "weekend";
   if (/leave$/i.test(d.status)) return "leave";
   if (d.status === "Off-site") return "offsite";
-  return d.date === today ? "nolog" : "absent";
+  return "nolog";
 }
 /** Break = time between an OUT and the next IN. Gross hours = first in to last out (to now for today). */
 function grossOf(d, today, nowMin) {
@@ -139,7 +139,7 @@ export function TimingsCard({ today, punches, minutesToday, now, h24, byMonth = 
     from = mins(rec.firstIn); to = rec.lastOut ? mins(rec.lastOut) : null;
     worked = rec.minutes;
     if (to === null) note = "No punch out";
-  } else if (rec) note = rec.holiday || (rec.off === "Weekend" ? "Weekly off" : /leave$/i.test(rec.status || "") ? rec.status : rec.status === "Absent" ? "Absent" : "No time entries");
+  } else if (rec) note = rec.holiday || (rec.off === "Weekend" ? "Weekly off" : /leave$/i.test(rec.status || "") ? rec.status : "No time entries");
   const fillFrom = from === null ? 0 : pct(from), fillTo = from === null ? 0 : to === null ? Math.min(100, fillFrom + 2) : pct(to);
   const title = isToday ? "Today" : dayText(pick);
   return (
@@ -158,6 +158,32 @@ export function TimingsCard({ today, punches, minutesToday, now, h24, byMonth = 
           : <span className="muted">{isToday ? "No punches yet today" : "No time entries"}</span>}</div>
       </div>
     </div>
+  );
+}
+
+/** A message for the person who forgot to punch out: it lists the finished days (from the last week) with a single punch, and says what was counted.
+    Each day is shown once on this browser; "Got it" remembers it. */
+export function ForgotPunchPopup({ byMonth, today, h24 }) {
+  const KEY = "att-forgot-seen";
+  const seen = () => { try { return JSON.parse(localStorage.getItem(KEY) || "[]"); } catch { return []; } };
+  const [done, setDone] = useState(false);
+  const from = addDays(today, -7);
+  const days = daysIn(byMonth, from, addDays(today, -1)).filter((d) => d.forgotOut && !seen().includes(d.date));
+  if (done || !days.length) return null;
+  const close = () => { try { localStorage.setItem(KEY, JSON.stringify([...new Set([...seen(), ...days.map((d) => d.date)])].slice(-60))); } catch {} setDone(true); };
+  return (
+    <Modal onClose={close}>
+      <div className="card-h" style={{ paddingTop: 24 }}><h3>You forgot to punch out</h3></div>
+      <div className="card-b">
+        <p style={{ margin: 0 }}>{days.length === 1 ? "There is only one punch for this day, so we counted your hours until the end of your shift." : "There is only one punch on each of these days, so we counted your hours until the end of your shift."}</p>
+        {days.map((d) => (
+          <div key={d.date} className="card" style={{ padding: "12px 16px" }}>
+            <b>{dayText(d.date)}</b><div className="muted">Punched in at {clock(d.firstIn, h24)}, no punch out. Counted until {clock(SHIFT.end, h24)}: <b style={{ color: "var(--ink)" }}>{dur(d.minutes)}</b>.</div>
+          </div>))}
+        <p className="muted" style={{ margin: 0 }}>If you left at a different time, ask HR to add your punch out. Please punch out every day.</p>
+      </div>
+      <div className="modal-f"><button type="button" className="btn primary" onClick={close}>Got it</button></div>
+    </Modal>
   );
 }
 
@@ -215,6 +241,7 @@ export function ActionsCard({ today, state, punches, onPunch, busy, now, h24 }) 
 /* ---- the log, and the calendar ---- */
 const LOG_ICON = { ok: "On track", warn: "Check", live: "Live" };
 function logIcon(d, today) {
+  if (d.forgotOut) return ["warn", `Forgot to punch out: the hours are counted until the end of the shift (${clock(SHIFT.end)})`];
   if (d.missingOut) return ["warn", "No punch out"];
   if (d.missingSwipe) return ["warn", "A punch in the middle has no matching return: ask HR to check the day"];
   if (d.status === "Working") return ["live", "Still working"];
@@ -235,10 +262,10 @@ function Row({ d, today, nowMin, h24, canEdit, onRemove }) {
       <>
         <tr className={`${rowClass} click`} onClick={() => setOpen(!open)} tabIndex={0} onKeyDown={(e) => e.key === "Enter" && setOpen(!open)} aria-expanded={open}>
           {date}
-          <td><DayBar firstIn={d.firstIn} lastOut={d.lastOut} open={!d.lastOut} /></td>
+          <td><DayBar firstIn={d.firstIn} lastOut={d.lastOut || (d.forgotOut ? SHIFT.end : null)} open={!d.lastOut && !d.forgotOut} /></td>
           <td className="num-cell">{dur(brk)}</td>
-          <td className="num-cell">{gross === null ? <span className="muted">No punch out</span> : dur(gross)}</td>
-          <td><span className={`att-chip ${tone}`} title={tip}>{/^Half day/.test(d.status || "") ? "Half day" : LOG_ICON[tone]}</span></td>
+          <td className="num-cell">{d.forgotOut ? <>{dur(d.minutes)}<div className="muted" style={{ fontSize: 12 }}>counted to {clock(SHIFT.end, h24)}</div></> : gross === null ? <span className="muted">No punch out</span> : dur(gross)}</td>
+          <td><span className={`att-chip ${tone}`} title={tip}>{d.forgotOut ? "Forgot punch out" : /^Half day/.test(d.status || "") ? "Half day" : LOG_ICON[tone]}</span></td>
         </tr>
         {open && <tr className="att-detail"><td colSpan="5">
           <div className="att-punches">{d.punches.map((p) => (
@@ -275,7 +302,7 @@ function Calendar({ byMonth, ensure, today, h24 }) {
           </div>))}
       </div>
       {!data && <div className="empty">Loading…</div>}
-      <div className="att-legend"><span><i className="ok" />Present</span><span><i className="warn" />Half day / short</span><span><i className="lv" />Leave</span><span><i className="hol" />Holiday</span><span><i className="off" />Weekly off</span><span><i className="bad" />Absent</span></div>
+      <div className="att-legend"><span><i className="ok" />Present</span><span><i className="warn" />Half day / short</span><span><i className="lv" />Leave</span><span><i className="hol" />Holiday</span><span><i className="off" />Weekly off</span><span><i className="lv" />Off-site</span></div>
     </div>
   );
 }

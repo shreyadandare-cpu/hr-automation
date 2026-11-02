@@ -3,6 +3,7 @@ import L from "../../frontend/leave-rules.cjs";
 import { pool } from "./db.js";
 import { requireHr } from "./auth.js";
 import { TOOL_NAMES, removeAccess } from "./connectors.js";
+import { computeClearance, inMonthEndWindow, inr, latestClearance, leaveSettlement, money, saveClearance } from "./clearance.js";
 
 // Tools offboarding removes for now: Claude only. Add ids from connectors.js (gws, gemini, github, gcp) to bring others back.
 const TOOLS = ["claude"];
@@ -68,30 +69,14 @@ async function load(db, id) {
   const { rows } = await db.query("SELECT * FROM offboardings WHERE id=$1", [id]);
   if (!rows[0]) return null;
   const o = rows[0];
-  const lc = o.work_email.toLowerCase();
-  const [steps, emp, reqs, comps, hols] = await Promise.all([
-    db.query("SELECT * FROM offboarding_steps WHERE offboarding_id=$1 ORDER BY id", [id]),
-    db.query("SELECT start_date, casual_opening, monthly_gross FROM employees WHERE lower(work_email)=$1", [lc]),
-    db.query("SELECT * FROM leave_requests WHERE lower(work_email)=$1", [lc]),
-    db.query("SELECT * FROM comp_off_credits WHERE lower(work_email)=$1", [lc]),
-    db.query("SELECT day FROM holidays"),
-  ]);
-  const e = emp.rows[0] || {};
-  const n = (v) => (v === null || v === undefined ? null : Number(v));
-  const settlement = L.exitSettlement({
-    emp: { start: e.start_date, casualOpening: n(e.casual_opening) || 0 },
-    lastDay: o.last_day,
-    requests: reqs.rows.map((r) => ({ type: r.type, from: r.from_date, to: r.to_date, half: r.half, status: r.status,
-      days: n(r.days), paidDays: n(r.paid_days), lopDays: n(r.lop_days) })),
-    compOffs: comps.rows.map((c) => ({ workedOn: c.worked_on, days: n(c.days), status: c.status })),
-    monthlyGross: n(e.monthly_gross),
-    holidays: hols.rows.map((h) => h.day),
-  });
+  const steps = await db.query("SELECT * FROM offboarding_steps WHERE offboarding_id=$1 ORDER BY id", [id]);
+  const settlement = await leaveSettlement(db, o.work_email, o.last_day);
+  const clearance = await latestClearance(db, id);
   return {
     id: o.id, email: o.work_email, lastDay: o.last_day, transferTo: o.transfer_to, status: o.status, runAt: o.run_at,
     startedAt: o.started_at, completedAt: o.completed_at,
     steps: steps.rows.map((s) => ({ kind: s.kind, key: s.key, label: s.label, status: s.status, detail: s.detail, doneAt: s.done_at })),
-    settlement,
+    settlement, clearance, monthEndWindow: inMonthEndWindow(o.last_day),
   };
 }
 
@@ -115,6 +100,22 @@ async function settle(db, id) {
     await audit(db, "All tool access removed", o[0].work_email);
   }
 }
+
+/** Why HR's confirmation can't be accepted as sent, as [status, message], or null when it can. */
+function clearanceProblem(c, body) {
+  const t = c.totals;
+  if (body.confirm !== true) return [400, "Confirm the financial clearance."];
+  if (t.totalRecovery > 0 && t.finalSalary === null) return [409, `Add ${c.name}'s monthly salary first: the recovery is taken from the final salary.`];
+  // The figures HR saw must be the figures in the database now (a claim or advance may have changed meanwhile).
+  if (body.expectedRecovery === undefined || money(Number(body.expectedRecovery)) !== t.totalRecovery
+    || (t.netSalary !== null && money(Number(body.expectedNet)) !== t.netSalary)) return [409, "The amounts changed since the clearance was opened. Review them again."];
+  if (c.reimbursements.awaiting.length && body.acknowledgePending !== true)
+    return [409, `${c.reimbursements.awaiting.length} reimbursement claim${c.reimbursements.awaiting.length === 1 ? " is" : "s are"} still waiting for a decision. Decide ${c.reimbursements.awaiting.length === 1 ? "it" : "them"} first, or confirm clearing without ${c.reimbursements.awaiting.length === 1 ? "it" : "them"}.`];
+  return null;
+}
+const clearanceDetail = (rec) => rec.status === "cleared"
+  ? `Financial clearance: nothing to recover${rec.netSalary !== null ? `, net salary ${inr(rec.netSalary)}` : ""}`
+  : `Financial clearance: ${inr(rec.totalRecovery)} recovered, net salary ${inr(rec.netSalary)}`;
 
 /**
  * Removes access tool by tool, Google Workspace first (that also blocks sign-in to every tool using Google login).
@@ -199,6 +200,10 @@ export function offboardingRouter(wrap) {
         const { rowCount } = await db.query("SELECT 1 FROM offboardings WHERE lower(work_email)=$1 AND status<>'cancelled'", [emp.work_email.toLowerCase()]);
         if (rowCount) errors.email = `${emp.name} is already being offboarded.`;
       }
+      // Exits on the 26th-30th must have the financial clearance checked; so must any offboarding that starts with the final settlement ticked.
+      const reviewed = !!(req.body && req.body.clearanceReviewed);
+      if (L.validDate(lastDay) && inMonthEndWindow(lastDay) && !reviewed) errors.clearance = "This exit falls on the 26th to 30th: check the outstanding reimbursements and advances in the financial clearance, then tick that you have reviewed it.";
+      else if (checklist.settlement && checklist.settlement[0] && !reviewed) errors.clearance = "Review the financial clearance before marking the final settlement cleared.";
       if (Object.keys(errors).length) return [400, { errors }];
 
       const { rows: o } = await db.query(
@@ -222,6 +227,15 @@ export function offboardingRouter(wrap) {
          WHERE lower(work_email)=$1 AND status IN ('pending','approved') AND from_date > $2`, [emp.work_email.toLowerCase(), lastDay]);
       await audit(db, when === "later" ? `Offboarding scheduled for ${lastDay}, 6:00 pm` : `Offboarding started, last working day ${lastDay}`, emp.work_email);
       if (dropped) await audit(db, `${dropped} leave request${dropped === 1 ? "" : "s"} after the last working day cancelled`, emp.work_email);
+      if (inMonthEndWindow(lastDay)) await audit(db, `Month-end exit (${lastDay}): HR confirmed the financial clearance was reviewed`, emp.work_email);
+      // Final settlement ticked at the start: the clearance is confirmed now, from the records as they are.
+      if (checklist.settlement && checklist.settlement[0]) {
+        const c = await computeClearance(db, emp.work_email, lastDay);
+        const problem = clearanceProblem(c, req.body || {});
+        if (problem) return [problem[0], { errors: { clearance: problem[1] } }];
+        const rec = await saveClearance(db, { id, work_email: emp.work_email }, req.user.email, c);
+        await db.query("UPDATE offboarding_steps SET detail=$3 WHERE offboarding_id=$1 AND key=$2", [id, "settlement", clearanceDetail(rec)]);
+      }
       return [201, { id }];
     });
     if (status >= 400) return res.status(status).json(body);
@@ -254,6 +268,7 @@ export function offboardingRouter(wrap) {
   // Tick or untick a manual task.
   r.post("/api/offboarding/:id/steps/:key", wrap(async (req, res) => {
     const done = !!(req.body && req.body.done);
+    if (done && req.params.key === "settlement") return res.status(409).json({ error: "Confirm the financial clearance to clear the final settlement.", needsClearance: true });
     let detail = null;
     if (done && req.params.key === "laptop") {
       const lp = (req.body && req.body.laptop) || {};
@@ -273,6 +288,31 @@ export function offboardingRouter(wrap) {
       await settle(db, s.offboarding_id);
       return [200, {}];
     }).then(async ([status, body]) => res.status(status).json(status < 400 ? await load(pool, Number(req.params.id)) : body));
+  }));
+
+  // HR confirms the financial clearance: figures re-worked from the database, saved with who and when, and the
+  // "Final settlement cleared" task ticked. The body only says what HR saw (to catch changes); it never sets an amount.
+  r.post("/api/offboarding/:id/clearance/complete", wrap(async (req, res) => {
+    const id = Number(req.params.id) || 0;
+    const [status, body] = await tx(null, async (db) => {
+      const { rows } = await db.query("SELECT * FROM offboardings WHERE id=$1 FOR UPDATE", [id]);
+      const o = rows[0];
+      if (!o) return [404, { error: "Offboarding not found." }];
+      if (["completed", "cancelled"].includes(o.status)) return [409, { error: "This offboarding is closed." }];
+      const { rows: st } = await db.query("SELECT * FROM offboarding_steps WHERE offboarding_id=$1 AND key='settlement' AND kind='task' FOR UPDATE", [id]);
+      if (!st[0]) return [404, { error: "This offboarding has no final settlement task." }];
+      if (st[0].status === "done") return [409, { error: "The financial clearance is already confirmed." }];
+      await db.query("SELECT 1 FROM employees WHERE lower(work_email)=$1 FOR UPDATE", [o.work_email.toLowerCase()]);
+      const c = await computeClearance(db, o.work_email, o.last_day);
+      const problem = clearanceProblem(c, req.body || {});
+      if (problem) return [problem[0], { error: problem[1] }];
+      const rec = await saveClearance(db, o, req.user.email, c);
+      await db.query("UPDATE offboarding_steps SET status='done', done_at=now(), detail=$2 WHERE id=$1", [st[0].id, clearanceDetail(rec)]);
+      await audit(db, `Checklist: ${st[0].label} (${clearanceDetail(rec)})`, o.work_email);
+      await settle(db, id);
+      return [200, {}];
+    });
+    res.status(status).json(status < 400 ? await load(pool, id) : body);
   }));
 
   // Try a tool that failed again.

@@ -1,8 +1,9 @@
 import express from "express";
 import L from "../../frontend/leave-rules.cjs";
-import { pool } from "./db.js";
+import { payPool as pool, PAYROLL_SEPARATE } from "./db.js";   // payroll may use its own database (PAYROLL_DATABASE_URL)
 import { event } from "./reimbursements.js";
-import { notify } from "./notify.js";
+import { notify as notifyAll } from "./notify.js";
+const notify = (to, n) => (PAYROLL_SEPARATE ? Promise.resolve(console.log(`Payroll on its own database, notice not sent to ${to}: ${n.title}`)) : notifyAll(to, n));
 import { buildSlip, cleanStructure, grossOf, structureFromRow } from "./payroll-calc.js";
 
 /*

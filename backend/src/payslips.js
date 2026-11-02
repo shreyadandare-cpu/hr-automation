@@ -2,7 +2,7 @@ import express from "express";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import PDFDocument from "pdfkit";
-import { pool } from "./db.js";
+import { payPool as pool } from "./db.js";   // payroll may use its own database (PAYROLL_DATABASE_URL)
 import { requireAuth } from "./auth.js";
 
 /* Payslips: everyone can see and download their own for any month HR has processed payroll for.

@@ -570,3 +570,48 @@ UPDATE employee_project_allocations a SET status='Ended', end_date=coalesce(a.en
 
 -- Whether someone joined as a regular employee or an intern.
 ALTER TABLE employees ADD COLUMN IF NOT EXISTS employment_type TEXT NOT NULL DEFAULT 'Employee';
+
+-- The company feed on the dashboard: HR posts, everyone likes and comments.
+CREATE TABLE IF NOT EXISTS posts (
+  id SERIAL PRIMARY KEY, author_email TEXT NOT NULL, body TEXT NOT NULL, created_at TIMESTAMPTZ NOT NULL DEFAULT now());
+CREATE TABLE IF NOT EXISTS post_likes (
+  post_id INT NOT NULL REFERENCES posts(id) ON DELETE CASCADE, email TEXT NOT NULL, created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (post_id, email));
+CREATE TABLE IF NOT EXISTS post_comments (
+  id SERIAL PRIMARY KEY, post_id INT NOT NULL REFERENCES posts(id) ON DELETE CASCADE, author_email TEXT NOT NULL,
+  body TEXT NOT NULL, created_at TIMESTAMPTZ NOT NULL DEFAULT now());
+CREATE INDEX IF NOT EXISTS post_comments_post ON post_comments (post_id, id);
+-- Pictures on feed posts. Uploaded first (post_id empty), then attached when the post is published.
+CREATE TABLE IF NOT EXISTS post_images (
+  id SERIAL PRIMARY KEY, post_id INT REFERENCES posts(id) ON DELETE CASCADE, uploaded_by TEXT NOT NULL,
+  stored_name TEXT NOT NULL, mime TEXT NOT NULL, position INT NOT NULL DEFAULT 0, created_at TIMESTAMPTZ NOT NULL DEFAULT now());
+CREATE INDEX IF NOT EXISTS post_images_post ON post_images (post_id, position);
+
+-- Posts get an optional title, an edited time and internal shares (to colleagues through the bell, or a copied link).
+ALTER TABLE posts ADD COLUMN IF NOT EXISTS title TEXT;
+ALTER TABLE posts ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ;
+CREATE TABLE IF NOT EXISTS post_shares (
+  id SERIAL PRIMARY KEY, post_id INT NOT NULL REFERENCES posts(id) ON DELETE CASCADE, shared_by TEXT NOT NULL,
+  shared_with TEXT, created_at TIMESTAMPTZ NOT NULL DEFAULT now());   -- shared_with empty = the link was copied
+CREATE INDEX IF NOT EXISTS post_shares_post ON post_shares (post_id);
+
+-- Money paid to an employee ahead of time (a travel advance, a salary advance) and what has been recovered of it.
+-- Outstanding = amount - recoveries; the offboarding financial clearance deducts what is still outstanding.
+CREATE TABLE IF NOT EXISTS employee_advances (
+  id SERIAL PRIMARY KEY, work_email TEXT NOT NULL, advance_date DATE NOT NULL, reason TEXT NOT NULL,
+  amount NUMERIC(12,2) NOT NULL CHECK (amount > 0), created_by TEXT NOT NULL, created_at TIMESTAMPTZ NOT NULL DEFAULT now());
+CREATE INDEX IF NOT EXISTS employee_advances_email ON employee_advances (lower(work_email));
+CREATE TABLE IF NOT EXISTS advance_recoveries (
+  id SERIAL PRIMARY KEY, advance_id INT NOT NULL REFERENCES employee_advances(id), amount NUMERIC(12,2) NOT NULL CHECK (amount > 0),
+  recovered_on DATE NOT NULL, note TEXT, recorded_by TEXT NOT NULL, offboarding_id INT REFERENCES offboardings(id),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now());
+CREATE INDEX IF NOT EXISTS advance_recoveries_advance ON advance_recoveries (advance_id);
+
+-- Each time HR confirms an offboarding's financial clearance: the figures as they were, who confirmed it and when.
+CREATE TABLE IF NOT EXISTS offboarding_clearances (
+  id SERIAL PRIMARY KEY, offboarding_id INT NOT NULL REFERENCES offboardings(id), work_email TEXT NOT NULL, exit_date DATE NOT NULL,
+  final_salary NUMERIC(12,2), reimbursements_payable NUMERIC(12,2) NOT NULL DEFAULT 0, advance_outstanding NUMERIC(12,2) NOT NULL DEFAULT 0,
+  total_recovery NUMERIC(12,2) NOT NULL DEFAULT 0, net_salary NUMERIC(12,2), final_payout NUMERIC(12,2),
+  month_end_window BOOLEAN NOT NULL DEFAULT false, status TEXT NOT NULL CHECK (status IN ('cleared','recovery_confirmed')),
+  details JSONB NOT NULL DEFAULT '{}', completed_by TEXT NOT NULL, completed_at TIMESTAMPTZ NOT NULL DEFAULT now());
+CREATE INDEX IF NOT EXISTS offboarding_clearances_off ON offboarding_clearances (offboarding_id, id DESC);

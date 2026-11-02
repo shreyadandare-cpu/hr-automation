@@ -11,6 +11,8 @@ import { NEW_FROM, TOOLS, isTop, mgrOf, toolIds } from "../../lib/people.js";
 import { lc, useLeave } from "../../lib/useLeave.js";
 import { AppLoginCard } from "./access.jsx";
 import { HistoryCard, LaptopReturnModal, LeaveCard, ProjectsCard, TeamCard, OffCard, RecordCard, ReimbCard, fdate } from "./cards.jsx";
+import { AdvancesCard } from "./advances.jsx";
+import { ClearanceCard, ClearanceConfirm } from "../offboarding/FinancialClearance.jsx";
 import { getLocal, patchLocal, useLocal } from "./local.js";
 
 const ON_TASKS = ["Laptop issued", "Policy documents signed"];
@@ -179,6 +181,8 @@ function EmployeeView({ p }) {
     }
     if (!rec) return;
     if (checked && x.key === "laptop") { setModal("laptop"); return; }
+    // The final settlement is cleared only through the financial clearance (the server refuses a plain tick).
+    if (checked && x.key === "settlement") { setModal("clearance"); return; }
     const r = await api("POST", `/api/offboarding/${rec.id}/steps/${x.key}`, { done: checked });
     if (!r.ok) { toast((r.data && (r.data.error || Object.values(r.data.errors || {})[0])) || "Could not save. Try again."); return; }
     setRec(r.data); reload();
@@ -231,12 +235,17 @@ function EmployeeView({ p }) {
       {isHr && status !== "offboarded" && <AppLoginCard person={{ ...e, email: p.email }} personalEmail={record && record.personalEmail} />}
       <RecordCard e={e} record={record} docs={docs} isMe={isMe} isHr={isHr} />
       <OffCard e={e} rec={rec} scheduled={scheduled} isHr={isHr} onChanged={() => { loadRec(); reload(); }} />
+      {isHr && rec && rec.status !== "cancelled" && <ClearanceCard rec={rec} onDone={(r) => { setRec(r); reload(); }} />}
       <TeamCard e={e} isHr={isHr} isMe={isMe} />
       <ProjectsCard e={e} />
       <LeaveCard e={e} isHr={isHr} />
       {isHr && <ReimbCard e={e} />}
+      {isHr && <AdvancesCard email={p.email} name={e.name} />}
       {isHr && <HistoryCard email={p.email} />}
       {modal === "edit" && <EditModal e={e} people={people} onClose={() => setModal(null)} />}
+      {modal === "clearance" && rec && <ClearanceConfirm offboardingId={rec.id} onClose={() => setModal(null)}
+        onReview={() => { setModal(null); document.getElementById("financial-clearance")?.scrollIntoView({ behavior: "smooth" }); }}
+        onDone={(r) => { setModal(null); setRec(r); reload(); if (r.status === "completed") toast(`${e.name} is fully offboarded`); }} />}
       {modal === "laptop" && rec && <LaptopReturnModal e={e} rec={rec} today={lv.today} serial0={(loc.laptop && loc.laptop.serial) || ""} onClose={() => setModal(null)} onDone={(r) => { setRec(r); reload(); }} />}
     </section>
   );

@@ -6,7 +6,7 @@ import { mailConfigured, sendMail } from "./mail.js";
 // recorded in email_outbox as "skipped" and the app carries on. Failures are recorded too, never thrown.
 export const emailMode = () => (mailConfigured() ? "smtp" : "off");
 
-export async function sendEmail(to, subject, body) {
+export async function sendEmail(to, subject, body, html = null) {   // html: optional rich version of body
   if (!to) return;
   if (!mailConfigured()) {
     console.log(`[email skipped: SMTP not configured] to=${to} subject="${subject}"`);
@@ -14,7 +14,7 @@ export async function sendEmail(to, subject, body) {
     return;
   }
   try {
-    await sendMail({ to, subject, text: body });
+    await sendMail({ to, subject, text: body, html: html || undefined });
     await pool.query("INSERT INTO email_outbox (recipient, subject, body, status) VALUES ($1,$2,$3,'sent')", [to, subject, body]);
   } catch (err) {
     console.error("Email failed:", err.message);

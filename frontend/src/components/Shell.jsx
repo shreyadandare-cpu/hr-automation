@@ -30,7 +30,7 @@ function ThemeButton() {
   );
 }
 
-/* Finances opens a small menu with Reimbursements and, for HR, Payroll. Placed with fixed coordinates so the scrolling link row cannot clip it. */
+/* A group opens a small menu of pages. Placed with fixed coordinates so the scrolling link row cannot clip it. */
 function GroupMenu({ label, items }) {
   const { pathname } = useLocation();
   const [open, setOpen] = useState(false);
@@ -124,7 +124,7 @@ export default function Shell() {
             <img className="lg lg-light" src="/wohlig-logo.png" alt="wohlig" /><img className="lg lg-dark" src="/wohlig-logo-dark.png" alt="" /><small>HR Access Hub</small>
           </a>
           <div className="links" ref={linksRef}>
-            {links.map(([k, label]) => k === "finances" ? <GroupMenu key={k} label={label} items={[["/app/reimbursements", "Reimbursements"], ...(isHr ? [["/app/payroll", "Payroll"]] : [])]} /> : k === "workforce" ? <GroupMenu key={k} label={label} items={[["/app/employees", "Employees"], ["/app/allocations", "Allocations"]]} /> : <NavLink key={k} to={pathFor(k, isHr)} className={({ isActive }) => (isActive ? "on" : "")}>{label}</NavLink>)}
+            {links.map(([k, label]) => k === "finances" ? <GroupMenu key={k} label={label} items={[["/app/reimbursements", "Reimbursements"], ["/app/payslips", "My payslips"], ...(isHr ? [["/app/payroll", "Payroll"]] : [])]} /> : k === "workforce" ? <GroupMenu key={k} label={label} items={[["/app/employees", "Employees"], ["/app/allocations", "Allocations"]]} /> : <NavLink key={k} to={pathFor(k, isHr)} className={({ isActive }) => (isActive ? "on" : "")}>{label}</NavLink>)}
           </div>
           <NotificationBell />
           <ThemeButton />

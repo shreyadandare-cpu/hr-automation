@@ -50,7 +50,7 @@ export default function BudgetDetail() {
   }, [id, hr]);
   useEffect(() => { setSt("loading"); setB(null); window.scrollTo(0, 0); load(); }, [load]);
 
-  const back = <button className="back" onClick={() => navigate("/app/budgets")}>← {hr ? "All budget requests" : "My budget requests"}</button>;
+  const back = <button className="back" onClick={() => navigate("/app/budgets")}><span className="back-ar" aria-hidden="true">←</span>{hr ? "All budget requests" : "My budget requests"}</button>;
   if (st === "loading") return <section className="section">{back}<div className="card rb-head"><span className="skel" style={{ width: "30%" }} /><span className="skel big" style={{ width: "45%" }} /></div></section>;
   if (st !== "ready") return <section className="section">{back}<div className="card"><div className="empty">{st === "missing" ? "This budget request doesn't exist or isn't yours to see." : "Unable to load the budget request. Please try again."}</div></div></section>;
 

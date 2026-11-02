@@ -146,7 +146,7 @@ export default function ClaimDetail() {
   useEffect(() => { setSt({ state: "loading", claim: null, events: [] }); setZoom(1); setDocId(null); window.scrollTo(0, 0); load(true); }, [load]);
   useEffect(() => { if (st.state === "ready" && wantDoc.current) { wantDoc.current = false; const el = document.getElementById("rb-doc"); if (el) el.scrollIntoView({ block: "start" }); } }, [st.state]);
 
-  const back = <Link className="back" to="/app/reimbursements" style={{ textDecoration: "none" }}>← {hr ? "All reimbursements" : "My reimbursements"}</Link>;
+  const back = <Link className="back" to="/app/reimbursements" style={{ textDecoration: "none" }}><span className="back-ar" aria-hidden="true">←</span>{hr ? "All reimbursements" : "My reimbursements"}</Link>;
   if (st.state === "loading") return <section className="section" style={{ gap: 20 }}>{back}<div className="card rb-head"><Skel w="30%" /><Skel big w="45%" /><Skel w="60%" /></div><div className="card" style={{ padding: 22 }}><span className="skel" style={{ width: "100%", height: 40 }} /></div>
     <div className="rb-grid"><div className="card" style={{ padding: 22 }}><Skel w="80%" /><Skel w="60%" /></div><div className="card rb-viewer" style={{ height: 420 }} /></div></section>;
   if (st.state === "missing") return <section className="section">{back}<div className="card"><div className="empty">This claim doesn't exist or isn't yours to see.</div></div></section>;

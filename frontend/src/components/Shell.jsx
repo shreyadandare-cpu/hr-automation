@@ -9,11 +9,11 @@ import NotificationBell from "./NotificationBell.jsx";
 import NextHolidayPopup from "./NextHolidayPopup.jsx";
 
 /* Pages still in the older single page app are plain links (hash routes under /). Pages already in React stay in the app. */
-const HR_LINKS = [["dashboard", "Dashboard"], ["employees", "Employees"], ["allocations", "Allocations"], ["onboard", "Onboarding"], ["offboard", "Offboarding"], ["leave", "Leave"], ["attendance", "Attendance"], ["finances", "Finances"], ["audit", "Audit log"]];
-const EMP_LINKS = [["dashboard", "Dashboard"], ["employees", "Employees"], ["allocations", "Allocations"], ["onboard", "Onboarding"], ["offboard", "Offboarding"], ["attendance", "Attendance"], ["finances", "Finances"], ["myleave", "My leave"]];
+const HR_LINKS = [["dashboard", "Dashboard"], ["workforce", "Workforce"], ["onboard", "Onboarding"], ["offboard", "Offboarding"], ["leave", "Leave"], ["attendance", "Attendance"], ["finances", "Finances"], ["audit", "Audit log"]];
+const EMP_LINKS = [["dashboard", "Dashboard"], ["workforce", "Workforce"], ["onboard", "Onboarding"], ["offboard", "Offboarding"], ["attendance", "Attendance"], ["finances", "Finances"], ["myleave", "My leave"]];
 const REACT_PAGES = {
   dashboard: "/app/dashboard", employees: "/app/employees", allocations: "/app/allocations", onboard: "/app/onboarding", offboard: "/app/offboarding", leave: "/app/leave", attendance: "/app/attendance",
-  reimb: "/app/reimbursements", payroll: "/app/payroll", audit: "/app/audit", myleave: "/app/my-leave", team: "/app/team-leave",
+  assets: "/app/assets", reimb: "/app/reimbursements", payroll: "/app/payroll", audit: "/app/audit", myleave: "/app/my-leave", team: "/app/team-leave",
 };
 /* Onboarding is HR's wizard; for employees the same menu entry is their own documents page. */
 const pathFor = (key, isHr) => (key === "onboard" && !isHr ? "/app/documents" : REACT_PAGES[key]);
@@ -31,12 +31,11 @@ function ThemeButton() {
 }
 
 /* Finances opens a small menu with Reimbursements and, for HR, Payroll. Placed with fixed coordinates so the scrolling link row cannot clip it. */
-function FinanceMenu({ isHr }) {
+function GroupMenu({ label, items }) {
   const { pathname } = useLocation();
   const [open, setOpen] = useState(false);
   const [pos, setPos] = useState({ left: 0, top: 0 });
   const box = useRef(null), btn = useRef(null);
-  const items = [["/app/reimbursements", "Reimbursements"], ...(isHr ? [["/app/payroll", "Payroll"]] : [])];
   const on = items.some(([to]) => pathname.startsWith(to));
   useEffect(() => { setOpen(false); }, [pathname]);
   useEffect(() => {
@@ -53,8 +52,8 @@ function FinanceMenu({ isHr }) {
   };
   return (
     <span ref={box} style={{ display: "contents" }}>
-      <a href="#finances" ref={btn} className={`${on || open ? "on" : ""}`} role="button" aria-haspopup="true" aria-expanded={open}
-        onClick={(e) => { e.preventDefault(); toggle(); }}>Finances <span aria-hidden="true" style={{ fontSize: 10 }}>▾</span></a>
+      <a href={`#${label}`} ref={btn} className={`${on || open ? "on" : ""}`} role="button" aria-haspopup="true" aria-expanded={open}
+        onClick={(e) => { e.preventDefault(); toggle(); }}>{label} <span aria-hidden="true" style={{ fontSize: 10 }}>▾</span></a>
       {open && (
         <div className="acct-menu fin-menu" role="menu" style={{ position: "fixed", left: pos.left, top: pos.top, right: "auto", minWidth: 190 }}>
           {items.map(([to, label]) => <NavLink key={to} to={to} role="menuitem">{label}</NavLink>)}
@@ -98,7 +97,7 @@ function AccountMenu({ photoV }) {
 }
 
 export default function Shell() {
-  const { user, isHr, isManager } = useAuth();
+  const { user, isHr, isManager, itAdmin } = useAuth();
   const { profile } = useData();
   const photoV = (profile && profile.photoV) || null;
   const navRef = useRef(null), linksRef = useRef(null);
@@ -115,7 +114,8 @@ export default function Shell() {
     document.fonts && document.fonts.ready.then(fit);
     return () => window.removeEventListener("resize", fit);
   });
-  const links = isHr ? HR_LINKS : [...EMP_LINKS, ...(isManager ? [["team", "Team leave"]] : [])];
+  const base = isHr ? HR_LINKS : [...EMP_LINKS, ...(isManager ? [["team", "Team leave"]] : [])];
+  const links = itAdmin ? [...base.filter(([k]) => k !== "audit"), ["assets", "Assets"], ...base.filter(([k]) => k === "audit")] : base;
   return (
     <>
       <div className="wrap navbar">
@@ -124,12 +124,11 @@ export default function Shell() {
             <img className="lg lg-light" src="/wohlig-logo.png" alt="wohlig" /><img className="lg lg-dark" src="/wohlig-logo-dark.png" alt="" /><small>HR Access Hub</small>
           </a>
           <div className="links" ref={linksRef}>
-            {links.map(([k, label]) => k === "finances" ? <FinanceMenu key={k} isHr={isHr} /> : <NavLink key={k} to={pathFor(k, isHr)} className={({ isActive }) => (isActive ? "on" : "")}>{label}</NavLink>)}
+            {links.map(([k, label]) => k === "finances" ? <GroupMenu key={k} label={label} items={[["/app/reimbursements", "Reimbursements"], ...(isHr ? [["/app/payroll", "Payroll"]] : [])]} /> : k === "workforce" ? <GroupMenu key={k} label={label} items={[["/app/employees", "Employees"], ["/app/allocations", "Allocations"]]} /> : <NavLink key={k} to={pathFor(k, isHr)} className={({ isActive }) => (isActive ? "on" : "")}>{label}</NavLink>)}
           </div>
-          <AccountMenu photoV={photoV} />
           <NotificationBell />
           <ThemeButton />
-          {isHr && <NavLink className="btn primary sm cta" to="/app/onboarding">+ <span className="lbl-long">New onboarding</span></NavLink>}
+          <AccountMenu photoV={photoV} />
         </nav>
       </div>
       <main className="wrap view"><Outlet /></main>

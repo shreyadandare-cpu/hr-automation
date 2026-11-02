@@ -4,5 +4,5 @@ import { useLocation, useNavigate } from "react-router-dom";
    With no earlier page in this visit, for example when the address is opened directly, it goes to `to` instead. */
 export default function BackButton({ to = "/app/dashboard", label = "Back" }) {
   const nav = useNavigate(), here = useLocation();
-  return <button type="button" className="back" onClick={() => (here.key !== "default" ? nav(-1) : nav(to))}>← {label}</button>;
+  return <button type="button" className="back" onClick={() => (here.key !== "default" ? nav(-1) : nav(to))}><span className="back-ar" aria-hidden="true">←</span>{label}</button>;
 }

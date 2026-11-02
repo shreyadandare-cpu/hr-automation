@@ -73,7 +73,7 @@ function kind(d, today) {
   if (d.off === "Weekend") return "weekend";
   if (/leave$/i.test(d.status)) return "leave";
   if (d.status === "Off-site") return "offsite";
-  return d.date === today ? "nolog" : "absent";
+  return "nolog";
 }
 /** Break = time between an OUT and the next IN. Gross hours = first in to last out (to now for today). */
 function grossOf(d, today, nowMin) {

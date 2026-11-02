@@ -66,7 +66,7 @@ function monthDays(month, punches, leave, holidays, emp, today, nowMin) {
     if (date > today || (emp.start && date < emp.start) || (emp.lastDay && date > emp.lastDay)) status = null;
     else if (ps.length) status = date === today && nowMin < SHIFT_END_MIN ? "Working" : w.minutes >= PRESENT_MIN ? "Present" : w.minutes >= HALF_MIN ? "Half day" : (date === today ? "Working" : "Short hours");
     else if (lv) status = lv.half ? "Half day leave" : "On leave";
-    else status = off || (offSite(emp.location) ? "Off-site" : "On leave");   // no punch and no approved leave is shown as On leave, never as Absent
+    else status = off || (offSite(emp.location) ? "Off-site" : "No punch");   // only an approved leave is shown as On leave; no punch and no leave is just No punch
     if (status === "Present" && off) status = "Worked on " + off.toLowerCase();
     days.push({ date, status, off, holiday: hol.get(date) || null, firstIn: ins[0] ? ins[0].time : null, lastOut: outs.length ? outs[outs.length - 1].time : null,
       minutes: w.minutes, missingOut: w.missingOut && date !== today && !forgot, forgotOut: forgot, countedTo: forgot ? "18:30" : null, missingSwipe: !!(dd && dd.missingSwipe), site: status === "Off-site" ? emp.location : null, punches: ps });
@@ -172,12 +172,43 @@ export function attendanceRouter(wrap) {
       let status;
       if (date > now.day) status = null;
       else if (mine.length) status = date === now.day && mins(now.time) < SHIFT_END_MIN ? "Working" : w.minutes >= PRESENT_MIN ? "Present" : w.minutes >= HALF_MIN ? "Half day" : date === now.day ? "Working" : "Short hours";
-      else status = l ? (l.half ? "Half day leave" : "On leave") : off || (offSite(e.work_location) ? "Off-site" : "On leave");
+      else status = l ? (l.half ? "Half day leave" : "On leave") : off || (offSite(e.work_location) ? "Off-site" : "No punch");
       return { email: e.work_email, name: e.name, title: e.title, status, firstIn: ins[0] ? ins[0].time : mine.length ? mine[0].time : null, lastOut: outs.length ? outs[outs.length - 1].time : null,
         lastPunch: mine.length ? mine[mine.length - 1].time : null, punchCount: mine.length,
         minutes: w.minutes, missingOut: w.missingOut && date !== now.day && !forgot, forgotOut: forgot, in: mine.length > 0 && mine[mine.length - 1].direction === "IN" };
     });
     res.json({ date, today: now.day, off, holiday: hol.rows[0] ? hol.rows[0].name : null, people });
+  }));
+
+  // HR: one month for everyone, one row per person. ?format=csv downloads it as a spreadsheet file.
+  r.get("/api/attendance/report", requireHr, wrap(async (req, res) => {
+    const now = await nowIst(pool);
+    const month = String(req.query.month || now.day.slice(0, 7));
+    if (!MONTH.test(month)) return res.status(400).json({ error: "Month must look like 2026-10." });
+    const from = `${month}-01`, to = `${month}-31`;
+    const [emps, ps, lv, hol] = await Promise.all([
+      pool.query(`SELECT id, emp_no, name, work_email, title, start_date, last_day, work_location FROM employees
+                  WHERE (status <> 'offboarded' OR last_day >= $1) AND (start_date IS NULL OR start_date <= $2) AND (last_day IS NULL OR last_day >= $1)`, [from, to]),
+      pool.query(`SELECT employee_id, id, to_char(work_date,'YYYY-MM-DD') AS work_date, punch_time, direction, source, note FROM attendance_punches WHERE work_date BETWEEN $1 AND $2 ORDER BY work_date, punch_time, id`, [from, to]),
+      pool.query(`SELECT lower(work_email) AS e, to_char(from_date,'YYYY-MM-DD') AS f, to_char(to_date,'YYYY-MM-DD') AS t, half FROM leave_requests WHERE status='approved' AND from_date<=$2 AND to_date>=$1`, [from, to]),
+      pool.query("SELECT to_char(day,'YYYY-MM-DD') AS day, name FROM holidays WHERE day BETWEEN $1 AND $2", [from, to]),
+    ]);
+    const rows = emps.rows.map((e) => {
+      const days = monthDays(month, ps.rows.filter((p) => p.employee_id === e.id).map(toPunch),
+        lv.rows.filter((x) => x.e === e.work_email.toLowerCase()).map((x) => ({ from: x.f, to: x.t, half: x.half })), hol.rows,
+        { start: e.start_date && String(e.start_date).slice(0, 10), lastDay: e.last_day && String(e.last_day).slice(0, 10), location: e.work_location }, now.day, mins(now.time));
+      const sum = summarize(days), c = (f) => days.filter(f).length;
+      return { no: e.emp_no || "", name: e.name, title: e.title || "", email: e.work_email,
+        workingDays: c((d) => d.status && !d.off), present: sum.present, half: sum.half, short: sum.short, leave: c((d) => d.status === "On leave"), halfLeave: c((d) => d.status === "Half day leave"),
+        offsite: sum.offsite, noPunch: c((d) => d.status === "No punch"), forgotOut: c((d) => d.forgotOut), minutes: sum.minutes };
+    }).sort((a, b) => String(a.no).localeCompare(String(b.no), undefined, { numeric: true }) || a.name.localeCompare(b.name));
+    if (req.query.format !== "csv") return res.json({ month, rows });
+    const safe = (v) => { const t = String(v ?? ""); const x = /^[=+\-@\t\r]/.test(t) ? `'${t}` : t; return /[",\n]/.test(x) ? `"${x.replace(/"/g, '""')}"` : x; };
+    const head = ["Employee ID", "Name", "Designation", "Email", "Working days", "Present", "Half days", "Under 3 hours", "On leave", "Half-day leave", "Off-site", "No punch", "Forgot punch out", "Hours worked"];
+    const lines = rows.map((x) => [x.no, x.name, x.title, x.email, x.workingDays, x.present, x.half, x.short, x.leave, x.halfLeave, x.offsite, x.noPunch, x.forgotOut, (x.minutes / 60).toFixed(1)].map(safe).join(","));
+    res.setHeader("Content-Type", "text/csv; charset=utf-8");
+    res.setHeader("Content-Disposition", `attachment; filename="attendance-${month}.csv"`);
+    res.send("\ufeff" + [head.map(safe).join(","), ...lines].join("\r\n") + "\r\n");
   }));
 
   // HR: add a missed punch. A reason is required and goes in the audit log.

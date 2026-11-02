@@ -20,5 +20,5 @@ export function AuthProvider({ children }) {
     });
   }, [user]);
   if (!user) return null;
-  return <AuthContext.Provider value={{ user, isHr: user.role === "hr", isManager }}>{children}</AuthContext.Provider>;
+  return <AuthContext.Provider value={{ user, isHr: user.role === "hr", itAdmin: !!user.itAdmin || user.role === "hr", isManager }}>{children}</AuthContext.Provider>;
 }

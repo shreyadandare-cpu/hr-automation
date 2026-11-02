@@ -181,7 +181,7 @@ tr.click:hover td{background:rgba(66,84,212,.04)}
 .tl{display:grid;grid-template-columns:12px minmax(0,1fr);gap:12px;padding:10px 24px}
 .tl .dot{margin-top:8px}
 .tl .meta{font-size:12px;color:var(--ink-faint)}
-.progress{height:6px;border-radius:999px;background:rgba(66,84,212,.08);overflow:hidden}
+.progress{height:6px;border-radius:999px;background:var(--tint);overflow:hidden}
 .progress i{display:block;height:100%;background:var(--grad-accent);border-radius:999px;transition:width .5s var(--ease)}
 
 /* Detail */
@@ -201,8 +201,11 @@ tr.click:hover td{background:rgba(66,84,212,.04)}
 .check .grow{flex:1;min-width:0}
 .check .tag{font:600 10.5px/1.4 var(--body);letter-spacing:.14em;text-transform:uppercase;color:var(--ink-faint)}
 .check.done .lbl{color:var(--ink-faint);text-decoration:line-through}
-.back{display:inline-flex;align-items:center;gap:6px;color:var(--ink-dim);font:500 14px/1 var(--display);cursor:pointer;background:none;border:0;padding:0;align-self:flex-start}
-.back:hover{color:var(--purple)}
+.back{display:inline-flex;align-items:center;gap:8px;padding:8px 18px 8px 8px;border-radius:999px;color:var(--ink);font:500 14px/1 var(--display);cursor:pointer;background:var(--surface);border:1px solid var(--card-edge);box-shadow:0 1px 2px rgba(14,10,56,.06);align-self:flex-start;text-decoration:none;transition:box-shadow .15s,transform .15s,border-color .15s}
+.back .back-ar{display:inline-grid;place-items:center;width:24px;height:24px;border-radius:50%;background:var(--tint);color:var(--purple);font-size:14px;line-height:1;transition:transform .15s}
+.back:hover{border-color:var(--purple);box-shadow:0 4px 14px rgba(77,73,221,.18)}
+.back:hover .back-ar{transform:translateX(-2px)}
+.back:focus-visible{outline:2px solid var(--purple);outline-offset:2px}
 
 /* Forms */
 .form{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px 22px}
@@ -311,7 +314,7 @@ tr.click:hover td{background:rgba(66,84,212,.04)}
 .imp-table tr.bad td{background:var(--bad-soft)}
 @media(max-width:860px){.cw-line{grid-template-columns:1fr 1fr}}
 @media(max-width:520px){.cw-line{grid-template-columns:1fr}.cw-import{padding:16px}}
-.db-masonry .rb-stats.four{grid-template-columns:repeat(2,minmax(0,1fr))}
+.db-cols .rb-stats.four{grid-template-columns:repeat(2,minmax(0,1fr))}
 .hol-table tr.past td{color:var(--ink-faint)}.hol-table tr.next td{background:var(--tint)}
 .rb-amounts{display:flex;flex-direction:column;gap:2px}
 .am-row{display:flex;justify-content:space-between;gap:12px;padding:9px 0;border-bottom:1px dashed var(--line);font-size:14.5px}.am-row:last-of-type{border-bottom:0}
@@ -472,8 +475,12 @@ body.ro [data-tool],body.ro [data-retry],body.ro [data-provision],body.ro [data-
 .db-hero h1 em{font-style:italic;font-weight:400;color:var(--purple)}
 .db-hero p{margin:10px 0 0;color:var(--ink-dim);max-width:62ch}
 .db-hero .row{margin-top:18px}
-.db-masonry{column-count:2;column-gap:22px}
-.db-masonry>.card{break-inside:avoid;margin-bottom:22px}
+.db-cols{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:22px;align-items:start}
+.db-col{display:flex;flex-direction:column;gap:22px;min-width:0}
+.db-col>.card{margin:0}
+.db{display:flex;flex-direction:column;gap:22px}
+.db-strip a.rb-stat{text-decoration:none;color:inherit;transition:box-shadow .15s,transform .15s}
+.db-strip a.rb-stat:hover{box-shadow:inset 0 0 0 1px var(--purple),0 6px 18px rgba(77,73,221,.14);transform:translateY(-1px)}
 .q-item{display:flex;align-items:center;gap:14px;padding:14px 24px;border-top:1px solid var(--line)}
 .q-item .grow{flex:1;min-width:0}
 .q-item b{display:block;font-weight:600}
@@ -514,7 +521,7 @@ body.ro [data-tool],body.ro [data-retry],body.ro [data-provision],body.ro [data-
 .cel .chip{padding-right:14px}
 .cel .chip .avatar{width:24px;height:24px;font-size:9.5px;box-shadow:none}
 .cel .chip small{color:var(--purple);font-weight:600;margin-left:2px}
-@media (max-width:1080px){.db-masonry{column-count:1}}
+@media (max-width:1080px){.db-cols{grid-template-columns:minmax(0,1fr)}}
 @media (max-width:720px){.db-hero{padding:26px 20px}.db-avatar{width:72px;height:72px;font-size:26px}.db-sky{display:none}.q-item,.step{padding-inline:16px}.mv-group,.cel,.db-bal,.db-donut{padding-inline:16px}}
 .ring>div{background:var(--surface)}
 /* Round avatar in the bar, and its menu */

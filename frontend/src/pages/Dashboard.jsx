@@ -53,8 +53,6 @@ function Move({ p, sub, right }) {
 function HrDashboard() {
   const { user } = useAuth();
   const { people, docs, leave, profile } = useData();
-  const [audit, setAudit] = useState([]);
-  useEffect(() => { api("GET", "/api/audit?limit=5").then((r) => r.ok && setAudit(r.data)); }, []);
   const today = leave ? leave.today : new Date().toISOString().slice(0, 10);
   const me = people.find((p) => p.email.toLowerCase() === user.email.toLowerCase()) || { name: user.name, color: "#4254d4" };
 
@@ -67,6 +65,7 @@ function HrDashboard() {
   for (const p of people) for (const id of Object.keys(p.errors || {})) q.push({ t: "bad", ic: "alert", title: `${TOOLS[id] ? TOOLS[id].name : id} access failed for ${p.name}`, meta: p.errors[id] || "The service rejected the request", href: empLink(p), btn: "Open" });
   const pendR = (leave ? leave.requests : []).filter((r) => r.status === "pending"), pendC = (leave ? leave.compOffs : []).filter((c) => c.status === "pending");
   const nPend = pendR.length + pendC.length;
+  const awayToday = (leave ? leave.requests : []).filter((r) => r.status === "approved" && r.from <= today && r.to >= today).length;
   if (nPend) {
     const names = [...new Set([...pendR, ...pendC].map((r) => (people.find((p) => p.email.toLowerCase() === r.email.toLowerCase()) || {}).name).filter(Boolean))];
     q.push({ t: "warn", ic: "calendar", title: `${nPend} leave request${nPend === 1 ? "" : "s"} waiting for approval`, meta: names.slice(0, 3).join(", ") + (names.length > 3 ? ` and ${names.length - 3} more` : ""), href: "/app/leave", btn: "Review" });
@@ -90,11 +89,21 @@ function HrDashboard() {
   const stepsDone = (p) => [["active", "invited"].includes(p.grants.claude), docCount(docs, p.email) > 0];
 
   return (
-    <>
+    <div className="db">
       <Hero me={me} photo={photo} today={today}
         sub={`${summary} ${active} active ${active === 1 ? "person" : "people"}${soon.length ? `, ${soon.length} joining soon` : ""}${leaving.length ? `, ${leaving.length} leaving` : ""}.`}
         actions={<><a className="btn primary" href="/app/documents">+ New onboarding</a><a className="btn glass" href="/app/offboarding"><Icon name="offboard" />Offboard someone</a></>} />
-      <div className="db-masonry">
+      <div className="rb-stats four db-strip">
+        <a className="rb-stat" href="/app/employees"><span className="lbl">Active people</span><b>{active}</b><span className="sub">{here.length} on the staff list</span></a>
+        <a className="rb-stat" href="/app/attendance"><span className="lbl">Away today</span><b>{awayToday}</b><span className="sub">on approved leave</span></a>
+        <a className={`rb-stat ${nPend ? "warn" : ""}`} href="/app/leave"><span className="lbl">Leave to approve</span><b>{nPend}</b><span className="sub">{nPend ? "waiting for you" : "nothing waiting"}</span></a>
+        <a className="rb-stat" href="/app/onboarding"><span className="lbl">New joiners</span><b>{onb.length}</b><span className="sub">{leaving.length ? `${leaving.length} leaving` : "no one leaving"}</span></a>
+      </div>
+      <div className="db-cols">
+        <div className="db-col">
+        <div className="card"><div className="card-h"><h3>People by department</h3><a className="btn link" href="/app/employees">Everyone</a></div>
+          <div className="db-donut"><Donut parts={depts} label="people" /><div className="db-legend">{depts.map((d) => <div key={d.label}><i style={{ background: d.color }} />{d.label}<span>{d.value}</span></div>)}</div></div>
+        </div>
         <div className="card"><div className="card-h"><h3>Needs you</h3><span className="muted">{q.length ? `${q.length} item${q.length === 1 ? "" : "s"}` : "Nothing waiting"}</span></div>
           {q.length ? q.map((i, k) => (
             <div key={k} className="q-item"><span className={`q-ic q-${i.t}`}><Icon name={i.ic} /></span>
@@ -102,6 +111,8 @@ function HrDashboard() {
               <a className="btn glass sm" href={i.href}>{i.btn}</a></div>))
             : <div className="q-clear"><span className="q-ic q-ok"><Icon name="check" /></span><div><b style={{ color: "var(--ink)" }}>All clear.</b><div className="meta" style={{ fontSize: 13 }}>Failed access, leave to approve and new joiners waiting on you show up here.</div></div></div>}
         </div>
+        </div>
+        <div className="db-col">
         <div className="card"><div className="card-h"><h3>People on the move</h3><span className="muted">Joining, settling in, leaving</span></div>
           <div className="mv-group">
             <h4>Starting soon</h4>
@@ -113,9 +124,6 @@ function HrDashboard() {
             {leaving.length ? leaving.slice(0, 4).map((p) => <Move key={p.id} p={p} sub={`Last day ${p.lastDay ? shortDate(p.lastDay) : "not set"}`} right={<Pill tone={STATUS[p.status][1]}>{p.status === "active" && p.lastDay ? `Leaving ${shortDate(p.lastDay)}` : STATUS[p.status][0]}</Pill>} />) : <div className="mv-empty">No one is leaving.</div>}
           </div>
         </div>
-        <div className="card"><div className="card-h"><h3>People by department</h3><a className="btn link" href="/app/employees">Everyone</a></div>
-          <div className="db-donut"><Donut parts={depts} label="people" /><div className="db-legend">{depts.map((d) => <div key={d.label}><i style={{ background: d.color }} />{d.label}<span>{d.value}</span></div>)}</div></div>
-        </div>
         <div className="card"><div className="card-h"><h3>Seats in use</h3></div><div className="card-b" style={{ display: "flex", flexDirection: "column", gap: 14 }}>
           {seats.map((x) => (
             <div key={x.t.id} style={{ display: "grid", gridTemplateColumns: "28px minmax(0,1fr) 28px", gap: 12, alignItems: "center" }}>
@@ -124,14 +132,9 @@ function HrDashboard() {
               <span className="num-cell" style={{ textAlign: "right", font: "600 18px/1 var(--display)" }}>{x.n}</span>
             </div>))}
         </div></div>
-        <div className="card"><div className="card-h"><h3>Recent activity</h3><a className="btn link" href="/app/audit">Audit log</a></div>
-          <div style={{ paddingBottom: 12 }}>{audit.length ? audit.map((a) => (
-            <div key={a.id} className="tl"><span className="dot" style={{ background: "var(--ok)" }} /><div style={{ minWidth: 0 }}>
-              <div style={{ fontSize: 14 }}><b style={{ fontWeight: 600 }}>{a.name || a.email || "System"}</b> · {a.action}</div>
-              <div className="meta">{new Date(a.ts).toLocaleString("en-IN", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}</div></div></div>))
-            : <div className="empty">No recorded actions yet.</div>}</div></div>
+        </div>
       </div>
-    </>
+    </div>
   );
 }
 
@@ -178,11 +181,12 @@ function EmployeeDashboard() {
   const pay = (c) => (c.approvedAmount != null ? c.approvedAmount : c.amount || 0);
 
   return (
-    <>
+    <div className="db">
       <Hero me={me} photo={photo} today={today}
         sub={<>{me.title && me.title !== "—" ? me.title : "Welcome"}{me.dept && me.dept !== "—" && !String(me.title || "").toLowerCase().includes(me.dept.toLowerCase()) ? ` · ${me.dept}` : ""}{mgr ? ` · Reports to ${mgr}` : ""}</>}
         actions={<><a className="btn primary" href="/app/my-leave">Request leave</a><a className="btn glass" href="/app/profile">My profile</a><a className="btn glass" href="/app/documents">Upload documents</a></>} />
-      <div className="db-masonry">
+      <div className="db-cols">
+        <div className="db-col">
         <div className="card"><div className="card-h"><h3>My leave</h3><a className="btn link" href="/app/my-leave">Details</a></div>
           {bal || <div className="card-b muted">Your leave balances show here once the leave data has loaded.</div>}
         </div>
@@ -193,6 +197,17 @@ function EmployeeDashboard() {
             <div className={`rb-stat ${todo.length ? "warn" : ""}`}><span className="lbl">Needs your action</span><b>{todo.length}</b><span className="sub">Drafts and changes asked</span></div>
             <div className="rb-stat"><span className="lbl">Paid to you</span><b>{money(cl.filter((c) => c.status === "paid").reduce((n, c) => n + (c.paidAmount || c.amount), 0))}</b></div>
           </div></div>
+        <div className="card"><div className="card-h"><h3>Coming up</h3><span className="muted">Company holidays</span></div>
+          {holidays.length ? holidays.map((h) => { const [, m, dn] = h.day.split("-").map(Number);
+            return <div key={h.day} className="q-item"><div className="dtile"><b>{dn}</b><span>{MON[m - 1]}</span></div><div className="grow"><b>{h.name}</b>
+              <div className="meta" style={{ fontSize: 13, color: "var(--ink-faint)" }}>{new Date(h.day + "T00:00:00").toLocaleDateString("en-IN", { weekday: "long" })} · {rel(today, h.day)}</div></div></div>; })
+            : <div className="card-b muted">No upcoming holidays on the calendar.</div>}
+        </div>
+        <div className="card"><div className="card-h"><h3>My tools</h3><span className="muted">{tools.length} active</span></div>
+          <div className="card-b">{tools.length ? <div className="chips">{tools.map((id) => <span key={id} className="chip"><ToolIcon tool={TOOLS[id]} state="active" />{TOOLS[id].name}</span>)}</div> : <span className="muted">No tools yet. HR gives access when you join.</span>}</div>
+        </div>
+        </div>
+        <div className="db-col">
         <div className="card"><div className="card-h"><h3>{pct === 100 ? "Your profile is complete" : "Finish setting up"}</h3><span className="muted">{done} of {steps.length}</span></div>
           <div className="db-donut" style={{ paddingBottom: 10 }}><Ring pct={pct} color="var(--purple)" label={`${pct}%`} sub="complete" size={112} />
             <div className="db-legend"><span style={{ margin: 0, textAlign: "left", color: "var(--ink-dim)" }}>{pct === 100 ? "Everything is in. Nice work." : "A fuller profile helps your team and HR."}</span></div></div>
@@ -204,17 +219,9 @@ function EmployeeDashboard() {
         <div className="card"><div className="card-h"><h3>New to the team</h3><span className="muted">Joined in the last 30 days</span></div>
           {fresh.length ? <div className="cel">{fresh.slice(0, 10).map((x) => chip(x, ""))}</div> : <div className="card-b muted">No new joiners lately.</div>}
         </div>
-        <div className="card"><div className="card-h"><h3>Coming up</h3><span className="muted">Company holidays</span></div>
-          {holidays.length ? holidays.map((h) => { const [, m, dn] = h.day.split("-").map(Number);
-            return <div key={h.day} className="q-item"><div className="dtile"><b>{dn}</b><span>{MON[m - 1]}</span></div><div className="grow"><b>{h.name}</b>
-              <div className="meta" style={{ fontSize: 13, color: "var(--ink-faint)" }}>{new Date(h.day + "T00:00:00").toLocaleDateString("en-IN", { weekday: "long" })} · {rel(today, h.day)}</div></div></div>; })
-            : <div className="card-b muted">No upcoming holidays on the calendar.</div>}
-        </div>
-        <div className="card"><div className="card-h"><h3>My tools</h3><span className="muted">{tools.length} active</span></div>
-          <div className="card-b">{tools.length ? <div className="chips">{tools.map((id) => <span key={id} className="chip"><ToolIcon tool={TOOLS[id]} state="active" />{TOOLS[id].name}</span>)}</div> : <span className="muted">No tools yet. HR gives access when you join.</span>}</div>
         </div>
       </div>
-    </>
+    </div>
   );
 }
 

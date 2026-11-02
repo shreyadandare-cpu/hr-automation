@@ -64,6 +64,7 @@ function WorkEmailCard({ ob, taken, onCreate }) {
       <div className="card"><div className="card-h"><h3>Work email</h3><span className="muted">Created in Google and active straight away</span></div>
         <div className="card-b" style={{ display: "flex", flexDirection: "column", gap: 14 }}>
           <div className="input mono" style={{ background: "var(--paper-2)", fontSize: 18 }}>{preview || "Add a first name and surname above"}</div>
+          <p style={{ margin: 0, color: "var(--ink-dim)" }}>Mail plan: <b>{/\b(director|vice president)\b/i.test(d.title || "") ? "Business" : "Starter"}</b>. Everyone is on Starter, except directors and the Vice President, who are on Business. It follows the job title.</p>
           <p style={{ margin: 0, color: "var(--ink-dim)" }}>Built as <span className="mono">name.surname@{DOMAIN}</span>, in lowercase. If the address is taken, a number is added. Fill in the details above, then create it. The name cannot be changed afterwards.</p>
           <Callout>A different password is generated for each person and emailed to their personal email. They must choose a new one at first sign-in.</Callout>
           <div className="row"><button type="button" className="btn primary" disabled={ob.busy} onClick={onCreate}>{ob.busy ? "Creating…" : "Create work email"}</button></div>

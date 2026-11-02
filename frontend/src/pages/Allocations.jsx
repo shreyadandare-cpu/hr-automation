@@ -137,7 +137,7 @@ function HandoverModal({ project, alloc, others, onClose, onDone }) {
   );
 }
 
-/* A project's people. HR and the project's lead can add someone or take them off. */
+/* A project's people. HR and the project lead can add someone or take them off. */
 function ProjectModal({ project, others, onClose, reload }) {
   const { people } = useData();
   const toast = useToast();
@@ -248,7 +248,7 @@ function ProjectTable({ rows, list, canCreate, reload }) {
               {page.map((p) => (
                 <tr key={p.id}>
                   <td><b>{p.name}</b></td>
-                  <td style={{ minWidth: 400, width: "38%" }}>
+                  <td style={{ minWidth: 280, width: "34%" }}>
                     <div><b>{p.current.length}</b> <span className="muted">current</span></div>
                     <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 6 }}>
                       {p.current.slice(0, 8).map((a) => <span key={a.id} className="pill p-mute" style={{ fontWeight: 500, padding: "5px 12px", fontSize: 13.5 }}>{a.employee}</span>)}
@@ -259,7 +259,7 @@ function ProjectTable({ rows, list, canCreate, reload }) {
                   <td style={{ whiteSpace: "nowrap" }}>{p.start ? shortDate(p.start) : dash}</td>
                   <td style={{ whiteSpace: "nowrap" }}>{p.end ? shortDate(p.end) : dash}</td>
                   <td><Pill tone={tone(p.status)}>{p.status || "Active"}</Pill></td>
-                  <td><button type="button" className="btn btn-sm" onClick={() => setOpenId(p.id)}>View</button></td>
+                  <td><button type="button" className="btn glass sm" onClick={() => setOpenId(p.id)}>View</button></td>
                 </tr>))}
             </tbody>
           </table></div>

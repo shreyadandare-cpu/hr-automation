@@ -189,7 +189,7 @@ function EmployeeView({ p }) {
     <section className="section" style={{ gap: 22 }}>
       <BackButton to="/app/employees" />
       <div className="card">
-        <div className="profile"><Avatar person={e} /><div style={{ flex: 1, minWidth: 0 }}><div className="eyebrow">{e.dept}</div><h2 style={{ marginTop: 6 }}>{e.name}</h2><div style={{ color: "var(--ink-dim)", marginTop: 2 }}>{e.title}</div></div>
+        <div className="profile"><Avatar person={e} /><div style={{ flex: 1, minWidth: 0 }}><div className="eyebrow">{e.dept}</div><h2 style={{ marginTop: 6 }}>{e.name}</h2><div style={{ color: "var(--ink-dim)", marginTop: 2 }}>{e.title}</div><div className="muted" style={{ marginTop: 6, fontSize: 13 }}>{e.email} · <span className={`pill ${e.mailPlan === "Business" ? "p-info" : "p-mute"}`}>{e.mailPlan} mail</span></div></div>
           <div className="row"><EmpPill e={e} />
             {isHr && status !== "offboarded" && <button className="btn glass sm" onClick={() => setModal("edit")}>Edit details</button>}
             {isHr && pending.length > 0 && <button className="btn primary sm" disabled={!!busy} onClick={() => toolDo("grant")}>Give access ({pending.length} tools)</button>}

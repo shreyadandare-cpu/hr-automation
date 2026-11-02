@@ -70,7 +70,7 @@ accountRouter.use(requireAuth);
 
 accountRouter.get("/me", wrap(async (req, res) => {
   const { rows } = await pool.query("SELECT name FROM employees WHERE lower(work_email)=$1", [req.user.email.toLowerCase()]);
-  res.json({ email: req.user.email, role: req.user.role, name: rows[0]?.name || req.user.email });
+  res.json({ email: req.user.email, role: req.user.role, itAdmin: !!req.user.it_admin, name: rows[0]?.name || req.user.email });
 }));
 
 accountRouter.post("/password", wrap(async (req, res) => {
@@ -88,7 +88,7 @@ accountRouter.post("/password", wrap(async (req, res) => {
 export const usersRouter = express.Router();
 usersRouter.use(requireHr);
 
-const toApi = (r) => ({ email: r.email, role: r.role, name: r.name || "", no: r.emp_no || "", title: r.title || "", lastLogin: r.last_login, createdAt: r.created_at, inviteExpires: r.invite_expires });
+const toApi = (r) => ({ email: r.email, role: r.role, itAdmin: !!r.it_admin, name: r.name || "", no: r.emp_no || "", title: r.title || "", lastLogin: r.last_login, createdAt: r.created_at, inviteExpires: r.invite_expires });
 
 usersRouter.get("/", wrap(async (_req, res) => {
   const { rows } = await pool.query(
@@ -160,6 +160,15 @@ usersRouter.put("/default-password", wrap(async (req, res) => {
   const value = String(req.body?.value || "");
   if (value.length < 8) return res.status(400).json({ error: "The default password must be at least 8 characters." });
   await setDefaultPassword(value);
+  res.json({ ok: true });
+}));
+
+// HR decides who is an IT admin (the only people who can see Assets).
+usersRouter.put("/:email/it-admin", wrap(async (req, res) => {
+  const email = req.params.email.toLowerCase(), on = req.body?.value === true;
+  const r = await pool.query("UPDATE users SET it_admin=$1 WHERE lower(email)=$2", [on, email]);
+  if (!r.rowCount) return res.status(404).json({ error: "No such account." });
+  await pool.query("INSERT INTO audit_log (action, work_email) VALUES ($1,$2)", [`${on ? "Made IT admin" : "IT admin removed"} by ${req.user.email}`, email]);
   res.json({ ok: true });
 }));
 

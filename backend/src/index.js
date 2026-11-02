@@ -3,7 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import express from "express";
-import { pool, initDb } from "./db.js";
+import { pool, payPool, PAY_SCHEMA, initDb } from "./db.js";
 import { documentsRouter } from "./documents.js";
 import { bootstrapAuth, loadSession, requireAuth, requireHr, createGoogleUser as createLogin } from "./auth.js";
 import { sessionRouter, accountRouter, usersRouter } from "./users.js";
@@ -11,6 +11,8 @@ import { profileRouter } from "./profile.js";
 import { googleRouter } from "./google-signin.js";
 import { inviteRouter, expireInvites, createInvite, INVITE_MINUTES } from "./invites.js";
 import { leaveRouter } from "./leave.js";
+import { postsRouter } from "./posts.js";
+import { leaveDigestRouter, runLeaveDigest } from "./leave-digest.js";
 import { attendanceRouter } from "./attendance.js";
 import { assetsRouter } from "./assets.js";
 import { deviceRouter } from "./device.js";
@@ -18,6 +20,7 @@ import { startPortalAttendanceSync } from "./portal-attendance.js";
 import { payslipsRouter } from "./payslips.js";
 import { claudeMode, grantClaude, removeClaude, recordAccess } from "./anthropic.js";
 import { offboardingRouter, runDue } from "./offboarding.js";
+import { clearanceRouter } from "./clearance.js";
 import { onboardingErrors, detailsErrors, maskAadhaar, maskPan, maskAcct } from "./validate.js";
 import { createGoogleUser, generatePassword, googleMode, assignLicense } from "./google.js";
 import { mailPlanOf } from "./mail-plan.js";
@@ -480,6 +483,8 @@ app.post("/api/onboarding", wrap(async (req, res) => {
 }));
 
 app.use(leaveRouter(wrap));
+app.use(postsRouter(wrap));
+app.use(leaveDigestRouter(wrap));   // HR: preview or test the daily leave digest email
 app.use(attendanceRouter(wrap));
 app.use(assetsRouter(wrap));   // IT admins only
 app.use(payslipsRouter(wrap));
@@ -526,6 +531,7 @@ app.use("/api/reimbursements", requireAuth, reimbursementsRouter);   // own clai
 app.use("/api/budget-requests", requireAuth, budgetsRouter);   // own requests for everyone; decisions are HR-only inside
 app.use("/api/payroll", requireHr, payslipAutoRouter, payrollRouter);
 app.use("/api/notifications", requireAuth, notificationsRouter);
+app.use(clearanceRouter(wrap));   // offboarding financial clearance and employee advances (HR only)
 app.use(offboardingRouter(wrap));
 
 // The page itself, so one command serves everything on the same origin.
@@ -551,6 +557,7 @@ app.use((err, _req, res, _next) => {
 });
 
 await initDb();
+if (payPool !== pool) { await initDb(payPool, PAY_SCHEMA); console.log("Payroll and payslips use their own database (PAYROLL_DATABASE_URL)"); }
 await bootstrapAuth();
 // BACKGROUND_JOBS=off: serve pages only. For a local copy pointed at the shared database, so the deployed server alone
 // runs the scheduled work (a local copy would simulate offboarding steps and skip emails, using them up for real).
@@ -574,6 +581,11 @@ else {
     .catch((err) => console.error("Automatic payslips failed:", err));
   checkPayslips();
   setInterval(checkPayslips, 60 * 60_000);
+  // One email to HR each working morning listing everyone on leave today (leave-digest.js); checked every 10 minutes, sent once a day.
+  const checkDigest = () => runLeaveDigest().then((r) => { if (r.sentTo !== undefined) console.log("Leave digest:", JSON.stringify(r)); })
+    .catch((err) => console.error("Leave digest failed:", err));
+  checkDigest();
+  setInterval(checkDigest, 10 * 60_000);
   startPortalAttendanceSync();   // copies the office device punches the Employee Portal received (only when PORTAL_ATTENDANCE_SYNC=true)
 }
 console.log(`Email: ${emailMode() === "smtp" ? "sending through SMTP" : "SMTP not configured, emails are logged and skipped"}`);

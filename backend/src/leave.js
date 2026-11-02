@@ -116,6 +116,41 @@ export function leaveRouter(wrap) {
     });
   }));
 
+  // Who is on leave today and whose birthday is coming up, for everyone signed in (like the HR home page in Keka).
+  // Only names and job titles go out: no leave type or reason, and birthdays as day and month (never the year, so no ages).
+  r.get("/api/leave/today", wrap(async (_req, res) => {
+    const today = todayIso();
+    const [away, people] = await Promise.all([
+      pool.query(
+        `SELECT DISTINCT ON (lower(e.work_email)) e.work_email, e.name, e.title, r.half
+         FROM leave_requests r JOIN employees e ON lower(e.work_email) = lower(r.work_email)
+         WHERE r.status = 'approved' AND r.from_date <= $1 AND r.to_date >= $1 AND e.status <> 'offboarded'
+         ORDER BY lower(e.work_email), r.half NULLS FIRST`, [today]),
+      // The date of birth from the person's own profile wins over the one HR entered at onboarding.
+      pool.query(
+        `SELECT e.work_email, e.name, e.title, COALESCE(NULLIF(p.data->'primary'->>'dob', ''), e.dob::text) AS dob
+         FROM employees e LEFT JOIN profiles p ON lower(p.email) = lower(e.work_email)
+         WHERE e.status <> 'offboarded'`),
+    ]);
+    // The next time each birthday falls, today included. 29 Feb is kept on 28 Feb in other years.
+    const y = Number(today.slice(0, 4));
+    const leap = (yr) => (yr % 4 === 0 && yr % 100 !== 0) || yr % 400 === 0;
+    const on = (yr, md) => (md === "02-29" && !leap(yr) ? `${yr}-02-28` : `${yr}-${md}`);
+    const limit = new Date(Date.parse(today) + 30 * 86400000).toISOString().slice(0, 10);
+    const birthdays = people.rows
+      .filter((p) => /^\d{4}-\d{2}-\d{2}/.test(p.dob || ""))
+      .map((p) => { const md = p.dob.slice(5, 10), d = on(y, md) >= today ? on(y, md) : on(y + 1, md);
+        return { email: p.work_email, name: p.name, title: p.title, date: d }; })
+      .filter((b) => b.date <= limit)
+      .sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : a.name.localeCompare(b.name)));
+    res.json({
+      today,
+      onLeave: away.rows.map((p) => ({ email: p.work_email, name: p.name, title: p.title, half: p.half || null }))
+        .sort((a, b) => a.name.localeCompare(b.name)),
+      birthdays,
+    });
+  }));
+
   r.post("/api/leave/requests", wrap(async (req, res) => {
     const { type, from, reason } = req.body || {};
     const email = isHr(req) ? req.body && req.body.email : self(req);   // employees always apply for themselves

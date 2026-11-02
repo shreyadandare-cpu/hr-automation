@@ -99,7 +99,7 @@ async function nameOf(db, email) {
 }
 
 /** HR copies: LEAVE_HR_EMAILS when set, otherwise every HR login. */
-const hrList = async () => {
+export const hrList = async () => {
   const set = (process.env.LEAVE_HR_EMAILS || "").split(",").map((s) => s.trim().toLowerCase()).filter(Boolean);
   return set.length ? set : (await hrEmails()).map((e) => e.toLowerCase());
 };

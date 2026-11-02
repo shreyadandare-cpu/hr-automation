@@ -1,6 +1,7 @@
 import express from "express";
-import { pool } from "./db.js";
-import { notify } from "./notify.js";
+import { payPool as pool, PAYROLL_SEPARATE } from "./db.js";   // payroll may use its own database (PAYROLL_DATABASE_URL)
+import { notify as notifyAll } from "./notify.js";
+const notify = (to, n) => (PAYROLL_SEPARATE ? Promise.resolve(console.log(`Payroll on its own database, notice not sent to ${to}: ${n.title}`)) : notifyAll(to, n));
 import { emailLink, linkMinutes } from "./email-links.js";
 import { lines, saveLine, tellIncluded } from "./payroll.js";
 import { istMonth, previousMonth } from "./payroll-calc.js";
@@ -26,7 +27,9 @@ const names = (list) => list.slice(0, 15).map((l) => l.name).join(", ") + (list.
 const ready = (l) => l.hasStructure && !l.incomplete.length;
 const issued = (item) => item && item.slip && item.slip.earnings && item.slip.earnings.length && !item.slip.incomplete.length;
 
-const tellReady = (people, period) => Promise.all(people.map(async (email) => notify(email, {
+const tellReady = (people, period) => PAYROLL_SEPARATE
+  ? Promise.resolve(console.log(`Payroll on its own database: payslip-ready notices for ${period} not sent`))
+  : Promise.all(people.map(async (email) => notify(email, {
   title: `Your payslip for ${monthName(period)} is ready.`, body: "View or download it in My payslips.", link: "/app/payslips",
   email: { subject: `Payslip for ${monthName(period)}`, body: `Your payslip for ${monthName(period)} is ready.\n\nView or download it here: ${await emailLink("/app/payslips")} (works for ${linkMinutes()} minutes). After that, sign in to the HR Access Hub and open My payslips.` } })));
 

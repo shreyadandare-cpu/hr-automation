@@ -6,6 +6,7 @@ import { useData } from "../data.jsx";
 import { Pill, SectionHead, shortDate } from "../components/ui.jsx";
 import { CompRequestModal, HolidayCalendar } from "../components/leaveParts.jsx";
 import { LeaveHistory, LeaveLeftPopup, LeaveStats, PolicyExplain, Ring, ViewTabs } from "../components/leaveSummary.jsx";
+import TodayCards from "../components/TodayCards.jsx";
 import { useToast } from "../components/toast.jsx";
 import { R } from "../lib/leave.js";
 import { LTYPE, dd, rangeText, useLeave } from "../lib/useLeave.js";
@@ -76,6 +77,7 @@ export default function MyLeave() {
             <button type="button" className="btn link" onClick={() => setModal("policy")}>Leave policy explanation</button>
           </div></div>
         </div>
+        {year === thisYear && <TodayCards />}
         <h3 className="lv-h">My leave stats</h3>
         <LeaveStats email={me.email} year={year} />
         <h3 className="lv-h">Leave balances {year}{future ? " (projected)" : ""}</h3>

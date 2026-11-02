@@ -3,6 +3,7 @@ import { api } from "../api.js";
 import { useAuth } from "../auth.jsx";
 import { useData } from "../data.jsx";
 import { Donut, Ring } from "../components/charts.jsx";
+import TodayCards from "../components/TodayCards.jsx";
 import { Avatar, Icon, Pill, ToolIcon, shortDate } from "../components/ui.jsx";
 import { AVATAR_COLORS, STATUS, TOOLS, docCount, mgrOf, toolIds } from "../lib/people.js";
 import { R } from "../lib/leave.js";
@@ -111,6 +112,7 @@ function HrDashboard() {
               <a className="btn glass sm" href={i.href}>{i.btn}</a></div>))
             : <div className="q-clear"><span className="q-ic q-ok"><Icon name="check" /></span><div><b style={{ color: "var(--ink)" }}>All clear.</b><div className="meta" style={{ fontSize: 13 }}>Failed access, leave to approve and new joiners waiting on you show up here.</div></div></div>}
         </div>
+        <TodayCards bare />
         </div>
         <div className="db-col">
         <div className="card"><div className="card-h"><h3>People on the move</h3><span className="muted">Joining, settling in, leaving</span></div>
@@ -190,6 +192,7 @@ function EmployeeDashboard() {
         <div className="card"><div className="card-h"><h3>My leave</h3><a className="btn link" href="/app/my-leave">Details</a></div>
           {bal || <div className="card-b muted">Your leave balances show here once the leave data has loaded.</div>}
         </div>
+        <TodayCards bare />
         <div className="card"><div className="card-h"><h3>Reimbursements</h3><div className="row" style={{ gap: 8 }}><a className="btn link sm" href="/app/reimbursements">My claims</a><a className="btn primary sm" href="/app/reimbursements">New claim</a></div></div>
           <div className="rb-stats four" style={{ padding: "0 24px 18px" }}>
             <div className="rb-stat"><span className="lbl">Added to {monthLabel(month)} salary</span><b>{money(thisMonth.reduce((n, c) => n + pay(c), 0))}</b><span className="sub">{thisMonth.length} approved claim{thisMonth.length === 1 ? "" : "s"}</span></div>

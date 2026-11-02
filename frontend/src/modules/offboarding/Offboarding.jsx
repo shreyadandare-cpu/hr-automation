@@ -11,6 +11,8 @@ import { R } from "../../lib/leave.js";
 import { STATUS, TOOLS } from "../../lib/people.js";
 import { lc, useLeave } from "../../lib/useLeave.js";
 import SettlementSummary from "./SettlementSummary.jsx";
+import { ClearancePanel, useClearance, windowText } from "./FinancialClearance.jsx";
+import { inr } from "../../lib/useLeave.js";
 
 const OW_STEPS = ["Who is leaving", "Access", "Last day & settlement", "Assets & checklist", "Review"];
 const OFF_TOOLS = ["claude"];   // offboarding handles Claude only for now
@@ -78,7 +80,7 @@ function newOw(person, today, people, startStep) {
   const mgr = e ? people.find((m) => m.name === e.manager && m.id !== e.id) : null;
   return {
     step: e ? 2 : 1, empId: e ? e.id : null, tools: e ? liveTools(e) : null, to: mgr ? mgr.email : "",
-    lastDay: today, when: "now", reviewed: false, fromReview: false, errors: {}, q: "",
+    lastDay: today, when: "now", reviewed: false, clearanceReviewed: false, ackPending: false, fromReview: false, errors: {}, q: "",
     assets: { laptop: { status: "pending", serial: "", date: today, condition: "Good", note: "" }, settlement: false }, ...(startStep ? { step: startStep } : {}),
   };
 }
@@ -93,6 +95,14 @@ function Wizard({ people, offs, initial }) {
   const e = people.find((x) => x.id === w.empId) || null;
   const tools = w.tools || (e ? liveTools(e) : []);
   const er = w.errors;
+  // Financial clearance for the chosen last day, from the server (from step 3 on).
+  const clr = useClearance({ email: w.step >= 3 && e ? e.email : null, lastDay: w.lastDay });
+  const fc = clr.c;
+  const settling = w.assets.settlement;
+  const day = Number(String(w.lastDay || "").slice(8, 10));
+  const monthEnd = R.validDate(w.lastDay || "") && day >= 26 && day <= 30;   // same window as the server (it enforces it too)
+  const needsCheck = monthEnd || settling;
+  const clearanceBlocked = settling && fc && ((fc.totals.totalRecovery > 0 && fc.totals.finalSalary === null) || (fc.reimbursements.awaiting.length > 0 && !w.ackPending));
 
   // Move focus to the first field with a problem.
   useEffect(() => {
@@ -140,8 +150,13 @@ function Wizard({ people, offs, initial }) {
     if (w.step < 5) { next(); return; }
     if (!e) return;
     if (!w.reviewed) { toast("Tick the review box before submitting."); return; }
+    if (needsCheck && !w.clearanceReviewed) { toast("Tick that you have checked the financial clearance."); return; }
+    if (settling && !fc) { toast("The financial clearance is still loading. Try again in a moment."); return; }
     const later = w.when === "later", day = w.lastDay;
-    const r = await api("POST", "/api/offboarding", { email: e.email, lastDay: day, transferTo: w.to, when: w.when, tools, checklist: w.assets });
+    const r = await api("POST", "/api/offboarding", { email: e.email, lastDay: day, transferTo: w.to, when: w.when, tools, checklist: w.assets,
+      clearanceReviewed: needsCheck ? w.clearanceReviewed : false,
+      ...(settling && fc ? { confirm: true, expectedRecovery: fc.totals.totalRecovery, expectedNet: fc.totals.netSalary, acknowledgePending: w.ackPending } : {}) });
+    if (!r.ok && r.status === 400 && r.data && r.data.errors && r.data.errors.clearance) clr.reload();
     if (!r.ok) { toast((r.data && (r.data.error || Object.values(r.data.errors || {})[0])) || apiMsg(r) || "Could not save. Try again."); return; }
     toast(later ? `Offboarding for ${e.name} scheduled for ${shortDate(day)}.` : `Access removed for ${e.name}. Finish the manual tasks to close it out.`);
     reload(); reloadLeave();   // leave after the last day may have been cancelled
@@ -200,6 +215,9 @@ function Wizard({ people, offs, initial }) {
         <Info>{w.when === "later" ? <>Access is removed automatically at <b>6:00 pm</b> on the last working day. Until then HR can remove it early or call the offboarding off.</> : "Access is removed as soon as you submit."}</Info>
       </div></div>
       <div className="card"><div className="card-h"><h3>Final settlement</h3><span className="muted">Leave only</span></div><div className="card-b" id="ow-settle"><SettlementSummary person={e} lastDay={w.lastDay} open /></div></div>
+      <div className="card" id="ow-clearance"><div className="card-h"><h3>Financial clearance</h3>
+        {fc && (fc.monthEndWindow ? <span className="pill p-warn">Month-end exit · check required</span> : <span className="muted">Reimbursements and advances</span>)}</div>
+        <div className="card-b">{fc ? <ClearancePanel c={fc} onReload={clr.reload} /> : <div className="empty">{clr.error || "Working out the clearance…"}</div>}</div></div>
     </>
   );
   if (w.step === 4) {
@@ -216,7 +234,7 @@ function Wizard({ people, offs, initial }) {
           </div></div>
         <div className="card"><div className="card-h"><h3>Exit checklist</h3><span className="muted">Tick if it's already done</span></div>
           <label className="check"><input type="checkbox" id="ow-fnf" checked={a.settlement} onChange={(x) => set({ assets: { ...a, settlement: x.target.checked } })} />
-            <div className="grow"><div className="lbl">Final settlement cleared</div><div className="tag">Leave payout and dues, see step 3</div></div></label></div>
+            <div className="grow"><div className="lbl">Final settlement cleared</div><div className="tag">Confirms the financial clearance in step 3{fc && fc.totals.totalRecovery > 0 ? `: ${inr(fc.totals.totalRecovery)} is recovered from the final salary` : ""}. Leave unticked to confirm it later from {first}'s page.</div></div></label></div>
       </>
     );
   }
@@ -230,11 +248,27 @@ function Wizard({ people, offs, initial }) {
           {OFF_TOOLS.includes("gws") && <Pairs pairs={[["Drive files and email go to", toName]]} />}</Review>
         <Review title="Last working day" step={3} go={goStep}><Pairs pairs={[["Last working day", shortDate(w.lastDay)], ["Access removed", w.when === "later" ? `On ${shortDate(w.lastDay)} at 6:00 pm` : "Right away, when you submit"]]} /></Review>
         <Review title="Final settlement" step={3} go={goStep}><SettlementSummary person={e} lastDay={w.lastDay} open /></Review>
+        <Review title="Financial clearance" step={3} go={goStep}>
+          {fc ? <>
+            {fc.monthEndWindow && <div className="callout warn-c" style={{ marginBottom: 12 }}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M12 3 2 20h20z" /><path d="M12 10v4M12 17h.01" /></svg><div><b>{windowText(fc)}.</b> The financial clearance must be checked before this offboarding is submitted.</div></div>}
+            <Pairs pairs={[["Final salary", fc.totals.finalSalary === null ? "Monthly salary not set" : inr(fc.totals.finalSalary)],
+              ["Advance recovery", fc.totals.totalRecovery ? <b style={{ color: "var(--bad)" }}>− {inr(fc.totals.totalRecovery)}</b> : "Nothing outstanding"],
+              ["Reimbursements payable", fc.totals.reimbursementsPayable ? `+ ${inr(fc.totals.reimbursementsPayable)}` : "None"],
+              ["Net salary after recovery", fc.totals.netSalary === null ? "—" : <b>{inr(fc.totals.netSalary)}</b>],
+              ["Clearance", settling ? "Confirmed when you submit" : "Confirmed later, from the checklist"]]} />
+          </> : <span className="muted">{clr.error || "Working out the clearance…"}</span>}
+        </Review>
         <Review title="Assets & checklist" step={4} go={goStep}><Pairs pairs={assetsSummary(w.assets)} /></Review>
         {open.length > 0 && <Info>Still open after you submit: <b>{open.join(", ")}</b>. The offboarding closes once {open.length === 1 ? "it is" : "they are"} ticked on the employee's checklist.</Info>}
         <div className="callout bad">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M12 3 2 20h20z" /><path d="M12 10v4M12 17h.01" /></svg>
           <div>{first} will lose access to <b>{tools.length} tool{tools.length === 1 ? "" : "s"}</b>{w.when === "later" ? ` on ${shortDate(w.lastDay)} at 6:00 pm` : " right away"}, and their HR Access Hub login is removed. Every step is written to the audit log.</div></div>
+        {needsCheck && <label className="check" style={{ border: 0, padding: 0 }}><input type="checkbox" id="ow-clearance-ok" checked={w.clearanceReviewed} onChange={(x) => set({ clearanceReviewed: x.target.checked })} />
+          <div className="grow"><div className="lbl">I have checked the outstanding reimbursements and advances (financial clearance)</div>
+            <div className="tag">{!fc ? "Working out the clearance…" : fc.totals.totalRecovery > 0 ? `${inr(fc.totals.totalRecovery)} will be recovered from the final salary` : "No outstanding employee recovery found"}</div></div></label>}
+        {settling && fc && fc.reimbursements.awaiting.length > 0 && <label className="check" style={{ border: 0, padding: 0 }}><input type="checkbox" checked={w.ackPending} onChange={(x) => set({ ackPending: x.target.checked })} />
+          <div className="grow"><div className="lbl">Clear without the {fc.reimbursements.awaiting.length} reimbursement claim{fc.reimbursements.awaiting.length === 1 ? "" : "s"} still waiting for a decision</div></div></label>}
+        {settling && fc && fc.totals.totalRecovery > 0 && fc.totals.finalSalary === null && <div className="callout bad"><div>Add the monthly salary in step 3 before clearing the final settlement: the recovery comes out of the final salary.</div></div>}
         <label className="check" style={{ border: 0, padding: 0 }}><input type="checkbox" id="ow-reviewed" checked={w.reviewed} onChange={(x) => set({ reviewed: x.target.checked })} /><div className="grow"><div className="lbl">I have reviewed all the details above</div></div></label>
       </>
     );
@@ -251,7 +285,7 @@ function Wizard({ people, offs, initial }) {
         {body}
         <div className="row" style={{ justifyContent: "space-between" }}>
           <div className="row">{w.step > 1 ? <button type="button" className="btn glass" onClick={back}>Back</button> : <button type="button" className="btn glass" onClick={() => nav("/app/employees")}>Cancel</button>}</div>
-          {w.step === 5 ? <button type="submit" className="btn danger" id="ow-submit" disabled={!w.reviewed}>{w.when === "later" ? "Schedule offboarding" : "Offboard now"}</button>
+          {w.step === 5 ? <button type="submit" className="btn danger" id="ow-submit" disabled={!w.reviewed || (needsCheck && !w.clearanceReviewed) || !!clearanceBlocked}>{w.when === "later" ? "Schedule offboarding" : "Offboard now"}</button>
             : <button type="button" className="btn primary" onClick={next}>{w.fromReview ? "Back to review" : "Continue"}</button>}
         </div>
       </form>

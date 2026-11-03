@@ -37,7 +37,7 @@ export async function notify(to, { title, body = "", link = null, email = null }
     const list = to === "hr" ? await hrEmails() : [].concat(to).filter(Boolean);
     for (const r of list) {
       await pool.query("INSERT INTO notifications (recipient, title, body, link) VALUES ($1,$2,$3,$4)", [r, title, body, link]);
-      if (email) await sendEmail(r, email.subject || title, email.body || body);
+      if (email) await sendEmail(r, email.subject || title, email.body || body, email.html || null);
     }
   } catch (err) {
     console.error("Notification failed:", err);

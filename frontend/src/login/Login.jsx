@@ -32,7 +32,7 @@ export default function Login() {
     try {
       const r = await fetch("/api/login", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email, password }) });
       const d = await r.json().catch(() => ({}));
-      if (r.ok) { location.href = "/app/dashboard"; return; }
+      if (r.ok) { location.href = "/"; return; }   // the server opens the page they came for, or the dashboard
       setError(d.error || "Could not sign in.");
     } catch { setError("Could not reach the server."); }
     setBusy(false);

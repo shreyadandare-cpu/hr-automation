@@ -118,14 +118,22 @@ export function leaveRouter(wrap) {
 
   // Who is on leave today and whose birthday is coming up, for everyone signed in (like the HR home page in Keka).
   // Only names and job titles go out: no leave type or reason, and birthdays as day and month (never the year, so no ages).
+  const UPCOMING_DAYS = 14;
   r.get("/api/leave/today", wrap(async (_req, res) => {
     const today = todayIso();
-    const [away, people] = await Promise.all([
+    const soonUntil = new Date(Date.parse(today) + UPCOMING_DAYS * 86400000).toISOString().slice(0, 10);
+    const [away, soon, people] = await Promise.all([
       pool.query(
         `SELECT DISTINCT ON (lower(e.work_email)) e.work_email, e.name, e.title, r.half
          FROM leave_requests r JOIN employees e ON lower(e.work_email) = lower(r.work_email)
          WHERE r.status = 'approved' AND r.from_date <= $1 AND r.to_date >= $1 AND e.status <> 'offboarded'
          ORDER BY lower(e.work_email), r.half NULLS FIRST`, [today]),
+      // Approved leave starting in the next UPCOMING_DAYS days. Like today's list: no leave type or reason.
+      pool.query(
+        `SELECT e.work_email, e.name, e.title, r.from_date, r.to_date, r.half, r.days
+         FROM leave_requests r JOIN employees e ON lower(e.work_email) = lower(r.work_email)
+         WHERE r.status = 'approved' AND r.from_date > $1 AND r.from_date <= $2 AND e.status <> 'offboarded'
+         ORDER BY r.from_date, e.name`, [today, soonUntil]),
       // The date of birth from the person's own profile wins over the one HR entered at onboarding.
       pool.query(
         `SELECT e.work_email, e.name, e.title, COALESCE(NULLIF(p.data->'primary'->>'dob', ''), e.dob::text) AS dob
@@ -147,6 +155,9 @@ export function leaveRouter(wrap) {
       today,
       onLeave: away.rows.map((p) => ({ email: p.work_email, name: p.name, title: p.title, half: p.half || null }))
         .sort((a, b) => a.name.localeCompare(b.name)),
+      upcomingLeave: soon.rows.map((p) => ({ email: p.work_email, name: p.name, title: p.title, from: p.from_date, to: p.to_date,
+        half: p.half || null, days: Number(p.days) })),
+      upcomingDays: UPCOMING_DAYS,
       birthdays,
     });
   }));

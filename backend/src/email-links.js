@@ -8,17 +8,17 @@ import { publicUrl } from "./mail.js";
  * EMAIL_LINK_MINUTES, 30 by default. The email holds /l/<token>; opening it in time goes to the page (which still asks
  * the person to sign in). After that it shows "This link has expired" with a sign-in button.
  * Only a hash of the token is stored, so the database alone can't be used to open a link.
- * Invitation links have their own 30-minute rule in invites.js.
+ * Invitation links have their own 30-minute rule in invites.js. Leave approval links last longer (leave-mail.js).
  */
 export const linkMinutes = () => { const n = Number(process.env.EMAIL_LINK_MINUTES || 30); return Number.isFinite(n) && n > 0 ? n : 30; };
 const sha = (s) => crypto.createHash("sha256").update(s).digest("hex");
 
-/** A link to `path` (inside this site) that works for linkMinutes(). */
-export async function emailLink(path) {
+/** A link to `path` (inside this site) that works for `minutes` (linkMinutes() by default). */
+export async function emailLink(path, minutes = linkMinutes()) {
   const target = String(path || "/").startsWith("/") ? String(path) : "/";
   const token = crypto.randomBytes(24).toString("base64url");
   await pool.query("DELETE FROM email_links WHERE expires_at < now() - interval '1 day'");   // tidy up old ones
-  await pool.query("INSERT INTO email_links (token_hash, path, expires_at) VALUES ($1,$2, now() + $3 * interval '1 minute')", [sha(token), target, linkMinutes()]);
+  await pool.query("INSERT INTO email_links (token_hash, path, expires_at) VALUES ($1,$2, now() + $3 * interval '1 minute')", [sha(token), target, minutes]);
   return `${publicUrl()}/l/${token}`;
 }
 
@@ -40,6 +40,6 @@ emailLinkRouter.get("/:token", async (req, res, next) => {
       ? await pool.query("SELECT path, expires_at < now() AS expired FROM email_links WHERE token_hash=$1", [sha(t)]) : { rows: [] };
     if (l && !l.expired) return res.redirect(l.path);
     res.status(410).type("html").send(page("This link has expired",
-      `Links in our emails work for ${linkMinutes()} minutes. Sign in to the HR Access Hub to see the latest details.`));
+      "Links in our emails work for a limited time. Sign in to the HR Access Hub to see the latest details."));
   } catch (e) { next(e); }
 });

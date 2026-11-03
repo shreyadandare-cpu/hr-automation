@@ -545,9 +545,23 @@ const distDir = path.join(frontendDir, "dist");
 const hasDist = () => fs.existsSync(path.join(distDir, "index.html"));
 const notBuilt = (res) => res.status(503).type("text").send("The interface has not been built yet. Run `npm run build:ui` in the backend folder, then reload.");
 app.use("/app/assets", express.static(path.join(distDir, "assets"), { immutable: true, maxAge: "1y" }));
-app.get("/app/*", (req, res) => (!req.user ? res.redirect("/login") : hasDist() ? res.sendFile(path.join(distDir, "index.html")) : notBuilt(res)));
-app.get("/login", (req, res) => (req.user ? res.redirect("/app/dashboard") : hasDist() ? res.sendFile(path.join(distDir, "login.html")) : notBuilt(res)));
-app.get("/", (req, res) => res.redirect(req.user ? "/app/dashboard" : "/login"));
+// A page opened while signed out (say, a leave request from an email) is remembered for 15 minutes and opened after sign-in.
+const AFTER = "hrhub_after";
+const pagePath = (p) => (/^\/app\/[A-Za-z0-9/_-]{1,200}$/.test(p) ? p : null);
+const toLogin = (req, res) => {
+  const p = pagePath(req.path);
+  if (p) res.append("Set-Cookie", `${AFTER}=${encodeURIComponent(p)}; Max-Age=900; Path=/; HttpOnly; SameSite=Lax`);
+  res.redirect("/login");
+};
+const home = (req, res) => {
+  const m = new RegExp(`(?:^|;\\s*)${AFTER}=([^;]+)`).exec(req.headers.cookie || "");
+  const p = m && pagePath(decodeURIComponent(m[1]));
+  if (m) res.append("Set-Cookie", `${AFTER}=; Max-Age=0; Path=/; HttpOnly; SameSite=Lax`);
+  res.redirect(p || "/app/dashboard");
+};
+app.get("/app/*", (req, res) => (!req.user ? toLogin(req, res) : hasDist() ? res.sendFile(path.join(distDir, "index.html")) : notBuilt(res)));
+app.get("/login", (req, res) => (req.user ? home(req, res) : hasDist() ? res.sendFile(path.join(distDir, "login.html")) : notBuilt(res)));
+app.get("/", (req, res) => (req.user ? home(req, res) : res.redirect("/login")));
 // Leave rules shared by the page and the server (no personal data in it).
 app.get("/leave-rules.js", (_req, res) => res.type("js").sendFile(path.join(frontendDir, "leave-rules.cjs")));
 

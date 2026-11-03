@@ -11,6 +11,7 @@ import Audit from "./pages/Audit.jsx";
 import LeaveHr from "./pages/LeaveHr.jsx";
 import MyLeave from "./pages/MyLeave.jsx";
 import TeamLeave from "./pages/TeamLeave.jsx";
+import LeaveReview from "./pages/LeaveReview.jsx";
 import Allocations from "./pages/Allocations.jsx";
 import Assets from "./pages/Assets.jsx";
 import LeaveApply from "./pages/LeaveApply.jsx";
@@ -37,6 +38,7 @@ export default function App() {
         <Route path="/app/leave/apply" element={<LeaveApply />} />
         <Route path="/app/my-leave" element={<MyLeave />} />
         <Route path="/app/team-leave" element={<TeamLeave />} />
+        <Route path="/app/leave/review/:id" element={<LeaveReview />} />
         {moduleRoutes.map((r) => <Route key={r.path} path={r.path} element={r.element} />)}
       </Route>
       <Route path="*" element={<Navigate to="/app/dashboard" replace />} />

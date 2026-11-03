@@ -100,11 +100,10 @@ function HrDashboard() {
         <a className={`rb-stat ${nPend ? "warn" : ""}`} href="/app/leave"><span className="lbl">Leave to approve</span><b>{nPend}</b><span className="sub">{nPend ? "waiting for you" : "nothing waiting"}</span></a>
         <a className="rb-stat" href="/app/onboarding"><span className="lbl">New joiners</span><b>{onb.length}</b><span className="sub">{leaving.length ? `${leaving.length} leaving` : "no one leaving"}</span></a>
       </div>
-      <div className="db-cols">
-        <div className="db-col">
-        <div className="card"><div className="card-h"><h3>People by department</h3><a className="btn link" href="/app/employees">Everyone</a></div>
-          <div className="db-donut"><Donut parts={depts} label="people" /><div className="db-legend">{depts.map((d) => <div key={d.label}><i style={{ background: d.color }} />{d.label}<span>{d.value}</span></div>)}</div></div>
-        </div>
+      {/* Rows of two: the cards side by side are stretched to the same height. */}
+      <div className="db-grid">
+        <TodayCards only="leave" />
+        <TodayCards only="birthdays" />
         <div className="card"><div className="card-h"><h3>Needs you</h3><span className="muted">{q.length ? `${q.length} item${q.length === 1 ? "" : "s"}` : "Nothing waiting"}</span></div>
           {q.length ? q.map((i, k) => (
             <div key={k} className="q-item"><span className={`q-ic q-${i.t}`}><Icon name={i.ic} /></span>
@@ -112,9 +111,14 @@ function HrDashboard() {
               <a className="btn glass sm" href={i.href}>{i.btn}</a></div>))
             : <div className="q-clear"><span className="q-ic q-ok"><Icon name="check" /></span><div><b style={{ color: "var(--ink)" }}>All clear.</b><div className="meta" style={{ fontSize: 13 }}>Failed access, leave to approve and new joiners waiting on you show up here.</div></div></div>}
         </div>
-        <TodayCards bare />
-        </div>
-        <div className="db-col">
+        <div className="card"><div className="card-h"><h3>Seats in use</h3></div><div className="card-b" style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+          {seats.map((x) => (
+            <div key={x.t.id} style={{ display: "grid", gridTemplateColumns: "28px minmax(0,1fr) 28px", gap: 12, alignItems: "center" }}>
+              <ToolIcon tool={x.t} state="active" />
+              <div><div style={{ fontSize: "13.5px", fontWeight: 600 }}>{x.t.name}</div><div className="progress" style={{ marginTop: 5 }}><i style={{ width: `${x.n / max * 100}%` }} /></div></div>
+              <span className="num-cell" style={{ textAlign: "right", font: "600 18px/1 var(--display)" }}>{x.n}</span>
+            </div>))}
+        </div></div>
         <div className="card"><div className="card-h"><h3>People on the move</h3><span className="muted">Joining, settling in, leaving</span></div>
           <div className="mv-group">
             <h4>Starting soon</h4>
@@ -126,14 +130,8 @@ function HrDashboard() {
             {leaving.length ? leaving.slice(0, 4).map((p) => <Move key={p.id} p={p} sub={`Last day ${p.lastDay ? shortDate(p.lastDay) : "not set"}`} right={<Pill tone={STATUS[p.status][1]}>{p.status === "active" && p.lastDay ? `Leaving ${shortDate(p.lastDay)}` : STATUS[p.status][0]}</Pill>} />) : <div className="mv-empty">No one is leaving.</div>}
           </div>
         </div>
-        <div className="card"><div className="card-h"><h3>Seats in use</h3></div><div className="card-b" style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-          {seats.map((x) => (
-            <div key={x.t.id} style={{ display: "grid", gridTemplateColumns: "28px minmax(0,1fr) 28px", gap: 12, alignItems: "center" }}>
-              <ToolIcon tool={x.t} state="active" />
-              <div><div style={{ fontSize: "13.5px", fontWeight: 600 }}>{x.t.name}</div><div className="progress" style={{ marginTop: 5 }}><i style={{ width: `${x.n / max * 100}%` }} /></div></div>
-              <span className="num-cell" style={{ textAlign: "right", font: "600 18px/1 var(--display)" }}>{x.n}</span>
-            </div>))}
-        </div></div>
+        <div className="card"><div className="card-h"><h3>People by department</h3><a className="btn link" href="/app/employees">Everyone</a></div>
+          <div className="db-donut"><Donut parts={depts} label="people" /><div className="db-legend">{depts.map((d) => <div key={d.label}><i style={{ background: d.color }} />{d.label}<span>{d.value}</span></div>)}</div></div>
         </div>
       </div>
     </div>

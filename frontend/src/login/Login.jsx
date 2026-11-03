@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import AuthLayout from "./AuthLayout.jsx";
 
 const MESSAGES = {
   invite: "That invite link has expired or was already used. Ask HR to send a new one.",
@@ -39,6 +40,7 @@ export default function Login() {
   };
 
   return (
+    <AuthLayout>
     <main className="card">
       <div className="logo">
         <img className="lg lg-light" src="/wohlig-logo.png" alt="wohlig" /><img className="lg lg-dark" src="/wohlig-logo-dark.png" alt="" />
@@ -64,5 +66,6 @@ export default function Login() {
       {googleNote && <p className="gnote">Google sign-in is not set up yet. Ask your admin to add the Google credentials.</p>}
       <p className="hint">{passwordOn ? "Email and password sign-in is on for testing." : "Can't get in? Ask HR to create your account."}</p>
     </main>
+    </AuthLayout>
   );
 }

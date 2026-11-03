@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import AuthLayout from "./AuthLayout.jsx";
 
 /* The link in the invitation email. Opening the page only checks the link: nothing is used up or activated until the
    person chooses a password and presses the button. (Mail scanners open links on their own.) */
@@ -32,6 +33,7 @@ export default function Invite() {
 
   const pending = info && info.state === "pending";
   return (
+    <AuthLayout>
     <main className="card">
       <div className="logo"><img className="lg lg-light" src="/wohlig-logo.png" alt="wohlig" /><img className="lg lg-dark" src="/wohlig-logo-dark.png" alt="" /></div>
       <div className="app-name">HR Access Hub</div>
@@ -55,5 +57,6 @@ export default function Invite() {
         <p className="hint">Next time, sign in with “Continue with Google” using your @wohlig.com account.</p>
       </>}
     </main>
+    </AuthLayout>
   );
 }

@@ -19,11 +19,6 @@ export default function AuthLayout({ children }) {
           <h2>Everything about working at wohlig, in one place.</h2>
           <ul>{POINTS.map(([ico, t, d]) => <li key={t}><span className="ico">{ico}</span><div><b>{t}</b><span>{d}</span></div></li>)}</ul>
         </div>
-        <div className="brand-peek" aria-hidden="true">
-          <div className="peek-row"><span>Today</span><em>On time</em></div>
-          <div className="peek-time">Punched in at 09:28</div>
-          <div className="peek-bar"><span /></div>
-        </div>
         <div className="brand-foot">People Ops</div>
       </aside>
       <div className="pane">{children}</div>

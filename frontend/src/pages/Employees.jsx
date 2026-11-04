@@ -74,7 +74,7 @@ export default function Employees() {
   const { isHr, user } = useAuth();
   const { people, reload } = useData();
   const toast = useToast();
-  const [giving, setGiving] = useState(null);          // HR: { done, total } while Claude access is being given to several people
+  const [refreshing, setRefreshing] = useState(false);
   const nav = useNavigate();
   const [q, setQ] = useState("");
   const [former, setFormer] = useState(false);
@@ -84,23 +84,16 @@ export default function Employees() {
   const chart = params.get("view") === "chart";
   const [scope, setScope] = useState("all");          // "all" or "team": the people under me
   const [adding, setAdding] = useState(false);        // the Add member dialog for my own team
-  // Claude access (HR). People who are here now and have no invite or seat yet.
-  const needsClaude = (p) => (p.status === "active" || p.status === "onboarding") && ["none", "failed", "revoked"].includes((p.grants || {}).claude);
-  const claudeList = isHr ? (people || []).filter(needsClaude) : [];
-  const giveClaude = async (list) => {
-    if (!list.length || giving) return;
-    if (list.length > 1 && !confirm(`Give Claude access to ${list.length} people? Each one is sent an invite from your Claude organization.`)) return;
-    let ok = 0, failed = 0, test = false, firstError = "";
-    setGiving({ done: 0, total: list.length });
-    for (const p of list) {
-      const r = await api("POST", "/api/tool-access/claude", { email: p.email, action: "grant" });
-      if (r.ok) { ok++; if (r.data && r.data.mode === "simulated") test = true; } else { failed++; firstError = firstError || apiMsg(r); }
-      setGiving({ done: ok + failed, total: list.length });
-    }
-    setGiving(null);
+  // Claude access (HR): giving it happens on the person's own page. Here HR can only refresh the status from the Claude organization.
+  const refreshClaude = async () => {
+    if (refreshing) return;
+    setRefreshing(true);
+    const r = await api("POST", "/api/tool-access/claude/refresh");
+    setRefreshing(false);
+    if (!r.ok) { toast(apiMsg(r)); return; }
+    if (r.data.mode === "simulated") { toast("Claude is not connected yet (no admin key), so there is nothing to refresh."); return; }
     await reload();
-    toast(test ? "Done as a test only: Claude is not connected yet (no admin key)."
-      : failed ? `Claude access: ${ok} invited, ${failed} failed. ${firstError}` : list.length === 1 ? `Claude access for ${list[0].name}: invited.` : `Claude access: ${ok} invited.`);
+    toast(r.data.changed ? `Claude status updated for ${r.data.changed} ${r.data.changed === 1 ? "person" : "people"}.` : "Already up to date with the Claude organization.");
   };
 
   const { direct, team } = useMemo(() => teamUnder(people, user && user.email), [people, user]);   // the people under me
@@ -136,7 +129,7 @@ export default function Employees() {
       {views}
       <SectionHead eyebrow="People" title="Everyone," accent="at a glance." sub="Everyone with a record here, and which tools they can use right now."
         actions={<>
-          {isHr && claudeList.length > 0 && <button type="button" className="btn primary sm" disabled={!!giving} onClick={() => giveClaude(claudeList)}>{giving ? `Giving Claude access… ${giving.done}/${giving.total}` : `Give Claude access to all (${claudeList.length})`}</button>}
+          {isHr && <button type="button" className="btn glass sm" disabled={refreshing} onClick={refreshClaude}>{refreshing ? "Checking…" : "Refresh Claude status"}</button>}
           {isHr && formerCount > 0 && <label className="former-toggle"><input type="checkbox" checked={former} onChange={(e) => { setFormer(e.target.checked); setPage(1); }} />Show former employees ({formerCount})</label>}
           <input className="input" placeholder="Search by name, ID, project, location or email" aria-label="Search employees" value={q} onChange={(e) => { setQ(e.target.value); setPage(1); }} />
         </>} />
@@ -161,8 +154,7 @@ export default function Employees() {
               <td className="hide-sm"><ProjectsCell person={p} /></td>
               <td><StatusPill person={p} /><div className="cell-sub">Joined {shortDate(p.start)}</div></td>
               <td><div className="apps-row">{toolIds(p).map((id) => <ToolIcon key={id} tool={TOOLS[id]} state={p.grants[id]} />)}
-                {p.grants && p.grants.claude === "invited" && <span className="cell-sub" style={{ marginLeft: 8 }}>Invited</span>}
-                {isHr && needsClaude(p) && <button type="button" className="btn link sm" style={{ marginLeft: 8 }} disabled={!!giving} onClick={() => giveClaude([p])}>Give access</button>}</div></td>
+                {p.grants && p.grants.claude === "invited" && <span className="cell-sub" style={{ marginLeft: 8 }}>Invited</span>}</div></td>
               <td className="dots-cell"><RowMenu person={p} canEdit={isHr} onView={(x) => nav(`/app/employees/${encodeURIComponent(x.email)}`)} onEdit={(x) => nav(`/app/employees/${encodeURIComponent(x.email)}?edit=1`)} /></td>
             </tr>
           )) : <tr><td colSpan="8"><div className="empty">{q ? `No one matches “${q}”.` : "No one here yet."}</div></td></tr>}

@@ -18,7 +18,7 @@ import { assetsRouter } from "./assets.js";
 import { deviceRouter } from "./device.js";
 import { startPortalAttendanceSync } from "./portal-attendance.js";
 import { payslipsRouter } from "./payslips.js";
-import { claudeMode, grantClaude, removeClaude, recordAccess, syncClaudeSoon } from "./anthropic.js";
+import { claudeMode, grantClaude, removeClaude, recordAccess, syncClaude, syncClaudeSoon } from "./anthropic.js";
 import { offboardingRouter, runDue } from "./offboarding.js";
 import { clearanceRouter } from "./clearance.js";
 import { onboardingErrors, detailsErrors, maskAadhaar, maskPan, maskAcct } from "./validate.js";
@@ -503,6 +503,14 @@ app.get("/api/tool-access", requireAuth, wrap(async (req, res) => {
   const { rows } = await pool.query("SELECT work_email, tool, status, detail FROM tool_access");
   const hr = req.user.role === "hr";   // everyone sees who has access; only HR sees the tool's own message
   res.json({ claudeMode: claudeMode(), rows: rows.map((r) => ({ email: r.work_email, tool: r.tool, status: r.status, detail: hr ? r.detail : null })) });
+}));
+// HR: check the Claude organization right now instead of waiting for the automatic check, and bring the app in line with it.
+app.post("/api/tool-access/claude/refresh", requireHr, wrap(async (req, res) => {
+  if (claudeMode() === "simulated") return res.json({ mode: "simulated", changed: 0 });
+  let changed;
+  try { changed = await syncClaude(); } catch (err) { return res.status(502).json({ error: `Claude could not be reached: ${err.message}` }); }
+  if (changed) await pool.query("INSERT INTO audit_log (action, work_email) VALUES ($1,$2)", [`Claude: status refreshed from the Claude organization, ${changed} changed (by ${req.user.email})`, req.user.email]);
+  res.json({ mode: "live", changed });
 }));
 app.post("/api/tool-access/claude", requireHr, wrap(async (req, res) => {
   const email = String((req.body && req.body.email) || "").toLowerCase();

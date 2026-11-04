@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { api, apiMsg } from "../../api.js";
 import { useAuth } from "../../auth.jsx";
 import { useData } from "../../data.jsx";
@@ -91,7 +91,7 @@ function WorkEmailCard({ ob, taken, onCreate }) {
 export default function Onboarding() {
   const { isHr } = useAuth();
   const { people, records, docs, reload } = useData();
-  const [giving, setGiving] = useState(null);   // { done, total } while invites are being sent
+  const [refreshing, setRefreshing] = useState(false);
   const toast = useToast(), nav = useNavigate();
   const [ob, setOb] = useState(newOb);
   const [pick, setPick] = useState("");
@@ -128,21 +128,15 @@ export default function Onboarding() {
   const waiting = people.filter((e) => e.status === "onboarding").sort((a, b) => a.name.localeCompare(b.name));
   // Claude access for people who are part-way through onboarding.
   const claudeOf = (x) => (x.grants && x.grants.claude) || "none";
-  const claudeDue = waiting.filter((x) => ["none", "failed", "revoked"].includes(claudeOf(x)));
-  const giveClaude = async (list) => {
-    if (!list.length || giving) return;
-    if (list.length > 1 && !confirm(`Give Claude access to ${list.length} people? Each one is sent an invite from your Claude organization.`)) return;
-    let ok = 0, failed = 0, test = false, firstError = "";
-    setGiving({ done: 0, total: list.length });
-    for (const x of list) {
-      const r = await api("POST", "/api/tool-access/claude", { email: x.email, action: "grant" });
-      if (r.ok) { ok++; if (r.data && r.data.mode === "simulated") test = true; } else { failed++; firstError = firstError || apiMsg(r); }
-      setGiving({ done: ok + failed, total: list.length });
-    }
-    setGiving(null);
+  const refreshClaude = async () => {
+    if (refreshing) return;
+    setRefreshing(true);
+    const r = await api("POST", "/api/tool-access/claude/refresh");
+    setRefreshing(false);
+    if (!r.ok) { toast(apiMsg(r)); return; }
+    if (r.data.mode === "simulated") { toast("Claude is not connected yet (no admin key), so there is nothing to refresh."); return; }
     await reload();
-    toast(test ? "Done as a test only: Claude is not connected yet (no admin key)."
-      : failed ? `Claude access: ${ok} invited, ${failed} failed. ${firstError}` : list.length === 1 ? `Claude access for ${list[0].name}: invited.` : `Claude access: ${ok} invited.`);
+    toast(r.data.changed ? `Claude status updated for ${r.data.changed} ${r.data.changed === 1 ? "person" : "people"}.` : "Already up to date with the Claude organization.");
   };
   const mgrs = people.filter((e) => e.status !== "offboarded");
   const picked = ob.email && people.find((x) => lc(x.email) === lc(ob.email));
@@ -282,7 +276,8 @@ export default function Onboarding() {
       <SectionHead eyebrow="Onboarding" title="Add a new" accent="joiner." sub="HR enters the details and the work email is created in Google. HR then creates the login, and the employee uploads their own documents later." />
       {isHr && waiting.length > 0 && (
         <div className="card"><div className="card-h"><h3>In onboarding now</h3>
-          {claudeDue.length > 0 && <button type="button" className="btn primary sm" disabled={!!giving} onClick={() => giveClaude(claudeDue)}>{giving ? `Giving Claude access… ${giving.done}/${giving.total}` : `Give Claude access to all (${claudeDue.length})`}</button>}</div>
+          <div className="row" style={{ gap: 8 }}><button type="button" className="btn glass sm" disabled={refreshing} onClick={refreshClaude}>{refreshing ? "Checking…" : "Refresh status"}</button>
+</div></div>
           <div className="card-b" style={{ display: "grid", gap: 10 }}>
             {waiting.map((x) => { const st = claudeOf(x); return (
               <div key={x.id} className="row" style={{ justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
@@ -290,7 +285,7 @@ export default function Onboarding() {
                 <div className="row" style={{ alignItems: "center", gap: 10 }}>
                   <ToolIcon tool={TOOLS.claude} state={st} />
                   <span className="muted">{st === "active" ? "Has Claude access" : st === "invited" ? "Invite sent, waiting for them to accept" : st === "failed" ? "Last attempt failed" : "No Claude access yet"}</span>
-                  {["none", "failed", "revoked"].includes(st) && <button type="button" className="btn glass sm" disabled={!!giving} onClick={() => giveClaude([x])}>{st === "failed" ? "Retry" : "Give access"}</button>}
+                  <Link className="btn glass sm" to={`/app/employees/${encodeURIComponent(x.email)}`}>Open profile</Link>
                 </div>
               </div>); })}
           </div></div>)}

@@ -97,6 +97,7 @@ h1,h2,h3{margin:0;font-family:var(--display);color:var(--ink);text-wrap:balance}
 
 /* ---------- Hero & section heads ---------- */
 .view{display:flex;flex-direction:column;gap:64px;padding-block:56px 72px}
+.view>.back-home{align-self:flex-start;margin-bottom:-36px}
 .eyebrow{font:600 11.8px/1.2 var(--body);letter-spacing:.2em;text-transform:uppercase;color:var(--purple)}
 .hero{display:flex;flex-direction:column;align-items:center;text-align:center;gap:20px;padding-top:18px}
 .hero h1{font-weight:300;font-size:clamp(44px,6.4vw,84px);line-height:1.02;letter-spacing:-.03em}
@@ -452,6 +453,7 @@ textarea.input{resize:vertical;font-family:var(--body)}
 @media (max-width:720px){
   .wrap{padding-inline:16px}
   .view{gap:44px;padding-block:36px 56px}
+  .view>.back-home{margin-bottom:-24px}
   .g2,.form{grid-template-columns:minmax(0,1fr)}
   .hide-sm{display:none}
   .logo small{display:none}

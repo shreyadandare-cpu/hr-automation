@@ -2,7 +2,7 @@
 
 A small program that runs **inside the office network**. It reads the eSSL / ZKTeco attendance device and sends new
 punches to the HR Access Hub. It only reads the device; it never clears or changes it. The device's address is private
-(`192.168.1.58`), so the website itself can't reach it, and that is why this program is needed.
+(`192.168.1.12`), so the website itself can't reach it, and that is why this program is needed.
 
 ## Set up (on an office computer that stays on, on the same network as the device)
 1. Install Node.js (version 20 or newer) from nodejs.org.

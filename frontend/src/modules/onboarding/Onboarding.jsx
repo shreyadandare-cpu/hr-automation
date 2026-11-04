@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { api, apiMsg } from "../../api.js";
 import { useAuth } from "../../auth.jsx";
 import { useData } from "../../data.jsx";
@@ -91,7 +91,6 @@ function WorkEmailCard({ ob, taken, onCreate }) {
 export default function Onboarding() {
   const { isHr } = useAuth();
   const { people, records, docs, reload } = useData();
-  const [refreshing, setRefreshing] = useState(false);
   const toast = useToast(), nav = useNavigate();
   const [ob, setOb] = useState(newOb);
   const [pick, setPick] = useState("");
@@ -126,18 +125,6 @@ export default function Onboarding() {
   const lc = (s) => String(s || "").toLowerCase();
   const recOf = (email) => (records || []).find((r) => lc(r.email) === lc(email));
   const waiting = people.filter((e) => e.status === "onboarding").sort((a, b) => a.name.localeCompare(b.name));
-  // Claude access for people who are part-way through onboarding.
-  const claudeOf = (x) => (x.grants && x.grants.claude) || "none";
-  const refreshClaude = async () => {
-    if (refreshing) return;
-    setRefreshing(true);
-    const r = await api("POST", "/api/tool-access/claude/refresh");
-    setRefreshing(false);
-    if (!r.ok) { toast(apiMsg(r)); return; }
-    if (r.data.mode === "simulated") { toast("Claude is not connected yet (no admin key), so there is nothing to refresh."); return; }
-    await reload();
-    toast(r.data.changed ? `Claude status updated for ${r.data.changed} ${r.data.changed === 1 ? "person" : "people"}.` : "Already up to date with the Claude organization.");
-  };
   const mgrs = people.filter((e) => e.status !== "offboarded");
   const picked = ob.email && people.find((x) => lc(x.email) === lc(ob.email));
   const taken = (x) => people.some((p) => lc(p.email) === lc(x));
@@ -274,21 +261,6 @@ export default function Onboarding() {
     <section className="section">
       <ObTabs cur="onboard" />
       <SectionHead eyebrow="Onboarding" title="Add a new" accent="joiner." sub="HR enters the details and the work email is created in Google. HR then creates the login, and the employee uploads their own documents later." />
-      {isHr && waiting.length > 0 && (
-        <div className="card"><div className="card-h"><h3>In onboarding now</h3>
-          <div className="row" style={{ gap: 8 }}><button type="button" className="btn glass sm" disabled={refreshing} onClick={refreshClaude}>{refreshing ? "Checking…" : "Refresh status"}</button>
-</div></div>
-          <div className="card-b" style={{ display: "grid", gap: 10 }}>
-            {waiting.map((x) => { const st = claudeOf(x); return (
-              <div key={x.id} className="row" style={{ justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
-                <div><b>{x.name}</b><div className="muted" style={{ fontSize: 13 }}>{x.title}</div></div>
-                <div className="row" style={{ alignItems: "center", gap: 10 }}>
-                  <ToolIcon tool={TOOLS.claude} state={st} />
-                  <span className="muted">{st === "active" ? "Has Claude access" : st === "invited" ? "Invite sent, waiting for them to accept" : st === "failed" ? "Last attempt failed" : "No Claude access yet"}</span>
-                  <Link className="btn glass sm" to={`/app/employees/${encodeURIComponent(x.email)}`}>Open profile</Link>
-                </div>
-              </div>); })}
-          </div></div>)}
       <Stepper step={ob.step} />
       {restored && <Callout>A saved draft was restored. It holds name, contact and job details only. <button type="button" className="btn link" onClick={cancel}>Start over</button></Callout>}
       <form className="grid" style={{ gap: 22 }} noValidate onSubmit={submit}>

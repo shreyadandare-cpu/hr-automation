@@ -1,4 +1,5 @@
 import { useNavigate } from "react-router-dom";
+import { useAuth } from "../../auth.jsx";
 import { shortDate } from "../../components/ui.jsx";
 
 export const DOCS = [
@@ -78,9 +79,11 @@ export function DocRows({ m }) {
 
 export function ObTabs({ cur }) {
   const nav = useNavigate();
+  const { isHr } = useAuth();
   return (
     <div className="subtabs" role="tablist">
       <button type="button" role="tab" className={cur === "onboard" ? "on" : ""} aria-selected={cur === "onboard"} onClick={() => nav("/app/onboarding")}>New joiner</button>
+      {isHr && <button type="button" role="tab" className={cur === "progress" ? "on" : ""} aria-selected={cur === "progress"} onClick={() => nav("/app/onboarding/progress")}>In onboarding</button>}
       <button type="button" role="tab" className={cur === "docs" ? "on" : ""} aria-selected={cur === "docs"} onClick={() => nav("/app/documents")}>Employee documents</button>
     </div>
   );

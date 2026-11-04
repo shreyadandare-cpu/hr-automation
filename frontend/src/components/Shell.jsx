@@ -16,7 +16,7 @@ const REACT_PAGES = {
   assets: "/app/assets", reimb: "/app/reimbursements", payroll: "/app/payroll", audit: "/app/audit", myleave: "/app/my-leave", team: "/app/team-leave",
 };
 /* The main page of each module gets a "Back to dashboard" button above it. Detail pages and pages that already have their own Back are left out. */
-const HOME_PAGES = new Set(["/app/attendance", "/app/employees", "/app/allocations", "/app/assets", "/app/audit", "/app/leave", "/app/my-leave", "/app/team-leave", "/app/onboarding", "/app/documents",
+const HOME_PAGES = new Set(["/app/attendance", "/app/employees", "/app/allocations", "/app/assets", "/app/audit", "/app/leave", "/app/my-leave", "/app/team-leave", "/app/onboarding", "/app/onboarding/progress", "/app/documents",
   "/app/reimbursements", "/app/payroll", "/app/posts", "/app/budgets"]);
 /* Onboarding is HR's wizard; for employees the same menu entry is their own documents page. */
 const pathFor = (key, isHr) => (key === "onboard" && !isHr ? "/app/documents" : REACT_PAGES[key]);

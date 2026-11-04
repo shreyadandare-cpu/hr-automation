@@ -20,6 +20,11 @@ export const isTop = (p) => /\b(director|vice president)\b/i.test(p.title || "")
 export const TOOLS = { claude: { id: "claude", name: "Claude", sub: "Claude Team seat", mono: "Cl", color: "#c96442" } };
 export const SHOWN_TOOLS = ["claude"];
 
+/** For someone still marked active with a last day: "Leaving" before it, "Left" once it has passed (not offboarded in the app yet). */
+export function leaving(p) {
+  const d = new Date(), today = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  return p.lastDay < today ? ["Left", "bad"] : ["Leaving", "warn"];
+}
 export const STATUS = { onboarding: ["Onboarding", "info"], active: ["Active", "ok"], offboarding: ["Offboarding", "warn"], offboarded: ["Offboarded", "mute"] };
 
 /** One person, built from the server's roster row, their tool access and any offboarding in progress. */

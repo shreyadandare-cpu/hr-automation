@@ -78,7 +78,7 @@ export async function syncClaude() {
   const pending = new Set(invites.filter((i) => i.status === "pending").map((i) => String(i.email || "").toLowerCase()));
   const { rows } = await pool.query(
     `SELECT lower(e.work_email) AS email, t.status FROM employees e
-     LEFT JOIN tool_access t ON t.work_email=lower(e.work_email) AND t.tool='claude' WHERE e.status<>'offboarded'`);
+     LEFT JOIN tool_access t ON t.work_email=lower(e.work_email) AND t.tool='claude'`);   // people who left too: they are the ones to remove
   let changed = 0;
   for (const r of rows) {
     const want = members.has(r.email) ? ["active", "In the Claude organization"]

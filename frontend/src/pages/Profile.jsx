@@ -6,7 +6,7 @@ import { useAuth } from "../auth.jsx";
 import { useData } from "../data.jsx";
 import { useToast } from "../components/toast.jsx";
 import { Avatar, Icon, Person, Pill, Smile, ToolIcon, initials, shortDate } from "../components/ui.jsx";
-import { STATUS, TOOLS, chainOf, docCount, mgrOf, toolIds } from "../lib/people.js";
+import { STATUS, TOOLS, chainOf, leaving, docCount, mgrOf, toolIds } from "../lib/people.js";
 
 const OPTS = {
   gender: ["", "Female", "Male", "Other", "Prefer not to say"],
@@ -89,7 +89,7 @@ export default function Profile() {
   const R = 70, C = 2 * Math.PI * R, arc = C * pct / 100;
   const years = me.start ? Math.floor(diffDays(me.start, todayIso()) / 365.25) : 0;
   const live = toolIds(me).filter((k) => me.grants[k] === "active");
-  const [statusLabel, statusTone] = me.status === "active" && me.lastDay ? [`Leaving ${shortDate(me.lastDay)}`, "warn"] : STATUS[me.status];
+  const [statusLabel, statusTone] = me.status === "active" && me.lastDay ? [`${leaving(me)[0]} ${shortDate(me.lastDay)}`, leaving(me)[1]] : STATUS[me.status];
 
   const startEdit = (sec) => {
     setErrors({});

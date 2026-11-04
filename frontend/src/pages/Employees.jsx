@@ -9,10 +9,10 @@ import { PersonCell, Pill, SectionHead, ToolIcon, shortDate } from "../component
 import Pager from "../components/Pager.jsx";
 import OrgChart from "../components/OrgChart.jsx";
 import { AddMemberModal } from "../modules/employee/cards.jsx";
-import { STATUS, TOOLS, byEmployeeNo, isTop, mgrOf, teamUnder, toolIds } from "../lib/people.js";
+import { STATUS, TOOLS, leaving, byEmployeeNo, isTop, mgrOf, teamUnder, toolIds } from "../lib/people.js";
 
 function StatusPill({ person }) {
-  if (person.status === "active" && person.lastDay) return <Pill tone="warn">Leaving {shortDate(person.lastDay)}</Pill>;
+  if (person.status === "active" && person.lastDay) { const [w, tone] = leaving(person); return <Pill tone={tone}>{w} {shortDate(person.lastDay)}</Pill>; }
   const [label, tone] = STATUS[person.status];
   return <Pill tone={tone}>{label}</Pill>;
 }

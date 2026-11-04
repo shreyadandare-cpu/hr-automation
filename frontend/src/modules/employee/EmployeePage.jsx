@@ -7,7 +7,7 @@ import { useData } from "../../data.jsx";
 import Modal from "../../components/Modal.jsx";
 import { Avatar, Icon } from "../../components/ui.jsx";
 import { useToast } from "../../components/toast.jsx";
-import { NEW_FROM, TOOLS, isTop, mgrOf, toolIds } from "../../lib/people.js";
+import { NEW_FROM, TOOLS, isTop, leaving, mgrOf, toolIds } from "../../lib/people.js";
 import { lc, useLeave } from "../../lib/useLeave.js";
 import { AppLoginCard } from "./access.jsx";
 import { HistoryCard, LaptopReturnModal, LeaveCard, ProjectsCard, TeamCard, OffCard, RecordCard, ReimbCard, fdate } from "./cards.jsx";
@@ -24,7 +24,7 @@ const GRANT = {
 const EMP = { onboarding: ["Onboarding", "p-info"], active: ["Active", "p-ok"], offboarding: ["Offboarding", "p-warn"], offboarded: ["Offboarded", "p-mute"] };
 
 function EmpPill({ e }) {
-  if (e.status === "active" && e.lastDay) return <span className="pill p-warn">Leaving {fdate(e.lastDay)}</span>;
+  if (e.status === "active" && e.lastDay) { const [w, tone] = leaving(e); return <span className={`pill p-${tone}`}>{w} {fdate(e.lastDay)}</span>; }
   return <span className={`pill ${EMP[e.status][1]}`}>{EMP[e.status][0]}</span>;
 }
 

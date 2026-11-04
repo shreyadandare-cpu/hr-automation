@@ -8,7 +8,7 @@ import { Callout, Person, Pill, SectionHead, ToolIcon, shortDate } from "../../c
 import Modal, { Field } from "../../components/Modal.jsx";
 import { useToast } from "../../components/toast.jsx";
 import { R } from "../../lib/leave.js";
-import { STATUS, TOOLS } from "../../lib/people.js";
+import { STATUS, TOOLS, leaving } from "../../lib/people.js";
 import { lc, useLeave } from "../../lib/useLeave.js";
 import SettlementSummary from "./SettlementSummary.jsx";
 import { ClearancePanel, useClearance, windowText } from "./FinancialClearance.jsx";
@@ -25,7 +25,7 @@ const taskDone = (a, i) => [a.laptop.status !== "pending", a.settlement][i];
 const liveTools = (p) => Object.keys(p.grants || {}).filter((k) => OFF_TOOLS.includes(k) && ["active", "invited", "failed", "created"].includes(p.grants[k]));
 
 function StatusPill({ person }) {
-  if (person.status === "active" && person.lastDay) return <Pill tone="warn">Leaving {shortDate(person.lastDay)}</Pill>;
+  if (person.status === "active" && person.lastDay) { const [w, tone] = leaving(person); return <Pill tone={tone}>{w} {shortDate(person.lastDay)}</Pill>; }
   const [label, tone] = STATUS[person.status];
   return <Pill tone={tone}>{label}</Pill>;
 }
@@ -302,6 +302,7 @@ function Wizard({ people, offs, initial }) {
       <SectionHead eyebrow="Offboarding" title="Remove access," accent="step by step." sub="Pick who is leaving, confirm the access to remove, set the last day, then review. Nothing happens until you submit." />
       {busy.length > 0 && <Info>{busy.map((b, i) => <span key={b.id}>{i > 0 && ", "}<b>{b.name}</b></span>)} {busy.length > 1 ? "are" : "is"} still being offboarded. <Link className="btn link" to={link(busy[0])}>Open checklist</Link></Info>}
       {schedPeople.length > 0 && <Info>Scheduled: {schedPeople.map((b, i) => <span key={b.id}>{i > 0 && " · "}<Link className="btn link" to={link(b)}>{b.name}, {shortDate(b.lastDay)}</Link></span>)}</Info>}
+      {w.step === 1 && <ClaudeLeavers people={people} offs={offs} />}
       <Stepper cur={w.step} />
       <form id="owf" className="grid" style={{ gap: 22 }} noValidate onSubmit={submit}>
         {body}
@@ -312,6 +313,53 @@ function Wizard({ people, offs, initial }) {
         </div>
       </form>
     </section>
+  );
+}
+
+/* HR: people leaving or gone who still have Claude, with a remove button each and one for all of them. */
+function ClaudeLeavers({ people, offs }) {
+  const { reload } = useData();
+  const toast = useToast();
+  const [ask, setAsk] = useState(null);       // the people HR is asked to confirm removing
+  const [busy, setBusy] = useState(null);     // { done, total } while removing
+  const leaving = (p) => ["offboarding", "offboarded"].includes(p.status) || p.lastDay || offs.some((o) => lc(o.email) === lc(p.email));
+  const list = people.filter((p) => leaving(p) && ["active", "invited", "failed"].includes((p.grants || {}).claude));
+  if (!list.length) return null;
+  const remove = async () => {
+    let ok = 0, failed = 0, test = false, firstError = "";
+    setBusy({ done: 0, total: ask.length });
+    for (const p of ask) {
+      const r = await api("POST", "/api/tool-access/claude", { email: p.email, action: "remove" });
+      if (r.ok) { ok++; if (r.data && r.data.mode === "simulated") test = true; } else { failed++; firstError = firstError || apiMsg(r); }
+      setBusy({ done: ok + failed, total: ask.length });
+    }
+    const one = ask.length === 1 ? ask[0].name : null;
+    setBusy(null); setAsk(null);
+    await reload();
+    toast(test ? "Done as a test only: Claude is not connected yet (no admin key)."
+      : failed ? `Claude access: ${ok} removed, ${failed} failed. ${firstError}` : one ? `Claude access removed for ${one}.` : `Claude access removed for ${ok} people.`);
+  };
+  return (
+    <div className="card"><div className="card-h"><h3>Leaving, still on Claude</h3>
+      {list.length > 1 && <button type="button" className="btn danger sm" disabled={!!busy} onClick={() => setAsk(list)}>Remove access for all ({list.length})</button>}</div>
+      <div className="card-b" style={{ display: "grid", gap: 10 }}>
+        {list.map((p) => (
+          <div key={p.id} className="row" style={{ justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+            <Person name={p.name} sub={`${p.title} · ${p.dept}`} color={p.color} />
+            <div className="row" style={{ alignItems: "center", gap: 10 }}>
+              <StatusPill person={p} /><ToolIcon tool={TOOLS.claude} state={p.grants.claude} />
+              <span className="muted">{p.grants.claude === "invited" ? "Invite not accepted yet" : p.grants.claude === "failed" ? "Last attempt failed" : "Has Claude access"}</span>
+              <button type="button" className="btn glass sm" disabled={!!busy} onClick={() => setAsk([p])}>Remove access</button>
+            </div>
+          </div>))}
+      </div>
+      {ask && <Modal onClose={() => !busy && setAsk(null)}>
+        <div className="card-h" style={{ paddingTop: 24 }}><h3>Remove Claude access?</h3></div>
+        <div className="card-b">{ask.length === 1 ? `Are you sure you want to remove ${ask[0].name}'s Claude access?` : `Are you sure you want to remove Claude access for ${ask.length} people?`} They are taken out of the Claude organization right away, and any pending invite is cancelled.</div>
+        <div className="modal-f"><button type="button" className="btn glass" disabled={!!busy} onClick={() => setAsk(null)}>Cancel</button>
+          <button type="button" className="btn danger" disabled={!!busy} onClick={remove}>{busy ? `Removing… ${busy.done}/${busy.total}` : "Yes, remove"}</button></div>
+      </Modal>}
+    </div>
   );
 }
 

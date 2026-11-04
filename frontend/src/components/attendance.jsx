@@ -268,7 +268,7 @@ function Row({ d, today, nowMin, h24, canEdit, onRemove }) {
           <td><span className={`att-chip ${tone}`} title={tip}>{d.forgotOut ? "Forgot punch out" : /^Half day/.test(d.status || "") ? "Half day" : LOG_ICON[tone]}</span></td>
         </tr>
         {open && <tr className="att-detail"><td colSpan="5">
-          <div className="att-punches">{d.punches.map((p) => (
+          <div className="att-punches">{[d.punches.find((p) => p.direction === "IN"), [...d.punches].reverse().find((p) => p.direction === "OUT")].filter(Boolean).map((p) => (
             <span key={p.id}><b>{p.direction}</b> {clock(p.time, h24)}{p.source === "hr" ? ` (HR: ${p.note || ""})` : p.source === "device" ? " (office device)" : ""}
               {canEdit && <> <button type="button" className="btn link sm" aria-label={`Remove ${p.direction} at ${p.time}`} onClick={(e) => { e.stopPropagation(); onRemove(p.id); }}>Remove</button></>}</span>))}
             <span className="muted">{d.status}{d.off ? ` · ${d.off.toLowerCase()}` : ""}</span></div>

@@ -82,8 +82,13 @@ const summarize = (days) => {
 async function employeeByEmail(db, email) {
   return (await db.query("SELECT id, name, work_email, start_date, last_day, status, work_location FROM employees WHERE lower(work_email)=$1", [String(email || "").toLowerCase()])).rows[0] || null;
 }
+// First and last day of a YYYY-MM month (30-day months and February end on their real last day, never a day that does not exist).
+const monthRange = (month) => {
+  const [y, m] = month.split("-").map(Number);
+  return [`${month}-01`, `${month}-${String(new Date(Date.UTC(y, m, 0)).getUTCDate()).padStart(2, "0")}`];
+};
 async function monthOf(emp, month) {
-  const from = `${month}-01`, to = `${month}-31`;
+  const [from, to] = monthRange(month);
   const [p, l, h, now] = await Promise.all([
     pool.query(`SELECT id, to_char(work_date,'YYYY-MM-DD') AS work_date, punch_time, direction, source, note FROM attendance_punches
                 WHERE employee_id=$1 AND work_date BETWEEN $2 AND $3 ORDER BY work_date, punch_time, id`, [emp.id, from, to]),
@@ -185,7 +190,7 @@ export function attendanceRouter(wrap) {
     const now = await nowIst(pool);
     const month = String(req.query.month || now.day.slice(0, 7));
     if (!MONTH.test(month)) return res.status(400).json({ error: "Month must look like 2026-10." });
-    const from = `${month}-01`, to = `${month}-31`;
+    const [from, to] = monthRange(month);
     const [emps, ps, lv, hol] = await Promise.all([
       pool.query(`SELECT id, emp_no, name, work_email, title, start_date, last_day, work_location FROM employees
                   WHERE (status <> 'offboarded' OR last_day >= $1) AND (start_date IS NULL OR start_date <= $2) AND (last_day IS NULL OR last_day >= $1)`, [from, to]),

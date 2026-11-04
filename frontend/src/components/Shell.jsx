@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { NavLink, Outlet, useLocation } from "react-router-dom";
+import { Link, NavLink, Outlet, useLocation } from "react-router-dom";
 import { api } from "../api.js";
 import { useAuth } from "../auth.jsx";
 import { useData } from "../data.jsx";
@@ -15,6 +15,9 @@ const REACT_PAGES = {
   dashboard: "/app/dashboard", posts: "/app/posts", employees: "/app/employees", allocations: "/app/allocations", onboard: "/app/onboarding", offboard: "/app/offboarding", leave: "/app/leave", attendance: "/app/attendance",
   assets: "/app/assets", reimb: "/app/reimbursements", payroll: "/app/payroll", audit: "/app/audit", myleave: "/app/my-leave", team: "/app/team-leave",
 };
+/* The main page of each module gets a "Back to dashboard" button above it. Detail pages and pages that already have their own Back are left out. */
+const HOME_PAGES = new Set(["/app/attendance", "/app/employees", "/app/allocations", "/app/assets", "/app/audit", "/app/leave", "/app/my-leave", "/app/team-leave", "/app/onboarding", "/app/documents",
+  "/app/reimbursements", "/app/payroll", "/app/posts", "/app/budgets"]);
 /* Onboarding is HR's wizard; for employees the same menu entry is their own documents page. */
 const pathFor = (key, isHr) => (key === "onboard" && !isHr ? "/app/documents" : REACT_PAGES[key]);
 
@@ -114,6 +117,7 @@ export default function Shell() {
     document.fonts && document.fonts.ready.then(fit);
     return () => window.removeEventListener("resize", fit);
   });
+  const { pathname } = useLocation();
   const base = isHr ? HR_LINKS : [...EMP_LINKS, ...(isManager ? [["team", "Team leave"]] : [])];
   const links = itAdmin ? [...base.filter(([k]) => k !== "audit"), ["assets", "Assets"], ...base.filter(([k]) => k === "audit")] : base;
   return (
@@ -131,7 +135,10 @@ export default function Shell() {
           <AccountMenu photoV={photoV} />
         </nav>
       </div>
-      <main className="wrap view"><Outlet /></main>
+      <main className="wrap view">
+        {HOME_PAGES.has(pathname.replace(/\/+$/, "")) && <Link className="back back-home" to="/app/dashboard"><span className="back-ar" aria-hidden="true">←</span>Back to dashboard</Link>}
+        <Outlet />
+      </main>
       <NextHolidayPopup />
       <footer className="wrap"><div className="foot">
         <a className="logo" href="/app/dashboard" style={{ textDecoration: "none" }}><img className="lg lg-light" src="/wohlig-logo.png" alt="wohlig" /><img className="lg lg-dark" src="/wohlig-logo-dark.png" alt="" /></a>

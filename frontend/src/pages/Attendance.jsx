@@ -291,7 +291,7 @@ export default function Attendance() {
   }, [load]);
 
   useEffect(() => {
-    if (!isHr) loadToday();
+    loadToday();
     if (isHr || isManager) loadDay();
   }, [isHr, isManager, loadToday, loadDay]);
 
@@ -300,31 +300,10 @@ export default function Attendance() {
 
   const datePick = <input className="input" type="date" aria-label="Date" value={date} style={{ width: "auto", padding: "8px 12px" }} onChange={(e) => e.target.value && loadDay(e.target.value)} />;
 
-  // HR: everyone's attendance.
-  if (isHr) {
-    return (
-      <section className="section">
-        <SectionHead eyebrow="Attendance" title="Everyone's" accent="attendance." sub="Who is in and who is on leave, for any day. Open a person to see their days, or to fix a missed punch." actions={tab === "day" ? datePick : null} />
-        {error && <Callout>{error}</Callout>}
-        <div className="row" style={{ gap: 8 }}>
-          <button type="button" className={`btn sm ${tab === "day" ? "primary" : "glass"}`} onClick={() => setTab("day")}>By day</button>
-          <button type="button" className={`btn sm ${tab === "month" ? "primary" : "glass"}`} onClick={() => setTab("month")}>Monthly report</button>
-        </div>
-        {tab === "month" ? <MonthlyReport onOpen={(x) => setPerson({ email: x.email, name: x.name })} />
-          : day ? <DayTable day={day} onOpen={(x) => setPerson({ email: x.email, name: x.name })} onFix={setFixing} /> : <div className="empty">{error || "Loading…"}</div>}
-        {fixing && day && <FixModal person={fixing} date={day.date} onClose={() => setFixing(null)} onDone={async (m) => { say(m); await loadDay(day.date); }} />}
-        <DeviceCard say={say} />
-        {toast && <div className="toast" role="status">{toast}</div>}
-      </section>
-    );
-  }
-
-  // Everyone else: my own attendance only.
-  const inNow = today && today.state === "in";
-  return (
-    <section className="section">
-      <SectionHead eyebrow="Me" title="My" accent="attendance." sub="Your attendance is recorded by the office biometric machine, and your hours and days are counted from those punches. You see only your own attendance here. If a punch is missing, ask HR to add it." />
-      {(error || mine.error) && <Callout>{error || mine.error}</Callout>}
+  // My own attendance: the whole page for an employee, a tab for HR.
+  const myView = (
+    <>
+      {mine.error && <Callout>{mine.error}</Callout>}
       {today ? (
         <>
           <div className="att-top">
@@ -336,6 +315,36 @@ export default function Attendance() {
           <AttendanceLog months={mine} today={today.date} />
         </>
       ) : <div className="empty">{error || "Loading…"}</div>}
+    </>
+  );
+
+  // HR: everyone's attendance.
+  if (isHr) {
+    return (
+      <section className="section">
+        <SectionHead eyebrow="Attendance" title="Everyone's" accent="attendance." sub="Who is in and who is on leave, for any day. Open a person to see their days, or to fix a missed punch." actions={tab === "day" ? datePick : null} />
+        {error && <Callout>{error}</Callout>}
+        <div className="row" style={{ gap: 8 }}>
+          <button type="button" className={`btn sm ${tab === "day" ? "primary" : "glass"}`} onClick={() => setTab("day")}>By day</button>
+          <button type="button" className={`btn sm ${tab === "month" ? "primary" : "glass"}`} onClick={() => setTab("month")}>Monthly report</button>
+          <button type="button" className={`btn sm ${tab === "me" ? "primary" : "glass"}`} onClick={() => setTab("me")}>My attendance</button>
+        </div>
+        {tab === "me" ? myView
+          : tab === "month" ? <MonthlyReport onOpen={(x) => setPerson({ email: x.email, name: x.name })} />
+          : day ? <DayTable day={day} onOpen={(x) => setPerson({ email: x.email, name: x.name })} onFix={setFixing} /> : <div className="empty">{error || "Loading…"}</div>}
+        {fixing && day && <FixModal person={fixing} date={day.date} onClose={() => setFixing(null)} onDone={async (m) => { say(m); await loadDay(day.date); }} />}
+        <DeviceCard say={say} />
+        {toast && <div className="toast" role="status">{toast}</div>}
+      </section>
+    );
+  }
+
+  // Everyone else: my own attendance only.
+  return (
+    <section className="section">
+      <SectionHead eyebrow="Me" title="My" accent="attendance." sub="Your attendance is recorded by the office biometric machine, and your hours and days are counted from those punches. You see only your own attendance here. If a punch is missing, ask HR to add it." />
+      {error && <Callout>{error}</Callout>}
+      {myView}
       {isManager && (
         <>
           <div className="sec-head" style={{ marginTop: 28 }}>

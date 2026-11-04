@@ -91,6 +91,7 @@ function WorkEmailCard({ ob, taken, onCreate }) {
 export default function Onboarding() {
   const { isHr } = useAuth();
   const { people, records, docs, reload } = useData();
+  const [giving, setGiving] = useState(null);   // { done, total } while invites are being sent
   const toast = useToast(), nav = useNavigate();
   const [ob, setOb] = useState(newOb);
   const [pick, setPick] = useState("");
@@ -125,6 +126,24 @@ export default function Onboarding() {
   const lc = (s) => String(s || "").toLowerCase();
   const recOf = (email) => (records || []).find((r) => lc(r.email) === lc(email));
   const waiting = people.filter((e) => e.status === "onboarding").sort((a, b) => a.name.localeCompare(b.name));
+  // Claude access for people who are part-way through onboarding.
+  const claudeOf = (x) => (x.grants && x.grants.claude) || "none";
+  const claudeDue = waiting.filter((x) => ["none", "failed", "revoked"].includes(claudeOf(x)));
+  const giveClaude = async (list) => {
+    if (!list.length || giving) return;
+    if (list.length > 1 && !confirm(`Give Claude access to ${list.length} people? Each one is sent an invite from your Claude organization.`)) return;
+    let ok = 0, failed = 0, test = false, firstError = "";
+    setGiving({ done: 0, total: list.length });
+    for (const x of list) {
+      const r = await api("POST", "/api/tool-access/claude", { email: x.email, action: "grant" });
+      if (r.ok) { ok++; if (r.data && r.data.mode === "simulated") test = true; } else { failed++; firstError = firstError || apiMsg(r); }
+      setGiving({ done: ok + failed, total: list.length });
+    }
+    setGiving(null);
+    await reload();
+    toast(test ? "Done as a test only: Claude is not connected yet (no admin key)."
+      : failed ? `Claude access: ${ok} invited, ${failed} failed. ${firstError}` : list.length === 1 ? `Claude access for ${list[0].name}: invited.` : `Claude access: ${ok} invited.`);
+  };
   const mgrs = people.filter((e) => e.status !== "offboarded");
   const picked = ob.email && people.find((x) => lc(x.email) === lc(ob.email));
   const taken = (x) => people.some((p) => lc(p.email) === lc(x));
@@ -261,6 +280,20 @@ export default function Onboarding() {
     <section className="section">
       <ObTabs cur="onboard" />
       <SectionHead eyebrow="Onboarding" title="Add a new" accent="joiner." sub="HR enters the details and the work email is created in Google. HR then creates the login, and the employee uploads their own documents later." />
+      {isHr && waiting.length > 0 && (
+        <div className="card"><div className="card-h"><h3>In onboarding now</h3>
+          {claudeDue.length > 0 && <button type="button" className="btn primary sm" disabled={!!giving} onClick={() => giveClaude(claudeDue)}>{giving ? `Giving Claude access… ${giving.done}/${giving.total}` : `Give Claude access to all (${claudeDue.length})`}</button>}</div>
+          <div className="card-b" style={{ display: "grid", gap: 10 }}>
+            {waiting.map((x) => { const st = claudeOf(x); return (
+              <div key={x.id} className="row" style={{ justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+                <div><b>{x.name}</b><div className="muted" style={{ fontSize: 13 }}>{x.title}</div></div>
+                <div className="row" style={{ alignItems: "center", gap: 10 }}>
+                  <ToolIcon tool={TOOLS.claude} state={st} />
+                  <span className="muted">{st === "active" ? "Has Claude access" : st === "invited" ? "Invite sent, waiting for them to accept" : st === "failed" ? "Last attempt failed" : "No Claude access yet"}</span>
+                  {["none", "failed", "revoked"].includes(st) && <button type="button" className="btn glass sm" disabled={!!giving} onClick={() => giveClaude([x])}>{st === "failed" ? "Retry" : "Give access"}</button>}
+                </div>
+              </div>); })}
+          </div></div>)}
       <Stepper step={ob.step} />
       {restored && <Callout>A saved draft was restored. It holds name, contact and job details only. <button type="button" className="btn link" onClick={cancel}>Start over</button></Callout>}
       <form className="grid" style={{ gap: 22 }} noValidate onSubmit={submit}>

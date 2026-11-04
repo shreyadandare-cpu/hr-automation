@@ -5,7 +5,7 @@ import { api, apiMsg } from "../../api.js";
 import { useAuth } from "../../auth.jsx";
 import { useData } from "../../data.jsx";
 import { Callout, Person, Pill, SectionHead, ToolIcon, shortDate } from "../../components/ui.jsx";
-import { Field } from "../../components/Modal.jsx";
+import Modal, { Field } from "../../components/Modal.jsx";
 import { useToast } from "../../components/toast.jsx";
 import { R } from "../../lib/leave.js";
 import { STATUS, TOOLS } from "../../lib/people.js";
@@ -22,7 +22,7 @@ const LP_COND = ["Good", "Minor wear", "Damaged"];
 const OFF_TASKS = ["Laptop returned", "Final settlement cleared"];
 // OFF_TASKS order: laptop, final settlement
 const taskDone = (a, i) => [a.laptop.status !== "pending", a.settlement][i];
-const liveTools = (p) => Object.keys(p.grants || {}).filter((k) => OFF_TOOLS.includes(k) && ["active", "failed", "created"].includes(p.grants[k]));
+const liveTools = (p) => Object.keys(p.grants || {}).filter((k) => OFF_TOOLS.includes(k) && ["active", "invited", "failed", "created"].includes(p.grants[k]));
 
 function StatusPill({ person }) {
   if (person.status === "active" && person.lastDay) return <Pill tone="warn">Leaving {shortDate(person.lastDay)}</Pill>;
@@ -90,6 +90,8 @@ function Wizard({ people, offs, initial }) {
   const { reload, reloadLeave } = useData();
   const today = lv.today;
   const [w, setW] = useState(() => newOw(initial, today, people));
+  const [revoke, setRevoke] = useState(null);   // the tool HR is asked to confirm removing right now
+  const [revoking, setRevoking] = useState(false);
   const set = (patch) => setW((x) => ({ ...x, ...patch }));
   const setLaptop = (patch) => setW((x) => ({ ...x, assets: { ...x.assets, laptop: { ...x.assets.laptop, ...patch } } }));
   const e = people.find((x) => x.id === w.empId) || null;
@@ -163,6 +165,18 @@ function Wizard({ people, offs, initial }) {
     nav(link(e));
   };
 
+  // Removes one tool straight away, before the rest of offboarding. The server checks HR rights again.
+  const removeNow = async () => {
+    setRevoking(true);
+    const r = await api("POST", `/api/tool-access/${revoke}`, { email: e.email, action: "remove" });
+    setRevoking(false);
+    if (!r.ok) { toast(apiMsg(r)); return; }
+    toast(`${TOOLS[revoke].name} access removed for ${e.name}.`);
+    set({ tools: tools.filter((t) => t !== revoke) });
+    setRevoke(null);
+    reload();
+  };
+
   const mgrs = people.filter((m) => m.status === "active" && (!e || m.id !== e.id)).sort((a, b) => (a.name < b.name ? -1 : 1));
   const toName = (people.find((p) => lc(p.email) === lc(w.to)) || {}).name || "";
   const first = e ? e.name.split(" ")[0] : "";
@@ -194,8 +208,16 @@ function Wizard({ people, offs, initial }) {
           {live.length ? <div className="tiles">{live.map((id) => (
             <label key={id} className="tile"><input type="checkbox" id={`ow-tool-${id}`} value={id} checked={tools.includes(id)}
               onChange={(x) => set({ tools: x.target.checked ? [...tools, id] : tools.filter((t) => t !== id) })} />
-              <ToolIcon tool={TOOLS[id]} state="active" /><span className="t"><b>{TOOLS[id].name}</b><span>{TOOL_DO[id]}</span></span></label>))}</div>
+              <ToolIcon tool={TOOLS[id]} state="active" /><span className="t"><b>{TOOLS[id].name}</b><span>{TOOL_DO[id]}</span></span>
+              <button type="button" className="btn danger" id={`ow-revoke-${id}`} style={{ marginLeft: "auto" }}
+                onClick={(x) => { x.preventDefault(); setRevoke(id); }}>Remove access now</button></label>))}</div>
             : <p className="muted" style={{ margin: 0 }}>{e.name} has no tool access to remove.</p>}</div></div>
+        {revoke && <Modal onClose={() => !revoking && setRevoke(null)}>
+          <div className="card-h" style={{ paddingTop: 24 }}><h3>Remove {TOOLS[revoke].name} access?</h3></div>
+          <div className="card-b">Are you sure you want to remove {e.name}'s {TOOLS[revoke].name} access? They are taken out of the {TOOLS[revoke].name} workspace right away.</div>
+          <div className="modal-f"><button type="button" className="btn glass" disabled={revoking} onClick={() => setRevoke(null)}>Cancel</button>
+            <button type="button" className="btn danger" id="ow-revoke-yes" disabled={revoking} onClick={removeNow}>{revoking ? "Removing…" : "Yes, remove"}</button></div>
+        </Modal>}
         {OFF_TOOLS.includes("gws") && <div className="card"><div className="card-h"><h3>Handover</h3></div><div className="card-b form">
           <Field id="ow-to" label="Move Drive files and email to" error={er.to} hint={tools.includes("gws") ? "Needed because Google Workspace is being removed." : "Only needed when Google Workspace is removed."}>
             <select className="input" id="ow-to" value={w.to} onChange={(x) => set({ to: x.target.value })}><option value="">Choose…</option>{mgrs.map((m) => <option key={m.id} value={m.email}>{m.name}</option>)}</select></Field>

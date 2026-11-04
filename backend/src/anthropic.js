@@ -66,3 +66,39 @@ export async function removeClaude(email) {
 export const recordAccess = (email, tool, status, detail) => pool.query(
   `INSERT INTO tool_access (work_email, tool, status, detail, updated_at) VALUES (lower($1),$2,$3,$4,now())
    ON CONFLICT (work_email, tool) DO UPDATE SET status=$3, detail=$4, updated_at=now()`, [email, tool, status, detail || null]);
+
+/**
+ * Brings tool_access in line with who is really in the Claude organization, matched by work email, so people
+ * added in Anthropic's console (not through this app) can still be offboarded. Reads Anthropic only.
+ */
+export async function syncClaude() {
+  if (claudeMode() === "simulated") return null;
+  const [users, invites] = await Promise.all([listAll("/users"), listAll("/invites")]);
+  const members = new Set(users.map((u) => String(u.email || "").toLowerCase()));
+  const pending = new Set(invites.filter((i) => i.status === "pending").map((i) => String(i.email || "").toLowerCase()));
+  const { rows } = await pool.query(
+    `SELECT lower(e.work_email) AS email, t.status FROM employees e
+     LEFT JOIN tool_access t ON t.work_email=lower(e.work_email) AND t.tool='claude' WHERE e.status<>'offboarded'`);
+  let changed = 0;
+  for (const r of rows) {
+    const want = members.has(r.email) ? ["active", "In the Claude organization"]
+      : pending.has(r.email) ? ["invited", "An invite is waiting for them to accept"]
+      : ["active", "invited"].includes(r.status) ? ["revoked", "Not in the Claude organization any more"] : null;
+    if (!want || want[0] === r.status) continue;
+    await recordAccess(r.email, "claude", want[0], want[1]);
+    changed++;
+  }
+  return changed;
+}
+
+// Checked with Anthropic at most every few minutes, when someone loads the app; one check at a time.
+const SYNC_MS = 5 * 60_000;
+let lastSync = 0, syncing = null;
+export function syncClaudeSoon() {
+  if (claudeMode() === "simulated" || Date.now() - lastSync < SYNC_MS) return syncing || Promise.resolve();
+  if (!syncing) syncing = syncClaude()
+    .then(() => { lastSync = Date.now(); })
+    .catch((err) => { lastSync = Date.now() - SYNC_MS + 60_000; console.error("Claude sync failed:", err.message); })   // retry in a minute
+    .finally(() => { syncing = null; });
+  return syncing;
+}

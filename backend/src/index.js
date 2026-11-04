@@ -18,7 +18,7 @@ import { assetsRouter } from "./assets.js";
 import { deviceRouter } from "./device.js";
 import { startPortalAttendanceSync } from "./portal-attendance.js";
 import { payslipsRouter } from "./payslips.js";
-import { claudeMode, grantClaude, removeClaude, recordAccess } from "./anthropic.js";
+import { claudeMode, grantClaude, removeClaude, recordAccess, syncClaudeSoon } from "./anthropic.js";
 import { offboardingRouter, runDue } from "./offboarding.js";
 import { clearanceRouter } from "./clearance.js";
 import { onboardingErrors, detailsErrors, maskAadhaar, maskPan, maskAcct } from "./validate.js";
@@ -499,6 +499,7 @@ app.get("/api/audit", requireHr, wrap(async (req, res) => {
 
 // Tool access HR gives from the Employees page. Claude is real when ANTHROPIC_ADMIN_KEY is set.
 app.get("/api/tool-access", requireAuth, wrap(async (req, res) => {
+  await syncClaudeSoon();   // pick up people added to Claude outside this app
   const { rows } = await pool.query("SELECT work_email, tool, status, detail FROM tool_access");
   const hr = req.user.role === "hr";   // everyone sees who has access; only HR sees the tool's own message
   res.json({ claudeMode: claudeMode(), rows: rows.map((r) => ({ email: r.work_email, tool: r.tool, status: r.status, detail: hr ? r.detail : null })) });

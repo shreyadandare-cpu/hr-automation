@@ -1136,3 +1136,28 @@ tr.click:hover .person b{color:var(--purple);text-decoration:underline;text-unde
 .lr-facts span{display:block;font-size:12.5px;color:var(--ink-dim)}
 .lr-facts b{font-weight:600}
 @media (max-width:620px){.lr-facts{grid-template-columns:repeat(2,minmax(0,1fr))}}
+
+/* Payroll module (modules/payroll) */
+.pr-steps{display:flex;gap:6px;list-style:none;margin:0;padding:0;flex-wrap:wrap}
+.pr-steps li{display:flex;align-items:center;gap:8px;padding:7px 12px 7px 7px;border-radius:999px;background:var(--paper-2);color:var(--ink-faint);font:600 12.5px/1 var(--body)}
+.pr-steps li span{display:grid;place-items:center;width:20px;height:20px;border-radius:50%;background:var(--surface);box-shadow:inset 0 0 0 1px var(--line-2);font-size:11px}
+.pr-steps li.done{color:var(--ok);background:var(--ok-soft)}.pr-steps li.done span{background:var(--ok);color:#fff;box-shadow:none}
+.pr-steps li.on{color:var(--purple);background:var(--tint);box-shadow:inset 0 0 0 1px var(--purple)}.pr-steps li.on span{background:var(--purple);color:#fff;box-shadow:none}
+.pr-actions{gap:10px;flex-wrap:wrap;justify-content:flex-end;border-top:1px solid var(--line);padding-top:16px}
+.pr-table{font-variant-numeric:tabular-nums}.pr-table th,.pr-table td{white-space:nowrap;padding-left:10px;padding-right:10px}.pr-table th:first-child,.pr-table td:first-child{padding-left:24px}.pr-table th:last-child,.pr-table td:last-child{padding-right:24px}
+.pr-table td:first-child{white-space:normal;min-width:190px}.pr-flag{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin:6px 0 0 50px;max-width:260px}
+.pr-row{cursor:pointer}.pr-row:hover td,.pr-row:focus-visible td{background:var(--tint-2)}.pr-row:focus-visible{outline:2px solid var(--purple);outline-offset:-2px}
+.pr-files{display:flex;flex-direction:column;gap:4px;font-size:13px}.pr-files a{color:var(--purple);font-weight:600}.pr-files a.muted{color:var(--ink-faint);font-weight:500}
+.pr-log{list-style:none;margin:12px 0 0;padding:0;display:flex;flex-direction:column;gap:8px;font-size:13.5px}
+.ln-cols{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px}.ln-cols h4{font:600 12px/1.3 var(--body);letter-spacing:.1em;text-transform:uppercase;color:var(--ink-faint);margin:0 0 6px}
+.ln-tbl{width:100%;font-size:14px;font-variant-numeric:tabular-nums}.ln-tbl td{padding:6px 10px;border-bottom:1px solid var(--line)}.ln-tbl td.num{text-align:right;white-space:nowrap}
+.ln-net{display:flex;justify-content:space-between;align-items:center;padding:14px 18px;border-radius:14px;background:var(--tint);font-size:15px}.ln-net b{font:600 22px/1 var(--display)}
+.ln-det summary{cursor:pointer;font-weight:600;color:var(--purple)}.ln-det[open] summary{margin-bottom:8px}
+.ln-calc{margin:0;padding-left:20px;display:flex;flex-direction:column;gap:4px;font-size:13.5px;color:var(--ink-dim)}
+/* The payroll table scrolls sideways between the person and the net pay, which stay in view. */
+.pr-run td:first-child,.pr-run th:first-child{position:sticky;left:0;z-index:1;background:var(--surface)}
+.pr-run td:last-child,.pr-run th:last-child{position:sticky;right:0;z-index:1;background:var(--surface);box-shadow:inset 1px 0 0 var(--line)}
+.pr-run tr.rb-total td:first-child,.pr-run tr.rb-total td:last-child{background:var(--paper-2)}
+.pr-run .pr-row:hover td:first-child,.pr-run .pr-row:hover td:last-child{background:var(--tint-2)}
+@media (max-width:720px){.ln-cols{grid-template-columns:1fr}.pr-steps li{padding:6px 10px 6px 6px}.pr-stats .rb-stat b{font-size:19px;overflow-wrap:normal}.pr-stats .rb-stat{padding:14px}
+  .pr-run td:first-child{min-width:150px}.pr-run td:first-child .person span:not(.avatar){display:none}}

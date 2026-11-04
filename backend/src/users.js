@@ -8,6 +8,7 @@ import { V, isCompanyEmail, COMPANY_EMAIL_MESSAGE } from "./validate.js";
 import { sendInvite, acceptInvitation, tooMany } from "./invites.js";
 import { mailConfigured, sendTestEmail } from "./mail.js";
 import { googleEnabled } from "./google-signin.js";
+import { isReviewer } from "./payroll/access.js";
 
 const wrap = (fn) => (req, res, next) => fn(req, res, next).catch(next);
 /** Email and password sign-in is for testing: it works only when ALLOW_PASSWORD_LOGIN=true. Google sign-in is the normal way in. */
@@ -70,7 +71,7 @@ accountRouter.use(requireAuth);
 
 accountRouter.get("/me", wrap(async (req, res) => {
   const { rows } = await pool.query("SELECT name FROM employees WHERE lower(work_email)=$1", [req.user.email.toLowerCase()]);
-  res.json({ email: req.user.email, role: req.user.role, itAdmin: !!req.user.it_admin, name: rows[0]?.name || req.user.email });
+  res.json({ email: req.user.email, role: req.user.role, itAdmin: !!req.user.it_admin, payrollReviewer: isReviewer(req.user.email), name: rows[0]?.name || req.user.email });
 }));
 
 accountRouter.post("/password", wrap(async (req, res) => {

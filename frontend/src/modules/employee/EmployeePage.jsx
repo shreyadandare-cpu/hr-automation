@@ -9,7 +9,9 @@ import Modal from "../../components/Modal.jsx";
 import { Avatar, Icon } from "../../components/ui.jsx";
 import { useToast } from "../../components/toast.jsx";
 import { NEW_FROM, TOOLS, isTop, leaving, mgrOf, toolIds } from "../../lib/people.js";
-import { lc, useLeave } from "../../lib/useLeave.js";
+import { inr, lc, useLeave } from "../../lib/useLeave.js";
+import SalaryModal from "../payroll/SalaryModal.jsx";
+import { BankModal } from "../payroll/EmployeesTab.jsx";
 import { AppLoginCard } from "./access.jsx";
 import { HistoryCard, LaptopReturnModal, LeaveCard, ProjectsCard, TeamCard, OffCard, RecordCard, ReimbCard, fdate } from "./cards.jsx";
 import { AdvancesCard } from "./advances.jsx";
@@ -31,7 +33,7 @@ function EmpPill({ e }) {
 
 /* Edit details (HR only): the reporting manager is saved on the server, and only HR can change it (the server checks again).
    Name, work email, job title, joining date and department have no server record yet, so they stay on this page (as in the old one). */
-function EditModal({ e, people, onClose }) {
+function EditModal({ e, people, onClose, onPayroll }) {
   const toast = useToast();
   const { isHr } = useAuth();
   const { setRoster } = useData();
@@ -43,6 +45,13 @@ function EditModal({ e, people, onClose }) {
   const [empNo, setEmpNo] = useState(e.no && e.no !== "Not assigned" ? e.no : "");
   const [f, setF] = useState({ name: e.name || "", email: e.email || "", title: e.title === "—" ? "" : e.title || "", start: e.start || "", dept: e.dept });
   const [emailErr, setEmailErr] = useState("");
+  // HR: what payroll has for this person (salary and bank account), so they can add it here for someone already working in the company.
+  const [pay, setPay] = useState(null);
+  useEffect(() => {
+    if (!isHr) return;
+    Promise.all([api("GET", `/api/payroll/structures/${encodeURIComponent(e.baseEmail)}`), api("GET", `/api/payroll/bank/${encodeURIComponent(e.baseEmail)}`)])
+      .then(([s, b]) => setPay({ salary: s.ok ? s.data.structures[0] || null : undefined, bank: b.ok ? b.data.bank : undefined }));
+  }, [isHr, e.baseEmail]);
   const taken = (email) => people.find((x) => x.id !== e.id && lc(x.email) === lc(email.trim()));
   const problem = (email) => {
     if (!email.trim()) return "Enter a work email.";
@@ -96,6 +105,17 @@ function EditModal({ e, people, onClose }) {
               <option value="">No manager</option>{mgrNames.map((n) => <option key={n}>{n}</option>)}</select>)}
           <span className="hint">{isHr ? "Only HR can change this. Their manager approves their leave; with no manager, HR does. Saved for everyone." : "Only HR can change the reporting manager."}</span></div>
         <div className="field"><label htmlFor="e-dept">Department</label><select className="input" id="e-dept" value={f.dept} onChange={set("dept")}>{[...new Set([f.dept, ...DEPTS])].map((d) => <option key={d}>{d}</option>)}</select></div>
+        {isHr && (
+          <div className="field"><span className="lab">Salary and bank account (payroll)</span>
+            <div className="sal-sum" style={{ flexDirection: "column", alignItems: "stretch", gap: 10 }}>
+              <div className="row" style={{ justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+                <span>{!pay ? "Loading…" : pay.salary === undefined ? "Salary can't be read." : pay.salary
+                  ? <>Salary <b>{inr(pay.salary.earnings.reduce((n, x) => n + Number(x.amount || 0), 0))}</b> a month, from {fdate(pay.salary.effectiveFrom + "-01")}</> : <span className="muted">No salary added yet. Payroll can't pay this person until it is.</span>}</span>
+                <button type="button" className="btn glass sm" onClick={() => { onClose(); onPayroll("salary"); }}>{pay && pay.salary ? "Edit salary" : "Add salary"}</button></div>
+              <div className="row" style={{ justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+                <span>{!pay ? "" : pay.bank === undefined ? "Bank account can't be read." : pay.bank ? <>Bank {pay.bank.bankName} ••{pay.bank.last4}</> : <span className="muted">No salary bank account yet. It's needed for the bank transfer file.</span>}</span>
+                <button type="button" className="btn glass sm" onClick={() => { onClose(); onPayroll("bank"); }}>{pay && pay.bank ? "Change bank account" : "Add bank account"}</button></div></div>
+            <span className="hint">Only HR sees this. These buttons close this form, so save any other changes above first.</span></div>)}
         <div className="muted" style={{ fontSize: 13 }}>The reporting manager is saved for everyone. The other details have no server record yet, so they show on this page until it is reloaded.</div></div>
       <div className="modal-f"><button type="button" className="btn glass" onClick={onClose}>Cancel</button><button type="submit" className="btn primary" disabled={saving}>{saving ? "Saving…" : "Save changes"}</button></div>
     </form></Modal>
@@ -246,7 +266,9 @@ function EmployeeView({ p }) {
       {isHr && <HistoryCard email={p.email} />}
       {asking && <ConfirmDialog title={`Give Claude access to ${e.name}?`} confirmLabel="Send invite" onClose={() => setAsking(false)} onConfirm={async () => { await toolDo("grant"); setAsking(false); }}>
         An invite is sent to <b>{e.email}</b> from your Claude organization. They get access when they accept it, and it may use a paid seat.</ConfirmDialog>}
-      {modal === "edit" && <EditModal e={e} people={people} onClose={() => setModal(null)} />}
+      {modal === "edit" && <EditModal e={e} people={people} onClose={() => setModal(null)} onPayroll={setModal} />}
+      {modal === "salary" && <SalaryModal email={p.email} onClose={() => setModal(null)} />}
+      {modal === "bank" && <BankModal email={p.email} onClose={() => setModal(null)} />}
       {modal === "clearance" && rec && <ClearanceConfirm offboardingId={rec.id} onClose={() => setModal(null)}
         onReview={() => { setModal(null); document.getElementById("financial-clearance")?.scrollIntoView({ behavior: "smooth" }); }}
         onDone={(r) => { setModal(null); setRec(r); reload(); if (r.status === "completed") toast(`${e.name} is fully offboarded`); }} />}

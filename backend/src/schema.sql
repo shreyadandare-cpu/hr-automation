@@ -298,7 +298,9 @@ CREATE TABLE IF NOT EXISTS email_links (
   expires_at TIMESTAMPTZ NOT NULL
 );
 ALTER TABLE payroll_runs ADD COLUMN IF NOT EXISTS published_at TIMESTAMPTZ;
-UPDATE payroll_runs SET published_at = processed_at WHERE published_at IS NULL AND publish_at IS NULL;
+-- Only runs from before the review workflow ('processed'/'paid' with no publish date); workflow runs are published on approval.
+UPDATE payroll_runs SET published_at = processed_at WHERE published_at IS NULL AND publish_at IS NULL AND status IN ('processed','paid')
+  AND NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='payroll_runs' AND column_name='workflow' AND table_schema=current_schema());
 
 CREATE TABLE IF NOT EXISTS reimbursements (
   id               SERIAL PRIMARY KEY,

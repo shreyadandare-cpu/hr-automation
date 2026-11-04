@@ -48,7 +48,8 @@ async function payslipOf(email, period, drafts) {
      FROM payroll_items i JOIN payroll_runs r ON r.id=i.run_id LEFT JOIN employees e ON lower(e.work_email)=lower(i.work_email)
      WHERE lower(i.work_email)=$1 AND r.period=$2 ${drafts ? "" : "AND r.published_at IS NOT NULL"}`, [email, period]);
   const x = rows[0];
-  if (!x) return { status: 404, error: `Payslip is not available for ${monthName(period)}.` };
+  // A salary on hold is not paid this month, so there is no payslip for it.
+  if (!x || (x.inputs && x.inputs.hold)) return { status: 404, error: `Payslip is not available for ${monthName(period)}.` };
   const s = x.slip || legacySlip(x);
   if (s.incomplete && s.incomplete.length) return { status: 422, error: INCOMPLETE };
   const e = s.employee || {};
@@ -163,7 +164,7 @@ export function payslipsRouter(wrap) {
     if (!emp && email !== req.user.email.toLowerCase()) return res.status(404).json({ error: "Employee not found." });
     const { rows } = await pool.query(
       `SELECT r.period, r.status, r.paid_at, r.published_at, r.publish_at, i.payable, i.base_salary, i.slip FROM payroll_items i JOIN payroll_runs r ON r.id=i.run_id
-       WHERE lower(i.work_email)=$1 ${isHr(req) ? "" : "AND r.published_at IS NOT NULL"} ORDER BY r.period DESC`, [email]);
+       WHERE lower(i.work_email)=$1 AND NOT coalesce((i.inputs->>'hold')::boolean, false) ${isHr(req) ? "" : "AND r.published_at IS NOT NULL"} ORDER BY r.period DESC`, [email]);
     res.json({
       employee: emp ? { name: emp.name, empNo: emp.emp_no, title: emp.title, dept: emp.dept, email } : { name: req.user.email, email },
       payslips: rows.map((x) => {

@@ -9,7 +9,7 @@ import NotificationBell from "./NotificationBell.jsx";
 import NextHolidayPopup from "./NextHolidayPopup.jsx";
 
 /* Pages still in the older single page app are plain links (hash routes under /). Pages already in React stay in the app. */
-const HR_LINKS = [["dashboard", "Dashboard"], ["posts", "Posts"], ["workforce", "Workforce"], ["onboard", "Onboarding"], ["offboard", "Offboarding"], ["leave", "Leave"], ["attendance", "Attendance"], ["finances", "Finances"], ["audit", "Audit log"]];
+const HR_LINKS = [["dashboard", "Dashboard"], ["posts", "Posts"], ["workforce", "Workforce"], ["onboard", "Onboarding"], ["offboard", "Offboarding"], ["leave", "Leave"], ["attendance", "Attendance"], ["finances", "Finances"], ["payroll", "Payroll"], ["audit", "Audit log"]];
 const EMP_LINKS = [["dashboard", "Dashboard"], ["posts", "Posts"], ["workforce", "Workforce"], ["onboard", "Onboarding"], ["offboard", "Offboarding"], ["attendance", "Attendance"], ["finances", "Finances"], ["myleave", "My leave"]];
 const REACT_PAGES = {
   dashboard: "/app/dashboard", posts: "/app/posts", employees: "/app/employees", allocations: "/app/allocations", onboard: "/app/onboarding", offboard: "/app/offboarding", leave: "/app/leave", attendance: "/app/attendance",
@@ -100,7 +100,7 @@ function AccountMenu({ photoV }) {
 }
 
 export default function Shell() {
-  const { user, isHr, isManager, itAdmin } = useAuth();
+  const { user, isHr, isManager, itAdmin, payrollReviewer } = useAuth();
   const { profile } = useData();
   const photoV = (profile && profile.photoV) || null;
   const navRef = useRef(null), linksRef = useRef(null);
@@ -118,7 +118,7 @@ export default function Shell() {
     return () => window.removeEventListener("resize", fit);
   });
   const { pathname } = useLocation();
-  const base = isHr ? HR_LINKS : [...EMP_LINKS, ...(isManager ? [["team", "Team leave"]] : [])];
+  const base = isHr ? HR_LINKS : [...EMP_LINKS, ...(isManager ? [["team", "Team leave"]] : []), ...(payrollReviewer ? [["payroll", "Payroll"]] : [])];   // the payroll reviewer (PAYROLL_REVIEWERS) approves payroll
   const links = itAdmin ? [...base.filter(([k]) => k !== "audit"), ["assets", "Assets"], ...base.filter(([k]) => k === "audit")] : base;
   return (
     <>
@@ -128,7 +128,7 @@ export default function Shell() {
             <img className="lg lg-light" src="/wohlig-logo.png" alt="wohlig" /><img className="lg lg-dark" src="/wohlig-logo-dark.png" alt="" /><small>HR Access Hub</small>
           </a>
           <div className="links" ref={linksRef}>
-            {links.map(([k, label]) => k === "finances" ? <GroupMenu key={k} label={label} items={[["/app/reimbursements", "Reimbursements"], ["/app/payslips", "My payslips"], ...(isHr ? [["/app/payroll", "Payroll"]] : [])]} /> : k === "workforce" ? <GroupMenu key={k} label={label} items={[["/app/employees", "Employees"], ["/app/allocations", "Allocations"]]} /> : <NavLink key={k} to={pathFor(k, isHr)} className={({ isActive }) => (isActive ? "on" : "")}>{label}</NavLink>)}
+            {links.map(([k, label]) => k === "finances" ? <GroupMenu key={k} label={label} items={[["/app/reimbursements", "Reimbursements"], ["/app/payslips", "My payslips"]]} /> : k === "workforce" ? <GroupMenu key={k} label={label} items={[["/app/employees", "Employees"], ["/app/allocations", "Allocations"]]} /> : <NavLink key={k} to={pathFor(k, isHr)} className={({ isActive }) => (isActive ? "on" : "")}>{label}</NavLink>)}
           </div>
           <NotificationBell />
           <ThemeButton />

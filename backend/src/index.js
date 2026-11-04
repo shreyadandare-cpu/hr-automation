@@ -29,6 +29,8 @@ import { reimbursementsRouter, runReimbursementReminders } from "./reimbursement
 import { budgetsRouter, runBudgetReminders } from "./budgets.js";
 import { payrollRouter } from "./payroll.js";
 import { payslipAutoRouter, runPayslips } from "./payslip-auto.js";
+import { payrollWorkflowRouter, initPayroll } from "./payroll/routes.js";
+import { requirePayrollAccess, hrOnly } from "./payroll/access.js";
 import { emailLinkRouter } from "./email-links.js";
 import { notificationsRouter, emailMode } from "./notify.js";
 
@@ -538,7 +540,8 @@ app.post("/api/tool-access/claude", requireHr, wrap(async (req, res) => {
 }));
 app.use("/api/reimbursements", requireAuth, reimbursementsRouter);   // own claims for everyone; review actions are HR-only inside
 app.use("/api/budget-requests", requireAuth, budgetsRouter);   // own requests for everyone; decisions are HR-only inside
-app.use("/api/payroll", requireHr, payslipAutoRouter, payrollRouter);
+// Payroll: HR prepares it and a payroll reviewer (PAYROLL_REVIEWERS) approves it; everything after the workflow router is HR only.
+app.use("/api/payroll", requirePayrollAccess, payrollWorkflowRouter, hrOnly, payslipAutoRouter, payrollRouter);
 app.use("/api/notifications", requireAuth, notificationsRouter);
 app.use(clearanceRouter(wrap));   // offboarding financial clearance and employee advances (HR only)
 app.use(offboardingRouter(wrap));
@@ -576,11 +579,13 @@ app.get("/leave-rules.js", (_req, res) => res.type("js").sendFile(path.join(fron
 
 app.use((err, _req, res, _next) => {
   console.error(err);
-  res.status(500).json({ error: "Server error" });
+  // An error the app raised on purpose (err.status, e.g. payroll encryption not set up) keeps its status and message.
+  res.status(err.status && err.status < 600 ? err.status : 500).json({ error: err.status ? err.message : "Server error" });
 });
 
 await initDb();
 if (payPool !== pool) { await initDb(payPool, PAY_SCHEMA); console.log("Payroll and payslips use their own database (PAYROLL_DATABASE_URL)"); }
+await initPayroll(payPool);   // payroll workflow tables and starting tax rules (payroll/schema.sql)
 await bootstrapAuth();
 // BACKGROUND_JOBS=off: serve pages only. For a local copy pointed at the shared database, so the deployed server alone
 // runs the scheduled work (a local copy would simulate offboarding steps and skip emails, using them up for real).
@@ -599,8 +604,8 @@ else {
   const checkReminders = () => Promise.all([runReimbursementReminders(), runBudgetReminders()]).catch((err) => console.error("Reimbursement reminder check failed:", err));
   checkReminders();
   setInterval(checkReminders, 60 * 60_000);
-  // Last month's payslips: a draft from the 1st, published to employees after HR's review window (payslip-auto.js); checked hourly.
-  const checkPayslips = () => runPayslips().then((r) => { if (r.created || r.made || r.told) console.log("Payslips:", JSON.stringify(r)); })
+  // Last month's payroll: started as a draft from the 1st for HR to check and send for review (payslip-auto.js); checked hourly.
+  const checkPayslips = () => runPayslips().then((r) => { if (r.created) console.log("Payroll:", JSON.stringify(r)); })
     .catch((err) => console.error("Automatic payslips failed:", err));
   checkPayslips();
   setInterval(checkPayslips, 60 * 60_000);

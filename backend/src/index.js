@@ -580,8 +580,7 @@ app.use(offboardingRouter(wrap));
 app.use("/auth", googleRouter);       // "Continue with Google" (public: it is how people sign in)
 app.use("/invite", inviteRouter);     // the link in the invite email
 app.use("/l", emailLinkRouter);       // short-lived links in automatic emails
-for (const f of ["wohlig-logo.png", "wohlig-logo-dark.png"]) app.get("/" + f, (_req, res) => res.sendFile(path.join(frontendDir, "public", f)));
-app.get("/favicon.ico", (_req, res) => res.status(204).end());
+for (const f of ["wohlig-logo.png", "wohlig-logo-dark.png", "favicon.svg", "favicon.ico", "apple-touch-icon.png"]) app.get("/" + f, (_req, res) => res.sendFile(path.join(frontendDir, "public", f), { maxAge: "7d" }));
 // The whole interface is React (frontend/src), built into frontend/dist with `npm run build:ui`.
 const distDir = path.join(frontendDir, "dist");
 const hasDist = () => fs.existsSync(path.join(distDir, "index.html"));

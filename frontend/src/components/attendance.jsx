@@ -190,10 +190,10 @@ export function ForgotPunchPopup({ byMonth, today, h24 }) {
 /* The attendance policy, in two tabs: how lateness and missing days are penalised, and how time is tracked. */
 const POLICY = {
   penal: { label: "Penalisation Policy", intro: "Below are the details of your Penalisation Policy", note: "Penalisation policy is effective 02 Feb 2023", items: [
-    ["No Attendance", "You won't be penalized for any leave if there is no attendance logged by you."],
-    ["Late Arrival", "You won't be penalized for any late arrival incidents."],
-    ["Work Hours", "There is no penalization for number of work hours you spend in office."],
-    ["Missing Swipes", "There is no penalization for Missing Swipes, but it is recommended to regularize your attendance."],
+    ["No Attendance", "You won't be penalised for any leave if there is no attendance logged by you."],
+    ["Late Arrival", "You won't be penalised for any late arrival incidents."],
+    ["Work Hours", "There is no penalisation for number of work hours you spend in office."],
+    ["Missing Swipes", "There is no penalisation for Missing Swipes, but it is recommended to regularise your attendance."],
   ] },
   track: { label: "Time tracking policy", intro: "Below are the details of time tracking policy assigned to you", items: [
     ["Bio-Metric & Web Clock-In", "Your attendance is automatically tracked using biometric device(s)."],

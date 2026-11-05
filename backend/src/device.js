@@ -46,6 +46,28 @@ async function addPunch(db, employeeId, { date, time }, createdBy) {
   return r.rowCount === 1;
 }
 
+/** Links the office device's user ID to a person, using the number in their employee ID (WT/206 is device user 206, which is how every
+    linked person is matched today). Punches kept aside for that ID are applied at once. Never takes an ID that belongs to someone else.
+    Returns { id, applied } when linked, { skipped } with the reason otherwise, or null when the employee ID has no number. */
+export async function linkDeviceUserByEmployeeNo(db, emp, by) {
+  const id = digits(emp.empNo);
+  if (!id) return null;
+  const own = (await db.query("SELECT d.employee_id, e.name FROM device_users d JOIN employees e ON e.id = d.employee_id WHERE d.device_user_id = $1", [id])).rows[0];
+  if (own && own.employee_id !== emp.id) {
+    await audit(db, `Device user ${id} was not linked to ${emp.name}: it already belongs to ${own.name}. Link it by hand in Attendance if that is wrong`, emp.email);
+    return { skipped: `device ID ${id} already belongs to ${own.name}` };
+  }
+  let applied = 0;
+  if (!own) {
+    await db.query("INSERT INTO device_users (device_user_id, employee_id) VALUES ($1,$2)", [id, emp.id]);
+    const held = (await db.query("DELETE FROM device_unmatched WHERE device_user_id = $1 RETURNING to_char(punched_at,'YYYY-MM-DD') AS d, to_char(punched_at,'HH24:MI:SS') AS t", [id])).rows
+      .sort((a, b) => (a.d + a.t < b.d + b.t ? -1 : 1));
+    for (const h of held) if (await addPunch(db, emp.id, { date: h.d, time: h.t }, "device:linked")) applied++;
+    await audit(db, `Device user ${id} linked to ${emp.name} at onboarding (from employee ID ${emp.empNo})${held.length ? `, ${held.length} waiting punches applied` : ""}`, emp.email);
+  }
+  return { id, applied };
+}
+
 const wrap = (fn) => (req, res, next) => fn(req, res, next).catch(next);
 
 export function deviceRouter() {

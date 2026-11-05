@@ -196,7 +196,7 @@ export default function ReimbList() {
         <div className="rb-filters">
           <SearchBox hr={hr} value={f.q} claims={claims} people={people} onChange={(q) => setLater({ q }, 400)} onPick={(q) => setNow({ q })} onEnter={() => setNow({})} />
           <select className="input" id="rbf-category" aria-label="Category" value={f.category} onChange={(e) => setNow({ category: e.target.value })}><option value="">All categories</option>{cats.map((c) => <option key={c.key} value={c.key}>{c.name}</option>)}</select>
-          <select className="input" id="rbf-status" aria-label="Status" value={f.status} onChange={(e) => setNow({ status: e.target.value })}><option value="">All statuses</option>
+          <select className="input" id="rbf-status" aria-label="Status" value={f.status} onChange={(e) => setNow({ status: e.target.value })}><option value="">All status</option>
             {Object.entries(RB_STATUS).filter(([k]) => k !== "approved" && (hr ? k !== "draft" : true)).map(([k, v]) => <option key={k} value={k}>{v[0]}</option>)}</select>
           <label className="rb-range"><span>Expense date</span><input className="input" type="date" id="rbf-from" value={f.from} aria-label="From date" onChange={(e) => setNow({ from: e.target.value })} /><span>–</span>
             <input className="input" type="date" id="rbf-to" value={f.to} aria-label="To date" onChange={(e) => setNow({ to: e.target.value })} /></label>

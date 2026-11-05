@@ -24,7 +24,7 @@ function targetOf(req, res) {
   if (!req.query.email) return self;
   const asked = String(req.query.email).toLowerCase();
   if (!EMAIL.test(asked)) { res.status(400).json({ error: "That isn't a valid email address." }); return null; }
-  if (asked !== self && !isHr(req)) { res.status(403).json({ error: "You are not authorized to access this payslip." }); return null; }
+  if (asked !== self && !isHr(req)) { res.status(403).json({ error: "You are not authorised to access this payslip." }); return null; }
   return asked;
 }
 

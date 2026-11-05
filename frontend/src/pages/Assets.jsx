@@ -154,7 +154,7 @@ export default function Assets() {
           <div className="filters">
             <input className="input grow" placeholder="Search tag, name, serial or person…" aria-label="Search assets" value={q} onChange={(e) => setQ(e.target.value)} />
             <select className="input" aria-label="Category" value={cat} onChange={(e) => setCat(e.target.value)}><option value="">All categories</option>{((d && d.categories) || []).map((c) => <option key={c}>{c}</option>)}</select>
-            <select className="input" aria-label="Status" value={st} onChange={(e) => setSt(e.target.value)}><option value="">All statuses</option>{((d && d.statuses) || []).map((s) => <option key={s}>{s}</option>)}</select>
+            <select className="input" aria-label="Status" value={st} onChange={(e) => setSt(e.target.value)}><option value="">All status</option>{((d && d.statuses) || []).map((s) => <option key={s}>{s}</option>)}</select>
           </div>
           <div className="tbl-wrap"><table className="alloc-table">
             <thead><tr><th>Tag</th><th>Asset</th><th>Serial</th><th>With</th><th>Status</th><th>Warranty</th><th></th></tr></thead>

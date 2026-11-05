@@ -14,7 +14,7 @@ const ACT = {
   approve: { label: "Approve", tone: "primary", title: "Approve this payroll?", text: "The figures are final from now on: payslips are published to employees and HR can make the bank file. Corrections then need an adjustment in a later month.", note: true },
   request_changes: { label: "Request changes", tone: "glass", title: "Ask HR for changes?", text: "HR corrects the payroll and sends it again.", note: true, need: true },
   reject: { label: "Reject", tone: "danger", title: "Reject this payroll?", text: "It goes back to HR with your reason.", note: true, need: true },
-  bank_file: { label: "Generate bank file", tone: "primary", title: "Generate the bank transfer file?", text: "A CSV for upload to corporate banking, with full account numbers. It does not move any money: an authorized person uploads it in the bank's portal, where the bank's own approval applies." },
+  bank_file: { label: "Generate bank file", tone: "primary", title: "Generate the bank transfer file?", text: "A CSV for upload to corporate banking, with full account numbers. It does not move any money: an authorised person uploads it in the bank's portal, where the bank's own approval applies." },
   mark_paid: { label: "Mark as processed", tone: "primary", title: "Confirm the salary transfer?", text: "Only after the bank has processed the transfer. Reimbursements in this payroll are marked paid.", ref: true },
 };
 
@@ -43,7 +43,7 @@ function Table({ data, onOpen }) {
         <input className="input grow" type="search" placeholder="Search name or employee ID" aria-label="Search employees" value={q} onChange={(e) => setQ(e.target.value)} />
         <select className="input" aria-label="Department" value={dept} onChange={(e) => setDept(e.target.value)}><option value="">All departments</option>{opts("dept").map((d) => <option key={d}>{d}</option>)}</select>
         <select className="input" aria-label="Designation" value={title} onChange={(e) => setTitle(e.target.value)}><option value="">All designations</option>{opts("title").map((d) => <option key={d}>{d}</option>)}</select>
-        <select className="input" aria-label="Payroll status" value={status} onChange={(e) => setStatus(e.target.value)}><option value="">All statuses</option><option value="ready">Ready</option><option value="incomplete">Incomplete</option><option value="hold">On hold</option></select>
+        <select className="input" aria-label="Payroll status" value={status} onChange={(e) => setStatus(e.target.value)}><option value="">All status</option><option value="ready">Ready</option><option value="incomplete">Incomplete</option><option value="hold">On hold</option></select>
         <select className="input" aria-label="Sort" value={sort} onChange={(e) => setSort(e.target.value)}><option value="name">Sort: name</option><option value="net-desc">Net pay, high to low</option><option value="net-asc">Net pay, low to high</option><option value="gross-desc">Gross, high to low</option></select>
       </div>
       <div className="tbl-wrap"><table className="pr-table pr-run"><thead><tr>

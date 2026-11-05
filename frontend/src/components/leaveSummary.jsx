@@ -76,7 +76,7 @@ export function LeaveHistory({ list, who = false, onCancel, title = "Leave histo
         <label className="lv-fsel"><span>Leave type</span>
           <select value={f.type} onChange={(e) => setF({ ...f, type: e.target.value })}><option value="">All types</option>{TYPES.map((t) => <option key={t} value={t}>{LTYPE[t]}</option>)}</select></label>
         <label className="lv-fsel"><span>Status</span>
-          <select value={f.status} onChange={(e) => setF({ ...f, status: e.target.value })}><option value="">All statuses</option>{Object.keys(LSTAT).map((s) => <option key={s} value={s}>{LSTAT[s][0]}</option>)}</select></label>
+          <select value={f.status} onChange={(e) => setF({ ...f, status: e.target.value })}><option value="">All status</option>{Object.keys(LSTAT).map((s) => <option key={s} value={s}>{LSTAT[s][0]}</option>)}</select></label>
         <label className="lv-fsearch"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7" /><path d="m20 20-3.5-3.5" /></svg>
           <input type="search" placeholder={who ? "Search name, type or note" : "Search notes"} aria-label="Search leave" value={f.q} onChange={(e) => setF({ ...f, q: e.target.value })} /></label>
         {(f.type || f.status || f.q) && <button type="button" className="btn link" onClick={() => setF({ type: "", status: "", q: "" })}>Clear filters</button>}

@@ -65,7 +65,7 @@ export default function Budgets() {
         <div className="rb-filters">
           <input className="input grow" type="search" placeholder={hr ? "Search employee, request number, purpose" : "Search request number or purpose"} value={f.q} onChange={(e) => onQ(e.target.value)} aria-label="Search" />
           <select className="input" aria-label="Status" value={f.status} onChange={(e) => onStatus(e.target.value)}>
-            <option value="">All statuses</option>
+            <option value="">All status</option>
             {Object.entries(BQ_STATUS).map(([k, v]) => <option key={k} value={k}>{v[0]}</option>)}
           </select>
         </div>

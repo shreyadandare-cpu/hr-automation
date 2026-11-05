@@ -52,7 +52,7 @@ export async function expireInvites() {
  */
 function inviteEmail({ name, link }) {
   const hello = `Hello ${name || "there"},`;
-  const text = `${hello}\n\nYou have been invited to join the HR Automation Platform by your organization's administrator.\n\n`
+  const text = `${hello}\n\nYou have been invited to join the HR Automation Platform by your organisation's administrator.\n\n`
     + `Click the link below to accept your invitation and activate your account.\n\nAccept Invitation: ${link}\n\n`
     + `This invitation link is valid for ${VALID_MINUTES} minutes from the time it was generated. If it expires, please contact your HR administrator to request a new invitation.\n\n`
     + `If you were not expecting this invitation, please contact your HR team.\n\nRegards,\nHR Administration Team\n`;
@@ -66,7 +66,7 @@ function inviteEmail({ name, link }) {
     <table role="presentation" cellpadding="0" cellspacing="0" style="margin-top:10px"><tr><td style="width:56px;height:3px;background:${blue};font-size:0;line-height:0">&nbsp;</td></tr></table></td></tr>
   <tr><td style="padding:28px 44px 0;font:15px/1.65 Arial,Helvetica,sans-serif;color:${ink}">
     <p style="margin:0 0 18px">${escHtml(hello)}</p>
-    <p style="margin:0 0 18px">You have been invited to join the <b>HR Automation Platform</b> by your organization's administrator.</p>
+    <p style="margin:0 0 18px">You have been invited to join the <b>HR Automation Platform</b> by your organisation's administrator.</p>
     <p style="margin:0 0 24px">Click the button below to accept your invitation and activate your account.</p></td></tr>
   <tr><td style="padding:0 44px 6px">
     <table role="presentation" cellpadding="0" cellspacing="0"><tr><td bgcolor="${blue}" style="background:${blue}">

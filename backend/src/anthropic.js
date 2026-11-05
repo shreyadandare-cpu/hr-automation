@@ -44,22 +44,22 @@ export async function claudeStatus(email) {
 export async function grantClaude(email) {
   if (claudeMode() === "simulated") return { status: "invited", detail: "Invite recorded (simulated: ANTHROPIC_ADMIN_KEY is not set)" };
   const now = await claudeStatus(email);
-  if (now === "member") return { status: "active", detail: "Already a member of the Claude organization" };
+  if (now === "member") return { status: "active", detail: "Already a member of the Claude organisation" };
   if (now === "invited") return { status: "invited", detail: "An invite is already waiting for them to accept" };
   await call("POST", "/invites", { email, role: process.env.ANTHROPIC_INVITE_ROLE || "user" });
-  return { status: "invited", detail: "Invite sent from the Claude organization. Access starts when they accept" };
+  return { status: "invited", detail: "Invite sent from the Claude organisation. Access starts when they accept" };
 }
 
 /** Removes the person from the organization and cancels any pending invite. */
 export async function removeClaude(email) {
-  if (claudeMode() === "simulated") return "Removed from the Claude organization (simulated: ANTHROPIC_ADMIN_KEY is not set)";
+  if (claudeMode() === "simulated") return "Removed from the Claude organisation (simulated: ANTHROPIC_ADMIN_KEY is not set)";
   const parts = [];
   const user = (await listAll("/users")).find((u) => same(u.email, email));
-  if (user) { await call("DELETE", `/users/${encodeURIComponent(user.id)}`); parts.push("removed from the Claude organization"); }
+  if (user) { await call("DELETE", `/users/${encodeURIComponent(user.id)}`); parts.push("removed from the Claude organisation"); }
   for (const inv of (await listAll("/invites")).filter((i) => same(i.email, email) && i.status === "pending")) {
     await call("DELETE", `/invites/${encodeURIComponent(inv.id)}`); parts.push("pending invite cancelled");
   }
-  return parts.length ? parts.join(", ").replace(/^./, (c) => c.toUpperCase()) : "Was not in the Claude organization";
+  return parts.length ? parts.join(", ").replace(/^./, (c) => c.toUpperCase()) : "Was not in the Claude organisation";
 }
 
 /** What HR last did for each person and tool, so the Employees page survives a reload. */
@@ -68,7 +68,7 @@ export const recordAccess = (email, tool, status, detail) => pool.query(
    ON CONFLICT (work_email, tool) DO UPDATE SET status=$3, detail=$4, updated_at=now()`, [email, tool, status, detail || null]);
 
 /**
- * Brings tool_access in line with who is really in the Claude organization, matched by work email, so people
+ * Brings tool_access in line with who is really in the Claude organisation, matched by work email, so people
  * added in Anthropic's console (not through this app) can still be offboarded. Reads Anthropic only.
  */
 export async function syncClaude() {
@@ -81,9 +81,9 @@ export async function syncClaude() {
      LEFT JOIN tool_access t ON t.work_email=lower(e.work_email) AND t.tool='claude'`);   // people who left too: they are the ones to remove
   let changed = 0;
   for (const r of rows) {
-    const want = members.has(r.email) ? ["active", "In the Claude organization"]
+    const want = members.has(r.email) ? ["active", "In the Claude organisation"]
       : pending.has(r.email) ? ["invited", "An invite is waiting for them to accept"]
-      : ["active", "invited"].includes(r.status) ? ["revoked", "Not in the Claude organization any more"] : null;
+      : ["active", "invited"].includes(r.status) ? ["revoked", "Not in the Claude organisation any more"] : null;
     if (!want || want[0] === r.status) continue;
     await recordAccess(r.email, "claude", want[0], want[1]);
     changed++;

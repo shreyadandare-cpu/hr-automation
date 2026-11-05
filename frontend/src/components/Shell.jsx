@@ -1,10 +1,11 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Link, NavLink, Outlet, useLocation } from "react-router-dom";
-import { api } from "../api.js";
+import { api, apiMsg } from "../api.js";
 import { useAuth } from "../auth.jsx";
 import { useData } from "../data.jsx";
 import { applyTheme, currentTheme, toggleTheme } from "../theme.js";
 import { initials } from "./ui.jsx";
+import { useToast } from "./toast.jsx";
 import NotificationBell from "./NotificationBell.jsx";
 import NextHolidayPopup from "./NextHolidayPopup.jsx";
 
@@ -13,10 +14,10 @@ const HR_LINKS = [["dashboard", "Dashboard"], ["posts", "Posts"], ["workforce", 
 const EMP_LINKS = [["dashboard", "Dashboard"], ["posts", "Posts"], ["workforce", "Workforce"], ["onboard", "Onboarding"], ["offboard", "Offboarding"], ["attendance", "Attendance"], ["finances", "Finances"], ["myleave", "My leave"]];
 const REACT_PAGES = {
   dashboard: "/app/dashboard", posts: "/app/posts", employees: "/app/employees", allocations: "/app/allocations", onboard: "/app/onboarding", offboard: "/app/offboarding", leave: "/app/leave", attendance: "/app/attendance",
-  assets: "/app/assets", reimb: "/app/reimbursements", payroll: "/app/payroll", audit: "/app/audit", myleave: "/app/my-leave", team: "/app/team-leave",
+  assets: "/app/assets", claude: "/app/claude-requests", reimb: "/app/reimbursements", payroll: "/app/payroll", audit: "/app/audit", myleave: "/app/my-leave", team: "/app/team-leave",
 };
 /* The main page of each module gets a "Back to dashboard" button above it. Detail pages and pages that already have their own Back are left out. */
-const HOME_PAGES = new Set(["/app/attendance", "/app/employees", "/app/allocations", "/app/assets", "/app/audit", "/app/leave", "/app/my-leave", "/app/team-leave", "/app/onboarding", "/app/onboarding/progress", "/app/documents",
+const HOME_PAGES = new Set(["/app/attendance", "/app/employees", "/app/allocations", "/app/assets", "/app/audit", "/app/leave", "/app/my-leave", "/app/team-leave", "/app/onboarding", "/app/onboarding/progress", "/app/claude-requests", "/app/documents",
   "/app/reimbursements", "/app/payroll", "/app/posts", "/app/budgets"]);
 /* Onboarding is HR's wizard; for employees the same menu entry is their own documents page. */
 const pathFor = (key, isHr) => (key === "onboard" && !isHr ? "/app/documents" : REACT_PAGES[key]);
@@ -99,6 +100,34 @@ function AccountMenu({ photoV }) {
   );
 }
 
+/* After the Claude admin has invited this person, they are asked to say when they have accepted it (nothing tells the app otherwise). */
+function ClaudeInviteBanner() {
+  const { user } = useAuth();
+  const { people, claudeMode, reload } = useData();
+  const toast = useToast();
+  const [hidden, setHidden] = useState(() => { try { return sessionStorage.getItem("claude-invite-later") === "1"; } catch { return false; } });
+  const [busy, setBusy] = useState(false);
+  const me = people && people.find((p) => String(p.email).toLowerCase() === String(user.email).toLowerCase());
+  if (hidden || claudeMode !== "simulated" || !me || !me.grants || me.grants.claude !== "invited") return null;
+  const yes = async () => {
+    setBusy(true);
+    const r = await api("POST", "/api/tool-access/claude/confirm");
+    setBusy(false);
+    if (!r.ok) { toast(apiMsg(r)); await reload(); return; }
+    toast("Thanks. Your Claude access is marked as active."); await reload();
+  };
+  const later = () => { try { sessionStorage.setItem("claude-invite-later", "1"); } catch { /* the banner just comes back next time */ } setHidden(true); };
+  return (
+    <div className="wrap" style={{ marginTop: 16 }}>
+      <div className="callout"><div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap", width: "100%" }}>
+        <div style={{ flex: 1, minWidth: 240 }}><b>Claude invite received?</b> You have been invited to Claude at your work email. Accept the email from Claude, then click Yes.</div>
+        <button type="button" className="btn primary sm" disabled={busy} onClick={yes}>{busy ? "Saving…" : "Yes, I have access"}</button>
+        <button type="button" className="btn glass sm" disabled={busy} onClick={later}>Not yet</button>
+      </div></div>
+    </div>
+  );
+}
+
 export default function Shell() {
   const { user, isHr, isManager, itAdmin, payrollReviewer } = useAuth();
   const { profile } = useData();
@@ -119,7 +148,7 @@ export default function Shell() {
   });
   const { pathname } = useLocation();
   const base = isHr ? HR_LINKS : [...EMP_LINKS, ...(isManager ? [["team", "Team leave"]] : []), ...(payrollReviewer ? [["payroll", "Payroll"]] : [])];   // the payroll reviewer (PAYROLL_REVIEWERS) approves payroll
-  const links = itAdmin ? [...base.filter(([k]) => k !== "audit"), ["assets", "Assets"], ...base.filter(([k]) => k === "audit")] : base;
+  const links = itAdmin ? [...base.filter(([k]) => k !== "audit"), ["assets", "Assets"], ...(isHr ? [] : [["claude", "Claude"]]), ...base.filter(([k]) => k === "audit")] : base;   // HR reaches the Claude requests from Onboarding; an IT admin who is not HR gets their own link
   return (
     <>
       <div className="wrap navbar">
@@ -135,6 +164,7 @@ export default function Shell() {
           <AccountMenu photoV={photoV} />
         </nav>
       </div>
+      <ClaudeInviteBanner />
       <main className="wrap view">
         {HOME_PAGES.has(pathname.replace(/\/+$/, "")) && <Link className="back back-home" to="/app/dashboard"><span className="back-ar" aria-hidden="true">←</span>Back to dashboard</Link>}
         <Outlet />

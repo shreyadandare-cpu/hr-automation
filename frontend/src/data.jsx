@@ -11,6 +11,7 @@ export function DataProvider({ children }) {
   const { isHr } = useAuth();
   const [roster, setRoster] = useState(null);
   const [tools, setTools] = useState([]);
+  const [claudeMode, setClaudeMode] = useState("live");   // "simulated" = no Claude admin key: access is requested from the Claude admin instead
   const [offs, setOffs] = useState([]);
   const [docs, setDocs] = useState([]);
   const [profile, setProfile] = useState(null);
@@ -25,7 +26,7 @@ export function DataProvider({ children }) {
     if (lv.ok) setLeave(lv.data);
     if (rec.ok) setRecords(rec.data);
     setRoster(r.ok ? r.data : []);
-    if (t.ok) setTools(t.data.rows);
+    if (t.ok) { setTools(t.data.rows); setClaudeMode(t.data.claudeMode); }
     if (o.ok && Array.isArray(o.data)) setOffs(o.data);
     if (d.ok) setDocs(d.data);
     if (p.ok) setProfile(p.data);
@@ -39,5 +40,5 @@ export function DataProvider({ children }) {
     return roster.map((r, i) => buildPerson(r, i, tools, offMap));
   }, [roster, tools, offs]);
 
-  return <DataContext.Provider value={{ people, docs, profile, records, leave, setProfile, reload, reloadLeave, setRoster }}>{children}</DataContext.Provider>;
+  return <DataContext.Provider value={{ claudeMode, people, docs, profile, records, leave, setProfile, reload, reloadLeave, setRoster }}>{children}</DataContext.Provider>;
 }

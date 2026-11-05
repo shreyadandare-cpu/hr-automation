@@ -59,6 +59,6 @@ export function onboardingErrors({ d = {}, ids = {}, apps }) {
   if (has(ids.pan) && !V.pan(ids.pan)) e.pan = "PAN must look like ABCDE1234F.";
   if (has(ids.acct) && !V.acct(ids.acct)) e.acct = "Bank account number must be 9 to 18 digits.";
   if (has(ids.ifsc) && !V.ifsc(ids.ifsc)) e.ifsc = "IFSC must look like HDFC0001234.";
-  if (!Array.isArray(apps) || !apps.length) e.apps = "Pick at least one tool to give.";
+  if (!Array.isArray(apps)) e.apps = "Say whether this person needs Claude access.";   // an empty list is fine: no access needed for now
   return e;
 }

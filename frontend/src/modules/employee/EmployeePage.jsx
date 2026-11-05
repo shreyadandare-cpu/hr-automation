@@ -22,7 +22,7 @@ const ON_TASKS = ["Laptop issued", "Policy documents signed"];
 const DEPTS = ["Engineering", "Data", "DevOps & Cloud", "Gen AI", "Sales", "HR", "Finance & Admin", "Leadership"];
 const GRANT = {
   none: ["Not started", "p-mute"], provisioning: ["Giving access", "p-info p-busy"], active: ["Active", "p-ok"], created: ["Created, waiting for joining date", "p-warn"],
-  invited: ["Invite sent", "p-info"], failed: ["Failed", "p-bad"], revoking: ["Removing", "p-warn p-busy"], revoked: ["Removed", "p-mute"],
+  requested: ["Waiting for the Claude admin", "p-warn"], invited: ["Invite sent", "p-info"], failed: ["Failed", "p-bad"], revoking: ["Removing", "p-warn p-busy"], revoked: ["Removed", "p-mute"],
 };
 const EMP = { onboarding: ["Onboarding", "p-info"], active: ["Active", "p-ok"], offboarding: ["Offboarding", "p-warn"], offboarded: ["Offboarded", "p-mute"] };
 
@@ -124,12 +124,13 @@ function EditModal({ e, people, onClose, onPayroll }) {
 
 function EmployeeView({ p }) {
   const { isHr, user } = useAuth();
-  const { people, docs, records, reload } = useData();
+  const { people, docs, records, reload, claudeMode } = useData();
   const lv = useLeave();
   const toast = useToast();
   const loc = useLocal(p.email);
   const [rec, setRec] = useState(null);          // the offboarding record (HR)
   const [asking, setAsking] = useState(false);    // the "Give Claude access?" question
+  const byRequest = claudeMode === "simulated";   // no Claude admin key: access is requested from the Claude admin, who invites them in Claude
   const [busy, setBusy] = useState(null);        // "provisioning" or "revoking" while a Claude call runs
   const [params, setParams] = useSearchParams();
   const [modal, setModal] = useState(() => (params.get("edit") === "1" && isHr && p.status !== "offboarded" ? "edit" : null));   // "edit" | "laptop"; the directory's Edit sends people here with ?edit=1
@@ -178,9 +179,14 @@ function EmployeeView({ p }) {
   const toolDo = async (action) => {
     setBusy(action === "grant" ? "provisioning" : "revoking");
     let r; try { r = await api("POST", "/api/tool-access/claude", { email: p.email, action }); } catch { r = { ok: false, data: { error: "No server connection." } }; }
-    if (r.ok) toast(r.data.mode === "simulated" ? "Done as a test only: Claude is not connected yet (no admin key)." : action === "grant" ? `Claude access for ${e.name}: ${r.data.detail}.` : `Claude access removed for ${e.name}.`);
+    if (r.ok) toast(action === "grant" ? `${byRequest ? e.name : `Claude access for ${e.name}`}: ${r.data.detail}.` : r.data.mode === "simulated" ? "Done as a test only: Claude is not connected yet (no admin key)." : `Claude access removed for ${e.name}.`);
     else toast((r.data && r.data.error) || "Request failed");
     await reload(); setBusy(null);
+  };
+  const cancelRequest = async () => {
+    const r = await api("POST", "/api/claude-requests/cancel", { email: p.email });
+    toast(r.ok ? `The Claude request for ${e.name} was cancelled.` : (r.data && r.data.error) || "Request failed");
+    await reload();
   };
   const remove = () => { if (confirm(`Remove ${e.name} from the Claude organisation?`)) toolDo("remove"); };
   const retry = async (app) => {
@@ -218,7 +224,7 @@ function EmployeeView({ p }) {
         <div className="profile"><Avatar person={e} /><div style={{ flex: 1, minWidth: 0 }}><div className="eyebrow">{e.dept}</div><h2 style={{ marginTop: 6 }}>{e.name}</h2><div style={{ color: "var(--ink-dim)", marginTop: 2 }}>{e.title}</div><div className="muted" style={{ marginTop: 6, fontSize: 13 }}>{e.email} · <span className={`pill ${e.mailPlan === "Business" ? "p-info" : "p-mute"}`}>{e.mailPlan} mail</span></div></div>
           <div className="row"><EmpPill e={e} />
             {isHr && status !== "offboarded" && <button className="btn glass sm" onClick={() => setModal("edit")}>Edit details</button>}
-            {isHr && pending.length > 0 && <button className="btn primary sm" disabled={!!busy} onClick={() => setAsking(true)}>Give Claude access</button>}
+            {isHr && pending.length > 0 && <button className="btn primary sm" disabled={!!busy} onClick={() => setAsking(true)}>{byRequest ? "Request Claude access" : "Give Claude access"}</button>}
             {isHr && canOff && <Link className="btn glass sm" to={`/app/offboarding?email=${encodeURIComponent(p.email)}`}><Icon name="offboard" />Offboard</Link>}</div></div>
         <dl className="facts">
           <div><dt>Employee no.</dt><dd className="mono">{e.no || "Not assigned"}</dd></div>
@@ -237,7 +243,8 @@ function EmployeeView({ p }) {
               <div className="grow"><b>{TOOLS[id].name}</b><span className={grants[id] === "failed" ? "err" : ""}>{grants[id] === "failed" ? errors[id] || "Request failed" : grants[id] === "created" ? `Suspended until ${fdate(e.start)}, then activates automatically` : TOOLS[id].sub}</span></div>
               <span className={`pill ${GRANT[grants[id]][1]}`}>{GRANT[grants[id]][0]}</span>
               {isHr && grants[id] === "failed" && <button className="btn glass sm" onClick={() => retry(id)}>Retry</button>}
-              {isHr && id === "claude" && status !== "offboarded" && ["none", "revoked"].includes(grants[id]) && <button className="btn primary sm" disabled={!!busy} onClick={() => setAsking(true)}>Give Claude access</button>}
+              {isHr && id === "claude" && status !== "offboarded" && ["none", "revoked"].includes(grants[id]) && <button className="btn primary sm" disabled={!!busy} onClick={() => setAsking(true)}>{byRequest ? "Request Claude access" : "Give Claude access"}</button>}
+              {isHr && id === "claude" && grants[id] === "requested" && <button className="btn glass sm" onClick={cancelRequest}>Cancel request</button>}
               {isHr && id === "claude" && ["active", "invited"].includes(grants[id]) && <button className="btn glass sm" onClick={remove}>Remove access</button>}
             </div>
           ))}
@@ -264,8 +271,10 @@ function EmployeeView({ p }) {
       {isHr && <ReimbCard e={e} />}
       {isHr && <AdvancesCard email={p.email} name={e.name} />}
       {isHr && <HistoryCard email={p.email} />}
-      {asking && <ConfirmDialog title={`Give Claude access to ${e.name}?`} confirmLabel="Send invite" onClose={() => setAsking(false)} onConfirm={async () => { await toolDo("grant"); setAsking(false); }}>
-        An invite is sent to <b>{e.email}</b> from your Claude organisation. They get access when they accept it, and it may use a paid seat.</ConfirmDialog>}
+      {asking && <ConfirmDialog title={byRequest ? `Request Claude access for ${e.name}?` : `Give Claude access to ${e.name}?`} confirmLabel={byRequest ? "Send request" : "Send invite"} onClose={() => setAsking(false)} onConfirm={async () => { await toolDo("grant"); setAsking(false); }}>
+        {byRequest
+          ? <>The Claude admin is asked to invite <b>{e.email}</b> from your Claude organisation. Nothing reaches {e.name} until they do, and it may use a paid seat.</>
+          : <>An invite is sent to <b>{e.email}</b> from your Claude organisation. They get access when they accept it, and it may use a paid seat.</>}</ConfirmDialog>}
       {modal === "edit" && <EditModal e={e} people={people} onClose={() => setModal(null)} onPayroll={setModal} />}
       {modal === "salary" && <SalaryModal email={p.email} onClose={() => setModal(null)} />}
       {modal === "bank" && <BankModal email={p.email} onClose={() => setModal(null)} />}

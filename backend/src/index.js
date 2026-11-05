@@ -19,6 +19,7 @@ import { deviceRouter, linkDeviceUserByEmployeeNo } from "./device.js";
 import { startPortalAttendanceSync } from "./portal-attendance.js";
 import { payslipsRouter } from "./payslips.js";
 import { claudeMode, grantClaude, removeClaude, recordAccess, syncClaude, syncClaudeSoon } from "./anthropic.js";
+import { claudeRequestsRouter, confirmOwnClaude, requestClaude, runClaudeReminders } from "./claude-requests.js";
 import { offboardingRouter, runDue } from "./offboarding.js";
 import { clearanceRouter } from "./clearance.js";
 import { onboardingErrors, detailsErrors, maskAadhaar, maskPan, maskAcct } from "./validate.js";
@@ -544,6 +545,14 @@ app.post("/api/tool-access/claude/refresh", requireHr, wrap(async (req, res) => 
   if (changed) await pool.query("INSERT INTO audit_log (action, work_email) VALUES ($1,$2)", [`Claude: status refreshed from the Claude organisation, ${changed} changed (by ${req.user.email})`, req.user.email]);
   res.json({ mode: "live", changed });
 }));
+// The signed-in person confirms they accepted their Claude invite (only when Claude is not connected; otherwise Claude itself is checked).
+app.post("/api/tool-access/claude/confirm", wrap(async (req, res) => {
+  if (!req.user) return res.status(401).json({ error: "Please sign in." });
+  if (claudeMode() !== "simulated") return res.status(409).json({ error: "Claude access is checked with Claude automatically." });
+  const r = await confirmOwnClaude(req.user.email);
+  if (!r) return res.status(409).json({ error: "There is no Claude invite waiting for you." });
+  res.json(r);
+}));
 app.post("/api/tool-access/claude", requireHr, wrap(async (req, res) => {
   const email = String((req.body && req.body.email) || "").toLowerCase();
   const action = req.body && req.body.action;
@@ -553,6 +562,8 @@ app.post("/api/tool-access/claude", requireHr, wrap(async (req, res) => {
   try {
     if (action === "grant") {
       if (emp.status === "offboarded") return res.status(400).json({ error: `${emp.name} has left, so Claude access cannot be given.` });
+      // No Admin API key: ask the Claude admin to invite them (claude-requests.js) instead of pretending an invite went out.
+      if (claudeMode() === "simulated") return res.json({ ...(await requestClaude(email, req.user.email)), mode: "simulated" });
       const r = await grantClaude(email);
       await recordAccess(email, "claude", r.status, r.detail);
       await pool.query("INSERT INTO audit_log (action, work_email) VALUES ($1,$2)", [`Claude: ${r.detail} (by ${req.user.email})`, email]);
@@ -568,6 +579,7 @@ app.post("/api/tool-access/claude", requireHr, wrap(async (req, res) => {
     res.status(502).json({ error: `Claude could not do that: ${err.message}` });
   }
 }));
+app.use("/api/claude-requests", claudeRequestsRouter);   // HR and IT admins: who is waiting to be invited to Claude
 app.use("/api/reimbursements", requireAuth, reimbursementsRouter);   // own claims for everyone; review actions are HR-only inside
 app.use("/api/budget-requests", requireAuth, budgetsRouter);   // own requests for everyone; decisions are HR-only inside
 // Payroll: HR prepares it and a payroll reviewer (PAYROLL_REVIEWERS) approves it; everything after the workflow router is HR only.
@@ -643,6 +655,10 @@ else {
     .catch((err) => console.error("Leave digest failed:", err));
   checkDigest();
   setInterval(checkDigest, 10 * 60_000);
+  // Claude access requests nobody has dealt with for a couple of days remind the Claude admin; checked hourly.
+  const checkClaude = () => runClaudeReminders().catch((err) => console.error("Claude request reminder failed:", err));
+  checkClaude();
+  setInterval(checkClaude, 60 * 60_000);
   startPortalAttendanceSync();   // copies the office device punches the Employee Portal received (only when PORTAL_ATTENDANCE_SYNC=true)
 }
 console.log(`Email: ${emailMode() === "smtp" ? "sending through SMTP" : "SMTP not configured, emails are logged and skipped"}`);

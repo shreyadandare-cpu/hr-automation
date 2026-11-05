@@ -3,8 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { api, apiMsg } from "../../api.js";
 import { useAuth } from "../../auth.jsx";
 import { useData } from "../../data.jsx";
-import { TOOLS } from "../../lib/people.js";
-import { Callout, SectionHead, ToolIcon } from "../../components/ui.jsx";
+import { Callout, SectionHead } from "../../components/ui.jsx";
 import { useToast } from "../../components/toast.jsx";
 import { ACCESS_HELP, ACCESS_LABEL, DEPTS, DOMAIN, DocRows, ObTabs, ON_TOOLS, V, docCount, fdate, groupDocs, hrConfirm, makeWorkEmail, nameSplit } from "./shared.jsx";
 
@@ -90,7 +89,7 @@ function WorkEmailCard({ ob, taken, onCreate }) {
 
 export default function Onboarding() {
   const { isHr } = useAuth();
-  const { people, records, docs, reload } = useData();
+  const { people, records, docs, reload, claudeMode } = useData();
   const toast = useToast(), nav = useNavigate();
   const [ob, setOb] = useState(newOb);
   const [pick, setPick] = useState("");
@@ -101,7 +100,7 @@ export default function Onboarding() {
   useEffect(() => { if (isHr) api("GET", "/api/onboarding/next-employee-no").then((r) => { if (r.ok && r.data && r.data.empNo) setNextNo(r.data.empNo); }).catch(() => {}); }, [isHr, ob.work]);
   useEffect(() => { if (nextNo && !ob.d.empNo && !ob.work) setOb((o) => (o.d.empNo || o.work ? o : { ...o, d: { ...o.d, empNo: nextNo } })); }, [nextNo, ob.d.empNo, ob.work]);
   const patch = (p) => setOb((o) => ({ ...o, ...p }));
-  const setD = (k, v) => setOb((o) => ({ ...o, d: { ...o.d, [k]: v }, ...(k === "dept" ? { apps: null } : {}) }));
+  const setD = (k, v) => setOb((o) => ({ ...o, d: { ...o.d, [k]: v } }));
 
   // A saved draft (server first, then this browser) fills in the details when the page opens.
   useEffect(() => {
@@ -236,8 +235,7 @@ export default function Onboarding() {
     if (ob.step !== OB_STEPS.length) return;
     if (!ob.reviewed) { toast("Tick the review box before submitting."); return; }
     if (!ob.work || !ob.login) { toast("Create the work email and the login first."); return; }
-    const apps = (ob.apps || ON_TOOLS).filter((a) => ON_TOOLS.includes(a));
-    if (!apps.length) { toast("Tick Claude to give access, or the onboarding can't be saved."); return; }
+    const apps = (ob.apps || ON_TOOLS).filter((a) => ON_TOOLS.includes(a));   // empty = this person does not need Claude for now
     const r = await api("POST", "/api/onboarding", { d, apps, existingEmail: ob.work.email });
     if (r.status === 400) { const errors = (r.data && r.data.errors) || {}; patch({ errors }); toast(Object.values(errors)[0] || (r.data && r.data.error) || "The server rejected the details."); return; }
     if (!r.ok) { toast("The server could not save this onboarding. Try again."); return; }
@@ -247,11 +245,11 @@ export default function Onboarding() {
     const dl = r.data.deviceLink;
     if (dl && dl.id) toast(`${name} is linked to attendance with device ID ${dl.id}.`);
     else if (dl && dl.skipped) toast(`Attendance was not linked: ${dl.skipped}. Link it by hand in Attendance.`);
-    // Give the tools that were ticked (Claude is a real call when the admin key is set, otherwise a test only).
+    // Claude: an invite when the admin key is set, otherwise a request for the Claude admin to invite them. Not ticked: nothing is asked for.
     if (apps.includes("claude")) {
       const g = await api("POST", "/api/tool-access/claude", { email, action: "grant" });
-      toast(g.ok ? (g.data.mode === "simulated" ? "Done as a test only: Claude is not connected yet (no admin key)." : `Claude access for ${name}: ${g.data.detail}.`) : apiMsg(g));
-    }
+      toast(g.ok ? (g.data.mode === "simulated" ? `${name}: ${g.data.detail}.` : `Claude access for ${name}: ${g.data.detail}.`) : apiMsg(g));
+    } else toast(`Claude access was not requested for ${name}. You can request it later from their profile.`);
     await reload();
     nav(`/app/employees/${encodeURIComponent(email)}`);
   };
@@ -327,13 +325,13 @@ export default function Onboarding() {
             <div><dt>Google</dt><dd>{{ active: "Active in Google Workspace", simulated: "Active (simulated)", existing: "Already in the employee list" }[w.google] || w.google}</dd></div>
             <div><dt>App login</dt><dd>{l && l.role === "hr" ? "Created with HR rights" : `Created, ${(ACCESS_LABEL[l && l.role] || "employee").toLowerCase()} role`}</dd></div></dl></div></div>
           <DocsCard person={picked} docs={docs} />
-          <div className="card"><div className="card-h"><h3>Tools to give</h3><span className="muted">Claude</span></div>
-            <div className="card-b" style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-              <div className="tiles">{ON_TOOLS.map((id) => (
-                <label className="tile" key={id}><input type="checkbox" value={id} checked={sel.includes(id)} onChange={(e) => patch({ apps: e.target.checked ? [...sel, id] : sel.filter((x) => x !== id) })} />
-                  <ToolIcon tool={TOOLS[id]} state="active" /><span className="t"><b>{TOOLS[id].name}</b><span>{TOOLS[id].sub}</span></span></label>
-              ))}</div>
-              <p className="muted" style={{ margin: 0 }}>Saved as this person's tool access, so offboarding can list it later. The employee uploads documents after signing in, and resume details will be added later.</p>
+          <div className="card"><div className="card-h"><h3>Claude access</h3></div>
+            <div className="card-b" style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+              <label className="check" style={{ border: 0, padding: 0 }}><input type="checkbox" checked={sel.includes("claude")} onChange={(e) => patch({ apps: e.target.checked ? ["claude"] : [] })} />
+                <div className="grow"><div className="lbl">This person needs Claude access</div></div></label>
+              <p className="muted" style={{ margin: 0 }}>{sel.includes("claude")
+                ? (claudeMode === "simulated" ? "A request goes to the Claude admin, who invites them in Claude. You can follow it under Claude requests." : "An invite is sent from the Claude organisation when you submit.")
+                : "No request is made now. If they need Claude later, request it from their profile."}</p>
             </div></div>
           <label className="check" style={{ border: 0, padding: 0 }}><input type="checkbox" checked={ob.reviewed} onChange={(e) => patch({ reviewed: e.target.checked })} /><div className="grow"><div className="lbl">I have reviewed all the details above</div></div></label>
         </>}

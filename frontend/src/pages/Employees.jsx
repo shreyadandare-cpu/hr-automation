@@ -72,7 +72,7 @@ function ProjectsCell({ person }) {
 
 export default function Employees() {
   const { isHr, user } = useAuth();
-  const { people, reload } = useData();
+  const { people, reload, claudeMode } = useData();
   const toast = useToast();
   const [refreshing, setRefreshing] = useState(false);
   const nav = useNavigate();
@@ -129,7 +129,7 @@ export default function Employees() {
       {views}
       <SectionHead eyebrow="People" title="Everyone," accent="at a glance." sub="Everyone with a record here, and which tools they can use right now."
         actions={<>
-          {isHr && <button type="button" className="btn glass sm" disabled={refreshing} onClick={refreshClaude}>{refreshing ? "Checking…" : "Refresh Claude status"}</button>}
+          {isHr && claudeMode !== "simulated" && <button type="button" className="btn glass sm" disabled={refreshing} onClick={refreshClaude}>{refreshing ? "Checking…" : "Refresh Claude status"}</button>}
           {isHr && formerCount > 0 && <label className="former-toggle"><input type="checkbox" checked={former} onChange={(e) => { setFormer(e.target.checked); setPage(1); }} />Show former employees ({formerCount})</label>}
           <input className="input" placeholder="Search by name, ID, project, location or email" aria-label="Search employees" value={q} onChange={(e) => { setQ(e.target.value); setPage(1); }} />
         </>} />
@@ -154,7 +154,8 @@ export default function Employees() {
               <td className="hide-sm"><ProjectsCell person={p} /></td>
               <td><StatusPill person={p} /><div className="cell-sub">Joined {shortDate(p.start)}</div></td>
               <td><div className="apps-row">{toolIds(p).map((id) => <ToolIcon key={id} tool={TOOLS[id]} state={p.grants[id]} />)}
-                {p.grants && p.grants.claude === "invited" && <span className="cell-sub" style={{ marginLeft: 8 }}>Invited</span>}</div></td>
+                {p.grants && p.grants.claude === "invited" && <span className="cell-sub" style={{ marginLeft: 8 }}>Invited</span>}
+                {p.grants && p.grants.claude === "requested" && <span className="cell-sub" style={{ marginLeft: 8 }}>Requested</span>}</div></td>
               <td className="dots-cell"><RowMenu person={p} canEdit={isHr} onView={(x) => nav(`/app/employees/${encodeURIComponent(x.email)}`)} onEdit={(x) => nav(`/app/employees/${encodeURIComponent(x.email)}?edit=1`)} /></td>
             </tr>
           )) : <tr><td colSpan="8"><div className="empty">{q ? `No one matches “${q}”.` : "No one here yet."}</div></td></tr>}

@@ -9,6 +9,7 @@ import { ObTabs } from "./shared.jsx";
 
 const CLAUDE = {
   active: ["Has Claude access", "ok"],
+  requested: ["Waiting for the Claude admin", "warn"],
   invited: ["Invite sent", "info"],
   failed: ["Invite failed", "bad"],
 };
@@ -16,7 +17,7 @@ const CLAUDE = {
 /* Everyone whose onboarding is not finished, and whether they have Claude. Access itself is given from the person's profile. */
 export default function Progress() {
   const { isHr } = useAuth();
-  const { people, reload } = useData();
+  const { people, reload, claudeMode } = useData();
   const toast = useToast();
   const [refreshing, setRefreshing] = useState(false);
   if (!isHr) return <section className="section"><SectionHead eyebrow="Onboarding" title="In" accent="onboarding." /><div className="empty">Only HR can see who is being onboarded.</div></section>;
@@ -37,8 +38,8 @@ export default function Progress() {
   return (
     <section className="section">
       <ObTabs cur="progress" />
-      <SectionHead eyebrow="Onboarding" title="Who is" accent="joining." sub="People whose onboarding is not finished, and whether they have Claude. Open a profile to give Claude access."
-        actions={<button type="button" className="btn glass sm" disabled={refreshing} onClick={refresh}>{refreshing ? "Checking…" : "Refresh Claude status"}</button>} />
+      <SectionHead eyebrow="Onboarding" title="Who is" accent="joining." sub="People whose onboarding is not finished, and whether they have Claude. Open a profile to ask for Claude access."
+        actions={claudeMode !== "simulated" && <button type="button" className="btn glass sm" disabled={refreshing} onClick={refresh}>{refreshing ? "Checking…" : "Refresh Claude status"}</button>} />
       <div className="card"><div className="tbl-wrap"><table>
         <thead><tr><th>Employee</th><th>Claude access</th><th aria-label="Open" /></tr></thead>
         <tbody>

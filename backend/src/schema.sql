@@ -565,6 +565,10 @@ END $$;
 CREATE TABLE IF NOT EXISTS tool_access (
   work_email TEXT NOT NULL, tool TEXT NOT NULL, status TEXT NOT NULL, detail TEXT, updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   PRIMARY KEY (work_email, tool));
+-- Claude access asked for by HR and waiting for the Claude admin to invite the person (status 'requested').
+ALTER TABLE tool_access ADD COLUMN IF NOT EXISTS requested_by TEXT;
+ALTER TABLE tool_access ADD COLUMN IF NOT EXISTS requested_at TIMESTAMPTZ;
+ALTER TABLE tool_access ADD COLUMN IF NOT EXISTS reminded_at TIMESTAMPTZ;
 
 -- People who have already left are not on any project any more.
 UPDATE employee_project_allocations a SET status='Ended', end_date=coalesce(a.end_date, e.last_day, CURRENT_DATE), end_reason=coalesce(a.end_reason, 'Left the company')

@@ -43,7 +43,7 @@ export default function Leavers() {
     if (!r.ok) { toast(apiMsg(r)); return; }
     if (r.data.mode === "simulated") { toast("Claude is not connected yet (no admin key), so there is nothing to refresh."); return; }
     await reload();
-    toast(r.data.changed ? `Claude status updated for ${r.data.changed} ${r.data.changed === 1 ? "person" : "people"}.` : "Already up to date with the Claude organization.");
+    toast(r.data.changed ? `Claude status updated for ${r.data.changed} ${r.data.changed === 1 ? "person" : "people"}.` : "Already up to date with the Claude organisation.");
   };
   const remove = async () => {
     let ok = 0, failed = 0, test = false, firstError = "";
@@ -86,7 +86,7 @@ export default function Leavers() {
       </table></div></div>
       {ask && <Modal onClose={() => !busy && setAsk(null)}>
         <div className="card-h" style={{ paddingTop: 24 }}><h3>Remove Claude access?</h3></div>
-        <div className="card-b">{ask.length === 1 ? `Are you sure you want to remove ${ask[0].name}'s Claude access?` : `Are you sure you want to remove Claude access for ${ask.length} people?`} They are taken out of the Claude organization right away, and any pending invite is cancelled.</div>
+        <div className="card-b">{ask.length === 1 ? `Are you sure you want to remove ${ask[0].name}'s Claude access?` : `Are you sure you want to remove Claude access for ${ask.length} people?`} They are taken out of the Claude organisation right away, and any pending invite is cancelled.</div>
         <div className="modal-f"><button type="button" className="btn glass" disabled={!!busy} onClick={() => setAsk(null)}>Cancel</button>
           <button type="button" className="btn danger" disabled={!!busy} onClick={remove}>{busy ? `Removing… ${busy.done}/${busy.total}` : "Yes, remove"}</button></div>
       </Modal>}

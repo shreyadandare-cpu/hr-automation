@@ -493,7 +493,7 @@ R.post("/adjustments", hrOnly, wrap(async (req, res) => {
   if (Object.keys(errors).length) return res.status(400).json({ error: "Please check the highlighted fields.", errors });
   const out = await tx(async (client) => {
     const { rows: [run] } = await client.query("SELECT status, workflow FROM payroll_runs WHERE period=$1", [sourcePeriod]);
-    if (!run || !(FINAL.has(run.status) || run.status === "processed")) return fail(409, `${monthName(sourcePeriod)} isn't finalized. Change its inputs directly instead.`);
+    if (!run || !(FINAL.has(run.status) || run.status === "processed")) return fail(409, `${monthName(sourcePeriod)} isn't finalised. Change its inputs directly instead.`);
     const { rows: [line] } = await client.query("SELECT 1 FROM payroll_items i JOIN payroll_runs r ON r.id=i.run_id WHERE r.period=$1 AND lower(i.work_email)=$2", [sourcePeriod, email]);
     if (!line) return fail(404, `This person wasn't in the ${monthName(sourcePeriod)} payroll.`);
     const { rows: [a] } = await client.query("INSERT INTO payroll_adjustments (work_email, source_period, kind, amount, reason, created_by) VALUES ($1,$2,$3,$4,$5,$6) RETURNING id",

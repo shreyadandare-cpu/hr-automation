@@ -14,7 +14,7 @@ export const actorOf = (req) => ({ email: req.user.email, hr: req.user.role === 
 
 export const requirePayrollAccess = (req, res, next) =>
   !req.user ? res.status(401).json({ error: "Please sign in." })
-  : req.user.role !== "hr" && !isReviewer(req.user.email) ? res.status(403).json({ error: "You are not authorized to access payroll." })
+  : req.user.role !== "hr" && !isReviewer(req.user.email) ? res.status(403).json({ error: "You are not authorised to access payroll." })
   : (res.setHeader("Cache-Control", "private, no-store"), next());
 
 export const hrOnly = (req, res, next) => (req.user.role === "hr" ? next() : res.status(403).json({ error: "Only HR can do this." }));

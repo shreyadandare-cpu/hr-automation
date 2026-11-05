@@ -182,7 +182,7 @@ function EmployeeView({ p }) {
     else toast((r.data && r.data.error) || "Request failed");
     await reload(); setBusy(null);
   };
-  const remove = () => { if (confirm(`Remove ${e.name} from the Claude organization?`)) toolDo("remove"); };
+  const remove = () => { if (confirm(`Remove ${e.name} from the Claude organisation?`)) toolDo("remove"); };
   const retry = async (app) => {
     if (status === "offboarding") {
       if (!rec) return;
@@ -265,7 +265,7 @@ function EmployeeView({ p }) {
       {isHr && <AdvancesCard email={p.email} name={e.name} />}
       {isHr && <HistoryCard email={p.email} />}
       {asking && <ConfirmDialog title={`Give Claude access to ${e.name}?`} confirmLabel="Send invite" onClose={() => setAsking(false)} onConfirm={async () => { await toolDo("grant"); setAsking(false); }}>
-        An invite is sent to <b>{e.email}</b> from your Claude organization. They get access when they accept it, and it may use a paid seat.</ConfirmDialog>}
+        An invite is sent to <b>{e.email}</b> from your Claude organisation. They get access when they accept it, and it may use a paid seat.</ConfirmDialog>}
       {modal === "edit" && <EditModal e={e} people={people} onClose={() => setModal(null)} onPayroll={setModal} />}
       {modal === "salary" && <SalaryModal email={p.email} onClose={() => setModal(null)} />}
       {modal === "bank" && <BankModal email={p.email} onClose={() => setModal(null)} />}

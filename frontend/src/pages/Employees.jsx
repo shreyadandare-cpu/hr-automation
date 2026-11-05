@@ -84,7 +84,7 @@ export default function Employees() {
   const chart = params.get("view") === "chart";
   const [scope, setScope] = useState("all");          // "all" or "team": the people under me
   const [adding, setAdding] = useState(false);        // the Add member dialog for my own team
-  // Claude access (HR): giving it happens on the person's own page. Here HR can only refresh the status from the Claude organization.
+  // Claude access (HR): giving it happens on the person's own page. Here HR can only refresh the status from the Claude organisation.
   const refreshClaude = async () => {
     if (refreshing) return;
     setRefreshing(true);
@@ -93,7 +93,7 @@ export default function Employees() {
     if (!r.ok) { toast(apiMsg(r)); return; }
     if (r.data.mode === "simulated") { toast("Claude is not connected yet (no admin key), so there is nothing to refresh."); return; }
     await reload();
-    toast(r.data.changed ? `Claude status updated for ${r.data.changed} ${r.data.changed === 1 ? "person" : "people"}.` : "Already up to date with the Claude organization.");
+    toast(r.data.changed ? `Claude status updated for ${r.data.changed} ${r.data.changed === 1 ? "person" : "people"}.` : "Already up to date with the Claude organisation.");
   };
 
   const { direct, team } = useMemo(() => teamUnder(people, user && user.email), [people, user]);   // the people under me

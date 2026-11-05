@@ -47,6 +47,7 @@ export function detailsErrors(d = {}) {
   if (!has(d.address)) e.address = "Enter an address.";
   if (!has(d.title)) e.title = "Enter a job title.";
   if (!/^\d{4}-\d{2}-\d{2}$/.test(d.start || "")) e.start = "Enter a start date.";
+  if (has(d.empNo) && !/^[A-Za-z0-9][A-Za-z0-9/_-]{0,19}$/.test(String(d.empNo).trim())) e.empNo = "Employee ID can use letters, digits, / - and _ (up to 20 characters).";
   return e;
 }
 

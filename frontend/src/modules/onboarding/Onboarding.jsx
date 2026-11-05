@@ -10,7 +10,7 @@ import { ACCESS_HELP, ACCESS_LABEL, DEPTS, DOMAIN, DocRows, ObTabs, ON_TOOLS, V,
 
 const OB_STEPS = ["Details and work email", "Create login", "Tools and review"];
 const OB_DRAFT_KEY = "hr_ob_draft";
-const newDetails = () => ({ first: "", last: "", pemail: "", phone: "", address: "", dept: "Engineering", kind: "Employee", title: "", mgr: "", start: "" });
+const newDetails = () => ({ first: "", last: "", pemail: "", phone: "", address: "", dept: "Engineering", kind: "Employee", title: "", mgr: "", start: "", empNo: "" });
 const newOb = () => ({ step: 1, fromReview: false, email: null, d: newDetails(), work: null, login: null, busy: false, apps: null, reviewed: false, errors: {}, role: null, sendInvite: true });
 
 /* Step 1 asks only for personal and job details. Documents come from the employee, so none are required here. */
@@ -97,6 +97,9 @@ export default function Onboarding() {
   const [restored, setRestored] = useState(false);
   const [focusTick, setFocusTick] = useState(0);
   const touched = useRef(false);
+  const [nextNo, setNextNo] = useState("");   // the next employee ID in the series
+  useEffect(() => { if (isHr) api("GET", "/api/onboarding/next-employee-no").then((r) => { if (r.ok && r.data && r.data.empNo) setNextNo(r.data.empNo); }).catch(() => {}); }, [isHr, ob.work]);
+  useEffect(() => { if (nextNo && !ob.d.empNo && !ob.work) setOb((o) => (o.d.empNo || o.work ? o : { ...o, d: { ...o.d, empNo: nextNo } })); }, [nextNo, ob.d.empNo, ob.work]);
   const patch = (p) => setOb((o) => ({ ...o, ...p }));
   const setD = (k, v) => setOb((o) => ({ ...o, d: { ...o.d, [k]: v }, ...(k === "dept" ? { apps: null } : {}) }));
 
@@ -108,7 +111,7 @@ export default function Onboarding() {
       let saved = null;
       try { const r = await api("GET", "/api/onboarding/draft"); if (r.ok && r.data && Object.keys(r.data).length) saved = r.data; } catch { /* use the browser copy */ }
       if (!saved) { try { saved = JSON.parse(localStorage.getItem(OB_DRAFT_KEY) || "null"); } catch { saved = null; } }
-      if (live && saved && !touched.current) { setOb((o) => ({ ...o, d: { ...o.d, ...saved } })); setRestored(true); }
+      if (live && saved && !touched.current) { const { empNo: _old, ...rest } = saved; setOb((o) => ({ ...o, d: { ...o.d, ...rest } })); setRestored(true); }   // an old draft never brings back an old employee ID
     })();
     return () => { live = false; };
   }, [isHr]);
@@ -137,6 +140,7 @@ export default function Onboarding() {
     if (e.start) nd.start = e.start;
     if (e.title && e.title !== "—") nd.title = e.title;
     if (e.dept) nd.dept = e.dept;
+    if (e.no) nd.empNo = e.no;
     if (e.manager && e.manager !== "—") nd.mgr = e.manager;
     if (rec.personalEmail) nd.pemail = rec.personalEmail;
     if (rec.phone) nd.phone = rec.phone;
@@ -240,6 +244,9 @@ export default function Onboarding() {
     const email = r.data.email, name = (d.first + " " + d.last).trim();
     clearDraft();
     toast(`HR notified: ${name} was submitted for onboarding.`);
+    const dl = r.data.deviceLink;
+    if (dl && dl.id) toast(`${name} is linked to attendance with device ID ${dl.id}.`);
+    else if (dl && dl.skipped) toast(`Attendance was not linked: ${dl.skipped}. Link it by hand in Attendance.`);
     // Give the tools that were ticked (Claude is a real call when the admin key is set, otherwise a test only).
     if (apps.includes("claude")) {
       const g = await api("POST", "/api/tool-access/claude", { email, action: "grant" });
@@ -288,6 +295,7 @@ export default function Onboarding() {
             <Fld label="Job title" id="title" value={d.title} onChange={(v) => setD("title", v)} err={er.title} ph="e.g. Software Development Engineer" />
             <div className="field"><label htmlFor="ob-mgr">Reporting manager</label><select className="input" id="ob-mgr" value={d.mgr} onChange={(e) => setD("mgr", e.target.value)}><option value="">None</option>{mgrs.map((m) => <option key={m.id}>{m.name}</option>)}</select></div>
             <Fld label="Start date" id="start" type="date" value={d.start} onChange={(v) => setD("start", v)} err={er.start} />
+            <Fld label="Employee ID" id="empNo" value={d.empNo} onChange={(v) => setD("empNo", v)} err={er.empNo} ph="e.g. WT/206" dis={!!ob.work} />
           </div></div>
           <WorkEmailCard ob={ob} taken={taken} onCreate={makeEmail} />
           <DocsCard person={picked} docs={docs} />
@@ -313,7 +321,7 @@ export default function Onboarding() {
         )}
         {ob.step === 3 && w && <>
           {reviewCard("Personal details", 1, [["Name", d.first + " " + d.last], ["Personal email", d.pemail], ["Phone", d.phone], ["Address", d.address]])}
-          {reviewCard("Job details", 1, [["Department", d.dept], ["Joining as", d.kind || "Employee"], ["Job title", d.title], ["Reporting manager", d.mgr], ["Start date", fdate(d.start)]])}
+          {reviewCard("Job details", 1, [["Department", d.dept], ["Joining as", d.kind || "Employee"], ["Job title", d.title], ["Reporting manager", d.mgr], ["Start date", fdate(d.start)], ["Employee ID", d.empNo]])}
           <div className="card"><div className="card-h"><h3>Work email and login</h3></div><div className="card-b"><dl className="rv">
             <div><dt>Work email</dt><dd><span className="mono">{w.email}</span></dd></div>
             <div><dt>Google</dt><dd>{{ active: "Active in Google Workspace", simulated: "Active (simulated)", existing: "Already in the employee list" }[w.google] || w.google}</dd></div>

@@ -15,7 +15,7 @@ import { postsRouter } from "./posts.js";
 import { leaveDigestRouter, runLeaveDigest } from "./leave-digest.js";
 import { attendanceRouter } from "./attendance.js";
 import { assetsRouter } from "./assets.js";
-import { deviceRouter } from "./device.js";
+import { deviceRouter, linkDeviceUserByEmployeeNo } from "./device.js";
 import { startPortalAttendanceSync } from "./portal-attendance.js";
 import { payslipsRouter } from "./payslips.js";
 import { claudeMode, grantClaude, removeClaude, recordAccess, syncClaude, syncClaudeSoon } from "./anthropic.js";
@@ -24,6 +24,7 @@ import { clearanceRouter } from "./clearance.js";
 import { onboardingErrors, detailsErrors, maskAadhaar, maskPan, maskAcct } from "./validate.js";
 import { createGoogleUser, generatePassword, googleMode, assignLicense } from "./google.js";
 import { mailPlanOf } from "./mail-plan.js";
+import { employeeNoOwner, nextEmployeeNoFrom } from "./employee-no.js";
 import { mailConfigured, sendWorkAccountEmail } from "./mail.js";
 import { reimbursementsRouter, runReimbursementReminders } from "./reimbursements.js";
 import { budgetsRouter, runBudgetReminders } from "./budgets.js";
@@ -360,6 +361,9 @@ app.delete("/api/onboarding/draft", wrap(async (req, res) => {
 
 // Step 1: save the personal and job details, issue the work email and activate it in Google straight away.
 // Send existingEmail to retry a failed Google call, or to use a person who is already in the employee list.
+// The employee ID the next joiner gets by default: one more than the latest in the series.
+app.get("/api/onboarding/next-employee-no", wrap(async (_req, res) => res.json({ empNo: await nextEmployeeNoFrom(pool) })));
+
 app.post("/api/onboarding/work-email", wrap(async (req, res) => {
   const { d = {}, existingEmail } = req.body || {};
   const errors = detailsErrors(d);
@@ -379,9 +383,13 @@ app.post("/api/onboarding/work-email", wrap(async (req, res) => {
       if (owner) { await client.query("ROLLBACK"); return res.status(400).json({ errors: dupEmailError(d.pemail.trim(), owner) }); }
       // Someone from the HR sheet already has a work email, so nothing is created for them in Google.
       status = r.rows[0].google_status || "existing";
+      let no = String(d.empNo || "").trim() || r.rows[0].emp_no || null;
+      if (!no) { await client.query("LOCK TABLE employees IN SHARE ROW EXCLUSIVE MODE"); no = await nextEmployeeNoFrom(client); }
+      const taken = no && no !== r.rows[0].emp_no ? await employeeNoOwner(client, no, email) : null;
+      if (taken) { await client.query("ROLLBACK"); return res.status(400).json({ errors: { empNo: `${no} already belongs to ${taken}.` } }); }
       await client.query(
         `UPDATE employees SET name=$1, dept=$2, title=$3, manager=$4, start_date=$5, personal_email=$6, phone=$7,
-         address=$8, google_status=$9 WHERE lower(work_email)=$10`, [...fields, status, email.toLowerCase()]);
+         address=$8, google_status=$9, emp_no=COALESCE($11, emp_no) WHERE lower(work_email)=$10`, [...fields, status, email.toLowerCase(), no]);
     } else {
       await client.query("LOCK TABLE employees IN SHARE ROW EXCLUSIVE MODE");
       email = await nextWorkEmail(client, d.first, d.last);
@@ -389,9 +397,12 @@ app.post("/api/onboarding/work-email", wrap(async (req, res) => {
       const owner = await personalEmailOwner(client, d.pemail, "");
       if (owner) { await client.query("ROLLBACK"); return res.status(400).json({ errors: dupEmailError(d.pemail.trim(), owner) }); }
       status = "pending";
+      const no = String(d.empNo || "").trim() || await nextEmployeeNoFrom(client);   // the table is locked above, so two joiners never get the same number
+      const taken = no ? await employeeNoOwner(client, no) : null;
+      if (taken) { await client.query("ROLLBACK"); return res.status(400).json({ errors: { empNo: `${no} already belongs to ${taken}.` } }); }
       await client.query(
-        `INSERT INTO employees (name, dept, title, manager, start_date, personal_email, phone, address, work_email, status, google_status)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'onboarding','pending')`, [...fields, email]);
+        `INSERT INTO employees (name, dept, title, manager, start_date, personal_email, phone, address, work_email, status, google_status, emp_no)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'onboarding','pending',$10)`, [...fields, email, no]);
       await client.query("INSERT INTO audit_log (action, work_email) VALUES ($1,$2)", ["Work email reserved", email]);
     }
     await client.query("UPDATE employees SET employment_type=$1 WHERE lower(work_email)=$2", [kindOf(d), email.toLowerCase()]);
@@ -473,9 +484,12 @@ app.post("/api/onboarding", wrap(async (req, res) => {
        WHERE lower(work_email)=$15`, [full, ...fields, row.work_email.toLowerCase()]);
     await client.query("UPDATE employees SET employment_type=$1 WHERE lower(work_email)=$2", [kindOf(d), row.work_email.toLowerCase()]);
     await client.query("INSERT INTO audit_log (action, work_email) VALUES ($1,$2)", [`Onboarding completed${kindOf(d) === "Intern" ? " (intern)" : ""}`, row.work_email]);
+    // Attendance: the person's name is linked to the office device straight away, so their punches count from day one.
+    const idNow = (await client.query("SELECT id, name, work_email, emp_no FROM employees WHERE lower(work_email)=$1", [row.work_email.toLowerCase()])).rows[0];
+    const device = idNow ? await linkDeviceUserByEmployeeNo(client, { id: idNow.id, name: idNow.name, email: idNow.work_email, empNo: idNow.emp_no }, req.user.email) : null;
     await client.query("DELETE FROM onboarding_drafts WHERE id=$1", [draftId(req)]);
     await client.query("COMMIT");
-    res.status(201).json(toApi(await loadRecord(row.work_email)));
+    res.status(201).json({ ...toApi(await loadRecord(row.work_email)), deviceLink: device });
   } catch (err) {
     await client.query("ROLLBACK");
     throw err;

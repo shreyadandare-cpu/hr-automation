@@ -6,6 +6,7 @@ import { useToast } from "../components/toast.jsx";
 import { Callout, Pill, SectionHead, shortDate } from "../components/ui.jsx";
 import Pager, { Paged } from "../components/Pager.jsx";
 import Modal, { Field } from "../components/Modal.jsx";
+import PeoplePicker from "../components/PeoplePicker.jsx";
 
 const dash = <span className="muted">—</span>;
 const tone = (s) => (s === "Active" ? "ok" : s === "Completed" ? "info" : "mute");
@@ -66,14 +67,16 @@ function AddProjectModal({ onClose, onDone }) {
   const { people } = useData();
   const toast = useToast();
   const [name, setName] = useState(""), [lead, setLead] = useState(""), [start, setStart] = useState(today()), [description, setDescription] = useState("");
+  const [location, setLocation] = useState(""), [members, setMembers] = useState([]);
   const [busy, setBusy] = useState(false), [error, setError] = useState("");
   const staff = (people || []).filter((p) => p.status !== "offboarded").sort((a, b) => a.name.localeCompare(b.name));
   const save = async () => {
     setBusy(true); setError("");
-    const r = await api("POST", "/api/projects", { name, lead, start, description });
+    const r = await api("POST", "/api/projects", { name, lead, start, description, location, members });
     setBusy(false);
     if (!r.ok) { setError(apiMsg(r)); return; }
-    toast(`${name.trim()} added.`);
+    const { added = 0, skipped = [] } = r.data || {};
+    toast(`${name.trim()} added${added ? ` with ${added} ${added === 1 ? "person" : "people"}` : ""}.${skipped.length ? ` Not added: ${skipped.join(", ")}.` : ""}`);
     await onDone(); onClose();
   };
   return (
@@ -86,6 +89,10 @@ function AddProjectModal({ onClose, onDone }) {
               <option value="">No lead yet</option>{staff.map((p) => <option key={p.id} value={p.name}>{p.name}</option>)}</select></Field>
           : <p className="muted" style={{ margin: "12px 0 0" }}>You will be the project lead, so you can add and remove people on it.</p>}
         <Field id="pr-start" label="Start date"><input id="pr-start" type="date" className="input" value={start} onChange={(e) => setStart(e.target.value)} /></Field>
+        <Field id="pr-loc" label="Project location (optional)" hint="Where the team works. New members get this location unless you set another."><input id="pr-loc" className="input" maxLength={80} placeholder="e.g. Kurla office, Client site, Remote" value={location} onChange={(e) => setLocation(e.target.value)} /></Field>
+        <Field id="pr-members" label="Add members (optional)" hint="Type a name to search, then click a person to add them. You can add more later.">
+          <PeoplePicker id="pr-members" multi people={staff} value={members} onChange={setMembers} />
+        </Field>
         <Field id="pr-desc" label="Description (optional)"><input id="pr-desc" className="input" maxLength={500} value={description} onChange={(e) => setDescription(e.target.value)} /></Field>
         {error && <p className="ferr" role="alert" style={{ marginTop: 12 }}>{error}</p>}
       </div>
@@ -167,7 +174,7 @@ function ProjectModal({ project, others, onClose, reload }) {
     <Modal onClose={onClose} wide>
       <div className="card-h" style={{ paddingTop: 24 }}><h3>{project.name}</h3></div>
       <div className="card-b">
-        <p className="muted" style={{ margin: "0 0 12px" }}>Lead: {project.lead || "—"} · {project.current.length} current · {project.all.length} {project.all.length === 1 ? "allocation" : "allocations"} in total</p>
+        <p className="muted" style={{ margin: "0 0 12px" }}>Lead: {project.lead || "—"}{project.location ? ` · Location: ${project.location}` : ""} · {project.current.length} current · {project.all.length} {project.all.length === 1 ? "allocation" : "allocations"} in total</p>
         <div className="tbl-wrap"><table>
           <thead><tr><th>Employee</th><th>Start</th><th>End</th><th>Location</th><th>Status</th><th>Handover</th>{project.canManage && <th></th>}</tr></thead>
           <tbody>
@@ -187,12 +194,11 @@ function ProjectModal({ project, others, onClose, reload }) {
         {project.canManage && (
           <div style={{ marginTop: 18 }}>
             <Field id="pm-who" label="Add a person">
-              <select id="pm-who" className="input" value={who} onChange={(e) => setWho(e.target.value)}>
-                <option value="">Choose a person…</option>{options.map((p) => <option key={p.id} value={p.email}>{p.name} ({p.no})</option>)}</select>
+              <PeoplePicker id="pm-who" people={options} value={who} onChange={setWho} />
             </Field>
             <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
               <Field id="pm-start" label="Start date"><input id="pm-start" type="date" className="input" value={start} onChange={(e) => setStart(e.target.value)} /></Field>
-              <Field id="pm-loc" label="Location (optional)"><input id="pm-loc" className="input" maxLength={80} placeholder="Their usual office" value={location} onChange={(e) => setLocation(e.target.value)} /></Field>
+              <Field id="pm-loc" label="Location (optional)"><input id="pm-loc" className="input" maxLength={80} placeholder={project.location ? `Defaults to ${project.location}` : "Their usual office"} value={location} onChange={(e) => setLocation(e.target.value)} /></Field>
             </div>
             {error && <p className="ferr" role="alert" style={{ marginTop: 8 }}>{error}</p>}
           </div>)}
@@ -247,7 +253,7 @@ function ProjectTable({ rows, list, canCreate, reload }) {
               {rows && !page.length && <tr><td colSpan="7"><div className="empty">No projects match.</div></td></tr>}
               {page.map((p) => (
                 <tr key={p.id}>
-                  <td><b>{p.name}</b></td>
+                  <td><b>{p.name}</b>{p.location && <div className="muted" style={{ fontSize: 13 }}>{p.location}</div>}</td>
                   <td style={{ minWidth: 280, width: "34%" }}>
                     <div><b>{p.current.length}</b> <span className="muted">current</span></div>
                     <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 6 }}>

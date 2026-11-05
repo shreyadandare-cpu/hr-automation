@@ -148,11 +148,11 @@ app.get("/api/allocations", wrap(async (req, res) => {
      FROM employee_project_allocations a
      JOIN projects p ON p.id = a.project_id JOIN employees e ON e.id = a.employee_id
      ORDER BY p.name, e.name`);
-  const projects = (await pool.query("SELECT id, name, project_lead, start_date, end_date, status, description FROM projects ORDER BY name")).rows;
+  const projects = (await pool.query("SELECT id, name, project_lead, start_date, end_date, status, description, location FROM projects ORDER BY name")).rows;
   res.json({
     canCreate: actor.canCreate,
     projects: projects.map((p) => ({ id: p.id, name: p.name, lead: p.project_lead, start: p.start_date, end: p.end_date, status: p.status,
-      description: p.description, closed: isClosed(p), canManage: !isClosed(p) && canManageProject(actor, p), canHandover: !isClosed(p) && canManageProject(actor, p) })),
+      description: p.description, location: p.location, closed: isClosed(p), canManage: !isClosed(p) && canManageProject(actor, p), canHandover: !isClosed(p) && canManageProject(actor, p) })),
     rows: rows.map((r) => ({ id: r.id, projectId: r.project_id, project: r.project, employee: r.employee, email: r.email, no: r.emp_no,
       start: r.start_date, end: r.end_date, lead: r.lead, location: r.location, status: r.status, handedOverTo: r.handed_over_to, movedTo: r.moved_to, endReason: r.end_reason })),
   });
@@ -172,9 +172,25 @@ app.post("/api/projects", requireAuth, wrap(async (req, res) => {
   }
   const start = /^\d{4}-\d{2}-\d{2}$/.test(req.body?.start || "") ? req.body.start : null;
   const description = String(req.body?.description || "").trim().slice(0, 500) || null;
-  const p = (await pool.query("INSERT INTO projects (name, project_lead, start_date, description) VALUES ($1,$2,$3,$4) RETURNING id", [name, lead || null, start, description])).rows[0];
-  await pool.query("INSERT INTO audit_log (action, work_email) VALUES ($1,$2)", [`Project "${name}" added${lead ? `, led by ${lead}` : ""}`, req.user.email]);
-  res.json({ id: p.id });
+  const location = String(req.body?.location || "").trim().slice(0, 80) || null;
+  const emails = [...new Set((Array.isArray(req.body?.members) ? req.body.members : []).map((x) => String(x || "").trim().toLowerCase()).filter(Boolean))].slice(0, 200);
+  const client = await pool.connect();
+  let id, added = 0; const skipped = [];
+  try {
+    await client.query("BEGIN");
+    id = (await client.query("INSERT INTO projects (name, project_lead, start_date, description, location) VALUES ($1,$2,$3,$4,$5) RETURNING id", [name, lead || null, start, description, location])).rows[0].id;
+    // People chosen in the form are put on the project straight away, at the project's location unless they work elsewhere on record.
+    for (const email of emails) {
+      const emp = (await client.query("SELECT id, name, status, work_location FROM employees WHERE lower(work_email)=$1", [email])).rows[0];
+      if (!emp || emp.status === "offboarded") { skipped.push(emp ? emp.name : email); continue; }
+      await client.query("INSERT INTO employee_project_allocations (employee_id, project_id, start_date, project_lead, location, status) VALUES ($1,$2,$3,$4,$5,'Active')",
+        [emp.id, id, start || new Date().toISOString().slice(0, 10), lead || null, location || emp.work_location || null]);
+      added++;
+    }
+    await client.query("INSERT INTO audit_log (action, work_email) VALUES ($1,$2)", [`Project "${name}" added${lead ? `, led by ${lead}` : ""}${location ? `, at ${location}` : ""}${added ? `, ${added} ${added === 1 ? "person" : "people"} added` : ""}`, req.user.email]);
+    await client.query("COMMIT");
+  } catch (err) { await client.query("ROLLBACK"); throw err; } finally { client.release(); }
+  res.json({ id, added, skipped });
 }));
 
 // Change a project's end date (empty clears it). HR, or the project's lead. A date that has passed marks the project Completed.
@@ -199,7 +215,7 @@ app.patch("/api/projects/:id", requireAuth, wrap(async (req, res) => {
 // Put someone on a project. HR, or the project's lead.
 app.post("/api/projects/:id/members", requireAuth, wrap(async (req, res) => {
   const actor = await projectActor(req);
-  const project = (await pool.query("SELECT id, name, project_lead, status, end_date FROM projects WHERE id=$1", [Number(req.params.id) || 0])).rows[0];
+  const project = (await pool.query("SELECT id, name, project_lead, status, end_date, location FROM projects WHERE id=$1", [Number(req.params.id) || 0])).rows[0];
   if (!project) return res.status(404).json({ error: "Project not found." });
   if (!canManageProject(actor, project)) return res.status(403).json({ error: "Only HR or the project lead can add people to this project." });
   if (isClosed(project)) return res.status(400).json({ error: CLOSED_MSG });
@@ -209,7 +225,7 @@ app.post("/api/projects/:id/members", requireAuth, wrap(async (req, res) => {
   if ((await pool.query("SELECT 1 FROM employee_project_allocations WHERE project_id=$1 AND employee_id=$2 AND status='Active'", [project.id, emp.id])).rowCount)
     return res.status(409).json({ error: `${emp.name} is already on ${project.name}.` });
   const start = /^\d{4}-\d{2}-\d{2}$/.test(req.body?.start || "") ? req.body.start : new Date().toISOString().slice(0, 10);
-  const location = String(req.body?.location || "").trim().slice(0, 80) || emp.work_location || null;
+  const location = String(req.body?.location || "").trim().slice(0, 80) || project.location || emp.work_location || null;
   await pool.query(`INSERT INTO employee_project_allocations (employee_id, project_id, start_date, project_lead, location, status) VALUES ($1,$2,$3,$4,$5,'Active')`,
     [emp.id, project.id, start, project.project_lead, location]);
   await pool.query("INSERT INTO audit_log (action, work_email) VALUES ($1,$2)", [`${emp.name} added to project "${project.name}"`, req.user.email]);
@@ -520,12 +536,12 @@ app.get("/api/tool-access", requireAuth, wrap(async (req, res) => {
   const hr = req.user.role === "hr";   // everyone sees who has access; only HR sees the tool's own message
   res.json({ claudeMode: claudeMode(), rows: rows.map((r) => ({ email: r.work_email, tool: r.tool, status: r.status, detail: hr ? r.detail : null })) });
 }));
-// HR: check the Claude organization right now instead of waiting for the automatic check, and bring the app in line with it.
+// HR: check the Claude organisation right now instead of waiting for the automatic check, and bring the app in line with it.
 app.post("/api/tool-access/claude/refresh", requireHr, wrap(async (req, res) => {
   if (claudeMode() === "simulated") return res.json({ mode: "simulated", changed: 0 });
   let changed;
   try { changed = await syncClaude(); } catch (err) { return res.status(502).json({ error: `Claude could not be reached: ${err.message}` }); }
-  if (changed) await pool.query("INSERT INTO audit_log (action, work_email) VALUES ($1,$2)", [`Claude: status refreshed from the Claude organization, ${changed} changed (by ${req.user.email})`, req.user.email]);
+  if (changed) await pool.query("INSERT INTO audit_log (action, work_email) VALUES ($1,$2)", [`Claude: status refreshed from the Claude organisation, ${changed} changed (by ${req.user.email})`, req.user.email]);
   res.json({ mode: "live", changed });
 }));
 app.post("/api/tool-access/claude", requireHr, wrap(async (req, res) => {

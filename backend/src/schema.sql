@@ -645,3 +645,4 @@ CREATE TABLE IF NOT EXISTS asset_events (
   asset_id INTEGER NOT NULL REFERENCES assets(id) ON DELETE CASCADE,
   at TIMESTAMPTZ NOT NULL DEFAULT now(), by_email TEXT, action TEXT NOT NULL);
 CREATE INDEX IF NOT EXISTS asset_events_asset ON asset_events (asset_id, at DESC);
+ALTER TABLE projects ADD COLUMN IF NOT EXISTS location TEXT;

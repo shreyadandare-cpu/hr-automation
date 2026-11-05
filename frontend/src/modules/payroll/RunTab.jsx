@@ -48,7 +48,7 @@ function Table({ data, onOpen }) {
       </div>
       <div className="tbl-wrap"><table className="pr-table pr-run"><thead><tr>
         <th>Employee</th><th className="num">Basic</th><th className="num">HRA</th><th className="num">Allowances</th><th className="num hide-sm">Other earnings</th><th className="num">Gross</th>
-        <th className="num">PF</th><th className="num">PT</th><th className="num">TDS</th><th className="num">Other ded.</th><th className="num">Net payable</th></tr></thead><tbody>
+        <th className="num">PF</th><th className="num hide-sm">ESIC</th><th className="num">PT</th><th className="num">TDS</th><th className="num">Other ded.</th><th className="num">Net payable</th></tr></thead><tbody>
         {rows.length ? rows.map((l) => {
           const s = l.summary;
           return (
@@ -56,14 +56,14 @@ function Table({ data, onOpen }) {
               <td><Person name={l.name} sub={[l.empNo, l.title].filter(Boolean).join(" · ") || l.email} />
                 {l.status !== "ready" && <div className="pr-flag"><LinePill status={l.status} /> <span className="muted">{l.status === "hold" ? l.inputs.holdReason : l.incomplete[0]}</span></div>}</td>
               <td className="num">{money(s.basic)}</td><td className="num">{money(s.hra)}</td><td className="num">{money(s.allowances)}</td><td className="num hide-sm">{money(s.otherEarnings)}</td>
-              <td className="num"><b>{money(s.gross)}</b></td><td className="num">{money(s.pf)}</td><td className="num">{money(s.pt)}</td>
+              <td className="num"><b>{money(s.gross)}</b></td><td className="num">{money(s.pf)}</td><td className="num hide-sm">{money(s.esic)}</td><td className="num">{money(s.pt)}</td>
               <td className="num">{money(s.tds)}{l.tds && l.tds.override && <div className="muted">overridden</div>}</td>
               <td className="num">{money(s.lop + s.otherDeductions)}{s.lop > 0 && <div className="muted">incl. LOP {money(s.lop)}</div>}</td>
               <td className="num"><b className="pay-total">{l.status === "ready" ? money(s.net) : "—"}</b></td>
             </tr>);
-        }) : <tr><td colSpan={11}><div className="empty">Nobody matches these filters.</div></td></tr>}
+        }) : <tr><td colSpan={12}><div className="empty">Nobody matches these filters.</div></td></tr>}
         <tr className="rb-total"><td><b>Total paid · {plural(t.people, "person", "people")}</b></td><td className="num">{money(t.basic)}</td><td className="num">{money(t.hra)}</td><td className="num">{money(t.allowances)}</td>
-          <td className="num hide-sm">{money(t.otherEarnings)}</td><td className="num"><b>{money(t.gross)}</b></td><td className="num">{money(t.pf)}</td><td className="num">{money(t.pt)}</td><td className="num">{money(t.tds)}</td>
+          <td className="num hide-sm">{money(t.otherEarnings)}</td><td className="num"><b>{money(t.gross)}</b></td><td className="num">{money(t.pf)}</td><td className="num hide-sm">{money(t.esic)}</td><td className="num">{money(t.pt)}</td><td className="num">{money(t.tds)}</td>
           <td className="num">{money(t.lop + t.otherDeductions)}</td><td className="num"><b>{money(t.net)}</b></td></tr>
       </tbody></table></div>
     </>

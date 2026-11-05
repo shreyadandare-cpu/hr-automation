@@ -11,6 +11,7 @@ import { actorOf, hrOnly, reviewers, seal, open, sha256, encryptionReady } from 
 import { buildLines, recalcRun, loadRun, totalsOfLines, staffFor, structuresFor, seedTaxRules, deptOf, monthName } from "./store.js";
 import { buildWorkbook } from "./excel.js";
 import { buildBankFile } from "./bank.js";
+import { readPayslipPdf } from "./payslip-read.js";
 
 /*
  * Payroll processing, review and disbursement. Mounted at /api/payroll behind requirePayrollAccess (HR or a payroll reviewer).
@@ -346,6 +347,17 @@ R.get("/runs/:id/files/:fileId", wrap(async (req, res) => {
 }));
 
 /* ---------- employees: salary, bank and tax set-up ---------- */
+
+// Reads an uploaded payslip PDF and suggests a salary structure from it. The file is read in memory and never stored; nothing is saved.
+R.post("/payslip-read", hrOnly, express.raw({ type: () => true, limit: 5 * 1024 * 1024 }), wrap(async (req, res) => {
+  const buf = req.body;
+  if (!Buffer.isBuffer(buf) || !buf.length) return res.status(400).json({ error: "Choose a payslip PDF." });
+  if (buf.subarray(0, 5).toString("latin1") !== "%PDF-") return res.status(400).json({ error: "That isn't a PDF. Upload the payslip as a PDF file." });
+  const out = readPayslipPdf(buf);
+  await audit(pool, req.user.email, "Payslip read to fill a salary structure", { work_email: lc(req.query.email) || null, detail: { ok: out.ok, period: out.period || null, matches: out.matches ?? null } });
+  if (!out.ok) return res.status(422).json({ error: out.error });
+  res.json(out);
+}));
 
 R.get("/employees", hrOnly, wrap(async (req, res) => {
   const period = PERIOD.test(String(req.query.period || "")) ? String(req.query.period) : istMonth();

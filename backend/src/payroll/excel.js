@@ -5,12 +5,14 @@ import { fyOf } from "./tax.js";
 
 /*
  * The month's payroll workbook, built from the run as stored in the database (loadRun). Three sheets:
- *   1. Employee Payroll Summary   one row per person paid this month, with per-row formulas and a grand total row
+ *   1. Employee Payroll Summary   Name, Gross, PF, PT, ESIC, TDS, Deduction (Adv/Late), Reimbur, Net Payable (a formula), grand total row
  *   2. Salary Calculation Details every earning and deduction per person, the calculation steps and the TDS working
  *   3. Payroll Summary            totals as formulas over sheet 1, next to the database's figures, and whether they match
- * Bank account numbers are masked here (the report is emailed for review). The full numbers are only in the bank file.
+ * Sheet 1 has only the columns of HR's sample sheet. Bank details are not in the report at all: they are only in the bank file.
  */
 export const COMPANY = "Wohlig Transformations Pvt Ltd";
+// Rows show "-" for nothing, like the sample sheet; totals always show the amount.
+const ROW = '[>=100000]"₹"##\\,##\\,##0.00;[=0]"-";"₹"##,##0.00';
 const INR = '[>=10000000]"₹"##\\,##\\,##\\,##0.00;[>=100000]"₹"##\\,##\\,##0.00;"₹"##,##0.00';
 const HEAD_FILL = { type: "pattern", pattern: "solid", fgColor: { argb: "FF2F2A8C" } };
 const TOTAL_FILL = { type: "pattern", pattern: "solid", fgColor: { argb: "FFEDEBFA" } };
@@ -19,29 +21,23 @@ const thin = { style: "thin", color: { argb: "FFD5D5DE" } };
 const BORDER = { top: thin, bottom: thin, left: thin, right: thin };
 const SHEET1 = "Employee Payroll Summary";
 
-/** Sheet 1 columns. `money` columns are summed in the totals row; `f` makes a per-row formula from the row's cell refs. */
+/** Sheet 1 columns, as in HR's sample sheet. Net = Gross − PF − PT − ESIC − TDS − Deduction + Reimbursements.
+ *  Gross is salary only (reimbursements are not in it); Deduction (Adv/Late) is loss of pay plus other deductions (advances, late marks…). */
 export const SUMMARY_COLUMNS = [
-  { key: "empNo", header: "Employee ID", width: 13 },
-  { key: "name", header: "Employee Name", width: 26 },
-  { key: "dept", header: "Department", width: 18 },
-  { key: "title", header: "Designation", width: 24 },
-  { key: "holder", header: "Account Holder Name", width: 24 },
-  { key: "acct", header: "Bank Account No.", width: 16 },
-  { key: "ifsc", header: "IFSC", width: 13 },
-  { key: "bankName", header: "Bank Name", width: 18 },
-  { key: "basic", header: "Basic", money: true },
-  { key: "hra", header: "HRA", money: true },
-  { key: "allowances", header: "Allowances", money: true },
-  { key: "otherEarnings", header: "Other Earnings", money: true },
-  { key: "gross", header: "Gross Salary", money: true, f: (c) => `SUM(${c.basic}:${c.otherEarnings})` },
-  { key: "pf", header: "PF (Employee)", money: true },
-  { key: "pt", header: "Professional Tax", money: true },
+  { key: "name", header: "Name", width: 28 },
+  { key: "gross", header: "Gross", money: true },
+  { key: "pf", header: "PF", money: true },
+  { key: "pt", header: "PT", money: true },
+  { key: "esic", header: "ESIC", money: true },
   { key: "tds", header: "TDS", money: true },
-  { key: "lop", header: "Loss of Pay", money: true },
-  { key: "otherDeductions", header: "Other Deductions", money: true },
-  { key: "totalDeductions", header: "Total Deductions", money: true, f: (c) => `SUM(${c.pf}:${c.otherDeductions})` },
-  { key: "net", header: "Net Payable", money: true, f: (c) => `${c.gross}-${c.totalDeductions}` },
+  { key: "deduction", header: "Deduction (Adv/Late)", money: true, width: 21 },
+  { key: "reimb", header: "Reimbur", money: true },
+  { key: "net", header: "Net Payable", money: true, f: (c) => `${c.gross}-${c.pf}-${c.pt}-${c.esic}-${c.tds}-${c.deduction}+${c.reimb}` },
 ];
+/** One person's figures for those columns, added in paise. */
+const p100 = (n) => Math.round(Number(n || 0) * 100);
+export const rowOf = (s) => ({ gross: (p100(s.gross) - p100(s.reimbursements)) / 100, pf: s.pf || 0, pt: s.pt || 0, esic: s.esic || 0, tds: s.tds || 0,
+  deduction: (p100(s.lop) + p100(s.otherDeductions)) / 100, reimb: s.reimbursements || 0, net: s.net });
 const colLetter = (i) => { let s = "", n = i + 1; while (n) { const r = (n - 1) % 26; s = String.fromCharCode(65 + r) + s; n = Math.floor((n - 1) / 26); } return s; };
 const round2 = (n) => Math.round(Number(n || 0) * 100) / 100;
 
@@ -69,10 +65,12 @@ export async function buildWorkbook(data, meta) {
   wb.creator = "HR Access Hub"; wb.company = COMPANY; wb.created = new Date(meta.generatedAt);
   wb.calcProperties.fullCalcOnLoad = true;   // formulas are recalculated when opened; cached results are the database figures
   const fyText = fyOf(run.period);
+  // The totals row, in the same columns as the rows (from the database totals).
+  const T = { gross: round2(t.gross - t.reimbursements), pf: t.pf, pt: t.pt, esic: t.esic, tds: t.tds, deduction: round2(t.lop + t.otherDeductions), reimb: t.reimbursements, net: t.net };
   const sub = `Payroll month ${monthName(run.period)} · FY ${fyText} · Status ${STATUS[run.status] || run.status} · Version ${meta.version} · Generated ${new Date(meta.generatedAt).toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })} by ${meta.generatedBy} · All amounts in INR`;
 
   /* ---------- Sheet 1 ---------- */
-  const s1 = wb.addWorksheet(SHEET1, { views: [{ state: "frozen", xSplit: 2, ySplit: 4 }], pageSetup: { orientation: "landscape", fitToPage: true, fitToWidth: 1, fitToHeight: 0, paperSize: 9 } });
+  const s1 = wb.addWorksheet(SHEET1, { views: [{ state: "frozen", xSplit: 1, ySplit: 4 }], pageSetup: { orientation: "landscape", fitToPage: true, fitToWidth: 1, fitToHeight: 0, paperSize: 9 } });
   const W = SUMMARY_COLUMNS.length;
   title(s1, `${COMPANY} · Payroll for ${monthName(run.period)}`, sub, W);
   const ref = Object.fromEntries(SUMMARY_COLUMNS.map((c, i) => [c.key, colLetter(i)]));
@@ -81,23 +79,20 @@ export async function buildWorkbook(data, meta) {
   header(s1.getRow(4));
   const first = 5;
   paid.forEach((l, n) => {
-    const r = first + n, s = l.summary;
-    const v = { empNo: l.empNo || "", name: l.name, dept: l.dept || "", title: l.title || "", holder: l.bank.holder || "", acct: l.bank.onFile ? `XXXX${l.bank.last4}` : "Not on file",
-      ifsc: l.bank.ifsc || "", bankName: l.bank.bankName || "", ...s };
+    const r = first + n, v = { name: l.name, ...rowOf(l.summary) };
     const cells = Object.fromEntries(SUMMARY_COLUMNS.map((c) => [c.key, `${ref[c.key]}${r}`]));
     SUMMARY_COLUMNS.forEach((c, i) => {
       const cell = s1.getCell(r, i + 1);
       cell.value = c.f ? { formula: c.f(cells), result: round2(v[c.key]) } : c.money ? round2(v[c.key]) : v[c.key];
+      if (c.money) cell.numFmt = ROW;
       cell.border = BORDER;
       if (n % 2) cell.fill = BAND_FILL;
     });
   });
   const last = first + paid.length - 1, totalRow = last + 1;
-  s1.getCell(totalRow, 1).value = "Grand total";
-  s1.getCell(totalRow, 2).value = { formula: `COUNTA(B${first}:B${Math.max(first, last)})`, result: paid.length };
-  s1.getCell(totalRow, 2).numFmt = '0" employees"';
+  s1.getCell(totalRow, 1).value = `Grand total · ${paid.length} employee${paid.length === 1 ? "" : "s"}`;
   SUMMARY_COLUMNS.forEach((c, i) => {
-    if (c.money) s1.getCell(totalRow, i + 1).value = { formula: `SUM(${ref[c.key]}${first}:${ref[c.key]}${Math.max(first, last)})`, result: round2(t[c.key]) };
+    if (c.money) { s1.getCell(totalRow, i + 1).value = { formula: `SUM(${ref[c.key]}${first}:${ref[c.key]}${Math.max(first, last)})`, result: round2(T[c.key]) }; s1.getCell(totalRow, i + 1).numFmt = INR; }
   });
   s1.getRow(totalRow).eachCell({ includeEmpty: true }, (c) => { c.font = { bold: true }; c.fill = TOTAL_FILL; c.border = BORDER; });
   s1.autoFilter = { from: { row: 4, column: 1 }, to: { row: Math.max(4, last), column: W } };
@@ -150,16 +145,18 @@ export async function buildWorkbook(data, meta) {
   r3++;
   s3.getRow(r3).values = ["Measure", "From this workbook", "Payroll database", "Check"];
   header(s3.getRow(r3)); r3++;
+  const sum = (keys) => keys.map(totalRef).join("+");
   const measures = [
-    ["Total employees processed", { formula: `COUNTA('${SHEET1}'!B${first}:B${Math.max(first, last)})`, result: paid.length }, paid.length, false],
-    ["Total gross payroll", { formula: totalRef("gross"), result: round2(t.gross) }, round2(t.gross), true],
-    ["Total PF (employee)", { formula: totalRef("pf"), result: round2(t.pf) }, round2(t.pf), true],
-    ["Total professional tax", { formula: totalRef("pt"), result: round2(t.pt) }, round2(t.pt), true],
-    ["Total TDS", { formula: totalRef("tds"), result: round2(t.tds) }, round2(t.tds), true],
-    ["Total loss of pay", { formula: totalRef("lop"), result: round2(t.lop) }, round2(t.lop), true],
-    ["Total other deductions", { formula: totalRef("otherDeductions"), result: round2(t.otherDeductions) }, round2(t.otherDeductions), true],
-    ["Total deductions", { formula: totalRef("totalDeductions"), result: round2(t.totalDeductions) }, round2(t.totalDeductions), true],
-    ["Total net salary payable", { formula: totalRef("net"), result: round2(t.net) }, round2(t.net), true],
+    ["Total employees processed", { formula: `COUNTA('${SHEET1}'!A${first}:A${Math.max(first, last)})`, result: paid.length }, paid.length, false],
+    ["Total gross salary (before reimbursements)", { formula: totalRef("gross"), result: round2(T.gross) }, round2(T.gross), true],
+    ["Total PF (employee)", { formula: totalRef("pf"), result: round2(T.pf) }, round2(T.pf), true],
+    ["Total professional tax", { formula: totalRef("pt"), result: round2(T.pt) }, round2(T.pt), true],
+    ["Total ESIC (employee)", { formula: totalRef("esic"), result: round2(T.esic) }, round2(T.esic), true],
+    ["Total TDS", { formula: totalRef("tds"), result: round2(T.tds) }, round2(T.tds), true],
+    ["Total deductions (adv/late/other)", { formula: totalRef("deduction"), result: round2(T.deduction) }, round2(T.deduction), true],
+    ["Total deductions", { formula: sum(["pf", "pt", "esic", "tds", "deduction"]), result: round2(t.totalDeductions) }, round2(t.totalDeductions), true],
+    ["Total reimbursements", { formula: totalRef("reimb"), result: round2(T.reimb) }, round2(T.reimb), true],
+    ["Total net salary payable", { formula: totalRef("net"), result: round2(T.net) }, round2(T.net), true],
     ["Employer PF (company cost, not deducted)", round2(t.employerPf), round2(t.employerPf), true],
   ];
   for (const [k, f, db, money] of measures) {
@@ -181,5 +178,5 @@ export async function buildWorkbook(data, meta) {
   s3.getCell(r3, 1).font = { italic: true, color: { argb: "FF6B6B7B" } };
 
   const buffer = Buffer.from(await wb.xlsx.writeBuffer());
-  return { buffer, totals: { people: paid.length, gross: round2(t.gross), pf: round2(t.pf), pt: round2(t.pt), tds: round2(t.tds), lop: round2(t.lop), otherDeductions: round2(t.otherDeductions), totalDeductions: round2(t.totalDeductions), net: round2(t.net) } };
+  return { buffer, totals: { people: paid.length, gross: round2(T.gross), pf: round2(T.pf), pt: round2(T.pt), esic: round2(T.esic), tds: round2(T.tds), deduction: round2(T.deduction), reimbursements: round2(T.reimb), totalDeductions: round2(t.totalDeductions), net: round2(T.net) } };
 }

@@ -7,6 +7,7 @@
 ALTER TABLE salary_structures ADD COLUMN IF NOT EXISTS annual_ctc     NUMERIC(14,2);
 ALTER TABLE salary_structures ADD COLUMN IF NOT EXISTS pf_applicable  BOOLEAN;
 ALTER TABLE salary_structures ADD COLUMN IF NOT EXISTS employer_pf    NUMERIC(12,2);
+ALTER TABLE salary_structures ADD COLUMN IF NOT EXISTS esic_employee  NUMERIC(12,2);
 ALTER TABLE salary_structures ADD COLUMN IF NOT EXISTS pt_applicable  BOOLEAN;
 ALTER TABLE salary_structures ADD COLUMN IF NOT EXISTS pt_february    NUMERIC(12,2);
 ALTER TABLE salary_structures ADD COLUMN IF NOT EXISTS tds_applicable BOOLEAN;

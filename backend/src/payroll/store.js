@@ -35,7 +35,7 @@ export const structuresFor = (db, period, email = null) => db.query(
 
 export const toStructure = (x) => ({
   id: x.id, effectiveFrom: x.effective_from, earnings: x.earnings, otherDeductions: x.other_deductions,
-  annualCtc: num(x.annual_ctc), pfApplicable: x.pf_applicable, pfEmployee: num(x.pf_employee), employerPf: num(x.employer_pf),
+  annualCtc: num(x.annual_ctc), pfApplicable: x.pf_applicable, pfEmployee: num(x.pf_employee), employerPf: num(x.employer_pf), esicEmployee: num(x.esic_employee),
   ptApplicable: x.pt_applicable, professionalTax: num(x.professional_tax), ptFebruary: num(x.pt_february),
   tdsApplicable: x.tds_applicable, tdsMode: x.tds_mode, tdsMonthly: num(x.tds_monthly),
   reason: x.reason, updatedBy: x.updated_by, updatedAt: x.updated_at,

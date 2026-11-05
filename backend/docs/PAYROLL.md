@@ -48,8 +48,9 @@ Gross earnings    = Basic + HRA + Allowances + Incentives + Bonus + Overtime + O
                     + positive adjustment + arrears + Reimbursements
 Loss of pay       = full-month fixed gross ÷ 30 × LOP days     (approved unpaid/over-balance leave + days HR enters)
 PF (employee)     = amount on the structure (prorated), or 12% × min(Basic earned after loss of pay, ₹15,000)
+ESIC (employee)   = amount on the structure (prorated); no rate is assumed, HR enters it
 Professional tax  = amount on the structure (February amount in February, e.g. ₹300 in Maharashtra)
-Total deductions  = PF + PT + TDS + Loss of pay + other deductions (structure, HR input, recoveries, negative adjustment)
+Total deductions  = PF + ESIC + PT + TDS + Loss of pay + other deductions (structure, HR input, recoveries, negative adjustment)
 Net payable       = Gross earnings − Total deductions
 ```
 
@@ -81,11 +82,11 @@ A salary structure applies from a month on. A raise is a new structure from a la
 
 `Payroll-YYYY-MM-vN.xlsx`, generated from the database and stored with the run. Earlier versions stay downloadable, marked old.
 
-1. **Employee Payroll Summary**: one row per person paid. ID, name, department, designation, account holder, account number (**masked: XXXX1234**), IFSC, bank, Basic, HRA, Allowances, Other earnings, Gross (formula), PF, PT, TDS, LOP, Other deductions, Total deductions (formula), Net (formula). The grand total row uses `SUM` formulas. Amounts are in INR with Indian digit grouping.
+1. **Employee Payroll Summary**: one row per person paid, with only these columns: **Name, Gross, PF, PT, ESIC, TDS, Deduction (Adv/Late), Reimbur, Net Payable**. `Net Payable = Gross − PF − PT − ESIC − TDS − Deduction + Reimbur` (a formula on each row). *Gross* is salary only; reimbursements are their own column and are added back. *Deduction (Adv/Late)* is loss of pay plus other deductions (advances, late marks, recoveries). The grand total row uses `SUM` formulas. Amounts are in INR, and empty amounts show "-".
 2. **Salary Calculation Details**: every earning and deduction per person, subtotals as formulas, employer contributions, the TDS working and each calculation step.
-3. **Payroll Summary**: month, FY, status, version, who generated it. Each total is a formula over sheet 1 beside the database figure, with a *Matches/Check* column.
+3. **Payroll Summary**: month, FY, status, version, who generated it. Each total (including ESIC and reimbursements) is a formula over sheet 1 beside the database figure, with a *Matches/Check* column.
 
-Account numbers are masked because the report is emailed for review. Only the bank file has full numbers.
+Bank details are not in the report at all, because it is emailed for review. Only the bank file has them.
 
 ## Bank transfer file (backend/src/payroll/bank.js)
 

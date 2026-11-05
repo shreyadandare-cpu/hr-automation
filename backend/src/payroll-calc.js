@@ -120,14 +120,14 @@ export function cleanStructure(body = {}) {
   const pfNumber = body.pfNumber === undefined ? undefined : String(body.pfNumber || "").trim().slice(0, 30) || null;
   if (pfNumber && !/^[A-Za-z0-9/ -]+$/.test(pfNumber)) errors.pfNumber = "Use letters, numbers, / or - only.";
   // Payroll module (payroll/engine.js): CTC, which statutory deductions apply, how TDS is worked out. Empty = as before.
-  const annualCtc = pick("annualCtc", "the annual CTC"), employerPf = pick("employerPf", "the employer PF"), ptFebruary = pick("ptFebruary", "February's professional tax");
+  const annualCtc = pick("annualCtc", "the annual CTC"), employerPf = pick("employerPf", "the employer PF"), ptFebruary = pick("ptFebruary", "February's professional tax"), esicEmployee = pick("esicEmployee", "the ESIC amount");
   const flag = (k) => (body[k] === true || body[k] === "true" ? true : body[k] === false || body[k] === "false" ? false : null);
   const tdsMode = body.tdsMode === "auto" || body.tdsMode === "manual" ? body.tdsMode : null;
   if (body.tdsMode && !tdsMode) errors.tdsMode = "Choose calculated or entered TDS.";
   const reason = String(body.reason || "").trim().slice(0, 300) || null;
   return Object.keys(errors).length ? { errors }
     : { value: { effectiveFrom, earnings, otherDeductions, pfEmployee: pfEmployee || 0, professionalTax: professionalTax || 0, tdsMonthly, pfNumber,
-      annualCtc, employerPf, ptFebruary, pfApplicable: flag("pfApplicable"), ptApplicable: flag("ptApplicable"), tdsApplicable: flag("tdsApplicable"), tdsMode, reason } };
+      annualCtc, employerPf, ptFebruary, esicEmployee, pfApplicable: flag("pfApplicable"), ptApplicable: flag("ptApplicable"), tdsApplicable: flag("tdsApplicable"), tdsMode, reason } };
 }
 
 /** The month (YYYY-MM) a moment falls in, India time. */

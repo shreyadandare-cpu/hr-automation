@@ -133,6 +133,10 @@ export function computeLine({ period, employee = {}, structure, inputs = {}, lea
     calc.push(Number(s.pfEmployee) > 0 ? `PF (employee) as set on the salary structure: ${inr(pfP)}.` : `PF (employee) = 12% of Basic earned ${inr(Math.min(earnedBasicP, ceilingP))} (wage ceiling ₹15,000) = ${inr(pfP)}.`);
   }
 
+  // 4b. ESIC (employee): the amount entered on the salary structure, prorated in a partial month like PF. No rate is assumed.
+  const esicP = Number(s.esicEmployee) > 0 && w.days ? (share === 1 ? P(s.esicEmployee) : rupee(P(s.esicEmployee) * share)) : 0;
+  if (esicP) calc.push(`ESIC (employee) as set on the salary structure: ${inr(esicP)}.`);
+
   // 5. Professional tax, as set on the structure (state slab amount; Maharashtra takes ₹300 instead of ₹200 in February).
   const ptApplicable = s.ptApplicable ?? Number(s.professionalTax) > 0;
   const ptMonthly = period.slice(5) === "02" && Number(s.ptFebruary) > 0 ? s.ptFebruary : s.professionalTax;
@@ -192,9 +196,9 @@ export function computeLine({ period, employee = {}, structure, inputs = {}, lea
   for (const o of other) deductionLines.push({ ...o, code: "other" });
   if (lopP) deductionLines.push({ name: `Loss of Pay (${lopDays} day${lopDays === 1 ? "" : "s"})`, p: lopP, code: "lop" });
   const dedP = sumP(deductionLines);
-  const totalDedP = pfP + dedP;
+  const totalDedP = pfP + esicP + dedP;
   const netP = grossP - totalDedP;
-  calc.push(`Total deductions = PF ${inr(pfP)} + PT ${inr(ptP)} + TDS ${inr(tds.amount)} + Loss of pay ${inr(lopP)} + other ${inr(otherP)} = ${inr(totalDedP)}.`);
+  calc.push(`Total deductions = PF ${inr(pfP)}${esicP ? ` + ESIC ${inr(esicP)}` : ""} + PT ${inr(ptP)} + TDS ${inr(tds.amount)} + Loss of pay ${inr(lopP)} + other ${inr(otherP)} = ${inr(totalDedP)}.`);
   calc.push(`Net payable = ${inr(grossP)} − ${inr(totalDedP)} = ${inr(netP)}.`);
   if (employerPfP) calc.push(`Employer PF ${inr(employerPfP)} is paid by the company on top and is not deducted from take-home pay.`);
   if (structure && w.days && netP < 0) incomplete.push("Deductions are more than the earnings for this month.");
@@ -206,13 +210,13 @@ export function computeLine({ period, employee = {}, structure, inputs = {}, lea
     v: 2, period, fy, employee, structureId: structure && structure.id ? structure.id : null,
     days: { total: w.total, actual: w.days, lop: lopDays, payable: Math.max(0, w.days - lopDays) },
     earnings: out(earnings),
-    contributions: pfP ? [{ name: "PF Employee", amount: R(pfP) }] : [],
+    contributions: [...(pfP ? [{ name: "PF Employee", amount: R(pfP) }] : []), ...(esicP ? [{ name: "ESIC Employee", amount: R(esicP) }] : [])],
     deductions: out(deductionLines),
     employer: employerPfP ? [{ name: "PF Employer", amount: R(employerPfP) }] : [],
-    totals: { earnings: R(grossP), contributions: R(pfP), deductions: R(dedP), totalDeductions: R(totalDedP), net: R(netP) },
+    totals: { earnings: R(grossP), contributions: R(pfP + esicP), deductions: R(dedP), totalDeductions: R(totalDedP), net: R(netP) },
     summary: {
       basic: R(basicP), hra: R(hraP), allowances: R(allowP), otherEarnings: R(otherEarnP), reimbursements: R(reimbP), gross: R(grossP),
-      pf: R(pfP), pt: R(ptP), tds: R(tds.amount), lop: R(lopP), otherDeductions: R(otherP), totalDeductions: R(totalDedP), net: R(netP),
+      pf: R(pfP), esic: R(esicP), pt: R(ptP), tds: R(tds.amount), lop: R(lopP), otherDeductions: R(otherP), totalDeductions: R(totalDedP), net: R(netP),
       employerPf: R(employerPfP), taxable: R(taxableP), fullMonthGross: R(fullGrossP),
     },
     annualIncome: R(fullGrossP * 12),
@@ -226,7 +230,7 @@ const monthsBetween = (a, b) => { const [ya, ma] = a.split("-").map(Number), [yb
 
 /** Totals of many lines, in rupees (added in paise). */
 export function totalsOf(slips) {
-  const keys = ["basic", "hra", "allowances", "otherEarnings", "reimbursements", "gross", "pf", "pt", "tds", "lop", "otherDeductions", "totalDeductions", "net", "employerPf"];
+  const keys = ["basic", "hra", "allowances", "otherEarnings", "reimbursements", "gross", "pf", "esic", "pt", "tds", "lop", "otherDeductions", "totalDeductions", "net", "employerPf"];
   const t = Object.fromEntries(keys.map((k) => [k, 0]));
   for (const s of slips) for (const k of keys) t[k] += P(s.summary ? s.summary[k] : 0);
   return { people: slips.length, ...Object.fromEntries(keys.map((k) => [k, R(t[k])])) };

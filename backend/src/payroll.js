@@ -42,14 +42,14 @@ async function saveStructure(client, emp, email, v, actor) {
   }
   await client.query(
     `INSERT INTO salary_structures (work_email, effective_from, earnings, pf_employee, professional_tax, other_deductions, tds_monthly, updated_by,
-       annual_ctc, pf_applicable, employer_pf, pt_applicable, pt_february, tds_applicable, tds_mode, reason)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)
+       annual_ctc, pf_applicable, employer_pf, pt_applicable, pt_february, tds_applicable, tds_mode, reason, esic_employee)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)
      ON CONFLICT (lower(work_email), effective_from) DO UPDATE SET earnings=EXCLUDED.earnings, pf_employee=EXCLUDED.pf_employee,
        professional_tax=EXCLUDED.professional_tax, other_deductions=EXCLUDED.other_deductions, tds_monthly=EXCLUDED.tds_monthly,
        updated_by=EXCLUDED.updated_by, updated_at=now(), annual_ctc=EXCLUDED.annual_ctc, pf_applicable=EXCLUDED.pf_applicable, employer_pf=EXCLUDED.employer_pf,
-       pt_applicable=EXCLUDED.pt_applicable, pt_february=EXCLUDED.pt_february, tds_applicable=EXCLUDED.tds_applicable, tds_mode=EXCLUDED.tds_mode, reason=EXCLUDED.reason`,
+       pt_applicable=EXCLUDED.pt_applicable, pt_february=EXCLUDED.pt_february, tds_applicable=EXCLUDED.tds_applicable, tds_mode=EXCLUDED.tds_mode, reason=EXCLUDED.reason, esic_employee=EXCLUDED.esic_employee`,
     [email, v.effectiveFrom, JSON.stringify(v.earnings), v.pfEmployee, v.professionalTax, JSON.stringify(v.otherDeductions), v.tdsMonthly, actor,
-      v.annualCtc, v.pfApplicable, v.employerPf, v.ptApplicable, v.ptFebruary, v.tdsApplicable, v.tdsMode, v.reason]);
+      v.annualCtc, v.pfApplicable, v.employerPf, v.ptApplicable, v.ptFebruary, v.tdsApplicable, v.tdsMode, v.reason, v.esicEmployee]);
   // The monthly gross (used for loss-of-pay cuts and exit settlements) follows the breakdown now in force.
   const [current] = await structuresFor(client, new Date(Date.now() + 5.5 * 3600e3).toISOString().slice(0, 7), email);
   await client.query("UPDATE employees SET pf_number=CASE WHEN $4 THEN $2 ELSE pf_number END, monthly_gross=coalesce($3, monthly_gross) WHERE id=$1",

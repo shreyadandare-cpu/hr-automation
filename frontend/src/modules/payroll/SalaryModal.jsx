@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { api, apiMsg } from "../../api.js";
 import { useData } from "../../data.jsx";
 import Modal, { Field } from "../../components/Modal.jsx";
@@ -8,7 +8,7 @@ import { fyOf, money, monthLabel, thisMonth } from "./util.jsx";
 
 const STANDARD = ["Basic", "HRA", "Medical Allowance", "Conveyance Allowance", "Special Allowance", "Statutory Bonus"];
 const blank = () => ({ effectiveFrom: thisMonth(), earnings: STANDARD.map((name) => ({ name, amount: "" })), otherDeductions: [], annualCtc: "",
-  pfApplicable: true, pfEmployee: "", employerPf: "", ptApplicable: true, professionalTax: "200", ptFebruary: "300", tdsApplicable: true, tdsMode: "auto", tdsMonthly: "", pfNumber: "", reason: "" });
+  pfApplicable: true, pfEmployee: "", employerPf: "", esicEmployee: "", ptApplicable: true, professionalTax: "200", ptFebruary: "300", tdsApplicable: true, tdsMode: "auto", tdsMonthly: "", pfNumber: "", reason: "" });
 /* For someone already working here: April of this financial year, or their joining month if that is later, so months already worked are covered. */
 const firstMonth = (start) => { const apr = `${fyOf(thisMonth()).slice(0, 4)}-04`, joined = String(start || "").slice(0, 7); return joined > apr ? joined : apr; };
 const total = (list) => list.reduce((n, x) => n + (Number(x.amount) || 0), 0);
@@ -43,6 +43,9 @@ export default function SalaryModal({ email, onClose }) {
   const [er, setEr] = useState({});
   const [gross, setGross] = useState("");
   const [busy, setBusy] = useState(false);
+  const [read, setRead] = useState(null);   // what was read from an uploaded payslip, shown for HR to check
+  const [reading, setReading] = useState(false);
+  const fileRef = useRef(null);
 
   useEffect(() => {
     api("GET", `/api/payroll/structures/${encodeURIComponent(email)}`).then((r) => {
@@ -50,7 +53,7 @@ export default function SalaryModal({ email, onClose }) {
       setInfo(r.data);
       const c = r.data.structures[0];
       setF(c ? { effectiveFrom: c.effectiveFrom, earnings: c.earnings.map((x) => ({ ...x })), otherDeductions: c.otherDeductions.map((x) => ({ ...x })), annualCtc: opt(c.annualCtc),
-        pfApplicable: c.pfApplicable ?? c.pfEmployee > 0, pfEmployee: c.pfEmployee || "", employerPf: opt(c.employerPf), ptApplicable: c.ptApplicable ?? c.professionalTax > 0,
+        pfApplicable: c.pfApplicable ?? c.pfEmployee > 0, pfEmployee: c.pfEmployee || "", employerPf: opt(c.employerPf), esicEmployee: opt(c.esicEmployee), ptApplicable: c.ptApplicable ?? c.professionalTax > 0,
         professionalTax: c.professionalTax || "", ptFebruary: opt(c.ptFebruary), tdsApplicable: c.tdsApplicable ?? true, tdsMode: c.tdsMode || (c.tdsMonthly != null ? "manual" : "auto"),
         tdsMonthly: opt(c.tdsMonthly), pfNumber: r.data.pfNumber || "", reason: "" }
         : { ...blank(), effectiveFrom: firstMonth(r.data.start), pfNumber: r.data.pfNumber || "" });
@@ -73,6 +76,33 @@ export default function SalaryModal({ email, onClose }) {
     setF({ ...f, earnings: [{ name: "Basic", amount: basic }, { name: "HRA", amount: hra }, { name: "Medical Allowance", amount: med }, { name: "Conveyance Allowance", amount: conv }, { name: "Special Allowance", amount: Math.max(0, g - basic - hra - med - conv) }] });
   };
 
+ // Reads a payslip PDF on the server and fills the form with what it found. Nothing is saved until HR presses Save.
+  const upload = async (file) => {
+    if (!file) return;
+    setReading(true); setRead(null);
+    let r;
+    try {
+      const res = await fetch(`/api/payroll/payslip-read?email=${encodeURIComponent(email)}`, { method: "POST", headers: { "Content-Type": "application/pdf" }, body: file });
+      r = { ok: res.ok, data: await res.json().catch(() => null) };
+    } catch { r = { ok: false, data: null }; }
+    setReading(false);
+    if (fileRef.current) fileRef.current.value = "";
+    if (!r.ok) return toast((r.data && r.data.error) || "The payslip couldn't be read. Enter the salary by hand.");
+    const d = r.data;
+    const has = (v) => v !== undefined && v !== null && v !== "";
+    setEr({});
+    setF((cur) => ({ ...cur,
+      earnings: d.earnings.map((x) => ({ name: x.name, amount: x.amount })),
+      pfApplicable: d.pfEmployee > 0, pfEmployee: d.pfEmployee || "", esicEmployee: d.esicEmployee || "",
+      ptApplicable: d.professionalTax > 0, professionalTax: d.professionalTax || "",
+      tdsApplicable: true, tdsMode: d.tds > 0 ? "manual" : "auto", tdsMonthly: d.tds > 0 ? d.tds : "",
+      otherDeductions: d.otherDeductions.map((x) => ({ name: x.name, amount: x.amount })),
+      // The payslip shows the PF number masked (101xxxxxx84): never overwrite the one on file with it.
+      pfNumber: has(cur.pfNumber) || !has(d.employee.pfNumber) || /x/i.test(d.employee.pfNumber) ? cur.pfNumber : d.employee.pfNumber }));
+    setGross(String(d.earnings.reduce((n, x) => n + Number(x.amount), 0)));
+    setRead(d);
+  };
+
   const submit = async (e) => {
     e.preventDefault();
     if (revision && f.reason.trim().length < 3) return setEr({ reason: "Say why the salary is revised (e.g. annual increment)." });
@@ -88,6 +118,19 @@ export default function SalaryModal({ email, onClose }) {
     <Modal wide onClose={() => onClose()}><form onSubmit={submit} noValidate className="sal-form">
       <div className="card-h" style={{ paddingTop: 24 }}><h3>Salary structure: {info.name}</h3>{latest && <Pill tone="info">Current from {monthLabel(latest.effectiveFrom)}</Pill>}</div>
       <div className="card-b form">
+        <div className="sal-upload">
+          <div><b>Start from a payslip</b><div className="muted">Upload this person's payslip (PDF) and the form below is filled from it. You can then check and edit every line before saving.</div></div>
+          <input ref={fileRef} type="file" accept="application/pdf,.pdf" hidden aria-label="Payslip PDF" onChange={(ev) => upload(ev.target.files && ev.target.files[0])} />
+          <button type="button" className="btn glass" disabled={reading} onClick={() => fileRef.current && fileRef.current.click()}>{reading ? "Reading…" : read ? "Upload another payslip" : "Upload payslip"}</button>
+        </div>
+        {read && (
+          <Callout>
+            <b>Filled from the payslip for {monthLabel(read.period)}{read.employee.name ? ` (${read.employee.name})` : ""}.</b>{" "}
+            {read.matches ? <>Its totals match: earnings {money(read.printed.earnings)}, net pay {money(read.printed.net)}.</> : <b>Its totals don't match the lines read. {read.warnings.join(" ")}</b>}
+            {read.employee.name && info.name && read.employee.name.replace(/\(.*?\)/g, "").trim().toLowerCase() !== info.name.trim().toLowerCase() && <div><b>Check the person:</b> the payslip is for {read.employee.name}, but you are editing {info.name}.</div>}
+            {read.left.map((x) => <div key={x.name} className="muted">Left out: {x.name} {money(x.amount)}. {x.why}</div>)}
+            <div className="muted">Review everything below, then press Save. "Applies from" is unchanged.</div>
+          </Callout>)}
         <div className="sal-grid">
           <Field id="sal-from" label="Applies from" hint="This month and later use it. For someone already working here, pick the first month payroll should use it (April covers this financial year). For a raise, pick the first month of the new salary: earlier months keep theirs." error={er.effectiveFrom}>
             <input className="input" id="sal-from" type="month" value={f.effectiveFrom} onChange={set("effectiveFrom")} /></Field>
@@ -112,6 +155,10 @@ export default function SalaryModal({ email, onClose }) {
           <Field id="sal-epf" label="PF employer (₹ a month)" hint="Company cost; never deducted from pay. Empty: same as the employee's." error={er.employerPf}><input className="input" id="sal-epf" type="number" min="0" step="1" value={f.employerPf} onChange={set("employerPf")} /></Field>
           <Field id="sal-pfno" label="PF number / UAN" hint="Shown masked on the payslip." error={er.pfNumber}><input className="input" id="sal-pfno" maxLength={30} value={f.pfNumber} onChange={set("pfNumber")} /></Field>
         </div>}
+        <div className="sal-grid">
+          <Field id="sal-esic" label="ESIC employee (₹ a month)" hint="Only if ESIC applies to this person. Leave empty if not; it is deducted as entered, prorated in a part month." error={er.esicEmployee}>
+            <input className="input" id="sal-esic" type="number" min="0" step="1" value={f.esicEmployee} onChange={set("esicEmployee")} /></Field>
+        </div>
         <Toggle id="sal-pton" label="Professional tax applies" checked={f.ptApplicable} onChange={set("ptApplicable")} />
         {f.ptApplicable && <div className="sal-grid">
           <Field id="sal-pt" label="Professional tax (₹ a month)" hint="Maharashtra: ₹200." error={er.professionalTax}><input className="input" id="sal-pt" type="number" min="0" step="1" value={f.professionalTax} onChange={set("professionalTax")} /></Field>

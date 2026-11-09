@@ -52,6 +52,4 @@ server {
   location @dashboard  { return 302 /app/dashboard; }
   location @signin     { return 302 /login; }
   location @login_page { rewrite ^ /_ui/login.html last; }
-
-  location = /favicon.ico { return 204; }
 }

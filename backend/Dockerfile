@@ -15,6 +15,8 @@ COPY backend/src ./src
 COPY backend/seed ./seed
 # Imported as ../../frontend/leave-rules.cjs from src/.
 COPY frontend/leave-rules.cjs /srv/frontend/leave-rules.cjs
+# The logo and favicon files the server sends from /, as ../../frontend/public from src/.
+COPY frontend/public /srv/frontend/public
 
 # Uploaded documents and receipts; mount a volume here so they survive restarts.
 RUN mkdir -p /srv/uploads && chown node:node /srv/uploads

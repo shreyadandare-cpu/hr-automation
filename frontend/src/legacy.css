@@ -426,6 +426,26 @@ textarea.input{resize:vertical;font-family:var(--body)}
 .lv-dates{display:grid;grid-template-columns:minmax(0,1fr) auto minmax(0,1fr);gap:12px;align-items:end}
 .lv-dates>[hidden]{display:none}
 .lv-days{align-self:center;margin-top:20px;padding:8px 12px;border-radius:12px;box-shadow:inset 0 0 0 1px var(--line-2);font-size:13px;font-weight:600;white-space:nowrap;background:var(--surface)}
+.dp{position:relative}
+.dp-btn{display:flex;align-items:center;justify-content:space-between;gap:10px;text-align:left;cursor:pointer;color:var(--ink)}
+.dp-btn .ph{color:var(--ink-faint)}.dp-btn svg{flex:none;color:var(--ink-faint)}
+.dp-pop{position:absolute;left:0;top:calc(100% + 8px);z-index:40;width:320px;max-width:calc(100vw - 32px);padding:16px 16px 14px;border-radius:16px;background:var(--surface);color:var(--ink);box-shadow:0 18px 44px rgba(14,10,56,.24),inset 0 0 0 1px var(--line-2)}
+.lv-dates>.field:last-child .dp-pop{left:auto;right:0}
+.dp-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
+.dp-head b{font:600 16px/1.2 var(--body)}
+.dp-nav{width:32px;height:32px;border:0;border-radius:10px;background:transparent;color:var(--purple);font-size:22px;line-height:1;cursor:pointer}
+.dp-nav:hover,.dp-nav:focus-visible{background:var(--tint)}
+.dp-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:2px;text-align:center}
+.dp-w{padding:6px 0;font:600 12px/1 var(--body);color:var(--ink-dim)}
+.dp-d{height:38px;border:0;border-radius:10px;background:transparent;color:var(--ink);font:500 14px/1 var(--body);cursor:pointer}
+.dp-d:hover:not(:disabled){background:var(--tint)}
+.dp-d.today{background:var(--tint-2);box-shadow:inset 0 0 0 1px var(--line-2);font-weight:700}
+.dp-d.in{background:var(--tint);border-radius:0}
+.dp-d.sel,.dp-d.sel:hover{background:var(--purple);color:#fff;font-weight:700}
+.dp-d:disabled{cursor:default}
+.dp-d.out{color:var(--ink-faint);opacity:.45}
+.dp-d.off{color:var(--ink-faint);opacity:.55;text-decoration:line-through;text-decoration-thickness:1px}
+.dp-d:focus-visible{outline:2px solid var(--purple);outline-offset:1px}
 .ring{width:132px;height:132px;border-radius:50%;display:grid;place-items:center;margin:4px auto 18px}
 .ring>div{width:104px;height:104px;border-radius:50%;background:var(--surface);color:var(--ink);display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center}
 .ring b{font:600 17px/1.2 var(--display)}.ring span{font-size:12px;color:var(--ink-faint)}

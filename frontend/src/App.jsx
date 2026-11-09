@@ -15,12 +15,18 @@ import LeaveReview from "./pages/LeaveReview.jsx";
 import Allocations from "./pages/Allocations.jsx";
 import Assets from "./pages/Assets.jsx";
 import LeaveApply from "./pages/LeaveApply.jsx";
+import { useAuth } from "./auth.jsx";
 
 /* Bigger features live in src/modules/<name>/index.jsx and export `routes = [{ path, element }]`. They are picked up here. */
 const modules = import.meta.glob("./modules/*/index.jsx", { eager: true });
 const moduleRoutes = Object.values(modules).flatMap((m) => m.routes || []);
 
+/* Onboarding and offboarding are HR's pages: an employee who opens one by its address goes back to the dashboard. */
+const HR_ONLY = ["/app/onboarding", "/app/onboarding/progress", "/app/offboarding", "/app/offboarding/leavers"];
+const guard = (path, element, isHr) => (HR_ONLY.includes(path) && !isHr ? <Navigate to="/app/dashboard" replace /> : element);
+
 export default function App() {
+  const { isHr } = useAuth();
   return (
     <Routes>
       <Route element={<Shell />}>
@@ -39,7 +45,7 @@ export default function App() {
         <Route path="/app/my-leave" element={<MyLeave />} />
         <Route path="/app/team-leave" element={<TeamLeave />} />
         <Route path="/app/leave/review/:id" element={<LeaveReview />} />
-        {moduleRoutes.map((r) => <Route key={r.path} path={r.path} element={r.element} />)}
+        {moduleRoutes.map((r) => <Route key={r.path} path={r.path} element={guard(r.path, r.element, isHr)} />)}
       </Route>
       <Route path="*" element={<Navigate to="/app/dashboard" replace />} />
     </Routes>

@@ -18,7 +18,7 @@ import { DIRECTORS, approverOf, hrLeaveApprovers } from "./teams.js";
  * HR copy: every HR login, or LEAVE_HR_EMAILS (comma separated) when set. Whoever did the action is not emailed about it.
  * Links work for EMAIL_LINK_MINUTES (30); the approver's link for LEAVE_APPROVAL_LINK_HOURS (72), since approvals often wait.
  * Each email has a plain text and an HTML version (the HTML one has a button for the link).
- * Without SMTP settings the emails are logged in email_outbox and skipped; the in-app notifications still arrive.
+ * Without SENDGRID_API_KEY the emails are logged in email_outbox and skipped; the in-app notifications still arrive.
  *
  * WORDING: each email is one entry in TEMPLATES below. To use the company's predefined format, change only that entry.
  * Every template gets the same fields, listed in `fields()`.

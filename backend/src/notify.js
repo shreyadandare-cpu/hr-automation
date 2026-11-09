@@ -2,14 +2,14 @@ import express from "express";
 import { pool } from "./db.js";
 import { mailConfigured, sendMail } from "./mail.js";
 
-// Email goes out through SMTP when it is set up (see mail.js). Without it (local development) nothing is sent: the message is
+// Email goes out through SendGrid when it is set up (see mail.js). Without it (local development) nothing is sent: the message is
 // recorded in email_outbox as "skipped" and the app carries on. Failures are recorded too, never thrown.
-export const emailMode = () => (mailConfigured() ? "smtp" : "off");
+export const emailMode = () => (mailConfigured() ? "sendgrid" : "off");
 
 export async function sendEmail(to, subject, body, html = null) {   // html: optional rich version of body
   if (!to) return;
   if (!mailConfigured()) {
-    console.log(`[email skipped: SMTP not configured] to=${to} subject="${subject}"`);
+    console.log(`[email skipped: SendGrid not configured] to=${to} subject="${subject}"`);
     await pool.query("INSERT INTO email_outbox (recipient, subject, body, status) VALUES ($1,$2,$3,'skipped')", [to, subject, body]);
     return;
   }

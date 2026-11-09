@@ -661,6 +661,6 @@ else {
   setInterval(checkClaude, 60 * 60_000);
   startPortalAttendanceSync();   // copies the office device punches the Employee Portal received (only when PORTAL_ATTENDANCE_SYNC=true)
 }
-console.log(`Email: ${emailMode() === "smtp" ? "sending through SMTP" : "SMTP not configured, emails are logged and skipped"}`);
+console.log(`Email: ${emailMode() === "sendgrid" ? "sending through SendGrid" : "SendGrid not configured, emails are logged and skipped"}`);
 const port = process.env.PORT || 3000;
 app.listen(port, () => console.log(`HR Access Hub on http://localhost:${port}`));

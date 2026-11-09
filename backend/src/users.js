@@ -142,7 +142,7 @@ const lastTest = new Map();
 usersRouter.post("/test-email", wrap(async (req, res) => {
   const to = String(req.body?.to || "").trim();
   if (!V.email(to)) return res.status(400).json({ error: "Enter a valid email address." });
-  if (!mailConfigured()) return res.status(503).json({ error: "Email isn't set up on the server yet. Add the SMTP settings to backend/.env and restart." });
+  if (!mailConfigured()) return res.status(503).json({ error: "Email isn't set up on the server yet. Add SENDGRID_API_KEY to backend/.env and restart." });
   const now = Date.now(), prev = lastTest.get(req.user.email) || 0;
   if (now - prev < 5000) return res.status(429).json({ error: "Wait a few seconds before sending another test." });
   lastTest.set(req.user.email, now);

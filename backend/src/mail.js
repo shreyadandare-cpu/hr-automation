@@ -1,16 +1,7 @@
-import nodemailer from "nodemailer";
-
-/* Outgoing email over SMTP. Settings are read when needed, so the .env file is already loaded.
-   MAILTRAP_* or MAIL_* (Mailtrap's own names) win over the older SMTP_* names, so any of the three sets works. */
-const env = (...names) => names.map((n) => process.env[n]).find(Boolean) || "";
-export const smtpSettings = () => ({
-  host: env("MAILTRAP_HOST", "MAIL_HOST", "SMTP_HOST"),
-  port: Number(env("MAILTRAP_PORT", "MAIL_PORT", "SMTP_PORT") || 587),
-  secure: process.env.SMTP_SECURE === "true",
-  user: env("MAILTRAP_USER", "MAIL_USERNAME", "SMTP_USER"),
-  pass: env("MAILTRAP_PASS", "MAIL_PASSWORD", "SMTP_PASS"),
-});
-export const mailConfigured = () => Boolean(smtpSettings().host);
+/* Outgoing email through the SendGrid Web API (HTTPS, no SMTP). Settings are read when needed, so the .env file is already loaded.
+   Needs SENDGRID_API_KEY (Mail Send permission) and a MAIL_FROM address verified in SendGrid (Sender Authentication). */
+const SENDGRID_URL = () => `https://api.${process.env.SENDGRID_EU === "true" ? "eu." : ""}sendgrid.com/v3/mail/send`;
+export const mailConfigured = () => Boolean(process.env.SENDGRID_API_KEY);
 
 /** The address people use to reach this app. Links in emails and the Google sign-in redirect are built from it. */
 export const publicUrl = () => (process.env.PUBLIC_URL || `http://localhost:${process.env.PORT || 3000}`).replace(/\/+$/, "");
@@ -18,11 +9,10 @@ export const publicUrl = () => (process.env.PUBLIC_URL || `http://localhost:${pr
 /** The address of the web app. Invitation links are built from it (FRONTEND_URL, else PUBLIC_URL). */
 export const frontendUrl = () => (process.env.FRONTEND_URL ? process.env.FRONTEND_URL.replace(/\/+$/, "") : publicUrl());
 
-let transport;
-const getTransport = () => {
-  if (transport) return transport;
-  const s = smtpSettings();
-  return (transport = nodemailer.createTransport({ host: s.host, port: s.port, secure: s.secure, auth: s.user ? { user: s.user, pass: s.pass } : undefined }));
+/** "Wohlig HR <info@wohlig.com>" -> { email, name }; a bare address -> { email }. */
+const parseAddress = (v) => {
+  const m = String(v || "").match(/^\s*"?([^"<]*?)"?\s*<([^>]+)>\s*$/);
+  return m ? (m[1] ? { email: m[2].trim(), name: m[1].trim() } : { email: m[2].trim() }) : { email: String(v || "").trim() };
 };
 
 /* Every email the app sends is automatic and can't be answered: replies go to the no-reply address (MAIL_REPLY_TO, else the
@@ -33,13 +23,24 @@ const noReplyHtml = `<p style="margin:18px 0 0;font:12px/1.5 Arial,Helvetica,san
 
 export async function sendMail({ to, subject, text, html }) {
   if (!mailConfigured()) throw new Error("Email is not set up");
-  const from = process.env.MAIL_FROM || smtpSettings().user;
-  await getTransport().sendMail({
-    from, to, subject, replyTo: process.env.MAIL_REPLY_TO || from,
-    headers: { "Auto-Submitted": "auto-generated", "X-Auto-Response-Suppress": "All" },
-    text: text ? `${text.trimEnd()}\n\n--\n${NO_REPLY_NOTE}\n` : text,
-    html: html ? (html.includes("</body>") ? html.replace("</body>", `${noReplyHtml}</body>`) : html + noReplyHtml) : html,
+  if (!process.env.MAIL_FROM) throw new Error("MAIL_FROM is not set");
+  const from = parseAddress(process.env.MAIL_FROM);
+  const body = text ? `${text.trimEnd()}\n\n--\n${NO_REPLY_NOTE}\n` : text;
+  const page = html ? (html.includes("</body>") ? html.replace("</body>", `${noReplyHtml}</body>`) : html + noReplyHtml) : html;
+  const content = [body && { type: "text/plain", value: body }, page && { type: "text/html", value: page }].filter(Boolean);
+  const res = await fetch(SENDGRID_URL(), {
+    method: "POST",
+    headers: { Authorization: `Bearer ${process.env.SENDGRID_API_KEY}`, "Content-Type": "application/json" },
+    body: JSON.stringify({
+      personalizations: [{ to: [{ email: to }] }],
+      from, reply_to: parseAddress(process.env.MAIL_REPLY_TO || process.env.MAIL_FROM), subject, content,
+      headers: { "Auto-Submitted": "auto-generated", "X-Auto-Response-Suppress": "All" },
+    }),
   });
+  if (!res.ok) {
+    const detail = (await res.json().catch(() => null))?.errors?.map((e) => e.message).join("; ");
+    throw new Error(`SendGrid ${res.status}${detail ? `: ${detail}` : ""}`);
+  }
 }
 
 /** A short message that proves email works: it goes through the same path as invites. */

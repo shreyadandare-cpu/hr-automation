@@ -4,7 +4,7 @@ import { api } from "./api.js";
 const AuthContext = createContext(null);
 export const useAuth = () => useContext(AuthContext);
 
-/* Who is signed in, and whether they approve anyone's leave (a reporting manager, or a director who approves HR staff's leave). */
+/* Who is signed in, and whether they approve anyone's leave (a reporting manager, HR staff included, or a director who approves HR staff's leave). */
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [isManager, setIsManager] = useState(false);
@@ -12,7 +12,7 @@ export function AuthProvider({ children }) {
     api("GET", "/api/me").then((r) => { if (r.ok) setUser(r.data); });
   }, []);
   useEffect(() => {
-    if (!user || user.role === "hr") return;
+    if (!user) return;
     api("GET", "/api/leave").then((r) => {
       if (!r.ok) return;
       const me = user.email.toLowerCase(), approvers = Object.values(r.data.approvers || {});

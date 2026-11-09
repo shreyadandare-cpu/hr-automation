@@ -6,9 +6,13 @@ import { useAuth } from "../auth.jsx";
 import { useData } from "../data.jsx";
 import { Avatar, SectionHead, shortDate } from "../components/ui.jsx";
 import { Field } from "../components/Modal.jsx";
+import DatePicker from "../components/DatePicker.jsx";
 import { useToast } from "../components/toast.jsx";
 import { R } from "../lib/leave.js";
 import { LTYPE, dd, lc, rangeText, useLeave } from "../lib/useLeave.js";
+
+/* The first day from `s` on that counts as a working day (not a Saturday, Sunday or company holiday). */
+const firstWorking = (s, holidays) => { const d = new Date(s + "T00:00:00Z"); while (R.isWeekend(d.toISOString().slice(0, 10)) || holidays.includes(d.toISOString().slice(0, 10))) d.setUTCDate(d.getUTCDate() + 1); return d.toISOString().slice(0, 10); };
 
 const STEPS = ["Dates", "Leave type", "Note", "Review"];
 const Stepper = ({ cur }) => (
@@ -54,7 +58,7 @@ export default function LeaveApply() {
   const lv = useLeave(), toast = useToast(), nav = useNavigate();
   const [params] = useSearchParams();
   const self = !isHr || params.get("self") === "1";
-  const [w, setW] = useState(() => ({ step: 1, email: self ? user.email : params.get("email") || "", dur: "full", from: lv.today, to: lv.today, half: "first", type: "", reason: "", notify: [], reviewed: false, fromReview: false, errors: {} }));
+  const [w, setW] = useState(() => ({ step: 1, email: self ? user.email : params.get("email") || "", dur: "full", from: firstWorking(lv.today, lv.holDays), to: firstWorking(lv.today, lv.holDays), half: "first", type: "", reason: "", notify: [], reviewed: false, fromReview: false, errors: {} }));
   const top = useRef(null);
   const set = (patch) => setW((x) => ({ ...x, ...patch }));
   if (!people) return <section className="section"><div className="empty">Loading…</div></section>;
@@ -74,6 +78,10 @@ export default function LeaveApply() {
   // Only sick leave can be for a date that has passed, and only up to POLICY.sickBackdateDays back.
   const past = R.validDate(val.from) && val.from < lv.today;
   const earliest = (() => { const d = new Date(lv.today + "T00:00:00Z"); d.setUTCDate(d.getUTCDate() - R.POLICY.sickBackdateDays); return d.toISOString().slice(0, 10); })();
+
+  // Saturdays, Sundays and company holidays aren't leave days, so the calendar won't let you pick them.
+  const isOff = (d) => R.isWeekend(d) || lv.holDays.includes(d);
+  const notes = Object.fromEntries(lv.L.holidays.map((h) => [h.day, h.name]));
 
   const problems = () => {
     const all = R.requestProblems({ emp, type: val.type || "unpaid", from: val.from, to: val.to, half: val.half, reason: val.reason || "x", holidays: lv.holDays, existing, bal, split: true, today: lv.today });
@@ -130,11 +138,13 @@ export default function LeaveApply() {
         <label><input type="radio" name="lw-dur" checked={w.dur === "full"} onChange={() => set({ dur: "full" })} />Full day(s)</label>
         <label><input type="radio" name="lw-dur" checked={w.dur === "half"} onChange={() => set({ dur: "half" })} />Half day</label></div></div>
       <div className="lv-dates">
-        <Field id="lw-from" label={w.dur === "half" ? "Date" : "From"} error={er.from}><input className="input" type="date" id="lw-from" min={earliest} value={w.from} onChange={(x) => set({ from: x.target.value, to: w.to < x.target.value ? x.target.value : w.to })} /></Field>
+        <Field id="lw-from" label={w.dur === "half" ? "Date" : "From"} error={er.from}><DatePicker id="lw-from" value={w.from} min={earliest} today={lv.today} isOff={isOff} notes={notes} invalid={!!er.from}
+          onChange={(v) => set({ from: v, to: w.to < v ? v : w.to })} /></Field>
         <span className="lv-days">{dd(days)}</span>
         {w.dur === "half"
           ? <Field id="lw-half" label="Which half" error={er.half}><select className="input" id="lw-half" value={w.half} onChange={(x) => set({ half: x.target.value })}><option value="first">First half (morning)</option><option value="second">Second half (afternoon)</option></select></Field>
-          : <Field id="lw-to" label="To" error={er.to}><input className="input" type="date" id="lw-to" min={w.from > earliest ? w.from : earliest} value={w.to} onChange={(x) => set({ to: x.target.value })} /></Field>}
+          : <Field id="lw-to" label="To" error={er.to}><DatePicker id="lw-to" value={w.to} min={w.from > earliest ? w.from : earliest} today={lv.today} from={w.from} isOff={isOff} notes={notes} invalid={!!er.to}
+            onChange={(v) => set({ to: v })} /></Field>}
       </div>
       <p className="muted" style={{ margin: 0 }}>Saturdays, Sundays and company holidays are not counted. Leave starts today or later; only sick leave can go back, up to {R.POLICY.sickBackdateDays} days.</p>
     </div></div>

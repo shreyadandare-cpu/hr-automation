@@ -22,14 +22,14 @@ const toEmp = (e) => ({ name: e.name, status: e.status, start: e.start_date, cas
 // Employees see and act on their own leave only; HR sees everyone and makes the decisions.
 const isHr = (req) => req.user && req.user.role === "hr";
 const self = (req) => req.user.email.toLowerCase();
-// A reporting manager decides their own team's requests; HR decides the managers' own (and anyone without a manager).
-// The reporting manager decides. When someone has no reporting manager (or theirs has left), HR decides instead.
+// The reporting manager decides their team's requests, whether or not their own login is an HR one.
+// When someone has no reporting manager (or theirs has left), HR decides instead.
 // HR staff's own leave goes to the directors (either one decides). Nobody decides their own request.
 const mayDecide = (req, approver, owner) => {
   if (String(owner).toLowerCase() === self(req)) return false;
   if (approver === "hr") return isHr(req);
   if (approver === DIRECTORS) return approves(approver, self(req));
-  return !isHr(req) && approver === self(req);
+  return approver === self(req);
 };
 const notYours = (approver) => ({ error: approver === "hr"
   ? "This person has no reporting manager, so HR approves it, and not the person's own request."

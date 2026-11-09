@@ -12,7 +12,7 @@ export const LSTAT = { pending: ["Waiting", "warn"], approved: ["Approved", "ok"
 /* Everything the leave pages work out from the server's leave data: balances, who approves whom, what a request would cost. */
 export function useLeave() {
   const { people, leave } = useData();
-  const { user, isHr, isManager } = useAuth();
+  const { user, isHr } = useAuth();
   return useMemo(() => {
     const L = leave || { today: new Date().toISOString().slice(0, 10), requests: [], compOffs: [], holidays: [], pay: [], approvers: {} };
     const pay = Object.fromEntries((L.pay || []).map((p) => [lc(p.email), p]));
@@ -30,7 +30,7 @@ export function useLeave() {
     const approvedByMe = (email) => { const a = approverOf(email), me = lc(user.email); return lc(email) !== me && (a === me || (a === "directors" && directors.includes(me))); };
     const canDecide = (email) => {
       const a = approverOf(email);
-      return a === "hr" ? isHr && lc(email) !== lc(user.email) : a === "directors" ? approvedByMe(email) : isManager && approvedByMe(email);
+      return a === "hr" ? isHr && lc(email) !== lc(user.email) : a === "directors" ? approvedByMe(email) : approvedByMe(email);
     };
     const bal = (p, year) => R.balances(year, { start: p.start, casualOpening: payOf(p.email).casualOpening }, reqsOf(p.email), compsOf(p.email));
     const preview = (r) => {
@@ -40,7 +40,7 @@ export function useLeave() {
     const lopDaysIn = (month, email) => L.requests.filter((r) => r.status === "approved" && r.lopDays && (!email || lc(r.email) === lc(email)))
       .reduce((n, r) => n + (R.lopByMonth(r, holDays)[month] || 0), 0);
     return { L, today: L.today, requests: L.requests, compOffs: L.compOffs, holidays: L.holidays, empBy, reqsOf, compsOf, payOf, holDays, approverOf, approverName, approvedByMe, canDecide, bal, preview, lopDaysIn };
-  }, [people, leave, user, isHr, isManager]);
+  }, [people, leave, user, isHr]);
 }
 
 /* "5 Nov 2026" and "5 Nov 2026 – 7 Nov 2026" / "(first half)" the way the older pages write dates. */

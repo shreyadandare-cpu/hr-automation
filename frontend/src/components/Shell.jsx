@@ -11,7 +11,7 @@ import NextHolidayPopup from "./NextHolidayPopup.jsx";
 
 /* Pages still in the older single page app are plain links (hash routes under /). Pages already in React stay in the app. */
 const HR_LINKS = [["dashboard", "Dashboard"], ["posts", "Posts"], ["workforce", "Workforce"], ["onboard", "Onboarding"], ["offboard", "Offboarding"], ["leave", "Leave"], ["attendance", "Attendance"], ["finances", "Finances"], ["payroll", "Payroll"], ["audit", "Audit log"]];
-const EMP_LINKS = [["dashboard", "Dashboard"], ["posts", "Posts"], ["workforce", "Workforce"], ["onboard", "Onboarding"], ["offboard", "Offboarding"], ["attendance", "Attendance"], ["finances", "Finances"], ["myleave", "My leave"]];
+const EMP_LINKS = [["dashboard", "Dashboard"], ["posts", "Posts"], ["workforce", "Workforce"], ["attendance", "Attendance"], ["finances", "Finances"], ["myleave", "My leave"]];
 const REACT_PAGES = {
   dashboard: "/app/dashboard", posts: "/app/posts", employees: "/app/employees", allocations: "/app/allocations", onboard: "/app/onboarding", offboard: "/app/offboarding", leave: "/app/leave", attendance: "/app/attendance",
   assets: "/app/assets", claude: "/app/claude-requests", reimb: "/app/reimbursements", payroll: "/app/payroll", audit: "/app/audit", myleave: "/app/my-leave", team: "/app/team-leave",
@@ -19,8 +19,8 @@ const REACT_PAGES = {
 /* The main page of each module gets a "Back to dashboard" button above it. Detail pages and pages that already have their own Back are left out. */
 const HOME_PAGES = new Set(["/app/attendance", "/app/employees", "/app/allocations", "/app/assets", "/app/audit", "/app/leave", "/app/my-leave", "/app/team-leave", "/app/onboarding", "/app/onboarding/progress", "/app/claude-requests", "/app/documents",
   "/app/reimbursements", "/app/payroll", "/app/posts", "/app/budgets"]);
-/* Onboarding is HR's wizard; for employees the same menu entry is their own documents page. */
-const pathFor = (key, isHr) => (key === "onboard" && !isHr ? "/app/documents" : REACT_PAGES[key]);
+/* Onboarding and Offboarding are HR's pages: employees don't get those menu entries (they upload their documents from My profile). */
+const pathFor = (key) => REACT_PAGES[key];
 
 function ThemeButton() {
   const [t, setT] = useState(currentTheme());
@@ -147,7 +147,7 @@ export default function Shell() {
     return () => window.removeEventListener("resize", fit);
   });
   const { pathname } = useLocation();
-  const base = isHr ? HR_LINKS : [...EMP_LINKS, ...(isManager ? [["team", "Team leave"]] : []), ...(payrollReviewer ? [["payroll", "Payroll"]] : [])];   // the payroll reviewer (PAYROLL_REVIEWERS) approves payroll
+  const base = isHr ? (isManager ? HR_LINKS.flatMap((l) => (l[0] === "leave" ? [l, ["team", "Team leave"]] : [l])) : HR_LINKS) : [...EMP_LINKS, ...(isManager ? [["team", "Team leave"]] : []), ...(payrollReviewer ? [["payroll", "Payroll"]] : [])];   // the payroll reviewer (PAYROLL_REVIEWERS) approves payroll
   const links = itAdmin ? [...base.filter(([k]) => k !== "audit"), ["assets", "Assets"], ...(isHr ? [] : [["claude", "Claude"]]), ...base.filter(([k]) => k === "audit")] : base;   // HR reaches the Claude requests from Onboarding; an IT admin who is not HR gets their own link
   return (
     <>

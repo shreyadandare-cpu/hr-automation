@@ -16,6 +16,8 @@ server {
   location /auth/   { proxy_pass ${BACKEND_URL}; }
   # The backend checks the invite link, then hands the page back here with X-Accel-Redirect.
   location /invite/ { proxy_pass ${BACKEND_URL}; }
+  # Links in automatic emails (leave, payslips, work email) are /l/<token>; the backend checks the token and redirects to the page.
+  location /l/      { proxy_pass ${BACKEND_URL}; }
 
   # Signed in? The backend answers 200 or 401; the app pages and /login use it like the backend did on its own.
   location = /_auth {
@@ -31,7 +33,7 @@ server {
   }
   location /app/ {
     auth_request /_auth;
-    error_page 401 = @signin;
+    error_page 401 = @app_signin;
     try_files /app/index.html =404;
   }
   location = /login {
@@ -49,7 +51,10 @@ server {
     alias /usr/share/nginx/html/app/login.html;
   }
 
-  location @dashboard  { return 302 /app/dashboard; }
+  # Signed out on an app page (say, a leave request opened from an email): the backend remembers the page for 15 minutes and sends
+  # them to /login. Signed in at / or /login: the backend opens the remembered page, or the dashboard when there is none.
+  location @app_signin { proxy_pass ${BACKEND_URL}; }
+  location @dashboard  { proxy_pass ${BACKEND_URL}; }
   location @signin     { return 302 /login; }
   location @login_page { rewrite ^ /_ui/login.html last; }
 }

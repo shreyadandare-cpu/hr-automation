@@ -48,7 +48,7 @@ button:disabled{opacity:.6;cursor:wait}
 /* Split screen: the form on the left, the brand panel on the right. */
 .split{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.05fr);min-height:100vh}
 .brand{order:2;position:relative;overflow:hidden;display:flex;flex-direction:column;justify-content:space-between;gap:28px;padding:44px clamp(32px,5vw,72px);color:#fff;
-  background:radial-gradient(70% 55% at 10% 0%,rgba(125,140,238,.55),transparent),radial-gradient(60% 50% at 100% 100%,rgba(66,84,212,.6),transparent),linear-gradient(160deg,#2b2a78,#171650 70%)}
+  background:radial-gradient(70% 55% at 10% 0%,rgba(247,120,29,.38),transparent),radial-gradient(60% 50% at 100% 100%,rgba(247,120,29,.28),transparent),linear-gradient(160deg,#800d35,#3a0a1b 70%)}
 .brand>*{position:relative;z-index:1}
 .ring{position:absolute!important;z-index:0!important;border-radius:50%;border:1px solid rgba(255,255,255,.09);pointer-events:none}
 .r1{width:520px;height:520px;right:-180px;top:-140px}

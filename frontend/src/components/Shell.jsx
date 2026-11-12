@@ -172,7 +172,6 @@ export default function Shell() {
       <NextHolidayPopup />
       <footer className="wrap"><div className="foot">
         <a className="logo" href="/app/dashboard" style={{ textDecoration: "none" }}><img className="lg lg-light" src="/wohlig-logo.svg" alt="wohlig" /><img className="lg lg-dark" src="/wohlig-logo-dark.svg" alt="" /></a>
-        <span>HR Access Hub · People Ops</span>
         <span>Signed in as <b style={{ color: "var(--ink)" }}>{user.name}</b>, {isHr ? "HR" : "Employee"}</span>
       </div></footer>
     </>

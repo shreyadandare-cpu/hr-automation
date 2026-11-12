@@ -6,8 +6,17 @@ import { mailConfigured, sendMail } from "./mail.js";
 // recorded in email_outbox as "skipped" and the app carries on. Failures are recorded too, never thrown.
 export const emailMode = () => (mailConfigured() ? "sendgrid" : "off");
 
+/* Addresses the app sends no email to (the directors, for now). Their website access and the bell notifications are not affected.
+   MAIL_SKIP_RECIPIENTS replaces the list, comma separated; leave it empty to email everyone again. */
+export const mailSkipped = () =>
+  (process.env.MAIL_SKIP_RECIPIENTS ?? "chirag@wohlig.com,chintan@wohlig.com").split(",").map((s) => s.trim().toLowerCase()).filter(Boolean);
+
 export async function sendEmail(to, subject, body, html = null) {   // html: optional rich version of body
   if (!to) return;
+  if (mailSkipped().includes(String(to).trim().toLowerCase())) {
+    await pool.query("INSERT INTO email_outbox (recipient, subject, body, status) VALUES ($1,$2,$3,'skipped')", [to, subject, body]);
+    return;
+  }
   if (!mailConfigured()) {
     console.log(`[email skipped: SendGrid not configured] to=${to} subject="${subject}"`);
     await pool.query("INSERT INTO email_outbox (recipient, subject, body, status) VALUES ($1,$2,$3,'skipped')", [to, subject, body]);

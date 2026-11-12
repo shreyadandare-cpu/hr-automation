@@ -1,6 +1,6 @@
 /* What the app knows about each person, worked out the same way the older pages do it. */
 export const NEW_FROM = "2026-09-15";   // joined on or after this date: onboarding is still open
-export const AVATAR_COLORS = ["#4254d4", "#7d6ee8", "#0e7c86", "#b4472a", "#2f6f3e", "#9a3b72", "#555177", "#3242b2"];
+export const AVATAR_COLORS = ["#800d35", "#c85f44", "#d9630f", "#76775a", "#5c0926", "#9a5a07", "#6b4a52", "#0f8592"];
 
 export function deptOf(title) {
   const t = String(title || "").toLowerCase();

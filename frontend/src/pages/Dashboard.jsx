@@ -31,7 +31,7 @@ function Hero({ me, photo, today, sub, actions }) {
   return (
     <section className="db-hero" style={{ "--db-a": s.a, "--db-b": s.b }}>
       {s.svg}
-      <a className="db-avatar" href="/app/profile" style={{ background: photo ? "transparent" : me.color || "#4254d4" }} aria-label="My profile">
+      <a className="db-avatar" href="/app/profile" style={{ background: photo ? "transparent" : me.color || "#800d35" }} aria-label="My profile">
         {photo ? <img src={photo} alt="" /> : me.name.split(/\s+/).map((p) => p[0]).slice(0, 2).join("").toUpperCase()}
       </a>
       <div style={{ minWidth: 0, flex: 1 }}>
@@ -55,7 +55,7 @@ function HrDashboard() {
   const { user } = useAuth();
   const { people, docs, leave, profile } = useData();
   const today = leave ? leave.today : new Date().toISOString().slice(0, 10);
-  const me = people.find((p) => p.email.toLowerCase() === user.email.toLowerCase()) || { name: user.name, color: "#4254d4" };
+  const me = people.find((p) => p.email.toLowerCase() === user.email.toLowerCase()) || { name: user.name, color: "#800d35" };
 
   const here = people.filter((p) => p.status !== "offboarded");
   const active = people.filter((p) => p.status === "active").length;
@@ -144,7 +144,7 @@ function EmployeeDashboard() {
   const [claims, setClaims] = useState(null);
   useEffect(() => { api("GET", "/api/reimbursements").then((r) => setClaims(r.ok ? r.data.claims : [])); }, []);
   const today = leave ? leave.today : new Date().toISOString().slice(0, 10);
-  const me = people.find((p) => p.email.toLowerCase() === user.email.toLowerCase()) || { id: -1, name: user.name, email: user.email, title: "—", dept: "—", color: "#4254d4", grants: {}, status: "active", start: "" };
+  const me = people.find((p) => p.email.toLowerCase() === user.email.toLowerCase()) || { id: -1, name: user.name, email: user.email, title: "—", dept: "—", color: "#800d35", grants: {}, status: "active", start: "" };
   const photo = profile && profile.photoV ? `/api/profile/photo?v=${profile.photoV}` : "";
   const mgr = mgrOf(me);
   const prof = profile || {};

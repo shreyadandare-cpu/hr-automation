@@ -34,7 +34,7 @@ export const Callout = ({ children }) => (
 
 export const Pill = ({ tone = "mute", children }) => <span className={`pill p-${tone}`}>{children}</span>;
 
-export function Person({ name, sub, color = "#4254d4" }) {
+export function Person({ name, sub, color = "#800d35" }) {
   return (
     <div className="person">
       <span className="avatar" style={{ background: color }}>{initials(name)}</span>

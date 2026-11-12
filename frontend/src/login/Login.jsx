@@ -43,7 +43,7 @@ export default function Login() {
     <AuthLayout>
     <main className="card">
       <div className="logo">
-        <img className="lg lg-light" src="/wohlig-logo.png" alt="wohlig" /><img className="lg lg-dark" src="/wohlig-logo-dark.png" alt="" />
+        <img className="lg lg-light" src="/wohlig-logo.svg" alt="wohlig" /><img className="lg lg-dark" src="/wohlig-logo-dark.svg" alt="" />
       </div>
       <div className="app-name">HR Access Hub</div>
       <h1>Sign in</h1>

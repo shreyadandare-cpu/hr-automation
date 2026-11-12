@@ -35,7 +35,7 @@ export default function Invite() {
   return (
     <AuthLayout>
     <main className="card">
-      <div className="logo"><img className="lg lg-light" src="/wohlig-logo.png" alt="wohlig" /><img className="lg lg-dark" src="/wohlig-logo-dark.png" alt="" /></div>
+      <div className="logo"><img className="lg lg-light" src="/wohlig-logo.svg" alt="wohlig" /><img className="lg lg-dark" src="/wohlig-logo-dark.svg" alt="" /></div>
       <div className="app-name">HR Access Hub</div>
       {!info && <p className="sub">Checking your invitation…</p>}
       {info && !pending && <>

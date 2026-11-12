@@ -98,7 +98,7 @@ export default function OrgChart({ people }) {
       <div className="org" tabIndex={0} aria-label="Organisation chart">
         <ul>
           <li>
-            <div className="org-card org-root"><span className="org-txt"><span className="org-logo"><img className="lg lg-light" src="/wohlig-logo.png" alt="Wohlig" /><img className="lg lg-dark" src="/wohlig-logo-dark.png" alt="" /></span>
+            <div className="org-card org-root"><span className="org-txt"><span className="org-logo"><img className="lg lg-light" src="/wohlig-logo.svg" alt="Wohlig" /><img className="lg lg-dark" src="/wohlig-logo-dark.svg" alt="" /></span>
               <span>Transformations · {org.total} people</span></span></div>
             {org.leads.length > 0 && <ul>{org.leads.map((p) => <Branch key={p.id} person={p} org={org} ctx={ctx} />)}</ul>}
           </li>

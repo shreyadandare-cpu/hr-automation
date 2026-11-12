@@ -74,7 +74,7 @@ export default function Profile() {
   const fileRef = useRef(null);
 
   const me = useMemo(() => (people || []).find((p) => p.email.toLowerCase() === user.email.toLowerCase())
-    || { id: -1, name: user.name, email: user.email, title: "—", dept: "—", status: "active", grants: {}, color: "#4254d4", no: "", start: "" }, [people, user]);
+    || { id: -1, name: user.name, email: user.email, title: "—", dept: "—", status: "active", grants: {}, color: "#800d35", no: "", start: "" }, [people, user]);
   const record = (records || []).find((r) => String(r.email).toLowerCase() === user.email.toLowerCase());
   if (!people || !profile) return <section className="section"><div className="empty">Loading…</div></section>;
 

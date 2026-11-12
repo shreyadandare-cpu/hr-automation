@@ -13,7 +13,7 @@ export default function AuthLayout({ children }) {
     <div className="split">
       <aside className="brand">
         <i className="ring r1" aria-hidden="true" /><i className="ring r2" aria-hidden="true" />
-        <span className="brand-chip"><img src="/wohlig-logo.png" alt="wohlig" /></span>
+        <span className="brand-chip"><img src="/wohlig-logo.svg" alt="wohlig" /></span>
         <div className="brand-body">
           <div className="app-name">HR Access Hub</div>
           <h2>Everything about working at wohlig, in one place.</h2>

@@ -17,6 +17,17 @@ const cfg = {
 };
 const STATE = new URL("./bridge-state.json", import.meta.url);
 const log = (...m) => console.log(new Date().toLocaleString("en-IN"), "-", ...m);
+// The device library rejects with plain objects ({ err, ip, command }), not Error instances: show what is inside.
+function whyText(e) {
+  if (!e) return "unknown error";
+  if (typeof e === "string") return e;
+  const inner = e.err || e;
+  const msg = inner.message || e.message;
+  const code = inner.code || e.code;
+  const bits = [msg, code && `code ${code}`, e.command && `command ${e.command}`].filter(Boolean);
+  if (bits.length) return bits.join(", ");
+  try { return JSON.stringify(e, Object.getOwnPropertyNames(e)); } catch { return String(e); }
+}
 const p2 = (n) => String(n).padStart(2, "0");
 /** The device's own wall-clock time as "YYYY-MM-DD HH:MM:SS". (The library builds the Date from the device's clock parts, so the local getters give back the device time.) */
 const wall = (d) => `${d.getFullYear()}-${p2(d.getMonth() + 1)}-${p2(d.getDate())} ${p2(d.getHours())}:${p2(d.getMinutes())}:${p2(d.getSeconds())}`;
@@ -112,7 +123,7 @@ async function readSince(since, startWant = 4000) {
         return out;
       }
     } catch (e) {
-      lastError = e && e.message ? e.message : String(e);
+      lastError = whyText(e);
       log(`Reading the newest punches failed (attempt ${attempt} of 3): ${lastError}`);
     } finally { try { await zk.disconnect(); } catch {} }
     await new Promise((r) => setTimeout(r, 5000));
@@ -128,7 +139,7 @@ async function readDevice() {
   // The library asks for every chunk of the log at once, and this device gives up after about a third of them. Asking one chunk at a time is gentler.
   // TAIL_READ=true asks only for the newest chunks (experimental: it returned blank records on the office device).
   try { return await readSince(startPoint(), process.env.TAIL_READ === "true" ? 4000 : Number.MAX_SAFE_INTEGER); }
-  catch (e) { log(`Reading the log one chunk at a time did not work (${e.message}). Trying the library's way.`); }
+  catch (e) { log(`Reading the log one chunk at a time did not work (${whyText(e)}). Trying the library's way.`); }
   const ZKLib = createRequire(import.meta.url)("node-zklib");
   // A big log (tens of thousands of punches) is often cut short on the way. The library reports that in `err` ("TIME OUT !! n PACKETS REMAIN")
   // but still hands back what it got, so a read with an error is thrown away and tried again, never trusted. The device's own count is a second check.
@@ -141,13 +152,13 @@ async function readDevice() {
       const logs = await zk.getAttendances();
       const out = (logs.data || []).map((l) => ({ userId: String(l.deviceUserId), time: wall(new Date(l.recordTime)) }));
       last = out.length;
-      if (logs.err) why = `the device stopped sending: ${logs.err.message || logs.err}`;
+      if (logs.err) why = `the device stopped sending: ${whyText(logs.err)}`;
       else if (expected && out.length < expected * 0.98) why = `only ${out.length} of the ${expected} punches the device holds arrived`;
       else { out.expected = expected; return out; }
       if (process.env.ALLOW_PARTIAL === "true" && out.length) { out.expected = expected; return out; }
       log(`Incomplete read (attempt ${attempt} of 5): ${why}. Trying again.`);
     } catch (e) {
-      why = e && e.message ? e.message : String(e);
+      why = whyText(e);
       log(`Device read failed (attempt ${attempt} of 5): ${why}`);
     } finally { try { await zk.disconnect(); } catch {} }
     await new Promise((r) => setTimeout(r, 10000));

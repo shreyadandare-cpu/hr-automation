@@ -3,7 +3,7 @@ import { Link } from "react-router-dom";
 import { Field } from "../../components/Modal.jsx";
 import { Callout, DownloadIcon } from "../../components/ui.jsx";
 import { useToast } from "../../components/toast.jsx";
-import { BANNER_DESIGNS, BG_DESIGNS, SIG_DEFAULT_OPTS, SIG_STYLES, aboutText, copyHtml, copyText, drawBackground, drawBanner, drawCard, fileSafe, hashtags, headlines, jpegOf,
+import { BANNER_DESIGNS, BG_DESIGNS, ICON_PROD, SIG_DEFAULT_OPTS, SIG_STYLES, aboutText, copyHtml, copyText, drawBackground, drawBanner, drawCard, fileSafe, hashtags, headlines, jpegOf,
   pdfFromJpegs, saveBlob, saveText, signatureHtml, signaturePlain, toBlob, webLink } from "./kit.js";
 
 /* A picture drawn on a canvas, shown as an image. It is drawn again when the inputs change. */
@@ -51,31 +51,46 @@ export function Signature({ p }) {
   const saved = (() => { try { return JSON.parse(localStorage.getItem(key) || "null"); } catch { return null; } })();
   const [f, setF] = useState({ ...base, ...(saved && saved.f) });
   const [o, setO] = useState({ ...SIG_DEFAULT_OPTS, ...(saved && saved.o) });
-  const [app, setApp] = useState("gmail");
+  const [iconsLive, setIconsLive] = useState(false);   // are the signature icons already on the live site? (they arrive with the next deploy)
+  useEffect(() => { const im = new Image(); im.onload = () => setIconsLive(true); im.onerror = () => setIconsLive(false); im.src = `${ICON_PROD}/icon-mail.png?probe=${Date.now()}`; }, []);
   useEffect(() => { try { localStorage.setItem(key, JSON.stringify({ f, o })); } catch { /* storage blocked: the page still works */ } }, [f, o, key]);
   const set = (k) => (e) => setF({ ...f, [k]: e.target.value });
   const sig = { ...f, name: f.name.trim() || p.name, title: f.title.trim(), phone: f.phone.trim(), email: p.email };
-  const html = signatureHtml(sig, o), previewHtml = signatureHtml(sig, o, true), plain = signaturePlain(sig, o);   // the preview loads pictures from this site; the copy loads them from the live one
+  const html = signatureHtml(sig, o, false, iconsLive), previewHtml = signatureHtml(sig, o, true), plain = signaturePlain(sig, o);   // the preview loads pictures from this site; the copy loads them from the live one
   const liBad = f.linkedin.trim() && !webLink(f.linkedin, /(^|\.)linkedin\.com$/i), bkBad = f.booking.trim() && !webLink(f.booking);
   const done = (ok, what) => toast(ok ? `${what} copied.` : "Could not copy. Select it and copy by hand.");
+  const BLURB = { classic: "Logo beside your details", executive: "Stacked, with icons and the partner badge", compact: "Text only, light for replies" };
   return (
-    <div className="dk-split dk-sig">
-      <div className="card"><div className="card-h"><h3>Your details</h3><button type="button" className="btn link sm" onClick={() => { setF(base); setO(SIG_DEFAULT_OPTS); }}>Reset</button></div>
+    <div className="dk-stack dk-sig">
+      <div className="card"><div className="card-h"><h3><span className="dk-step">1</span>Choose a style</h3></div>
+        <div className="card-b dk-stylecards" role="radiogroup" aria-label="Signature style">
+          {SIG_STYLES.map(([k, l]) => (
+            <button key={k} type="button" role="radio" aria-checked={o.style === k} className={`dk-stylecard${o.style === k ? " on" : ""}`} onClick={() => setO({ ...o, style: k })}>
+              <div className="dk-mini" aria-hidden="true"><div className="dk-mini-in" dangerouslySetInnerHTML={{ __html: signatureHtml(sig, { ...o, style: k }, true) }} /></div>
+              <b>{l}</b><span>{BLURB[k]}</span>
+            </button>))}
+        </div>
+      </div>
+
+      <div className="card"><div className="card-h"><h3><span className="dk-step">2</span>Your details</h3>
+        <button type="button" className="btn link sm" onClick={() => { setF(base); setO({ ...SIG_DEFAULT_OPTS, style: o.style }); }}>Reset to my record</button></div>
         <div className="card-b form">
           <Field id="sg-n" label="Name"><input className="input" id="sg-n" value={f.name} maxLength={80} onChange={set("name")} /></Field>
           <Field id="sg-t" label="Designation"><input className="input" id="sg-t" value={f.title} maxLength={120} placeholder="e.g. Solutions Architect" onChange={set("title")} /></Field>
           <Field id="sg-p" label={<>Mobile <span className="muted">(optional)</span></>}><input className="input" id="sg-p" type="tel" value={f.phone} maxLength={20} placeholder="+91 98765 43210" onChange={set("phone")} /></Field>
-          <Field id="sg-e" label="Email"><input className="input" id="sg-e" value={p.email} readOnly /></Field>
-          <Field id="sg-l" label={<>LinkedIn profile <span className="muted">(optional)</span></>} error={liBad ? "Use a linkedin.com link, like linkedin.com/in/your-name." : ""}><input className="input" id="sg-l" value={f.linkedin} maxLength={200} placeholder="linkedin.com/in/your-name" onChange={set("linkedin")} /></Field>
-          <Field id="sg-b" label={<>Booking link <span className="muted">(optional)</span></>} hint={'Adds a "Book a meeting" link.'} error={bkBad ? "Enter a web link." : ""}><input className="input" id="sg-b" value={f.booking} maxLength={300} placeholder="calendar.app.google/… or calendly.com/…" onChange={set("booking")} /></Field>
-          <div className="dk-opts">{OPT_LABELS.map(([k, l]) => { const off = k === "badge" && o.style === "compact"; return <label className="check" key={k} title={off ? "The compact style is text only, so it has no badge." : undefined} style={off ? { opacity: 0.5 } : undefined}><input type="checkbox" checked={!!o[k] && !off} disabled={off} onChange={(e) => setO({ ...o, [k]: e.target.checked })} /> {l}{off && <span className="muted"> (not in compact)</span>}</label>; })}</div>
-          <p className="muted dk-hint" style={{ margin: 0 }}>The Google photo option is not offered: a picture in an email has to load from the internet for every reader, and profile photos here are private.</p>
+          <Field id="sg-e" label="Email" hint="Your work address; it can't be changed here."><input className="input" id="sg-e" value={p.email} readOnly /></Field>
+          <Field id="sg-l" label={<>LinkedIn <span className="muted">(optional)</span></>} error={liBad ? "Use a linkedin.com link, like linkedin.com/in/your-name." : ""}><input className="input" id="sg-l" value={f.linkedin} maxLength={200} placeholder="linkedin.com/in/your-name" onChange={set("linkedin")} /></Field>
+          <Field id="sg-b" label={<>Booking link <span className="muted">(optional)</span></>} hint="Adds a Book a meeting link." error={bkBad ? "Enter a web link." : ""}><input className="input" id="sg-b" value={f.booking} maxLength={300} placeholder="calendar.app.google/… or calendly.com/…" onChange={set("booking")} /></Field>
+          <div className="dk-togglewrap" style={{ gridColumn: "1 / -1" }}>
+            <span className="dk-togglelabel">Show in my signature</span>
+            <div className="dk-toggles">{OPT_LABELS.map(([k, l]) => { const off = k === "badge" && o.style === "compact"; return <button key={k} type="button" className={`dk-toggle${o[k] && !off ? " on" : ""}`} aria-pressed={!!o[k] && !off} disabled={off} title={off ? "The compact style is text only, so it has no badge." : undefined} onClick={() => setO({ ...o, [k]: !o[k] })}>{o[k] && !off ? "✓ " : ""}{l}</button>; })}</div>
+            <p className="muted dk-hint" style={{ margin: 0 }}>Saved on this computer. A Google photo is not offered: a picture in an email must load from the internet for every reader, and profile photos here are private.</p>
+          </div>
         </div>
       </div>
-      <div className="dk-stack">
-        <div className="card"><div className="card-b">
-          <p className="muted dk-hint" style={{ margin: "0 0 14px" }}>Fill in your details once; this browser remembers them. Pick a style, then copy.</p>
-          <div className="subtabs dk-styles" role="tablist" aria-label="Signature style">{SIG_STYLES.map(([k, l]) => <button key={k} type="button" role="tab" aria-selected={o.style === k} className={o.style === k ? "on" : ""} onClick={() => setO({ ...o, style: k })}>{l}</button>)}</div>
+
+      <div className="card"><div className="card-h"><h3><span className="dk-step">3</span>Preview and copy</h3></div>
+        <div className="card-b">
           <div className="dk-sigbox dk-sigmail"><p className="dk-regards">Best regards,</p><div dangerouslySetInnerHTML={{ __html: previewHtml }} /></div>
           <div className="row dk-actions">
             <button type="button" className="btn primary" onClick={async () => done(await copyHtml(html, plain), "Signature")}>Copy signature</button>
@@ -84,10 +99,10 @@ export function Signature({ p }) {
             <button type="button" className="btn glass" onClick={() => saveText(html, `${fileSafe(sig.name)}-signature.html`, "text/html;charset=utf-8")}><DownloadIcon />Download .html</button>
           </div>
           <p className="muted dk-hint">Paste with <kbd className="dk-kbd">⌘V</kbd> / <kbd className="dk-kbd">Ctrl V</kbd>, not "paste as plain text", so the logo, icons and colours come with it.</p>
-          <hr className="dk-hr" />
-          <div className="subtabs" role="tablist" aria-label="Where to paste it">{Object.entries(SIG_APPS).map(([k, [l]]) => <button key={k} type="button" role="tab" aria-selected={app === k} className={app === k ? "on" : ""} onClick={() => setApp(k)}>{l}</button>)}</div>
-          <ol className="dk-ol dk-sigsteps">{SIG_APPS[app][1].map((t) => <li key={t}>{t}</li>)}</ol>
-        </div></div>
+          {o.style === "executive" && !iconsLive && <p className="muted dk-hint">The icon pictures reach the live site with the next update. Until then a copied Executive signature uses the letters E, M, W and A instead of icons; the preview already shows the icons.</p>}
+          <div className="dk-acc">{Object.entries(SIG_APPS).map(([k, [l, steps]]) => (
+            <details key={k} open={k === "gmail"}><summary>{l}<span className="caret" aria-hidden="true" /></summary><ol className="dk-ol">{steps.map((t) => <li key={t}>{t}</li>)}</ol></details>))}</div>
+        </div>
       </div>
     </div>
   );

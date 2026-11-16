@@ -106,3 +106,79 @@ button.dk-dlbtn{border:0;cursor:pointer}
 .dk-styles{margin:0 0 20px}
 
 .dk-sig .dk-styles{margin-bottom:22px}
+
+/* The signature preview must look like an email, not like the app: the app's own table styles must not reach into it. */
+.dk-sigmail table{width:auto;border-collapse:separate;border-spacing:0;margin:0;background:none;box-shadow:none}
+.dk-sigmail td,.dk-sigmail th{padding:0;border:0;background:none;vertical-align:baseline;white-space:normal}
+.dk-sigmail tr{background:none;box-shadow:none}
+
+/* ----- own layout: a menu on the left, the section on the right ----- */
+.dk-shell{display:grid;grid-template-columns:230px minmax(0,1fr);gap:26px;align-items:start}
+.dk-side{position:sticky;top:110px;display:flex;flex-direction:column;gap:20px;padding:18px 14px;border-radius:var(--radius);background:var(--surface);box-shadow:inset 0 0 0 1px var(--line-2)}
+.dk-side-group{display:flex;flex-direction:column;gap:4px}
+.dk-side-group h4{margin:0 8px 6px;font:800 11.5px/1 var(--body);letter-spacing:.14em;text-transform:uppercase;color:var(--terracotta)}
+.dk-side button{display:flex;align-items:center;gap:11px;width:100%;border:0;background:none;cursor:pointer;text-align:left;padding:11px 12px;border-radius:14px;color:var(--ink-dim);font:600 14.5px/1.2 var(--body)}
+.dk-side button svg{width:19px;height:19px;flex:none}
+.dk-side button span{flex:1}
+.dk-side button em{font-style:normal;font-size:12px;font-weight:700;padding:2px 8px;border-radius:999px;background:var(--tint)}
+.dk-side button:hover{background:var(--tint-2);color:var(--ink)}
+.dk-side button.on{background:var(--purple);color:#fff}
+.dk-side button.on em{background:rgba(255,255,255,.22);color:#fff}
+.dk-main{display:flex;flex-direction:column;gap:22px;min-width:0}
+@media (max-width:900px){.dk-shell{grid-template-columns:1fr}.dk-side{position:static;flex-direction:row;overflow-x:auto;padding:10px}.dk-side-group{flex-direction:row;align-items:center}.dk-side-group h4{display:none}.dk-side button{white-space:nowrap;width:auto}}
+
+/* ----- ready-to-use text: list and editor ----- */
+.dk-rt2{display:grid;grid-template-columns:minmax(0,300px) minmax(0,1fr);gap:22px;align-items:start}
+.dk-rt2-search{padding:0 18px 12px}
+.dk-rt2-list{list-style:none;margin:0;padding:0 10px 12px;display:flex;flex-direction:column;gap:4px}
+.dk-rt2-list button{display:flex;flex-direction:column;gap:3px;width:100%;border:0;background:none;cursor:pointer;text-align:left;padding:12px 14px;border-radius:14px}
+.dk-rt2-list button b{font:700 15px/1.25 var(--body);color:var(--ink)}
+.dk-rt2-list button span{font-size:13px;color:var(--ink-dim);line-height:1.35}
+.dk-rt2-list button:hover{background:var(--tint-2)}
+.dk-rt2-list button.on{background:var(--tint);box-shadow:inset 3px 0 0 var(--purple)}
+.dk-rt2-none{padding:10px 14px}
+@media (max-width:900px){.dk-rt2{grid-template-columns:1fr}}
+
+/* ----- file rows ----- */
+.dk-grp .card-h{padding-bottom:6px}
+.dk-rows{list-style:none;margin:0;padding:6px 14px 14px;display:flex;flex-direction:column}
+.dk-row2{display:grid;grid-template-columns:64px minmax(0,1fr) auto auto;align-items:center;gap:16px;padding:12px 8px;border-top:1px solid var(--line)}
+.dk-row2:first-child{border-top:0}
+.dk-thumb2{width:64px;height:64px;border-radius:14px;display:grid;place-items:center;overflow:hidden;border:0;padding:7px;background:var(--tint-2);box-shadow:inset 0 0 0 1px var(--line)}
+button.dk-thumb2{cursor:pointer}
+.dk-thumb2.dark{background:var(--purple)}.dk-thumb2.zip{background:var(--tint)}
+.dk-thumb2 img{display:block;max-width:100%;max-height:100%;object-fit:contain}
+.dk-thumb2.mark img{width:100%;height:100%}
+.dk-thumb2.doc{padding:0;align-items:start}.dk-thumb2.doc img{width:100%;height:100%;object-fit:cover;object-position:top}
+.dk-thumb2 b{font:800 12px/1 var(--body);letter-spacing:.06em;color:var(--terracotta)}
+.dk-row2-text{min-width:0;display:flex;flex-direction:column;gap:3px}
+.dk-row2-text b{font:700 15.5px/1.25 var(--body);overflow-wrap:anywhere}
+.dk-row2-text span{font-size:13.5px;color:var(--ink-dim);line-height:1.4}
+.dk-tags{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}
+.dk-tags i{font-style:normal;font:700 11.5px/1 var(--body);letter-spacing:.04em;padding:5px 10px;border-radius:999px;background:var(--tint);color:var(--purple)}
+@media (max-width:700px){.dk-row2{grid-template-columns:56px minmax(0,1fr) auto}.dk-tags{display:none}.dk-thumb2{width:56px;height:56px}}
+
+/* ----- signature builder: three steps ----- */
+.dk-step{display:inline-grid;place-items:center;width:28px;height:28px;margin-right:12px;border-radius:50%;background:var(--purple);color:#fff;font:700 14px/1 var(--body);vertical-align:2px}
+.dk-stylecards{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px}
+.dk-stylecard{display:flex;flex-direction:column;gap:6px;text-align:left;border:0;cursor:pointer;padding:14px;border-radius:18px;background:var(--surface-3);box-shadow:inset 0 0 0 1px var(--line-2);font:inherit;color:inherit}
+.dk-stylecard:hover{box-shadow:inset 0 0 0 1px var(--purple)}
+.dk-stylecard.on{background:var(--tint-2);box-shadow:inset 0 0 0 2px var(--purple)}
+.dk-stylecard b{font:700 15.5px/1.2 var(--body)}.dk-stylecard span{font-size:13px;color:var(--ink-dim)}
+.dk-mini{height:150px;overflow:hidden;border-radius:12px;background:#fff;box-shadow:inset 0 0 0 1px var(--line);pointer-events:none;padding:12px}
+.dk-mini-in{width:230%;transform:scale(.43);transform-origin:top left}
+.dk-togglewrap{display:flex;flex-direction:column;gap:10px}
+.dk-togglelabel{font:700 13px/1 var(--body);letter-spacing:.04em}
+.dk-toggles{display:flex;flex-wrap:wrap;gap:10px}
+.dk-toggle{border:0;cursor:pointer;padding:10px 16px;border-radius:999px;background:var(--surface-3);color:var(--ink-dim);font:700 14px/1 var(--body);box-shadow:inset 0 0 0 1px var(--line-2)}
+.dk-toggle.on{background:var(--purple);color:#fff;box-shadow:none}
+.dk-toggle:disabled{opacity:.5;cursor:not-allowed}
+.dk-acc{display:flex;flex-direction:column;gap:8px;margin-top:20px}
+.dk-acc details{border-radius:14px;background:var(--surface-3);box-shadow:inset 0 0 0 1px var(--line-2);padding:0 16px}
+.dk-acc summary{cursor:pointer;padding:14px 0;font:700 15px/1.2 var(--body);list-style:none;display:flex;justify-content:space-between;align-items:center}
+.dk-acc summary::-webkit-details-marker{display:none}
+.dk-acc .dk-ol{padding-bottom:16px}
+@media (max-width:900px){.dk-stylecards{grid-template-columns:1fr}}
+
+.dk-acc summary .caret{margin-left:0;color:var(--purple)}
+.dk-acc details[open] summary .caret{transform:rotate(180deg)}

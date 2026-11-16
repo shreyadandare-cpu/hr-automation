@@ -598,6 +598,7 @@ app.use("/auth", googleRouter);       // "Continue with Google" (public: it is h
 app.use("/invite", inviteRouter);     // the link in the invite email
 app.use("/l", emailLinkRouter);       // short-lived links in automatic emails
 for (const f of ["wohlig-logo.svg", "wohlig-logo-dark.svg", "wohlig-logo.png", "wohlig-logo-dark.png", "wohlig-smile-mark.svg", "wohlig-smile-mark.png", "wohlig-premier-partner-badge.png", "wohlig-logos.zip", "favicon.svg", "favicon.ico", "apple-touch-icon.png"]) app.get("/" + f, (_req, res) => res.sendFile(path.join(frontendDir, "public", f), { maxAge: "1h" }));
+app.use("/sig", express.static(path.join(frontendDir, "public", "sig"), { maxAge: "1h" }));   // small icon pictures used by the email signature (public: mail programs fetch them)
 // The whole interface is React (frontend/src), built into frontend/dist with `npm run build:ui`.
 const distDir = path.join(frontendDir, "dist");
 const hasDist = () => fs.existsSync(path.join(distDir, "index.html"));

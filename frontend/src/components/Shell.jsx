@@ -10,7 +10,7 @@ import NotificationBell from "./NotificationBell.jsx";
 import NextHolidayPopup from "./NextHolidayPopup.jsx";
 
 /* Pages still in the older single page app are plain links (hash routes under /). Pages already in React stay in the app. */
-const HR_LINKS = [["dashboard", "Dashboard"], ["community", "Community"], ["workforce", "Workforce"], ["people", "Joiners & leavers"], ["leave", "Leave"], ["attendance", "Attendance"], ["finances", "Finances"], ["audit", "Audit log"]];
+const HR_LINKS = [["dashboard", "Dashboard"], ["community", "Community"], ["workforce", "Workforce"], ["onboard", "Onboarding"], ["offboard", "Offboarding"], ["leave", "Leave"], ["attendance", "Attendance"], ["finances", "Finances"], ["audit", "Audit log"]];
 const EMP_LINKS = [["dashboard", "Dashboard"], ["posts", "Posts"], ["workforce", "Workforce"], ["attendance", "Attendance"], ["finances", "Finances"], ["myleave", "My leave"]];
 const REACT_PAGES = {
   dashboard: "/app/dashboard", posts: "/app/posts", celebrations: "/app/celebrations", employees: "/app/employees", allocations: "/app/allocations", onboard: "/app/onboarding", offboard: "/app/offboarding", leave: "/app/leave", attendance: "/app/attendance",
@@ -158,7 +158,7 @@ export default function Shell() {
             <img className="lg lg-light" src="/wohlig-logo.svg" alt="wohlig" /><img className="lg lg-dark" src="/wohlig-logo-dark.svg" alt="" /><small>HR Access Hub</small>
           </a>
           <div className="links" ref={linksRef}>
-            {links.map(([k, label]) => k === "finances" ? <GroupMenu key={k} label={label} items={[["/app/reimbursements", "Reimbursements"], ["/app/payslips", "My payslips"], ...(isHr || payrollReviewer ? [["/app/payroll", "Payroll"]] : [])]} /> : k === "people" ? <GroupMenu key={k} label={label} items={[["/app/onboarding", "Onboarding"], ["/app/offboarding", "Offboarding"]]} /> : k === "community" ? <GroupMenu key={k} label={label} items={[["/app/posts", "Posts"], ["/app/celebrations", "Celebrations"]]} /> : k === "workforce" ? <GroupMenu key={k} label={label} items={[["/app/employees", "Employees"], ["/app/allocations", "Allocations"]]} /> : <NavLink key={k} to={pathFor(k, isHr)} className={({ isActive }) => (isActive ? "on" : "")}>{label}</NavLink>)}
+            {links.map(([k, label]) => k === "finances" ? <GroupMenu key={k} label={label} items={[["/app/reimbursements", "Reimbursements"], ["/app/payslips", "My payslips"], ...(isHr || payrollReviewer ? [["/app/payroll", "Payroll"]] : [])]} /> : k === "community" ? <GroupMenu key={k} label={label} items={[["/app/posts", "Posts"], ["/app/celebrations", "Celebrations"]]} /> : k === "workforce" ? <GroupMenu key={k} label={label} items={[["/app/employees", "Employees"], ["/app/allocations", "Allocations"]]} /> : <NavLink key={k} to={pathFor(k, isHr)} className={({ isActive }) => (isActive ? "on" : "")}>{label}</NavLink>)}
           </div>
           <NotificationBell />
           <ThemeButton />

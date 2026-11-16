@@ -691,3 +691,33 @@ CREATE TABLE IF NOT EXISTS celebration_alerts (
   created_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
   PRIMARY KEY (employee_email, alert_key)
 );
+
+-- Digital Kit: one small record per employee (personal details used to personalise the kit), and the shared master resources HR manages.
+CREATE TABLE IF NOT EXISTS digital_kits (
+  employee_id INTEGER PRIMARY KEY REFERENCES employees(id) ON DELETE CASCADE,
+  source      TEXT NOT NULL DEFAULT 'migration',
+  overrides   JSONB NOT NULL DEFAULT '{}',
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE TABLE IF NOT EXISTS digital_kit_resources (
+  id          SERIAL PRIMARY KEY,
+  module      TEXT NOT NULL CHECK (module IN ('text','template','download','background','linkedin','card')),
+  category    TEXT NOT NULL DEFAULT '',
+  title       TEXT NOT NULL,
+  description TEXT NOT NULL DEFAULT '',
+  body        TEXT,
+  filename    TEXT,
+  mime        TEXT,
+  size        INTEGER,
+  stored_name TEXT,
+  published   BOOLEAN NOT NULL DEFAULT false,
+  sort_order  INTEGER NOT NULL DEFAULT 0,
+  version     INTEGER NOT NULL DEFAULT 1,
+  created_by  TEXT,
+  updated_by  TEXT,
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS digital_kit_resources_module ON digital_kit_resources (module, published);
+CREATE TABLE IF NOT EXISTS digital_kit_state (key TEXT PRIMARY KEY, value TEXT NOT NULL);

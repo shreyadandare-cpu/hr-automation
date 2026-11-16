@@ -18,7 +18,7 @@ const addr = (w) => [[`addresses.${w}.line`, "Address", "textarea"], [`addresses
 const SECTIONS = {
   about: { title: "About", fields: [["about", "About me", "textarea"], ["loveJob", "What I love about my job?", "textarea"], ["hobbies", "My interests and hobbies", "textarea"]] },
   primary: { title: "Primary details", fields: [["primary.first", "First name"], ["primary.middle", "Middle name"], ["primary.last", "Last name"], ["primary.gender", "Gender", "select", "gender"], ["primary.dob", "Date of birth", "date"], ["primary.marital", "Marital status", "select", "marital"], ["primary.blood", "Blood group", "select", "blood"], ["primary.handicapped", "Physically handicapped", "select", "handicapped"], ["primary.nationality", "Nationality"]] },
-  contact: { title: "Contact details", fields: [["contact.personalEmail", "Personal email", "email"], ["contact.phone", "Phone", "tel"]] },
+  contact: { title: "Contact details", fields: [["contact.personalEmail", "Personal email", "email"], ["contact.phone", "Phone", "tel"], ["contact.linkedin", "LinkedIn profile", "url"]] },
   current: { title: "Current address", fields: addr("current") },
   permanent: { title: "Permanent address", fields: addr("permanent") },
   edu: { title: "Add education", fields: [["degree", "Degree"], ["branch", "Branch / specialisation"], ["college", "University / college"], ["cgpa", "CGPA / percentage"], ["joining", "Year of joining", "date"], ["completion", "Year of completion", "date"]] },
@@ -36,7 +36,7 @@ function profileData(me, p, record) {
   return {
     about: p.about || "", loveJob: p.loveJob || "", hobbies: p.hobbies || "", education: (p.education || []).map((x) => ({ ...x })),
     primary: { first, middle: "", last, gender: "", dob: (record && record.ids && record.ids.dob) || "", marital: "", blood: "", handicapped: "", nationality: "", ...(p.primary || {}) },
-    contact: { personalEmail: (record && record.personalEmail) || "", phone: (record && record.phone) || "", ...(p.contact || {}) },
+    contact: { personalEmail: (record && record.personalEmail) || "", phone: (record && record.phone) || "", linkedin: "", ...(p.contact || {}) },
     addresses: { current: a(ad.current, record && record.address), permanent: a(ad.permanent, "") },
   };
 }
@@ -45,7 +45,7 @@ function Field({ k, label, type, opt, value, error, onChange }) {
   const id = "pf-" + k.replace(/\./g, "-");
   const ctl = type === "textarea" ? <textarea className="input" id={id} rows={3} value={value} onChange={(e) => onChange(e.target.value)} />
     : type === "select" ? <select className="input" id={id} value={value} onChange={(e) => onChange(e.target.value)}>{OPTS[opt].map((o) => <option key={o} value={o}>{o || "Select"}</option>)}</select>
-    : <input className="input" id={id} type={type || "text"} value={value} autoComplete="off" onChange={(e) => onChange(e.target.value)} />;
+    : <input className="input" id={id} type={type || "text"} value={value} autoComplete="off" placeholder={k === "contact.linkedin" ? "https://www.linkedin.com/in/your-name" : undefined} onChange={(e) => onChange(e.target.value)} />;
   return <div className="field" style={type === "textarea" ? { gridColumn: "1/-1" } : undefined}><label htmlFor={id}>{label}</label>{ctl}{error && <span className="ferr" role="alert">{error}</span>}</div>;
 }
 
@@ -143,7 +143,7 @@ export default function Profile() {
     if (editing === sec) return <div className="card"><div className="card-h"><h3>{c.title}</h3></div>{form(sec)}</div>;
     return (
       <div className="card"><div className="card-h"><h3>{c.title}</h3>{edit(sec)}</div><div className="card-b"><dl className="rv">
-        {c.fields.map(([k, l]) => <div key={k} style={c.fields.length === 5 && k.endsWith(".line") ? { gridColumn: "1/-1" } : undefined}><dt>{l}</dt><dd>{getPath(d, k) || "—"}</dd></div>)}
+        {c.fields.map(([k, l]) => <div key={k} style={c.fields.length === 5 && k.endsWith(".line") ? { gridColumn: "1/-1" } : undefined}><dt>{l}</dt><dd>{k === "contact.linkedin" && getPath(d, k) ? <a href={getPath(d, k)} target="_blank" rel="noopener noreferrer">View on LinkedIn</a> : getPath(d, k) || "—"}</dd></div>)}
       </dl></div></div>
     );
   };

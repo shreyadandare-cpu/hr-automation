@@ -23,6 +23,18 @@ function cleanAddress(a = {}, path, errors) {
   return out;
 }
 
+/** A LinkedIn profile link: only linkedin.com/in/<name>. Adds https:// when it is missing, drops anything after the name, returns "" for an empty value. */
+function cleanLinkedin(v, errors) {
+  let s = str(v, 200);
+  if (!s) return "";
+  if (!/^https?:\/\//i.test(s)) s = "https://" + s;
+  let u;
+  try { u = new URL(s); } catch { u = null; }
+  const m = u && /^(?:[a-z0-9-]+\.)?linkedin\.com$/i.test(u.hostname) && u.pathname.match(/^\/in\/([^/?#\s]{2,100})\/?/i);
+  if (!m) { errors["contact.linkedin"] = "Enter your LinkedIn profile link, like https://www.linkedin.com/in/your-name"; return s; }
+  return `https://www.linkedin.com/in/${m[1]}`;
+}
+
 /** Keeps only the known fields, trims and limits them, and returns { data, errors }. */
 export function cleanProfile(input = {}) {
   const errors = {};
@@ -34,7 +46,7 @@ export function cleanProfile(input = {}) {
       gender: str(p.gender, 30), dob: str(p.dob, 10), marital: str(p.marital, 30), blood: str(p.blood, 5),
       handicapped: str(p.handicapped, 5), nationality: str(p.nationality, 60),
     },
-    contact: { personalEmail: str(c.personalEmail, 120), phone: str(c.phone, 20) },
+    contact: { personalEmail: str(c.personalEmail, 120), phone: str(c.phone, 20), linkedin: cleanLinkedin(c.linkedin, errors) },
     addresses: { current: cleanAddress(a.current, "addresses.current", errors), permanent: cleanAddress(a.permanent, "addresses.permanent", errors) },
     education: (Array.isArray(input.education) ? input.education : []).slice(0, 10).map((x = {}, i) => {
       const e = { degree: str(x.degree, 100), branch: str(x.branch, 100), college: str(x.college, 150),

@@ -4,6 +4,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import express from "express";
 import { pool, payPool, PAY_SCHEMA, initDb } from "./db.js";
+import { digitalKitRouter, ensureKit, initDigitalKits, removeDuplicateStarters, seedDigitalKit, seedOfficialFiles, repairOfficialFiles, seedOfficialTexts, updateOfficialLabels } from "./digital-kit.js";
 import { documentsRouter } from "./documents.js";
 import { bootstrapAuth, loadSession, requireAuth, requireHr, createGoogleUser as createLogin } from "./auth.js";
 import { sessionRouter, accountRouter, usersRouter } from "./users.js";
@@ -81,6 +82,7 @@ const loadRecord = async (email) =>
 const app = express();
 app.use(loadSession);
 app.use("/api/documents", requireAuth, documentsRouter); // raw file bodies, so it goes before the JSON parser
+app.use("/api/digital-kit", requireAuth, digitalKitRouter); // employees: only their own kit; HR: the /admin part (it reads raw uploads itself, so it also goes before the JSON parser)
 app.use(express.json({ limit: "100kb" }));
 app.use("/api", sessionRouter); // login and logout are the only public API routes
 app.use(deviceRouter()); // the office device posts punches with its own key (no session); the linking screens check for HR themselves
@@ -506,6 +508,7 @@ app.post("/api/onboarding", wrap(async (req, res) => {
     const idNow = (await client.query("SELECT id, name, work_email, emp_no FROM employees WHERE lower(work_email)=$1", [row.work_email.toLowerCase()])).rows[0];
     const device = idNow ? await linkDeviceUserByEmployeeNo(client, { id: idNow.id, name: idNow.name, email: idNow.work_email, empNo: idNow.emp_no }, req.user.email) : null;
     await client.query("DELETE FROM onboarding_drafts WHERE id=$1", [draftId(req)]);
+    if (idNow) await ensureKit(client, idNow.id, "onboarding");   // the Digital Kit is ready when they first sign in
     await client.query("COMMIT");
     res.status(201).json({ ...toApi(await loadRecord(row.work_email)), deviceLink: device });
   } catch (err) {
@@ -594,7 +597,7 @@ app.use(offboardingRouter(wrap));
 app.use("/auth", googleRouter);       // "Continue with Google" (public: it is how people sign in)
 app.use("/invite", inviteRouter);     // the link in the invite email
 app.use("/l", emailLinkRouter);       // short-lived links in automatic emails
-for (const f of ["wohlig-logo.svg", "wohlig-logo-dark.svg", "wohlig-logo.png", "wohlig-logo-dark.png", "favicon.svg", "favicon.ico", "apple-touch-icon.png"]) app.get("/" + f, (_req, res) => res.sendFile(path.join(frontendDir, "public", f), { maxAge: "7d" }));
+for (const f of ["wohlig-logo.svg", "wohlig-logo-dark.svg", "wohlig-logo.png", "wohlig-logo-dark.png", "wohlig-smile-mark.svg", "wohlig-smile-mark.png", "wohlig-premier-partner-badge.png", "wohlig-logos.zip", "favicon.svg", "favicon.ico", "apple-touch-icon.png"]) app.get("/" + f, (_req, res) => res.sendFile(path.join(frontendDir, "public", f), { maxAge: "1h" }));
 // The whole interface is React (frontend/src), built into frontend/dist with `npm run build:ui`.
 const distDir = path.join(frontendDir, "dist");
 const hasDist = () => fs.existsSync(path.join(distDir, "index.html"));
@@ -630,6 +633,19 @@ await initDb();
 if (payPool !== pool) { await initDb(payPool, PAY_SCHEMA); console.log("Payroll and payslips use their own database (PAYROLL_DATABASE_URL)"); }
 await initPayroll(payPool);   // payroll workflow tables and starting tax rules (payroll/schema.sql)
 await bootstrapAuth();
+// Digital Kit: starter text once, and a kit for every employee who does not have one yet (safe to repeat; nobody is duplicated or changed).
+try {
+  await seedDigitalKit();
+  await seedOfficialFiles();
+  await seedOfficialTexts();
+  await updateOfficialLabels();
+  const fixed = await repairOfficialFiles();
+  if (fixed) console.log(`Digital Kit: ${fixed} official file${fixed === 1 ? "" : "s"} now read from the app's own folder`);
+  const dup = await removeDuplicateStarters();
+  if (dup) console.log(`Digital Kit: removed ${dup} duplicate starter item${dup === 1 ? "" : "s"}`);
+  const made = await initDigitalKits();
+  if (made) console.log(`Digital Kit: created for ${made} employee${made === 1 ? "" : "s"}`);
+} catch (err) { console.error("Digital Kit setup failed:", err.message); }
 // BACKGROUND_JOBS=off: serve pages only. For a local copy pointed at the shared database, so the deployed server alone
 // runs the scheduled work (a local copy would simulate offboarding steps and skip emails, using them up for real).
 if (process.env.BACKGROUND_JOBS === "off") console.log("Background jobs are off (BACKGROUND_JOBS=off)");

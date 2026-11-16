@@ -51,6 +51,14 @@ function Move({ p, sub, right }) {
   return <a className="mv" href={empLink(p)} style={{ textDecoration: "none", color: "inherit" }}><Avatar person={p} /><div className="grow"><b>{p.name}</b><span>{sub}</span></div>{right}</a>;
 }
 
+/* Everyone, new or existing, has a Digital Kit: signature, card, call backgrounds, LinkedIn kit and the company resources. */
+function KitCard() {
+  return (
+    <div className="card"><div className="card-h"><h3>My Digital Kit</h3><a className="btn link" href="/app/digital-kit">Open</a></div>
+      <div className="card-b muted">Your email signature, business card, call backgrounds and LinkedIn kit, plus the company's ready-to-use text, templates and downloads.</div></div>
+  );
+}
+
 function HrDashboard() {
   const { user } = useAuth();
   const { people, docs, leave, profile } = useData();
@@ -111,6 +119,7 @@ function HrDashboard() {
               <a className="btn glass sm" href={i.href}>{i.btn}</a></div>))
             : <div className="q-clear"><span className="q-ic q-ok"><Icon name="check" /></span><div><b style={{ color: "var(--ink)" }}>All clear.</b><div className="meta" style={{ fontSize: 13 }}>Failed access, leave to approve and new joiners waiting on you show up here.</div></div></div>}
         </div>
+        <KitCard />
         <div className="card"><div className="card-h"><h3>Seats in use</h3></div><div className="card-b" style={{ display: "flex", flexDirection: "column", gap: 14 }}>
           {seats.map((x) => (
             <div key={x.t.id} style={{ display: "grid", gridTemplateColumns: "28px minmax(0,1fr) 28px", gap: 12, alignItems: "center" }}>
@@ -204,6 +213,7 @@ function EmployeeDashboard() {
               <div className="meta" style={{ fontSize: 13, color: "var(--ink-faint)" }}>{new Date(h.day + "T00:00:00").toLocaleDateString("en-IN", { weekday: "long" })} · {rel(today, h.day)}</div></div></div>; })
             : <div className="card-b muted">No upcoming holidays on the calendar.</div>}
         </div>
+        <KitCard />
         <div className="card"><div className="card-h"><h3>My tools</h3><span className="muted">{tools.length} active</span></div>
           <div className="card-b">{tools.length ? <div className="chips">{tools.map((id) => <span key={id} className="chip"><ToolIcon tool={TOOLS[id]} state="active" />{TOOLS[id].name}</span>)}</div> : <span className="muted">No tools yet. HR gives access when you join.</span>}</div>
         </div>

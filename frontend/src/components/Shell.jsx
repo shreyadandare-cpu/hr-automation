@@ -18,7 +18,7 @@ const REACT_PAGES = {
 };
 /* The main page of each module gets a "Back to dashboard" button above it. Detail pages and pages that already have their own Back are left out. */
 const HOME_PAGES = new Set(["/app/attendance", "/app/employees", "/app/allocations", "/app/assets", "/app/audit", "/app/leave", "/app/my-leave", "/app/team-leave", "/app/onboarding", "/app/onboarding/progress", "/app/claude-requests", "/app/documents",
-  "/app/reimbursements", "/app/payroll", "/app/posts", "/app/celebrations", "/app/budgets"]);
+  "/app/reimbursements", "/app/payroll", "/app/posts", "/app/celebrations", "/app/budgets", "/app/digital-kit"]);
 /* Onboarding and Offboarding are HR's pages: employees don't get those menu entries (they upload their documents from My profile). */
 const pathFor = (key) => REACT_PAGES[key];
 
@@ -90,6 +90,7 @@ function AccountMenu({ photoV }) {
             <div style={{ minWidth: 0 }}><b>{user.name}</b><span>{user.email} · {isHr ? "HR" : "Employee"}</span></div>
           </div>
           <NavLink to="/app/profile" role="menuitem" onClick={() => setOpen(false)}>My profile</NavLink>
+          <NavLink to="/app/digital-kit" role="menuitem" onClick={() => setOpen(false)}>My Digital Kit</NavLink>
           <NavLink to="/app/payslips" role="menuitem" onClick={() => setOpen(false)}>My payslips</NavLink>
           <NavLink to="/app/account" role="menuitem" onClick={() => setOpen(false)}>Account and password</NavLink>
           {isHr && <NavLink to="/app/users" role="menuitem" onClick={() => setOpen(false)}>Manage users</NavLink>}

@@ -6,6 +6,11 @@ export const DownloadIcon = () => (
   <svg className="dl-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M12 4v11M7 10l5 5 5-5M5 20h14" /></svg>
 );
 
+/** The eye shown on buttons that open a larger preview. Give the button an aria-label. */
+export const ViewIcon = () => (
+  <svg className="dl-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z" /><circle cx="12" cy="12" r="3" /></svg>
+);
+
 export const Smile = () => (
   <svg className="smile" viewBox="0 0 34 10" fill="none" aria-hidden="true">
     <path d="M2 2c4 5 9 6.5 15 6.5S28 7 32 2" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" />

@@ -10,7 +10,7 @@ import NotificationBell from "./NotificationBell.jsx";
 import NextHolidayPopup from "./NextHolidayPopup.jsx";
 
 /* Pages still in the older single page app are plain links (hash routes under /). Pages already in React stay in the app. */
-const HR_LINKS = [["dashboard", "Dashboard"], ["community", "Community"], ["workforce", "Workforce"], ["onboard", "Onboarding"], ["offboard", "Offboarding"], ["leave", "Leave"], ["attendance", "Attendance"], ["finances", "Finances"], ["payroll", "Payroll"], ["audit", "Audit log"]];
+const HR_LINKS = [["dashboard", "Dashboard"], ["community", "Community"], ["workforce", "Workforce"], ["people", "Joiners & leavers"], ["leave", "Leave"], ["attendance", "Attendance"], ["finances", "Finances"], ["audit", "Audit log"]];
 const EMP_LINKS = [["dashboard", "Dashboard"], ["posts", "Posts"], ["workforce", "Workforce"], ["attendance", "Attendance"], ["finances", "Finances"], ["myleave", "My leave"]];
 const REACT_PAGES = {
   dashboard: "/app/dashboard", posts: "/app/posts", celebrations: "/app/celebrations", employees: "/app/employees", allocations: "/app/allocations", onboard: "/app/onboarding", offboard: "/app/offboarding", leave: "/app/leave", attendance: "/app/attendance",
@@ -147,7 +147,7 @@ export default function Shell() {
     return () => window.removeEventListener("resize", fit);
   });
   const { pathname } = useLocation();
-  const base = isHr ? (isManager ? HR_LINKS.flatMap((l) => (l[0] === "leave" ? [l, ["team", "Team leave"]] : [l])) : HR_LINKS) : [...EMP_LINKS, ...(isManager ? [["team", "Team leave"]] : []), ...(payrollReviewer ? [["payroll", "Payroll"]] : [])];   // the payroll reviewer (PAYROLL_REVIEWERS) approves payroll
+  const base = isHr ? (isManager ? HR_LINKS.flatMap((l) => (l[0] === "leave" ? [l, ["team", "Team leave"]] : [l])) : HR_LINKS) : [...EMP_LINKS, ...(isManager ? [["team", "Team leave"]] : [])];   // the payroll reviewer (PAYROLL_REVIEWERS) approves payroll
   const links = itAdmin ? [...base.filter(([k]) => k !== "audit"), ["assets", "Assets"], ...(isHr ? [] : [["claude", "Claude"]]), ...base.filter(([k]) => k === "audit")] : base;   // HR reaches the Claude requests from Onboarding; an IT admin who is not HR gets their own link
   return (
     <>
@@ -157,7 +157,7 @@ export default function Shell() {
             <img className="lg lg-light" src="/wohlig-logo.svg" alt="wohlig" /><img className="lg lg-dark" src="/wohlig-logo-dark.svg" alt="" /><small>HR Access Hub</small>
           </a>
           <div className="links" ref={linksRef}>
-            {links.map(([k, label]) => k === "finances" ? <GroupMenu key={k} label={label} items={[["/app/reimbursements", "Reimbursements"], ["/app/payslips", "My payslips"]]} /> : k === "community" ? <GroupMenu key={k} label={label} items={[["/app/posts", "Posts"], ["/app/celebrations", "Celebrations"]]} /> : k === "workforce" ? <GroupMenu key={k} label={label} items={[["/app/employees", "Employees"], ["/app/allocations", "Allocations"]]} /> : <NavLink key={k} to={pathFor(k, isHr)} className={({ isActive }) => (isActive ? "on" : "")}>{label}</NavLink>)}
+            {links.map(([k, label]) => k === "finances" ? <GroupMenu key={k} label={label} items={[["/app/reimbursements", "Reimbursements"], ["/app/payslips", "My payslips"], ...(isHr || payrollReviewer ? [["/app/payroll", "Payroll"]] : [])]} /> : k === "people" ? <GroupMenu key={k} label={label} items={[["/app/onboarding", "Onboarding"], ["/app/offboarding", "Offboarding"]]} /> : k === "community" ? <GroupMenu key={k} label={label} items={[["/app/posts", "Posts"], ["/app/celebrations", "Celebrations"]]} /> : k === "workforce" ? <GroupMenu key={k} label={label} items={[["/app/employees", "Employees"], ["/app/allocations", "Allocations"]]} /> : <NavLink key={k} to={pathFor(k, isHr)} className={({ isActive }) => (isActive ? "on" : "")}>{label}</NavLink>)}
           </div>
           <NotificationBell />
           <ThemeButton />

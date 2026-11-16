@@ -22,7 +22,7 @@ const modules = import.meta.glob("./modules/*/index.jsx", { eager: true });
 const moduleRoutes = Object.values(modules).flatMap((m) => m.routes || []);
 
 /* Onboarding and offboarding are HR's pages: an employee who opens one by its address goes back to the dashboard. */
-const HR_ONLY = ["/app/onboarding", "/app/onboarding/progress", "/app/offboarding", "/app/offboarding/leavers"];
+const HR_ONLY = ["/app/onboarding", "/app/onboarding/progress", "/app/offboarding", "/app/offboarding/leavers", "/app/celebrations"];
 const guard = (path, element, isHr) => (HR_ONLY.includes(path) && !isHr ? <Navigate to="/app/dashboard" replace /> : element);
 
 export default function App() {

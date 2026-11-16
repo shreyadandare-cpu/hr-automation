@@ -21,7 +21,8 @@ const parseAddress = (v) => {
 export const NO_REPLY_NOTE = "This is an automated email. Please do not reply to it.";
 const noReplyHtml = `<p style="margin:18px 0 0;font:12px/1.5 Arial,Helvetica,sans-serif;color:#8a87a6">${NO_REPLY_NOTE}</p>`;
 
-export async function sendMail({ to, subject, text, html }) {
+/* attachments: [{ content: Buffer, filename, type, cid? }]. With a cid the file is shown inline: <img src="cid:..."> in the html. */
+export async function sendMail({ to, subject, text, html, attachments = [] }) {
   if (!mailConfigured()) throw new Error("Email is not set up");
   if (!process.env.MAIL_FROM) throw new Error("MAIL_FROM is not set");
   const from = parseAddress(process.env.MAIL_FROM);
@@ -34,6 +35,8 @@ export async function sendMail({ to, subject, text, html }) {
     body: JSON.stringify({
       personalizations: [{ to: [{ email: to }] }],
       from, reply_to: parseAddress(process.env.MAIL_REPLY_TO || process.env.MAIL_FROM), subject, content,
+      ...(attachments.length && { attachments: attachments.map((a) => ({ content: a.content.toString("base64"), type: a.type, filename: a.filename,
+        disposition: a.cid ? "inline" : "attachment", ...(a.cid && { content_id: a.cid }) })) }),
       headers: { "Auto-Submitted": "auto-generated", "X-Auto-Response-Suppress": "All" },
     }),
   });

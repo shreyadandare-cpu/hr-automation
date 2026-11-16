@@ -12,6 +12,7 @@ import { googleRouter } from "./google-signin.js";
 import { inviteRouter, expireInvites, createInvite, INVITE_MINUTES } from "./invites.js";
 import { leaveRouter } from "./leave.js";
 import { postsRouter } from "./posts.js";
+import { celebrationsRouter, runCelebrationAlerts } from "./celebrations.js";
 import { leaveDigestRouter, runLeaveDigest } from "./leave-digest.js";
 import { attendanceRouter } from "./attendance.js";
 import { assetsRouter } from "./assets.js";
@@ -585,6 +586,7 @@ app.use("/api/budget-requests", requireAuth, budgetsRouter);   // own requests f
 // Payroll: HR prepares it and a payroll reviewer (PAYROLL_REVIEWERS) approves it; everything after the workflow router is HR only.
 app.use("/api/payroll", requirePayrollAccess, payrollWorkflowRouter, hrOnly, payslipAutoRouter, payrollRouter);
 app.use("/api/notifications", requireAuth, notificationsRouter);
+app.use("/api/celebrations", requireHr, celebrationsRouter);   // HR: birthday and welcome posters, emailed to everyone
 app.use(clearanceRouter(wrap));   // offboarding financial clearance and employee advances (HR only)
 app.use(offboardingRouter(wrap));
 
@@ -659,6 +661,11 @@ else {
   const checkClaude = () => runClaudeReminders().catch((err) => console.error("Claude request reminder failed:", err));
   checkClaude();
   setInterval(checkClaude, 60 * 60_000);
+  // Birthdays today and new joiners without a poster: HR is told once through the bell (celebrations.js); checked hourly. Nothing is emailed.
+  const checkCelebrations = () => runCelebrationAlerts().then((r) => { if (r.told.length) console.log("Celebrations:", r.told.join(", ")); })
+    .catch((err) => console.error("Celebration check failed:", err));
+  checkCelebrations();
+  setInterval(checkCelebrations, 60 * 60_000);
   startPortalAttendanceSync();   // copies the office device punches the Employee Portal received (only when PORTAL_ATTENDANCE_SYNC=true)
 }
 console.log(`Email: ${emailMode() === "sendgrid" ? "sending through SendGrid" : "SendGrid not configured, emails are logged and skipped"}`);

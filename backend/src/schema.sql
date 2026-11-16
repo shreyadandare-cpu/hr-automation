@@ -650,3 +650,44 @@ CREATE TABLE IF NOT EXISTS asset_events (
   at TIMESTAMPTZ NOT NULL DEFAULT now(), by_email TEXT, action TEXT NOT NULL);
 CREATE INDEX IF NOT EXISTS asset_events_asset ON asset_events (asset_id, at DESC);
 ALTER TABLE projects ADD COLUMN IF NOT EXISTS location TEXT;
+
+-- Celebrations: birthday and welcome posters HR creates and emails to everyone. One row per poster; the row is a draft until HR
+-- sends it. A person gets one birthday poster a year (occasion_key birthday:YYYY) and one welcome poster ever (welcome); the
+-- unique index covers every poster that was sent, so retrying a failed one never makes a second.
+CREATE TABLE IF NOT EXISTS celebrations (
+  id             SERIAL PRIMARY KEY,
+  occasion       TEXT NOT NULL CHECK (occasion IN ('birthday','welcome')),
+  occasion_key   TEXT NOT NULL,
+  employee_email TEXT NOT NULL,
+  employee_name  TEXT NOT NULL,
+  template       TEXT NOT NULL,
+  heading        TEXT,
+  designation    TEXT,
+  joining_date   DATE,
+  message        TEXT,
+  poster_file    TEXT,
+  status         TEXT NOT NULL DEFAULT 'draft' CHECK (status IN ('draft','sending','sent','partial','failed')),
+  created_by     TEXT NOT NULL,
+  created_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
+  send_started_at TIMESTAMPTZ,
+  sent_at        TIMESTAMPTZ
+);
+CREATE UNIQUE INDEX IF NOT EXISTS celebrations_once ON celebrations (lower(employee_email), occasion_key) WHERE status <> 'draft';
+CREATE INDEX IF NOT EXISTS celebrations_recent ON celebrations (id DESC);
+-- Who a poster was emailed to (fixed when sending starts) and how each delivery went, so a retry only touches the ones not sent.
+CREATE TABLE IF NOT EXISTS celebration_recipients (
+  celebration_id INT NOT NULL REFERENCES celebrations(id) ON DELETE CASCADE,
+  email          TEXT NOT NULL,
+  name           TEXT,
+  status         TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','sent','failed','skipped')),
+  error          TEXT,
+  sent_at        TIMESTAMPTZ,
+  PRIMARY KEY (celebration_id, email)
+);
+-- The daily check tells HR about a birthday or a new joiner once; this remembers what it already said.
+CREATE TABLE IF NOT EXISTS celebration_alerts (
+  employee_email TEXT NOT NULL,
+  alert_key      TEXT NOT NULL,
+  created_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (employee_email, alert_key)
+);

@@ -4,6 +4,8 @@ import { useAuth } from "../auth.jsx";
 import { useData } from "../data.jsx";
 import { Donut, Ring } from "../components/charts.jsx";
 import TodayCards from "../components/TodayCards.jsx";
+import BirthdayPopup from "../components/BirthdayPopup.jsx";
+import CelebrateCard from "../components/CelebrateCard.jsx";
 import { Avatar, Icon, Pill, ToolIcon, shortDate } from "../components/ui.jsx";
 import { AVATAR_COLORS, STATUS, TOOLS, docCount, mgrOf, toolIds } from "../lib/people.js";
 import { R } from "../lib/leave.js";
@@ -111,7 +113,7 @@ function HrDashboard() {
       {/* Rows of two: the cards side by side are stretched to the same height. */}
       <div className="db-grid">
         <TodayCards only="leave" />
-        <TodayCards only="birthdays" />
+        <CelebrateCard />
         <div className="card"><div className="card-h"><h3>Needs you</h3><span className="muted">{q.length ? `${q.length} item${q.length === 1 ? "" : "s"}` : "Nothing waiting"}</span></div>
           {q.length ? q.map((i, k) => (
             <div key={k} className="q-item"><span className={`q-ic q-${i.t}`}><Icon name={i.ic} /></span>
@@ -157,7 +159,7 @@ function EmployeeDashboard() {
   const photo = profile && profile.photoV ? `/api/profile/photo?v=${profile.photoV}` : "";
   const mgr = mgrOf(me);
   const prof = profile || {};
-  const steps = [["Add a profile photo", !!photo, "/app/profile"], ["Tell us about yourself", !!prof.about, "/app/profile"], ["Add your date of birth", !!(prof.primary && prof.primary.dob), "/app/profile"],
+  const steps = [["Add a profile photo", !!photo, "/app/profile"], ["Tell us about yourself", !!prof.about, "/app/profile"], ["Add your date of birth", !!(prof.primary && prof.primary.dob) || !!prof.employeeDob, "/app/profile"],
     ["Add your address", !!(prof.addresses && prof.addresses.current && prof.addresses.current.line), "/app/profile"], ["Add your education", !!(prof.education && prof.education.length), "/app/profile"],
     ["Upload your documents", docCount(docs, me.email) > 0, "/app/documents"]];
   const done = steps.filter((s) => s[1]).length, pct = Math.round(done / steps.length * 100);
@@ -178,11 +180,7 @@ function EmployeeDashboard() {
     } catch (e) { bal = null; }
   }
   const holidays = (leave ? leave.holidays : []).filter((h) => h.day >= today).sort((x, y) => (x.day < y.day ? -1 : 1)).slice(0, 3);
-  const mo = today.slice(5, 7), yr = Number(today.slice(0, 4));
-  const anniv = people.filter((x) => x.status !== "offboarded" && x.start && x.start.slice(5, 7) === mo && Number(x.start.slice(0, 4)) < yr).sort((x, y) => (x.start.slice(8) < y.start.slice(8) ? -1 : 1));
-  const fresh = people.filter((x) => x.status !== "offboarded" && x.start && x.start <= today && diff(x.start, today) <= 30 && x.id !== me.id);
   const tools = toolIds(me).filter((k) => me.grants[k] === "active");
-  const chip = (x, txt) => <span key={x.id} className="chip"><Avatar person={x} />{x.name}{txt && <> <small>{txt}</small></>}</span>;
 
   const cl = claims || [], month = new Date(Date.now() + 5.5 * 3600e3).toISOString().slice(0, 7);
   const wait = cl.filter((c) => ["submitted", "under_review", "resubmitted"].includes(c.status)), todo = cl.filter((c) => ["draft", "changes_requested"].includes(c.status));
@@ -199,7 +197,8 @@ function EmployeeDashboard() {
         <div className="card"><div className="card-h"><h3>My leave</h3><a className="btn link" href="/app/my-leave">Details</a></div>
           {bal || <div className="card-b muted">Your leave balances show here once the leave data has loaded.</div>}
         </div>
-        <TodayCards bare />
+        <TodayCards only="leave" />
+        <CelebrateCard />
         <div className="card"><div className="card-h"><h3>Reimbursements</h3><div className="row" style={{ gap: 8 }}><a className="btn link sm" href="/app/reimbursements">My claims</a><a className="btn primary sm" href="/app/reimbursements">New claim</a></div></div>
           <div className="rb-stats four" style={{ padding: "0 24px 18px" }}>
             <div className="rb-stat"><span className="lbl">Added to {monthLabel(month)} salary</span><b>{money(thisMonth.reduce((n, c) => n + pay(c), 0))}</b><span className="sub">{thisMonth.length} approved claim{thisMonth.length === 1 ? "" : "s"}</span></div>
@@ -224,12 +223,6 @@ function EmployeeDashboard() {
             <div className="db-legend"><span style={{ margin: 0, textAlign: "left", color: "var(--ink-dim)" }}>{pct === 100 ? "Everything is in. Nice work." : "A fuller profile helps your team and HR."}</span></div></div>
           {steps.map(([t, ok, href]) => <a key={t} className={`step ${ok ? "done" : ""}`} href={href}><span className="tick"><Icon name="check" /></span><span>{t}</span>{!ok && <em>Do it</em>}</a>)}
         </div>
-        <div className="card"><div className="card-h"><h3>Celebrating this month</h3><span className="muted">Work anniversaries</span></div>
-          {anniv.length ? <div className="cel">{anniv.slice(0, 10).map((x) => chip(x, `${yr - Number(x.start.slice(0, 4))} yr${yr - Number(x.start.slice(0, 4)) === 1 ? "" : "s"}`))}</div> : <div className="card-b muted">No anniversaries this month.</div>}
-        </div>
-        <div className="card"><div className="card-h"><h3>New to the team</h3><span className="muted">Joined in the last 30 days</span></div>
-          {fresh.length ? <div className="cel">{fresh.slice(0, 10).map((x) => chip(x, ""))}</div> : <div className="card-b muted">No new joiners lately.</div>}
-        </div>
         </div>
       </div>
     </div>
@@ -240,5 +233,5 @@ export default function Dashboard() {
   const { isHr } = useAuth();
   const { people } = useData();
   if (!people) return <section className="section"><div className="empty">Loading…</div></section>;
-  return isHr ? <HrDashboard /> : <EmployeeDashboard />;
+  return <>{isHr ? <HrDashboard /> : <EmployeeDashboard />}<BirthdayPopup /></>;
 }

@@ -59,6 +59,7 @@ export default function DigitalKit() {
                   <span>{label}</span>{count(k, r) != null && <em>{count(k, r)}</em>}
                 </button>))}
             </div>))}
+          <p className="dk-side-note">{p.title ? <>Matched to your designation: <b>{p.title}</b>. Some company resources show only for certain roles.</> : <>Add your designation (ask HR) and the company resources for your role appear here.</>}</p>
           {kit.isHr && <div className="dk-side-group"><h4>HR</h4>
             <button type="button" className={tab === "manage" ? "on" : ""} aria-current={tab === "manage" ? "page" : undefined} onClick={() => go("manage")}>
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{IC.gear}</svg><span>Manage</span></button></div>}

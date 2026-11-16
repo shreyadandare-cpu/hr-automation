@@ -721,3 +721,6 @@ CREATE TABLE IF NOT EXISTS digital_kit_resources (
 );
 CREATE INDEX IF NOT EXISTS digital_kit_resources_module ON digital_kit_resources (module, published);
 CREATE TABLE IF NOT EXISTS digital_kit_state (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+
+-- Digital Kit: who a shared resource is for. Empty means everyone; otherwise words matched against a person's designation and department (and "hr" for the HR role).
+ALTER TABLE digital_kit_resources ADD COLUMN IF NOT EXISTS audience TEXT[] NOT NULL DEFAULT '{}';

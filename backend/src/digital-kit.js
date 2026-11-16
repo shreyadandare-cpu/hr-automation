@@ -137,6 +137,89 @@ Send me a first draft by [date] and I'll come back within a day.
 {{email}}{{phone_line}}`],
 ];
 
+/* Starter texts for particular designations, added once. They show only to people whose designation or department fits. HR can change who each is for. */
+const BY_DESIGNATION = [
+  [["hr"], "Interview invitation", "Inviting a candidate to interview.",
+`Subject: Interview at Wohlig: [role]
+
+Hi [Name],
+
+Thank you for your interest in the [role] position at Wohlig. We'd like to invite you to an interview.
+
+Date and time: [date, time, time zone]
+Format: [video call link or office address]
+Who you'll meet: [names and roles]
+
+Please reply to confirm, or suggest another time if this doesn't suit you.
+
+Regards,
+{{name}}
+{{title}}, Wohlig
+{{email}}{{phone_line}}`],
+  [["hr"], "Welcome email for a new joiner", "Sent before someone's first day.",
+`Subject: Welcome to Wohlig, [Name]
+
+Hi [Name],
+
+We're glad you're joining us as [role] on [start date].
+
+On your first day:
+- Arrive at [time] at [place], and ask for {{name}}.
+- Bring [documents].
+- Your buddy will be [buddy name].
+
+If you have any questions before then, reply to this email.
+
+Welcome to the team,
+{{name}}
+{{title}}, Wohlig`],
+  [["engineer", "developer", "devops", "architect", "tech"], "Ask for a code review", "A short, clear review request.",
+`Hi [Name],
+
+Could you review [link to the change] when you have time?
+
+What it does: [one sentence]
+What I'd like your eyes on: [the risky or unsure part]
+How to test it: [steps]
+
+I'd like to merge by [date]. Thanks,
+{{name}}`],
+  [["engineer", "developer", "devops", "architect", "tech"], "Share an incident update", "A calm update while something is being fixed.",
+`Subject: Update on [issue], [time]
+
+What happened: [one or two sentences, in plain words]
+Who is affected: [teams or customers]
+What we're doing: [the fix in progress]
+Next update: [time]
+
+If you see anything new, tell me straight away.
+
+{{name}}
+{{title}}, Wohlig`],
+  [["sales", "business", "partner", "growth", "account"], "Follow up on a proposal", "A nudge after you've sent a proposal.",
+`Subject: Your proposal from Wohlig
+
+Hi [Name],
+
+I wanted to check that the proposal for [project] reached you, and to see if there is anything you'd like us to clarify.
+
+If it helps, I can walk your team through it in 20 minutes. Would [day] or [day] suit you?
+
+Regards,
+{{name}}
+{{title}}, Wohlig
+{{email}}{{phone_line}}`],
+];
+export async function seedDesignationTexts(db = pool) {
+  if (!(await claim(db, "designation-texts-v1"))) return 0;
+  let n = 80;
+  for (const [audience, title, description, body] of BY_DESIGNATION) {
+    await db.query(`INSERT INTO digital_kit_resources (module, category, title, description, body, published, sort_order, audience, created_by) VALUES ('text','',$1,$2,$3,true,$4,$5,'system')`,
+      [title, description, body, (n += 10), audience]);
+  }
+  return BY_DESIGNATION.length;
+}
+
 /** Claims a one-time setup step. Only one server wins it, even if several start at once, so nothing is seeded twice. */
 const claim = async (db, key) => (await db.query("INSERT INTO digital_kit_state (key, value) VALUES ($1,'1') ON CONFLICT DO NOTHING", [key])).rowCount === 1;
 
@@ -230,10 +313,29 @@ export async function removeDuplicateStarters(db = pool) {
   return r.rowCount;
 }
 
+/* ---------- who a resource is for ---------- */
+/** An empty audience means everyone. Otherwise a person sees the resource when their designation or department has a word starting with one of the audience words
+    (so "engineer" fits "Software Engineer" and "Engineering"), or when the word is "hr" and they have the HR role. */
+const escRe = (w) => w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+export function forPerson(audience, who) {
+  const a = Array.isArray(audience) ? audience : [];
+  if (!a.length) return true;
+  const hay = `${who.title || ""} ${who.dept || ""}`;
+  return a.some((w) => (w === "hr" && who.role === "hr") || new RegExp(`(^|[^a-z0-9])${escRe(w)}`, "i").test(hay));
+}
+/** The words typed by HR (a list or a comma separated line), cleaned. Returns { list } or { error }. */
+function cleanAudience(v) {
+  const raw = Array.isArray(v) ? v : String(v ?? "").split(/[,\n]/);
+  const list = [...new Set(raw.map((x) => String(x).trim().toLowerCase()).filter(Boolean))];
+  if (list.length > 12) return { error: "Use at most 12 words." };
+  if (list.some((w) => !/^[a-z0-9][a-z0-9 &/+.-]{0,29}$/.test(w))) return { error: "Use short words like hr, sales or engineer, separated by commas." };
+  return { list };
+}
+
 /* ---------- who is asking ---------- */
 const placeholderTitle = (t) => { const s = line(t, 120); return !s || s === "—" || s === "-" ? "" : s; };
 
-async function personOf(email) {
+async function personOf(email, role = "employee") {
   const key = email.toLowerCase();
   const e = (await pool.query("SELECT * FROM employees WHERE lower(work_email)=$1", [key])).rows[0];
   if (!e) return null;
@@ -242,7 +344,7 @@ async function personOf(email) {
   const profile = (await pool.query("SELECT data FROM profiles WHERE lower(email)=$1", [key])).rows[0]?.data || {};
   const ov = kit.overrides || {};
   const person = {
-    id: e.id, empNo: e.emp_no || "", name: e.name, email: e.work_email.toLowerCase(), dept: e.dept || "",
+    id: e.id, empNo: e.emp_no || "", name: e.name, email: e.work_email.toLowerCase(), dept: e.dept || "", role,
     title: placeholderTitle(ov.title) || placeholderTitle(e.title),
     phone: line(ov.phone, 20) || line(profile.contact?.phone, 20) || line(e.phone, 20),
     location: line(ov.location, 80) || line(e.work_location, 80),
@@ -257,7 +359,7 @@ async function personOf(email) {
 
 const shape = (r, withDraft = false) => ({
   id: r.id, module: r.module, category: r.category, title: r.title, description: r.description, body: r.body,
-  hasFile: !!r.stored_name, hasPreview: hasPreview(r), filename: r.filename, mime: r.mime, size: r.size, version: r.version, updatedAt: r.updated_at,
+  audience: r.audience || [], hasFile: !!r.stored_name, hasPreview: hasPreview(r), filename: r.filename, mime: r.mime, size: r.size, version: r.version, updatedAt: r.updated_at,
   ...(withDraft ? { published: r.published, sortOrder: r.sort_order, updatedBy: r.updated_by } : {}),
 });
 
@@ -281,10 +383,17 @@ const INLINE = new Set(["png", "jpg", "webp", "gif", "pdf"]);
 /* ---------- routes ---------- */
 export const digitalKitRouter = express.Router();
 
-// A file is only reachable while it is published (HR can always reach it).
+/** Is this resource for the person asking? (Their own designation and department decide, never anything in the request.) */
+async function mine(req, r) {
+  if (!(r.audience || []).length) return true;
+  const me = await personOf(req.user.email, req.user.role);
+  return !!me && forPerson(r.audience, me.person);
+}
+
+// A file is only reachable while it is published and meant for the person (HR can always reach it).
 digitalKitRouter.get("/resources/:id/file", wrap(async (req, res) => {
   const r = (await pool.query("SELECT * FROM digital_kit_resources WHERE id=$1", [idOf(req.params.id)])).rows[0];
-  if (!r || !r.stored_name || !(r.published || req.user.role === "hr")) return res.status(404).json({ error: "Not found" });
+  if (!r || !r.stored_name || !(req.user.role === "hr" || (r.published && await mine(req, r)))) return res.status(404).json({ error: "Not found" });
   const ext = Object.keys(MIME).find((k) => MIME[k] === r.mime) || "";
   res.set({
     "Content-Type": r.mime,
@@ -299,7 +408,7 @@ digitalKitRouter.get("/resources/:id/file", wrap(async (req, res) => {
 // The preview picture of an official document, under the same rule: only while published (HR can always see it).
 digitalKitRouter.get("/resources/:id/preview", wrap(async (req, res) => {
   const r = (await pool.query("SELECT * FROM digital_kit_resources WHERE id=$1", [idOf(req.params.id)])).rows[0];
-  if (!r || !hasPreview(r) || !(r.published || req.user.role === "hr")) return res.status(404).json({ error: "Not found" });
+  if (!r || !hasPreview(r) || !(req.user.role === "hr" || (r.published && await mine(req, r)))) return res.status(404).json({ error: "Not found" });
   res.set({ "Content-Type": "image/png", "X-Content-Type-Options": "nosniff", "Cache-Control": "private, max-age=3600" });
   res.sendFile(path.join(SEED_DIR, `${path.basename(r.stored_name.slice(5))}.preview.png`));
 }));
@@ -327,9 +436,9 @@ digitalKitRouter.use(express.json({ limit: "200kb" }));
 
 // My kit: my details, what is missing, and everything HR has published.
 digitalKitRouter.get("/", wrap(async (req, res) => {
-  const me = await personOf(req.user.email);
+  const me = await personOf(req.user.email, req.user.role);
   if (!me) return res.status(404).json({ error: "There is no employee record for your account yet. Ask HR." });
-  const rows = (await pool.query("SELECT * FROM digital_kit_resources WHERE published ORDER BY sort_order, id")).rows;
+  const rows = (await pool.query("SELECT * FROM digital_kit_resources WHERE published ORDER BY sort_order, id")).rows.filter((r) => forPerson(r.audience, me.person));   // only what is for this person's designation
   const resources = Object.fromEntries(MODULES.map((m) => [m, rows.filter((r) => r.module === m).map((r) => shape(r))]));
   res.json({ ...me, resources, isHr: req.user.role === "hr" });
 }));
@@ -351,6 +460,7 @@ function cleanResource(b = {}, partial = false) {
   if (b.description !== undefined) out.description = line(b.description, 500);
   if (b.body !== undefined) out.body = b.body === null ? null : str(b.body, 20000);
   if (b.published !== undefined) out.published = !!b.published;
+  if (b.audience !== undefined) { const a = cleanAudience(b.audience); if (a.error) errors.audience = a.error; else out.audience = a.list; }
   if (b.sortOrder !== undefined) { const n = Number(b.sortOrder); if (!Number.isInteger(n) || n < -9999 || n > 9999) errors.sortOrder = "Enter a whole number."; else out.sort_order = n; }
   return { out, errors };
 }
@@ -359,9 +469,9 @@ admin.post("/resources", wrap(async (req, res) => {
   const { out, errors } = cleanResource(req.body, false);
   if (Object.keys(errors).length) return res.status(400).json({ errors });
   const r = await pool.query(
-    `INSERT INTO digital_kit_resources (module, category, title, description, body, published, sort_order, created_by, updated_by)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$8) RETURNING *`,
-    [out.module, out.category || "", out.title, out.description || "", out.body ?? null, out.published ?? false, out.sort_order ?? 100, req.user.email]);
+    `INSERT INTO digital_kit_resources (module, category, title, description, body, published, sort_order, audience, created_by, updated_by)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$9) RETURNING *`,
+    [out.module, out.category || "", out.title, out.description || "", out.body ?? null, out.published ?? false, out.sort_order ?? 100, out.audience || [], req.user.email]);
   await audit(pool, `Digital Kit: added "${out.title}" (${out.module})`, req.user.email);
   res.status(201).json(shape(r.rows[0], true));
 }));

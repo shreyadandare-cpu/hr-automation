@@ -68,6 +68,12 @@ profileRouter.use(requireAuth);
 
 const wrap = (fn) => (req, res, next) => fn(req, res, next).catch(next);
 
+/** The date of birth on the employee record (entered at onboarding or imported), as YYYY-MM-DD, or "". It is used when the profile has none of its own. */
+const ownDob = async (email) => {
+  const { rows } = await pool.query("SELECT to_char(dob, 'YYYY-MM-DD') AS dob FROM employees WHERE lower(work_email)=$1", [email.toLowerCase()]);
+  return rows[0] && rows[0].dob ? rows[0].dob : "";
+};
+
 const photoVersion = async (email) => {
   const { rows } = await pool.query("SELECT updated_at FROM profile_photos WHERE lower(email)=$1", [email.toLowerCase()]);
   return rows[0] ? new Date(rows[0].updated_at).getTime() : null;
@@ -75,7 +81,7 @@ const photoVersion = async (email) => {
 
 profileRouter.get("/", wrap(async (req, res) => {
   const { rows } = await pool.query("SELECT data FROM profiles WHERE lower(email)=$1", [req.user.email.toLowerCase()]);
-  res.json({ ...(rows[0]?.data || {}), photoV: await photoVersion(req.user.email) });
+  res.json({ ...(rows[0]?.data || {}), photoV: await photoVersion(req.user.email), employeeDob: await ownDob(req.user.email) });
 }));
 
 profileRouter.put("/", wrap(async (req, res) => {
@@ -92,7 +98,7 @@ profileRouter.put("/", wrap(async (req, res) => {
   await pool.query(
     `INSERT INTO profiles (email, data) VALUES ($1,$2)
      ON CONFLICT (email) DO UPDATE SET data=$2, updated_at=now()`, [req.user.email.toLowerCase(), data]);
-  res.json({ ...data, photoV: await photoVersion(req.user.email) });
+  res.json({ ...data, photoV: await photoVersion(req.user.email), employeeDob: await ownDob(req.user.email) });
 }));
 
 /* Profile photo: one picture per person. The page crops it square before sending, so it is small. */

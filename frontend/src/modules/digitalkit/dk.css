@@ -182,3 +182,7 @@ button.dk-thumb2{cursor:pointer}
 
 .dk-acc summary .caret{margin-left:0;color:var(--purple)}
 .dk-acc details[open] summary .caret{transform:rotate(180deg)}
+
+.dk-for{font-style:normal;font:700 11px/1 var(--body);letter-spacing:.04em;color:var(--purple);margin-top:3px}
+.dk-side-note{margin:0 8px;font-size:12.5px;line-height:1.45;color:var(--ink-dim)}
+.dk-side-note b{color:var(--ink)}

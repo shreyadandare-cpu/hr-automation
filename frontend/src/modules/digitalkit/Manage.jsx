@@ -61,13 +61,14 @@ function Resources({ onChanged }) {
           <span className="muted">Published items show to every employee straight away. Changing one updates it for everyone; nobody needs to redo their kit.</span>
         </div>
         <div className="tbl-wrap"><table>
-          <thead><tr><th>Title</th><th>Section</th><th>Status</th><th>File</th><th>Version</th><th>Updated</th><th aria-label="Actions" /></tr></thead>
+          <thead><tr><th>Title</th><th>Section</th><th>For</th><th>Status</th><th>File</th><th>Version</th><th>Updated</th><th aria-label="Actions" /></tr></thead>
           <tbody>
-            {rows === null ? <tr><td colSpan="7"><div className="empty">Loading…</div></td></tr>
+            {rows === null ? <tr><td colSpan="8"><div className="empty">Loading…</div></td></tr>
               : list.length ? list.map((r) => (
                 <tr key={r.id}>
                   <td><b>{r.title}</b>{r.category && <div className="muted" style={{ fontSize: 12.5 }}>{r.category}</div>}</td>
                   <td>{LABEL[r.module]}</td>
+                  <td>{r.audience && r.audience.length ? <span className="dk-tags" style={{ justifyContent: "flex-start" }}>{r.audience.slice(0, 3).map((w) => <i key={w}>{w}</i>)}{r.audience.length > 3 && <i>+{r.audience.length - 3}</i>}</span> : <span className="muted">Everyone</span>}</td>
                   <td><Pill tone={r.published ? "ok" : "mute"}>{r.published ? "Published" : "Draft"}</Pill></td>
                   <td>{r.hasFile ? <span title={r.filename}>{(r.filename || "").split(".").pop().toUpperCase()} · {kb(r.size)}</span> : WITH_BODY.has(r.module) ? "Text" : <span className="muted">None</span>}</td>
                   <td>v{r.version}</td><td>{day(r.updatedAt)}</td>
@@ -77,7 +78,7 @@ function Resources({ onChanged }) {
                     <button type="button" className="btn glass sm" onClick={() => toggle(r)}>{r.published ? "Unpublish" : "Publish"}</button>{" "}
                     <button type="button" className="btn link sm" onClick={() => setDel(r)}>Delete</button>
                   </td></tr>))
-                : <tr><td colSpan="7"><div className="empty">Nothing here yet. Add the first resource.</div></td></tr>}
+                : <tr><td colSpan="8"><div className="empty">Nothing here yet. Add the first resource.</div></td></tr>}
           </tbody></table></div>
       </div>
       {edit && <ResourceModal item={edit} onClose={() => setEdit(null)} upload={upload} onSaved={(m) => { setEdit(null); after(m); }} />}
@@ -90,13 +91,13 @@ function Resources({ onChanged }) {
 
 function ResourceModal({ item, onClose, onSaved, upload }) {
   const isNew = !item.id;
-  const [f, setF] = useState({ module: item.module || "text", category: item.category || "", title: item.title || "", description: item.description || "", body: item.body || "", sortOrder: item.sortOrder ?? 100, published: item.published ?? false });
+  const [f, setF] = useState({ module: item.module || "text", category: item.category || "", title: item.title || "", description: item.description || "", body: item.body || "", sortOrder: item.sortOrder ?? 100, published: item.published ?? false, audience: (item.audience || []).join(", ") });
   const [file, setFile] = useState(null), [errors, setErrors] = useState({}), [busy, setBusy] = useState(false);
   const toast = useToast();
   const set = (k) => (e) => setF({ ...f, [k]: e.target.type === "checkbox" ? e.target.checked : e.target.value });
   const save = async () => {
     setBusy(true);
-    const body = { title: f.title, category: f.category, description: f.description, sortOrder: Number(f.sortOrder) || 0, published: f.published, ...(WITH_BODY.has(f.module) ? { body: f.body } : {}), ...(isNew ? { module: f.module } : {}) };
+    const body = { title: f.title, category: f.category, description: f.description, sortOrder: Number(f.sortOrder) || 0, published: f.published, audience: f.audience, ...(WITH_BODY.has(f.module) ? { body: f.body } : {}), ...(isNew ? { module: f.module } : {}) };
     const r = isNew ? await api("POST", "/api/digital-kit/admin/resources", body) : await api("PUT", `/api/digital-kit/admin/resources/${item.id}`, body);
     if (!r.ok) { setBusy(false); if (r.status === 400 && r.data && r.data.errors) { setErrors(r.data.errors); return; } toast(apiMsg(r)); return; }
     if (file) { const d = await upload(r.data.id, file); if (!d) { setBusy(false); onSaved("Saved, but the file was not uploaded. Use Upload file to try again."); return; } }
@@ -112,6 +113,7 @@ function ResourceModal({ item, onClose, onSaved, upload }) {
         <Field id="dk-d" label="Short description (optional)"><input className="input" id="dk-d" value={f.description} maxLength={500} onChange={set("description")} /></Field>
         {WITH_BODY.has(f.module) && <Field id="dk-b" label={f.module === "text" ? "Text" : "Text (optional, for a template without a file)"} hint="Use {{name}}, {{title}}, {{email}} and {{phone}} to fill in each person's details. Use [brackets] for what they write themselves."><textarea className="input" id="dk-b" rows={9} value={f.body} maxLength={20000} onChange={set("body")} /></Field>}
         <Field id="dk-f" label={item.hasFile ? "Replace the file (optional)" : "File (optional)"} hint="PDF, image, Word, PowerPoint, Excel or ZIP, up to 25 MB."><input className="input" id="dk-f" type="file" accept=".pdf,.png,.jpg,.jpeg,.webp,.gif,.docx,.pptx,.xlsx,.zip" onChange={(e) => setFile(e.target.files[0] || null)} /></Field>
+        <Field id="dk-a" label="Who is it for?" hint="Leave empty for everyone. Or type words such as hr, sales, engineer, designer, separated by commas: only people whose designation or department has one of them will see it. Use hr for the HR team." error={errors.audience}><input className="input" id="dk-a" value={f.audience} maxLength={200} placeholder="Everyone" onChange={set("audience")} /></Field>
         <Field id="dk-o" label="Order" hint="Smaller numbers come first. The official items use 10 to 70." error={errors.sortOrder}><input className="input" id="dk-o" type="number" value={f.sortOrder} onChange={set("sortOrder")} /></Field>
         <label className="check"><input type="checkbox" checked={f.published} onChange={set("published")} /> Published (visible to all employees)</label>
       </div>

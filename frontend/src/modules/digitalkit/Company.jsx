@@ -27,7 +27,7 @@ export function ReadyText({ items, p }) {
         <div className="card-h"><h3>Templates</h3><span className="muted">{items.length}</span></div>
         <div className="dk-rt2-search"><input className="input" type="search" placeholder="Search" aria-label="Search templates" value={q} onChange={(e) => setQ(e.target.value)} /></div>
         <ul className="dk-rt2-list">
-          {list.map((r) => <li key={r.id}><button type="button" className={cur.id === r.id ? "on" : ""} onClick={() => setId(r.id)}><b>{r.title}</b>{r.description && <span>{r.description}</span>}</button></li>)}
+          {list.map((r) => <li key={r.id}><button type="button" className={cur.id === r.id ? "on" : ""} onClick={() => setId(r.id)}><b>{r.title}</b>{r.description && <span>{r.description}</span>}{r.audience && r.audience.length > 0 && <em className="dk-for">For your role</em>}</button></li>)}
           {!list.length && <li className="muted dk-rt2-none">Nothing matches.</li>}
         </ul>
       </div>

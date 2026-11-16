@@ -2,12 +2,13 @@
    Safe to run again at any time: employees, logins and existing kits are never changed or duplicated.
    Run:  node --env-file=.env scripts/init-digital-kits.mjs   (from the backend folder) */
 import { pool, initDb } from "../src/db.js";
-import { initDigitalKits, removeDuplicateStarters, seedDigitalKit, seedOfficialFiles, repairOfficialFiles, seedOfficialTexts, updateOfficialLabels } from "../src/digital-kit.js";
+import { initDigitalKits, removeDuplicateStarters, seedDigitalKit, seedOfficialFiles, repairOfficialFiles, seedDesignationTexts, seedOfficialTexts, updateOfficialLabels } from "../src/digital-kit.js";
 
 await initDb();
 const seeded = await seedDigitalKit();
 const files = await seedOfficialFiles();
 await seedOfficialTexts();
+await seedDesignationTexts();
 await updateOfficialLabels();
 await repairOfficialFiles();
 const dups = await removeDuplicateStarters();

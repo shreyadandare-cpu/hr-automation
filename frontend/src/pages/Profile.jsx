@@ -35,7 +35,7 @@ function profileData(me, p, record) {
   const a = (x, line) => ({ line: line || "", city: "", state: "", country: "", pin: "", ...(x || {}) });
   return {
     about: p.about || "", loveJob: p.loveJob || "", hobbies: p.hobbies || "", education: (p.education || []).map((x) => ({ ...x })),
-    primary: { first, middle: "", last, gender: "", dob: (record && record.ids && record.ids.dob) || "", marital: "", blood: "", handicapped: "", nationality: "", ...(p.primary || {}) },
+    primary: { first, middle: "", last, gender: "", dob: "", marital: "", blood: "", handicapped: "", nationality: "", ...(p.primary || {}), dob: (p.primary && p.primary.dob) || p.employeeDob || (record && record.ids && record.ids.dob) || "" },
     contact: { personalEmail: (record && record.personalEmail) || "", phone: (record && record.phone) || "", linkedin: "", ...(p.contact || {}) },
     addresses: { current: a(ad.current, record && record.address), permanent: a(ad.permanent, "") },
   };

@@ -4,7 +4,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import express from "express";
 import { pool, payPool, PAY_SCHEMA, initDb } from "./db.js";
-import { digitalKitRouter, ensureKit, initDigitalKits, removeDuplicateStarters, seedDigitalKit, seedOfficialFiles, repairOfficialFiles, seedOfficialTexts, updateOfficialLabels } from "./digital-kit.js";
+import { digitalKitRouter, ensureKit, initDigitalKits, removeDuplicateStarters, seedDigitalKit, seedOfficialFiles, repairOfficialFiles, seedDesignationTexts, seedOfficialTexts, updateOfficialLabels } from "./digital-kit.js";
 import { documentsRouter } from "./documents.js";
 import { bootstrapAuth, loadSession, requireAuth, requireHr, createGoogleUser as createLogin } from "./auth.js";
 import { sessionRouter, accountRouter, usersRouter } from "./users.js";
@@ -639,6 +639,7 @@ try {
   await seedDigitalKit();
   await seedOfficialFiles();
   await seedOfficialTexts();
+  await seedDesignationTexts();
   await updateOfficialLabels();
   const fixed = await repairOfficialFiles();
   if (fixed) console.log(`Digital Kit: ${fixed} official file${fixed === 1 ? "" : "s"} now read from the app's own folder`);

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { api, apiMsg } from "../api.js";
 import { useAuth } from "../auth.jsx";
-import { Callout, Person, Pill, SectionHead, Stat, hours, shortDate } from "../components/ui.jsx";
+import { Callout, DownloadIcon, Person, Pill, SectionHead, Stat, hours, shortDate } from "../components/ui.jsx";
 import { ActionsCard, AttendanceLog, DayCell, ForgotPunchPopup, StatsCard, TimingsCard, istNow, useH24, useMonths, useNow } from "../components/attendance.jsx";
 import Pager, { usePaged } from "../components/Pager.jsx";
 import { useData } from "../data.jsx";
@@ -171,7 +171,7 @@ function MonthlyReport({ onOpen }) {
       <div className="filters">
         <input className="input" type="month" aria-label="Month" value={month} max={istNow().date.slice(0, 7)} style={{ width: "auto" }} onChange={(e) => e.target.value && setMonth(e.target.value)} />
         <input className="input grow" type="search" placeholder="Search by name, ID or email" aria-label="Search the report" value={q} onChange={(e) => setQ(e.target.value)} />
-        <a className="btn glass sm" href={`/api/attendance/report?month=${month}&format=csv`} download>Download spreadsheet</a>
+        <a className="btn glass sm" href={`/api/attendance/report?month=${month}&format=csv`} download aria-label="Download spreadsheet" title="Download spreadsheet"><DownloadIcon />Spreadsheet</a>
       </div>
       {error && <Callout>{error}</Callout>}
       <div className="tbl-wrap"><table>

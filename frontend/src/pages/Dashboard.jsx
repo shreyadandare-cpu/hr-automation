@@ -20,9 +20,9 @@ function sky() {
   const h = new Date().getHours();
   const sun = <><circle cx="32" cy="32" r="12" /><path d="M32 6v8M32 50v8M6 32h8M50 32h8M13.6 13.6l5.6 5.6M44.8 44.8l5.6 5.6M13.6 50.4l5.6-5.6M44.8 19.2l5.6-5.6" /></>;
   const moon = <path d="M50 38A20 20 0 1 1 26 14a16 16 0 0 0 24 24z" />;
-  const [word, a, b, icon] = h < 12 ? ["Good morning", "rgba(255,176,140,.18)", "rgba(169,187,255,.12)", sun]
-    : h < 18 ? ["Good afternoon", "rgba(125,140,238,.14)", "rgba(189,238,226,.12)", sun]
-    : ["Good evening", "rgba(98,84,200,.16)", "rgba(111,127,238,.10)", moon];
+  const [word, a, b, icon] = h < 12 ? ["Good morning", "rgba(247,120,29,.14)", "rgba(234,217,194,.45)", sun]
+    : h < 18 ? ["Good afternoon", "rgba(247,120,29,.08)", "rgba(200,95,68,.10)", sun]
+    : ["Good evening", "rgba(128,13,53,.14)", "rgba(247,120,29,.08)", moon];
   return { word, a, b, svg: <svg className="db-sky" viewBox="0 0 64 64" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" aria-hidden="true">{icon}</svg> };
 }
 
@@ -164,7 +164,7 @@ function EmployeeDashboard() {
         <div className="db-bal">
           <div><Ring pct={cT ? b.casual.left / cT * 100 : 0} color="var(--purple-soft)" label={String(b.casual.left)} sub="days left" /><small>{R.TYPES.casual.name}</small></div>
           <div><Ring pct={b.sick.quota ? b.sick.left / b.sick.quota * 100 : 0} color="#8fae3e" label={String(b.sick.left)} sub="days left" /><small>{R.TYPES.sick.name}</small></div>
-          <div><Ring pct={b.compoff.earned ? b.compoff.left / b.compoff.earned * 100 : 0} color="#0e7c86" label={String(b.compoff.left)} sub="days left" /><small>{R.TYPES.compoff.name}</small></div>
+          <div><Ring pct={b.compoff.earned ? b.compoff.left / b.compoff.earned * 100 : 0} color="#76775a" label={String(b.compoff.left)} sub="days left" /><small>{R.TYPES.compoff.name}</small></div>
         </div>);
     } catch (e) { bal = null; }
   }

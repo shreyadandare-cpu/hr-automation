@@ -4,7 +4,7 @@ import { useSearchParams } from "react-router-dom";
 import { api, apiMsg } from "../api.js";
 import { useAuth } from "../auth.jsx";
 import { useData } from "../data.jsx";
-import { Callout, Pill, SectionHead, shortDate } from "../components/ui.jsx";
+import { Callout, DownloadIcon, Pill, SectionHead, shortDate } from "../components/ui.jsx";
 
 const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 const label = (period) => { const [y, m] = period.split("-").map(Number); return `${MONTHS[m - 1]} ${y}`; };
@@ -18,7 +18,7 @@ function SlipView({ s, pdf, onClose }) {
   return (
     <div className="card ps-slip" id="ps-view">
       <div className="card-h"><h3>Payslip · {label(s.period)}</h3>
-        <div className="row" style={{ gap: 8 }}><a className="btn primary sm" href={pdf} download>Download PDF</a><button type="button" className="btn glass sm" onClick={onClose}>Close</button></div></div>
+        <div className="row" style={{ gap: 8 }}><a className="btn primary sm" href={pdf} download aria-label="Download PDF" title="Download PDF"><DownloadIcon />PDF</a><button type="button" className="btn glass sm" onClick={onClose}>Close</button></div></div>
       <dl className="facts ps-facts">
         <div><dt>Date joined</dt><dd>{s.employee.start ? shortDate(String(s.employee.start).slice(0, 10)) : "—"}</dd></div>
         <div><dt>PAN</dt><dd>{dash(s.employee.pan)}</dd></div>
@@ -103,7 +103,7 @@ export default function Payslips() {
                   {list.map((x) => <option key={x.period} value={x.period}>{label(x.period)}</option>)}
                 </select></label>
               <button type="button" className="btn primary" disabled={!pick} onClick={() => view(pick)}>View payslip</button>
-              {chosen && chosen.available && <a className="btn glass" href={pdf(pick)} download>Download PDF</a>}
+              {chosen && chosen.available && <a className="btn glass" href={pdf(pick)} download aria-label="Download PDF" title="Download PDF"><DownloadIcon />PDF</a>}
             </div>
           )}
         </div>
@@ -124,7 +124,7 @@ export default function Payslips() {
                   <td className="num">{x.available ? money(x.net) : "—"}</td>
                   <td>{x.draft ? <Pill tone="warn">Draft</Pill> : !x.available ? <Pill tone="warn">Incomplete</Pill> : x.status === "paid" ? <Pill tone="ok">Paid{x.paidAt ? ` ${shortDate(String(x.paidAt).slice(0, 10))}` : ""}</Pill> : <Pill tone="info">Processed</Pill>}</td>
                   <td style={{ textAlign: "right" }}>{x.available
-                    ? <div className="row" style={{ gap: 8, justifyContent: "flex-end" }}><button type="button" className="btn glass sm" onClick={() => view(x.period)}>View</button><a className="btn primary sm" href={pdf(x.period)} download>Download PDF</a></div>
+                    ? <div className="row" style={{ gap: 8, justifyContent: "flex-end" }}><button type="button" className="btn glass sm" onClick={() => view(x.period)}>View</button><a className="btn primary sm" href={pdf(x.period)} download aria-label="Download PDF" title="Download PDF"><DownloadIcon />PDF</a></div>
                     : <span className="muted">{x.message}</span>}</td>
                 </tr>
               ))}</tbody>

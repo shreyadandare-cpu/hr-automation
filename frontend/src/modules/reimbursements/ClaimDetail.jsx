@@ -1,3 +1,4 @@
+import { DownloadIcon } from "../../components/ui.jsx";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { api, apiMsg } from "../../api.js";
@@ -49,7 +50,7 @@ function DocViewer({ c, docId, zoom, setZoom, onDoc, onBig }) {
             <button type="button" className="btn glass sm" aria-label="Zoom in" onClick={() => setZoom(Math.min(3, Math.max(0.5, zoom + 0.25)))}><Ico k="zin" /></button></>}
         <span className="grow" />
         <button type="button" className="btn glass sm" onClick={() => onBig(it)}><Ico k="open" />Open larger</button>
-        <a className="btn glass sm" href={`${src}?download=1`}><Ico k="down" />Download</a>
+        <a className="btn glass sm" href={`${src}?download=1`} aria-label="Download" title="Download"><DownloadIcon />File</a>
       </div></div>
   );
 }
@@ -205,7 +206,7 @@ export default function ClaimDetail() {
 
       {big && <Dlg wide onClose={() => setDlg(null)}>{(() => { const src = `/api/reimbursements/${c.id}/documents/${big.document.id}`; return <>
         <div className="rb-big">{big.document.mime === "application/pdf" ? <iframe src={`${src}#view=FitH`} title="Invoice" /> : <div className="rb-imgwrap"><img src={src} alt="Receipt" /></div>}</div>
-        <div className="modal-f"><a className="btn glass" href={`${src}?download=1`}><Ico k="down" />Download</a><button type="button" className="btn primary" onClick={() => setDlg(null)}>Close</button></div></>; })()}</Dlg>}
+        <div className="modal-f"><a className="btn glass" href={`${src}?download=1`} aria-label="Download" title="Download"><DownloadIcon />File</a><button type="button" className="btn primary" onClick={() => setDlg(null)}>Close</button></div></>; })()}</Dlg>}
       {dlg && dlg.kind === "approve" && <ApproveDlg c={c} v={dlg.v} reason={dlg.reason} onClose={() => setDlg(null)} decide={decide} toast={toast} />}
       {dlg && dlg.kind === "reject" && <RejectDlg c={c} reasons={(meta && meta.rejectReasons) || ["Other"]} onClose={() => setDlg(null)} decide={decide} toast={toast} />}
       {dlg && dlg.kind === "changes" && <ChangesDlg c={c} onClose={() => setDlg(null)} decide={decide} />}

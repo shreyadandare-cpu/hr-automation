@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { api, apiMsg } from "../../api.js";
 import Modal, { Field } from "../../components/Modal.jsx";
-import { Callout, Person } from "../../components/ui.jsx";
+import { Callout, DownloadIcon, Person } from "../../components/ui.jsx";
 import { useToast } from "../../components/toast.jsx";
 import LineModal from "./LineModal.jsx";
 import { LinePill, STEPS, StatusPill, fileUrl, money, monthLabel, plural, thisMonth, when } from "./util.jsx";
@@ -169,8 +169,8 @@ export default function RunTab({ you }) {
               {!run && you.hr && <button type="button" className="btn primary" onClick={() => setDlg({ start: true })}>Start payroll for {monthLabel(period)}</button>}
               {!run && !you.hr && <span className="muted">No payroll has been sent for review for this month.</span>}
               {run && run.editable && <button type="button" className="btn glass" disabled={busy} onClick={recalc}>Recalculate</button>}
-              {workbook && <a className="btn glass" href={fileUrl(run.id, workbook.id)} download>Download Excel (v{workbook.version})</a>}
-              {bank && you.hr && <a className="btn glass" href={fileUrl(run.id, bank.id)} download>Download bank file</a>}
+              {workbook && <a className="btn glass" href={fileUrl(run.id, workbook.id)} download aria-label={`Download Excel (v${workbook.version})`} title="Download Excel"><DownloadIcon />Excel (v{workbook.version})</a>}
+              {bank && you.hr && <a className="btn glass" href={fileUrl(run.id, bank.id)} download aria-label="Download bank file" title="Download bank file"><DownloadIcon />Bank file</a>}
               {run && run.actions.map((a) => <button key={a} type="button" className={`btn ${ACT[a].tone}`} onClick={() => { setNote(""); setRef(""); setDlg({ action: a }); }}>{ACT[a].label}</button>)}
             </div>
           </>}

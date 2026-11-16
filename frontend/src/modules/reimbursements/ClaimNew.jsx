@@ -1,3 +1,4 @@
+import { DownloadIcon } from "../../components/ui.jsx";
 import { useEffect, useRef, useState } from "react";
 import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import BackButton from "../../components/BackButton.jsx";
@@ -31,7 +32,7 @@ function DocPreview({ claimId, it }) {
   const src = `/api/reimbursements/${claimId}/documents/${d.id}`, pdf = d.mime === "application/pdf";
   return (
     <div className="cw-doc"><div className="cw-doc-h"><Ico k="doc" /><span title={d.name}>{d.name}</span><span className="grow" />
-      <a className="btn link sm nolink" href={src} target="_blank" rel="noopener noreferrer"><Ico k="open" />Open</a><a className="btn link sm nolink" href={`${src}?download=1`}><Ico k="down" />Download</a></div>
+      <a className="btn link sm nolink" href={src} target="_blank" rel="noopener noreferrer"><Ico k="open" />Open</a><a className="btn link sm nolink" href={`${src}?download=1`} aria-label="Download" title="Download"><DownloadIcon />File</a></div>
       <div className={`rb-viewer ${pdf ? "pdf" : "img"} small`}>{pdf ? <iframe src={`${src}#view=FitH`} title={`Invoice for expense ${it.position || ""}: ${d.name}`} /> : <div className="rb-imgwrap"><img src={src} alt={`Invoice: ${d.name}`} /></div>}</div></div>
   );
 }
@@ -279,7 +280,7 @@ export default function ClaimNew() {
         if (hr && !w.id && !w.email) return set({ errors: { email: "Choose the employee first." } });
         setW((x) => ({ ...x, items: [...x.items, mkLine({})], step: 2 })); window.scrollTo(0, 0); setTimeout(() => { const n = document.getElementById(`cw-${wr.current.items.length - 1}-vendor`); if (n) n.focus(); });
       }}><Ico k="plus" />Add an expense by hand</button>
-        <a className="btn glass sm" href="/api/reimbursements/import/template" download><Ico k="down" />Excel template</a>
+        <a className="btn glass sm" href="/api/reimbursements/import/template" download aria-label="Download Excel template" title="Download Excel template"><DownloadIcon />Excel template</a>
         <label className="btn glass sm cw-file"><Ico k="doc" />{w.importing ? "Reading the sheet…" : "Upload Excel or CSV"}<input type="file" id="cw-sheet" accept=".xlsx,.csv,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" disabled={w.importing}
           onChange={(e) => { const f = e.target.files[0]; e.target.value = ""; if (f) importSheet(f); }} /></label></div></div>}
   </>;
@@ -344,7 +345,7 @@ export default function ClaimNew() {
           toast(`${good.length} expense${good.length === 1 ? "" : "s"} added from the sheet.`); }} />
         : <Dlg onClose={() => setImp(null)}><div className="card-h" style={{ paddingTop: 24 }}><h3>This sheet can't be imported</h3></div><div className="card-b"><div className="callout bad"><Ico k="warn" /><div>{(imp.data && imp.data.error) || "The server refused the file."}</div></div>
           <div className="muted">Download the template, fill one row per expense, and upload it again.</div></div>
-          <div className="modal-f"><a className="btn glass" href="/api/reimbursements/import/template" download><Ico k="down" />Download template</a><button type="button" className="btn primary" autoFocus onClick={() => setImp(null)}>OK</button></div></Dlg>)}
+          <div className="modal-f"><a className="btn glass" href="/api/reimbursements/import/template" download aria-label="Download template" title="Download template"><DownloadIcon />Template</a><button type="button" className="btn primary" autoFocus onClick={() => setImp(null)}>OK</button></div></Dlg>)}
     </section>
   );
 }

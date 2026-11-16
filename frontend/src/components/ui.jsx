@@ -1,6 +1,11 @@
 /* Small building blocks that reuse the existing page's styles, so React pages look like the rest of the app. */
 export const initials = (n) => String(n || "").split(/\s+/).map((p) => p[0]).slice(0, 2).join("").toUpperCase();
 
+/** The download arrow shown in buttons that save a file. Give the button an aria-label, since the word "Download" is not shown. */
+export const DownloadIcon = () => (
+  <svg className="dl-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M12 4v11M7 10l5 5 5-5M5 20h14" /></svg>
+);
+
 export const Smile = () => (
   <svg className="smile" viewBox="0 0 34 10" fill="none" aria-hidden="true">
     <path d="M2 2c4 5 9 6.5 15 6.5S28 7 32 2" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" />

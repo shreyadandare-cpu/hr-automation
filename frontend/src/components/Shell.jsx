@@ -57,7 +57,7 @@ function GroupMenu({ label, items }) {
   return (
     <span ref={box} style={{ display: "contents" }}>
       <a href={`#${label}`} ref={btn} className={`${on || open ? "on" : ""}`} role="button" aria-haspopup="true" aria-expanded={open}
-        onClick={(e) => { e.preventDefault(); toggle(); }}>{label} <span aria-hidden="true" style={{ fontSize: 10 }}>▾</span></a>
+        onClick={(e) => { e.preventDefault(); toggle(); }}>{label}<span className="caret" aria-hidden="true" /></a>
       {open && (
         <div className="acct-menu fin-menu" role="menu" style={{ position: "fixed", left: pos.left, top: pos.top, right: "auto", minWidth: 190 }}>
           {items.map(([to, label]) => <NavLink key={to} to={to} role="menuitem">{label}</NavLink>)}

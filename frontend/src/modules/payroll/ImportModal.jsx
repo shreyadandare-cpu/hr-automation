@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { api, apiMsg } from "../../api.js";
 import Modal from "../../components/Modal.jsx";
-import { Callout } from "../../components/ui.jsx";
+import { Callout, DownloadIcon } from "../../components/ui.jsx";
 import { useToast } from "../../components/toast.jsx";
 
 /* The columns HR's sheet should have. Any other column with an amount is read as an earning named by its header;
@@ -69,7 +69,7 @@ export default function ImportModal({ onClose }) {
         <p className="muted" style={{ marginTop: 0 }}>One row per person. <b>Applies From</b> is the first month the salary counts for (for example 2026-11).
           Every other column with an amount is an earning; name a column <b>Deduction: Canteen</b> for another deduction. Fill <b>Monthly TDS</b> for anyone above ₹12,00,000 a year.</p>
         <div className="row" style={{ gap: 8, flexWrap: "wrap", marginBottom: 14 }}>
-          <button type="button" className="btn glass sm" onClick={template}>Download the template</button>
+          <button type="button" className="btn glass sm" onClick={template} aria-label="Download the template" title="Download the template"><DownloadIcon />Template</button>
         </div>
         <label className="lv-fsel" style={{ display: "block" }}><span>CSV file</span>
           <input className="input" type="file" accept=".csv,text/csv" onChange={(e) => pick(e.target.files[0])} /></label>

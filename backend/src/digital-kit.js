@@ -410,7 +410,9 @@ digitalKitRouter.get("/resources/:id/preview", wrap(async (req, res) => {
   const r = (await pool.query("SELECT * FROM digital_kit_resources WHERE id=$1", [idOf(req.params.id)])).rows[0];
   if (!r || !hasPreview(r) || !(req.user.role === "hr" || (r.published && await mine(req, r)))) return res.status(404).json({ error: "Not found" });
   res.set({ "Content-Type": "image/png", "X-Content-Type-Options": "nosniff", "Cache-Control": "private, max-age=3600" });
-  res.sendFile(path.join(SEED_DIR, `${path.basename(r.stored_name.slice(5))}.preview.png`));
+  // ?thumb=1 gives a small copy for the little pictures in lists; the full-size one is for the preview window.
+  const base = path.basename(r.stored_name.slice(5)), small = path.join(SEED_DIR, `${base}.thumb.png`);
+  res.sendFile(req.query.thumb && (await exists(small)) ? small : path.join(SEED_DIR, `${base}.preview.png`));
 }));
 
 // Raw file body, so it is read before the JSON parser below.

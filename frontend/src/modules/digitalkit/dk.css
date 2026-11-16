@@ -186,3 +186,21 @@ button.dk-thumb2{cursor:pointer}
 .dk-for{font-style:normal;font:700 11px/1 var(--body);letter-spacing:.04em;color:var(--purple);margin-top:3px}
 .dk-side-note{margin:0 8px;font-size:12.5px;line-height:1.45;color:var(--ink-dim)}
 .dk-side-note b{color:var(--ink)}
+
+/* LinkedIn banner builder */
+.dk-bn{display:flex;flex-direction:column;gap:18px}
+.dk-bn-h{margin:0;font:600 clamp(24px,2.6vw,30px)/1.15 var(--display);color:var(--purple)}
+.dk-bn-sub{margin:8px 0 0;max-width:68ch}
+.dk-bn-row{display:flex;flex-wrap:wrap;align-items:center;gap:12px}
+.dk-bn-fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px}
+@media (max-width:700px){.dk-bn-fields{grid-template-columns:1fr}}
+
+/* Video-call background builder */
+.dk-cb{display:flex;flex-direction:column;gap:24px}
+.dk-cb-head{display:flex;justify-content:space-between;align-items:flex-start;gap:32px;flex-wrap:wrap}
+.dk-cb-head p{margin:0;max-width:48ch;font-size:16.5px;line-height:1.5}
+.dk-cb-body{display:grid;grid-template-columns:minmax(260px,.8fr) minmax(0,1.6fr);gap:30px;align-items:start}
+.dk-cb-side{display:flex;flex-direction:column;gap:18px}
+.dk-cb-check{display:flex;align-items:center;gap:12px;padding:16px 18px;border-radius:16px;background:var(--paper-2);font:500 16px/1.2 var(--body);cursor:pointer}
+.dk-cb-check input{width:20px;height:20px;accent-color:var(--purple)}
+@media (max-width:900px){.dk-cb-body{grid-template-columns:1fr}}

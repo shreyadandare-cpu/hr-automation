@@ -3,7 +3,7 @@ import { Link } from "react-router-dom";
 import { Field } from "../../components/Modal.jsx";
 import { Callout, DownloadIcon } from "../../components/ui.jsx";
 import { useToast } from "../../components/toast.jsx";
-import { BANNER_DESIGNS, BG_DESIGNS, ICON_PROD, SIG_DEFAULT_OPTS, SIG_STYLES, aboutText, copyHtml, copyText, drawBackground, drawBanner, drawCard, fileSafe, hashtags, headlines, jpegOf,
+import { BANNER_PRESETS, BANNER_THEMES, ICON_PROD, SIG_DEFAULT_OPTS, SIG_STYLES, aboutText, copyHtml, copyText, drawBackground, drawBanner, drawCard, fileSafe, hashtags, headlines, jpegOf,
   pdfFromJpegs, saveBlob, saveText, signatureHtml, signaturePlain, toBlob, webLink } from "./kit.js";
 
 /* A picture drawn on a canvas, shown as an image. It is drawn again when the inputs change. */
@@ -147,21 +147,23 @@ const PLATFORMS = {
 };
 export function Background({ p }) {
   const toast = useToast();
-  const [design, setDesign] = useState("ivory"), [name, setName] = useState(false), [plat, setPlat] = useState("meet");
-  const save = async () => { try { saveBlob(await toBlob(await drawBackground(design, p, name)), `wohlig-background-${design}${name ? `-${fileSafe(p.name)}` : ""}.png`); } catch { toast("Could not make the file."); } };
+  const [theme, setTheme] = useState("light"), [show, setShow] = useState(true), [plat, setPlat] = useState("meet");
+  const o = { theme, name: p.name, title: p.title, showName: show };
+  const save = async () => { try { saveBlob(await toBlob(await drawBackground(o)), `${fileSafe(p.name)}-call-background.png`); } catch { toast("Could not make the file."); } };
   return (
-    <div className="dk-split">
-      <div className="card"><div className="card-h"><h3>Call background</h3><span className="muted">1920 × 1080</span></div>
-        <div className="card-b">
-          <Drawn draw={() => drawBackground(design, p, name)} deps={[design, name, p.name, p.title]} alt="Call background preview" />
-          <div className="row dk-actions">
-            <div className="seg" role="radiogroup" aria-label="Design">{BG_DESIGNS.map(([k, l]) => <label key={k}><input type="radio" name="bgd" checked={design === k} onChange={() => setDesign(k)} /><span>{l}</span></label>)}</div>
-            <label className="check dk-check"><input type="checkbox" checked={name} onChange={(e) => setName(e.target.checked)} /> Add my name</label>
-            <button type="button" className="btn primary sm" onClick={save}><DownloadIcon />PNG</button>
+    <div className="dk-stack">
+      <div className="card"><div className="card-b dk-cb">
+        <div className="dk-cb-head"><h3 className="dk-bn-h">Video-call background</h3><p className="muted">For Google Meet, Zoom and Teams: your name and designation on a Wohlig background, 1920×1080.</p></div>
+        <div className="dk-cb-body">
+          <div className="dk-cb-side">
+            <div className="seg" role="radiogroup" aria-label="Theme">{BANNER_THEMES.map(([k, l]) => <label key={k}><input type="radio" name="cbt" checked={theme === k} onChange={() => setTheme(k)} /><span>{l}</span></label>)}</div>
+            <label className="dk-cb-check"><input type="checkbox" checked={show} onChange={(e) => setShow(e.target.checked)} /> Show my name &amp; designation</label>
+            <p className="muted dk-hint" style={{ margin: 0 }}>Uses the name and designation from your record. Your app may show it mirrored to you; others see it the right way round.</p>
+            <div><button type="button" className="btn primary" onClick={save}><DownloadIcon />Download background</button></div>
           </div>
-          <p className="muted dk-hint">The middle is left clear for you. Zoom can mirror your own view, so your name may look reversed to you but reads correctly to everyone else.</p>
+          <Drawn draw={() => drawBackground(o)} deps={[theme, show, p.name, p.title]} alt="Call background preview" />
         </div>
-      </div>
+      </div></div>
       <div className="card"><div className="card-h"><h3>Use it in a call</h3></div>
         <div className="card-b">
           <div className="seg" role="radiogroup" aria-label="Program">{Object.entries(PLATFORMS).map(([k, [l]]) => <label key={k}><input type="radio" name="plat" checked={plat === k} onChange={() => setPlat(k)} /><span>{l}</span></label>)}</div>
@@ -174,9 +176,13 @@ export function Background({ p }) {
 
 export function LinkedIn({ p }) {
   const toast = useToast();
-  const hs = headlines(p), [pick, setPick] = useState(0), [about, setAbout] = useState(aboutText(p)), [bd, setBd] = useState("maroon");
+  const hs = headlines(p), [pick, setPick] = useState(0), [about, setAbout] = useState(aboutText(p));
+  const [theme, setTheme] = useState("light"), [preset, setPreset] = useState(0), [bh, setBh] = useState(""), [be, setBe] = useState("");
   const tags = hashtags(p), copy = async (t, what) => toast((await copyText(t)) ? `${what} copied.` : "Could not copy. Select it and copy by hand.");
-  const banner = async () => { try { saveBlob(await toBlob(await drawBanner(bd)), `wohlig-linkedin-banner-${bd}.png`); } catch { toast("Could not make the file."); } };
+  // Your own words win; with nothing typed, the chosen tagline is used.
+  const own = bh.trim() || be.trim(), pr = BANNER_PRESETS[preset];
+  const bopts = (guide) => ({ theme, headline: own ? bh.trim() : pr.h, emphasis: own ? be.trim() : pr.e, name: p.name, guide });
+  const banner = async () => { try { saveBlob(await toBlob(await drawBanner(bopts(false))), `${fileSafe(p.name)}-linkedin-banner.png`); } catch { toast("Could not make the file."); } };
   return (
     <div className="dk-stack">
       <div className="card"><div className="card-h"><h3>Headline</h3><span className="muted">up to 220 characters</span></div>
@@ -191,16 +197,20 @@ export function LinkedIn({ p }) {
           {!p.linkedin && <p className="muted dk-hint">Add your LinkedIn link in <Link to="/app/profile">My profile</Link> and this opens your own page.</p>}
         </div>
       </div>
-      <div className="card"><div className="card-h"><h3>Profile banner</h3><span className="muted">1584 × 396</span></div>
-        <div className="card-b">
-          <Drawn draw={() => drawBanner(bd)} deps={[bd]} alt="LinkedIn banner preview" />
-          <div className="row dk-actions">
-            <div className="seg" role="radiogroup" aria-label="Banner design">{BANNER_DESIGNS.map(([k, l]) => <label key={k}><input type="radio" name="bnd" checked={bd === k} onChange={() => setBd(k)} /><span>{l}</span></label>)}</div>
-            <button type="button" className="btn primary sm" onClick={banner}><DownloadIcon />PNG</button>
-          </div>
-          <p className="muted dk-hint">LinkedIn puts your photo over the lower left, so the banner keeps that corner clear.</p>
+      <div className="card"><div className="card-b dk-bn">
+        <div><h3 className="dk-bn-h">Your profile banner</h3><p className="muted dk-bn-sub">1584×396 for your personal LinkedIn cover. The left side stays clear because your profile photo sits there.</p></div>
+        <div className="dk-bn-row">
+          <div className="seg" role="radiogroup" aria-label="Theme">{BANNER_THEMES.map(([k, l]) => <label key={k}><input type="radio" name="bnt" checked={theme === k} onChange={() => setTheme(k)} /><span>{l}</span></label>)}</div>
+          {BANNER_PRESETS.map((x, i) => <button key={x.label} type="button" className={`dk-toggle${!own && preset === i ? " on" : ""}`} aria-pressed={!own && preset === i} onClick={() => { setPreset(i); setBh(""); setBe(""); }}>{x.label}</button>)}
         </div>
-      </div>
+        <div className="dk-bn-fields">
+          <Field id="bn-h" label={<>Headline <span className="muted">(optional, your own words)</span></>}><input className="input" id="bn-h" value={bh} maxLength={60} placeholder={pr.h} onChange={(e) => setBh(e.target.value)} /></Field>
+          <Field id="bn-e" label={<>Emphasis, in italic <span className="muted">(optional)</span></>}><input className="input" id="bn-e" value={be} maxLength={30} placeholder={pr.e} onChange={(e) => setBe(e.target.value)} /></Field>
+        </div>
+        <Drawn draw={() => drawBanner(bopts(true))} deps={[theme, preset, bh, be, p.name]} alt="LinkedIn banner preview" />
+        <p className="muted dk-hint" style={{ margin: 0 }}>The dashed circle shows where LinkedIn puts your profile photo. It is only a guide and isn't in the download.</p>
+        <div><button type="button" className="btn primary" onClick={banner}><DownloadIcon />Download banner</button></div>
+      </div></div>
       <div className="dk-pair2">
         <div className="card"><div className="card-h"><h3>Hashtags</h3></div>
           <div className="card-b"><div className="chips">{tags.map((t) => <span className="chip" key={t}>{t}</span>)}</div>

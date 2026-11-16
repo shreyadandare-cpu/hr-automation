@@ -2,7 +2,7 @@
   color-scheme:light;
   --paper:#fff7e9; --card:rgba(255,250,241,.9); --ink:#2a1016; --ink-dim:#6b4a52;
   --purple:#800d35; --line:rgba(128,13,53,.22); --input:rgba(255,255,255,.9); --bad:#c0352b; --bad-soft:#fdeceb;
-  --btn:linear-gradient(135deg,#f98a3a -20%,#f7781d 45%,#d9630f);
+  --btn:linear-gradient(135deg,#a8493f -30%,#7d1535 42%,#5c0926 100%);
   --blob1:rgba(247,120,29,.16); --blob2:rgba(234,217,194,.7);
 }
 @media (prefers-color-scheme:dark){

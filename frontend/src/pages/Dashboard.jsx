@@ -203,7 +203,6 @@ function EmployeeDashboard() {
           {bal || <div className="card-b muted">Your leave balances show here once the leave data has loaded.</div>}
         </div>
         <TodayCards only="leave" />
-        <CelebrateCard />
         <div className="card"><div className="card-h"><h3>Reimbursements</h3><div className="row" style={{ gap: 8 }}><a className="btn link sm" href="/app/reimbursements">My claims</a><a className="btn primary sm" href="/app/reimbursements">New claim</a></div></div>
           <div className="rb-stats four" style={{ padding: "0 24px 18px" }}>
             <div className="rb-stat"><span className="lbl">Added to {monthLabel(month)} salary</span><b>{money(thisMonth.reduce((n, c) => n + pay(c), 0))}</b><span className="sub">{thisMonth.length} approved claim{thisMonth.length === 1 ? "" : "s"}</span></div>
@@ -217,7 +216,6 @@ function EmployeeDashboard() {
               <div className="meta" style={{ fontSize: 13, color: "var(--ink-faint)" }}>{new Date(h.day + "T00:00:00").toLocaleDateString("en-IN", { weekday: "long" })} · {rel(today, h.day)}</div></div></div>; })
             : <div className="card-b muted">No upcoming holidays on the calendar.</div>}
         </div>
-        <KitCard />
         <div className="card"><div className="card-h"><h3>My tools</h3><span className="muted">{tools.length} active</span></div>
           <div className="card-b">{tools.length ? <div className="chips">{tools.map((id) => <span key={id} className="chip"><ToolIcon tool={TOOLS[id]} state="active" />{TOOLS[id].name}</span>)}</div> : <span className="muted">No tools yet. HR gives access when you join.</span>}</div>
         </div>
@@ -228,7 +226,9 @@ function EmployeeDashboard() {
             <div className="db-legend"><span style={{ margin: 0, textAlign: "left", color: "var(--ink-dim)" }}>{pct === 100 ? "Everything is in. Nice work." : "A fuller profile helps your team and HR."}</span></div></div>
           {steps.map(([t, ok, href]) => <a key={t} className={`step ${ok ? "done" : ""}`} href={href}><span className="tick"><Icon name="check" /></span><span>{t}</span>{!ok && <em>Do it</em>}</a>)}
         </div>
+        <CelebrateCard />
         <FestivalTile />
+        <KitCard />
         </div>
       </div>
     </div>

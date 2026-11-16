@@ -94,35 +94,97 @@ export async function drawCard(p, side) {
   return c;
 }
 
-/** A 1920 x 1080 background for a video call. The middle is left clear for the person; the details sit at the edge. */
-export const BG_DESIGNS = [["ivory", "Ivory"], ["maroon", "Maroon"], ["beige", "Beige"]];
-export async function drawBackground(design, p, withName) {
+/** A 1920 x 1080 background for a video call: the logo top left, a faint flower on the right, and your name low on the left. The middle stays clear for you. */
+export async function drawBackground({ theme = "light", name = "", title = "", showName = true } = {}) {
   const [W, H] = [1920, 1080], c = newCanvas(W, H), x = c.getContext("2d");
   await loadFonts();
-  const dark = design === "maroon", g = await loadImage(dark ? LOGO_DARK : LOGO_LIGHT);
-  if (dark) x.fillStyle = C.maroon; else if (design === "beige") { const gr = x.createLinearGradient(0, 0, W, H); gr.addColorStop(0, "#f7f0e2"); gr.addColorStop(0.55, "#f1e3cc"); gr.addColorStop(1, "#f5ead9"); x.fillStyle = gr; } else x.fillStyle = C.ivory;
-  x.fillRect(0, 0, W, H); arcs(x, W, H, dark ? C.ivory : C.beige, dark ? 0.12 : 0.9);
-  const lh = 96; logo(x, g, 90, 80, lh);
-  x.fillStyle = C.orange; x.fillRect(90, 80 + lh + 26, 110, 6);
-  if (withName && p.name) {
-    x.fillStyle = dark ? C.ivory : C.maroon; x.font = `600 56px ${SERIF}`; x.fillText(p.name, 90, H - 120);
-    if (p.title) { x.fillStyle = dark ? C.beige : C.terracotta; x.font = `700 26px ${SANS}`; x.letterSpacing = "3px"; x.fillText(p.title.toUpperCase(), 90, H - 76); x.letterSpacing = "0px"; }
+  const dark = theme === "maroon", g = await loadImage(dark ? LOGO_DARK : LOGO_LIGHT);
+  const bg = x.createLinearGradient(0, 0, W, H);
+  if (dark) { bg.addColorStop(0, "#6e0a2d"); bg.addColorStop(1, C.maroonDeep); } else { bg.addColorStop(0, "#fff7e9"); bg.addColorStop(0.55, "#fbe9d6"); bg.addColorStop(1, "#f6d3b8"); }
+  x.fillStyle = bg; x.fillRect(0, 0, W, H);
+  const glow = x.createRadialGradient(W * 0.98, H * 0.92, 20, W * 0.98, H * 0.92, 760);
+  glow.addColorStop(0, dark ? "rgba(247,120,29,.18)" : "rgba(247,140,90,.28)"); glow.addColorStop(1, "rgba(247,120,29,0)");
+  x.fillStyle = glow; x.fillRect(0, 0, W, H);
+  const line = dark ? C.ivory : C.terracotta;
+  x.save(); x.strokeStyle = line; x.lineWidth = 2; x.globalAlpha = dark ? 0.08 : 0.12;   // two soft arches, low on the left
+  for (const r of [430, 580]) { x.beginPath(); x.arc(250, H, r, Math.PI, 0); x.stroke(); }
+  x.restore();
+  x.save(); x.beginPath(); x.rect(0, 0, W, H); x.clip();
+  flower(x, 1690, 455, 430, 0.12, line, dark ? 0.2 : 0.32, 2.4);
+  flower(x, 1690, 455, 300, 0.12 + Math.PI / 8, line, dark ? 0.12 : 0.18, 1.8);
+  x.restore();
+  const lh = 100; logo(x, g, 100, 86, lh);
+  if (showName && name) {
+    x.fillStyle = C.orange; x.fillRect(100, 748, 66, 5);
+    x.fillStyle = dark ? C.ivory : C.maroon; const size = fit(x, name, 980, 96, 600, SERIF, 48); x.font = `600 ${size}px ${SERIF}`; x.fillText(name, 100, 868);
+    let y = 925;
+    if (title) { x.fillStyle = dark ? C.orange : C.terracotta; x.font = `700 28px ${SANS}`; x.letterSpacing = "4px"; x.fillText(title.toUpperCase(), 100, y); x.letterSpacing = "0px"; y += 56; }
+    x.fillStyle = dark ? C.beige : C.inkDim; x.font = `400 30px ${SANS}`; x.fillText("Wohlig · Google Cloud Premier Partner", 100, y);
   }
   return c;
 }
 
-/** The LinkedIn profile banner, 1584 x 396. The profile picture sits over the lower left, so the content starts to the right of it. */
-export const BANNER_DESIGNS = [["maroon", "Maroon"], ["ivory", "Ivory"]];
-export async function drawBanner(design) {
+/** The LinkedIn profile banner, 1584 x 396: a flower motif on the left, the headline and your name on the right, the logo and badge below.
+    LinkedIn lays the profile photo over the lower left, so nothing is drawn there; the dashed circle ("guide") shows where, in the preview only. */
+export const BANNER_THEMES = [["light", "Warm light"], ["maroon", "Maroon"]];
+export const BANNER_PRESETS = [
+  { label: "Feels wohlig", h: "Enterprise tech that feels", e: "wohlig." },
+  { label: "Ship, not slideware", h: "AI agents that ship, not", e: "slideware." },
+  { label: "Meaningful change", h: "AI agents that make", e: "meaningful change." },
+];
+function flower(x, cx, cy, R, rot, color, alpha, lw) {   // eight petals, outlines only: the brand's flower motif, kept faint
+  x.save(); x.strokeStyle = color; x.globalAlpha = alpha; x.lineWidth = lw; x.lineJoin = "round";
+  for (let i = 0; i < 8; i++) {
+    const a = rot + (i * Math.PI) / 4, ux = Math.cos(a), uy = Math.sin(a), px = -uy, py = ux, w = R * 0.34;
+    x.beginPath(); x.moveTo(cx, cy);
+    x.quadraticCurveTo(cx + ux * R * 0.55 + px * w, cy + uy * R * 0.55 + py * w, cx + ux * R, cy + uy * R);
+    x.quadraticCurveTo(cx + ux * R * 0.55 - px * w, cy + uy * R * 0.55 - py * w, cx, cy); x.stroke();
+  }
+  x.restore();
+}
+export async function drawBanner({ theme = "light", headline = "", emphasis = "", name = "", guide = false } = {}) {
   const [W, H] = [1584, 396], c = newCanvas(W, H), x = c.getContext("2d");
   await loadFonts();
-  const dark = design === "maroon", g = await loadImage(dark ? LOGO_DARK : LOGO_LIGHT);
-  x.fillStyle = dark ? C.maroon : C.ivory; x.fillRect(0, 0, W, H); arcs(x, W, H, dark ? C.ivory : C.beige, dark ? 0.12 : 0.9);
-  const lh = 92, lw = logo(x, g, W - 120 - 92 * 2.715, 112, lh); void lw;
-  x.fillStyle = C.orange; x.fillRect(W - 120 - 92 * 2.715, 112 + lh + 22, 90, 5);
-  x.fillStyle = dark ? C.ivory : C.maroon; x.font = `300 52px ${SERIF}`; x.fillText("Enterprise tech that", 560, 168);
-  x.font = `italic 400 52px ${SERIF}`; x.fillStyle = dark ? C.orange : C.orangeDeep; x.fillText("feels wohlig.", 560, 232);
-  x.fillStyle = dark ? C.beige : C.inkDim; x.font = `700 19px ${SANS}`; x.letterSpacing = "3px"; x.fillText("AI AGENTS  ·  AGENTIC WORKFLOWS  ·  GOOGLE CLOUD", 560, 288); x.letterSpacing = "0px";
+  const dark = theme === "maroon";
+  const [logoImg, badge] = await Promise.all([loadImage(dark ? LOGO_DARK : LOGO_LIGHT), loadImage("/wohlig-premier-partner-badge.png")]);
+  // the ground: warm ivory fading to peach, or deep maroon
+  const g = x.createLinearGradient(0, 0, W, H * 0.6);
+  if (dark) { g.addColorStop(0, "#6e0a2d"); g.addColorStop(1, C.maroonDeep); } else { g.addColorStop(0, "#fff7e9"); g.addColorStop(0.55, "#fbe9d6"); g.addColorStop(1, "#f7d6bb"); }
+  x.fillStyle = g; x.fillRect(0, 0, W, H);
+  const glow = x.createRadialGradient(W * 0.92, H * 0.2, 10, W * 0.92, H * 0.2, 520);
+  glow.addColorStop(0, dark ? "rgba(247,120,29,.16)" : "rgba(247,150,80,.20)"); glow.addColorStop(1, "rgba(247,120,29,0)");
+  x.fillStyle = glow; x.fillRect(0, 0, W, H);
+  // the flower motif, once, as a watermark
+  x.save(); x.beginPath(); x.rect(0, 0, W, H); x.clip();
+  const line = dark ? C.ivory : C.terracotta;
+  flower(x, 171, 64, 430, 0.18, line, dark ? 0.2 : 0.42, 2.2);
+  flower(x, 171, 64, 300, 0.18 + Math.PI / 8, line, dark ? 0.12 : 0.22, 1.6);
+  x.restore();
+
+  // the words
+  const X = 480, maxW = W - X - 70, ink = dark ? C.ivory : C.maroon;
+  x.fillStyle = C.orange; x.fillRect(X, 85, 44, 4);
+  x.fillStyle = dark ? C.beige : C.maroon; x.font = `800 17px ${SANS}`; x.letterSpacing = "4px"; x.fillText("WOHLIG  ·  GOOGLE CLOUD PREMIER PARTNER", X + 66, 95); x.letterSpacing = "0px";
+  const h = String(headline || "").trim(), em = String(emphasis || "").trim();
+  let size = 68; const gap = h && em ? 16 : 0;
+  const measure = (sz) => { x.font = `600 ${sz}px ${SERIF}`; const a = x.measureText(h).width; x.font = `italic 400 ${sz}px ${SERIF}`; return a + gap + x.measureText(em).width; };
+  while (size > 30 && measure(size) > maxW) size -= 2;
+  x.font = `600 ${size}px ${SERIF}`; x.fillStyle = ink; x.fillText(h, X, 170);
+  const hw = x.measureText(h).width;
+  x.font = `italic 400 ${size}px ${SERIF}`; x.fillStyle = dark ? C.orange : "rgba(128,13,53,.78)"; x.fillText(em, X + hw + gap, 170);
+  x.fillStyle = dark ? C.ivory : C.ink; x.font = `800 33px ${SANS}`; x.fillText(String(name || "").slice(0, 60), X, 217);
+  x.fillStyle = dark ? C.beige : C.inkDim; x.font = `400 23px ${SANS}`; x.fillText(`AI agents  ·  Agentic workflows  ·  Gemini Enterprise  ·  ${SITE}`, X, 258);
+  // logo and badge
+  const lh = 62, lw = lh * (logoImg.naturalWidth / logoImg.naturalHeight || 2.715);
+  x.drawImage(logoImg, X, 296, lw, lh);
+  x.fillStyle = dark ? "rgba(255,247,233,.35)" : "rgba(128,13,53,.18)"; x.fillRect(X + lw + 20, 302, 2, 50);
+  const bh = 58, bw = bh * (badge.naturalWidth / badge.naturalHeight || 1); x.drawImage(badge, X + lw + 40, 297, bw, bh);
+
+  if (guide) {   // where LinkedIn puts the profile photo (a guide for the preview only)
+    x.save(); x.setLineDash([9, 8]); x.strokeStyle = dark ? "rgba(255,247,233,.7)" : "rgba(128,13,53,.55)"; x.lineWidth = 2.6;
+    x.beginPath(); x.arc(198, 396, 150, 0, Math.PI * 2); x.stroke(); x.setLineDash([]);
+    x.fillStyle = dark ? C.ivory : C.maroon; x.font = `700 26px ${SANS}`; x.textAlign = "center"; x.fillText("Your photo", 198, 290); x.textAlign = "left"; x.restore();
+  }
   return c;
 }
 

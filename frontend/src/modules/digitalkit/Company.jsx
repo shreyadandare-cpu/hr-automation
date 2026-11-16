@@ -76,7 +76,7 @@ export function Templates({ items, p }) {
     const canView = r.hasFile ? isImage(r) || r.hasPreview : !!r.body;
     const open = () => setView(r.hasFile ? { title: r.title, src: r.hasPreview ? previewUrl(r) : fileUrl(r), download: fileUrl(r, true) } : { title: r.title, text: textOf(r) });
     return r.hasFile
-      ? { key: r.id, title: r.title, desc: r.description, tags: [extOf(r), ...(r.size ? [kb(r.size)] : []), ...(r.version > 1 ? [`v${r.version}`] : [])], thumb: r.hasPreview ? previewUrl(r) : isImage(r) ? fileUrl(r) : null, doc: r.hasPreview, href: fileUrl(r, true), name: r.filename, onView: canView ? open : null }
+      ? { key: r.id, title: r.title, desc: r.description, tags: [extOf(r), ...(r.size ? [kb(r.size)] : []), ...(r.version > 1 ? [`v${r.version}`] : [])], thumb: r.hasPreview ? `${previewUrl(r)}?thumb=1` : isImage(r) ? fileUrl(r) : null, doc: r.hasPreview, href: fileUrl(r, true), name: r.filename, onView: canView ? open : null }
       : { key: r.id, title: r.title, desc: r.description, tags: ["TXT"], href: `data:text/plain;charset=utf-8,${encodeURIComponent(textOf(r))}`, name: `${fileSafe(r.title)}.txt`, onView: canView ? open : null };
   });
   return (

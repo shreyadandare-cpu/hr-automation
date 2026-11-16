@@ -1,3 +1,4 @@
+import FestivalTile from "../modules/festivals/FestivalTile.jsx";
 import { useEffect, useMemo, useState } from "react";
 import { api } from "../api.js";
 import { useAuth } from "../auth.jsx";
@@ -117,6 +118,7 @@ function HrDashboard() {
       <div className="db-grid">
         <TodayCards only="leave" />
         <CelebrateCard />
+        <FestivalTile />
         <div className="card"><div className="card-h"><h3>Needs you</h3><span className="muted">{q.length ? `${q.length} item${q.length === 1 ? "" : "s"}` : "Nothing waiting"}</span></div>
           {q.length ? q.map((i, k) => (
             <div key={k} className="q-item"><span className={`q-ic q-${i.t}`}><Icon name={i.ic} /></span>
@@ -226,6 +228,7 @@ function EmployeeDashboard() {
             <div className="db-legend"><span style={{ margin: 0, textAlign: "left", color: "var(--ink-dim)" }}>{pct === 100 ? "Everything is in. Nice work." : "A fuller profile helps your team and HR."}</span></div></div>
           {steps.map(([t, ok, href]) => <a key={t} className={`step ${ok ? "done" : ""}`} href={href}><span className="tick"><Icon name="check" /></span><span>{t}</span>{!ok && <em>Do it</em>}</a>)}
         </div>
+        <FestivalTile />
         </div>
       </div>
     </div>

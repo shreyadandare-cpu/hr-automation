@@ -1,4 +1,4 @@
-.cel{display:flex;flex-direction:column;gap:22px}
+.cel-page{display:flex;flex-direction:column;gap:22px}
 .cel-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:22px;align-items:start}
 .cel-list{display:flex;flex-direction:column}
 .cel-row{display:flex;align-items:center;gap:12px;padding:12px 24px;border-top:1px solid var(--line)}
@@ -32,7 +32,7 @@
 .cel-form{display:grid;gap:16px;grid-template-columns:repeat(2,minmax(0,1fr))}
 .cel-form .wide{grid-column:1/-1}
 @media (max-width:620px){.cel-form{grid-template-columns:1fr}}
-.cel-thumb{width:100%;aspect-ratio:1240/1754;border-radius:14px;background:var(--paper-2);box-shadow:0 14px 40px rgba(58,20,15,.18);display:block;object-fit:contain}
+.cel-thumb{width:100%;aspect-ratio:1;border-radius:14px;background:var(--paper-2);box-shadow:0 14px 40px rgba(58,20,15,.18);display:block;object-fit:contain}
 .cel-thumb-box{position:sticky;top:90px}
 .cel-drop{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;text-align:center;padding:34px 20px;border:2px dashed var(--line-2);border-radius:var(--radius);background:var(--surface-3);cursor:pointer;color:var(--ink-dim)}
 .cel-drop:hover{border-color:var(--purple)}
@@ -43,7 +43,7 @@
 .cel-tpl button{padding:12px;border-radius:var(--radius);border:2px solid var(--card-edge);background:var(--surface);cursor:pointer;color:var(--ink);text-align:left;display:flex;flex-direction:column;gap:10px}
 .cel-tpl button.on{border-color:var(--purple);box-shadow:0 10px 30px rgba(128,13,53,.16)}
 .cel-preview{display:flex;justify-content:center}
-.cel-preview img{width:min(100%,560px);aspect-ratio:1240/1754;border-radius:10px;box-shadow:0 20px 50px rgba(58,20,15,.25);background:var(--paper-2)}
+.cel-preview img{width:min(100%,560px);aspect-ratio:1;border-radius:10px;box-shadow:0 20px 50px rgba(58,20,15,.25);background:var(--paper-2)}
 .cel-actions{display:flex;gap:10px;flex-wrap:wrap;justify-content:space-between;align-items:center}
 .cel-actions .grp{display:flex;gap:10px;flex-wrap:wrap}
 .cel-facts{display:grid;grid-template-columns:auto 1fr;gap:8px 18px;margin:0}
@@ -59,3 +59,6 @@
 .cel-poster-modal img{width:min(100%,480px);border-radius:8px}
 .cel-crop{width:340px;max-width:100%;aspect-ratio:1;border-radius:14px;cursor:grab;touch-action:none;background:#222;box-shadow:0 10px 30px rgba(58,20,15,.25)}
 .cel-crop:active{cursor:grabbing}
+.cel-seg{display:inline-flex;padding:4px;border-radius:999px;background:var(--paper-2)}
+.cel-seg button{border:0;background:none;padding:9px 20px;border-radius:999px;font:600 14px/1 var(--display);color:var(--ink-dim);cursor:pointer}
+.cel-seg button.on{background:var(--surface);color:var(--purple);box-shadow:0 2px 8px rgba(58,20,15,.12)}

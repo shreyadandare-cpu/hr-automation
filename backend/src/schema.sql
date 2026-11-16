@@ -724,3 +724,50 @@ CREATE TABLE IF NOT EXISTS digital_kit_state (key TEXT PRIMARY KEY, value TEXT N
 
 -- Digital Kit: who a shared resource is for. Empty means everyone; otherwise words matched against a person's designation and department (and "hr" for the HR role).
 ALTER TABLE digital_kit_resources ADD COLUMN IF NOT EXISTS audience TEXT[] NOT NULL DEFAULT '{}';
+
+-- Celebrations: more occasions (work anniversary, new certification, new role), a headline emphasis (shown in italic), a look
+-- (maroon or warm light) and one extra detail line (the certification).
+ALTER TABLE celebrations ADD COLUMN IF NOT EXISTS emphasis TEXT;
+ALTER TABLE celebrations ADD COLUMN IF NOT EXISTS detail   TEXT;
+ALTER TABLE celebrations ADD COLUMN IF NOT EXISTS theme    TEXT NOT NULL DEFAULT 'maroon';
+ALTER TABLE celebrations DROP CONSTRAINT IF EXISTS celebrations_occasion_check;
+ALTER TABLE celebrations ADD CONSTRAINT celebrations_occasion_check CHECK (occasion IN ('birthday','welcome','anniversary','certified','newrole'));
+
+-- The poster in a celebration email is a linked picture (not an attachment) at /p/<token>.png.
+ALTER TABLE celebrations ADD COLUMN IF NOT EXISTS poster_token TEXT;
+CREATE UNIQUE INDEX IF NOT EXISTS celebrations_poster_token ON celebrations (poster_token) WHERE poster_token IS NOT NULL;
+
+-- Festival Wishes (everyone): the festivals employees can make greeting images for, and the dates they fall on. The look of each
+-- festival's templates lives in the frontend (src/modules/festivals); this is what changes year to year. Dates of lunar festivals
+-- (Eid, Diwali...) differ each year, so add the new year's dates here (INSERT INTO festival_dates) and nothing else needs a release.
+CREATE TABLE IF NOT EXISTS festivals (
+  slug        TEXT PRIMARY KEY,
+  name        TEXT NOT NULL,
+  description TEXT NOT NULL DEFAULT '',
+  sort        INT  NOT NULL DEFAULT 0,
+  active      BOOLEAN NOT NULL DEFAULT true
+);
+CREATE TABLE IF NOT EXISTS festival_dates (
+  slug TEXT NOT NULL REFERENCES festivals(slug) ON DELETE CASCADE,
+  day  DATE NOT NULL,
+  PRIMARY KEY (slug, day)
+);
+INSERT INTO festivals (slug, name, description, sort) VALUES
+  ('diwali',           'Diwali',               'The festival of lights: diyas, rangoli and new beginnings.', 1),
+  ('holi',             'Holi',                 'The festival of colours that welcomes spring.', 2),
+  ('eid-ul-fitr',      'Eid-ul-Fitr',          'Eid Mubarak: the joyful end of Ramadan.', 3),
+  ('eid-ul-adha',      'Eid-ul-Adha (Bakrid)', 'The festival of sacrifice, generosity and togetherness.', 4),
+  ('ganesh-chaturthi', 'Ganesh Chaturthi',     'Welcoming Lord Ganesha, the remover of obstacles.', 5),
+  ('navratri',         'Navratri / Dussehra',  'Nine nights of dance and devotion, and the victory of good over evil.', 6),
+  ('christmas',        'Christmas',            'Warm wishes for the season of joy and giving.', 7)
+ON CONFLICT (slug) DO NOTHING;
+-- Check these against the calendar each year: moon-sighted dates (Eid) can move by a day.
+INSERT INTO festival_dates (slug, day) VALUES
+  ('diwali', '2026-11-08'), ('diwali', '2027-10-29'),
+  ('holi', '2026-03-04'), ('holi', '2027-03-22'),
+  ('eid-ul-fitr', '2026-03-21'), ('eid-ul-fitr', '2027-03-10'),
+  ('eid-ul-adha', '2026-05-27'), ('eid-ul-adha', '2027-05-17'),
+  ('ganesh-chaturthi', '2026-09-14'), ('ganesh-chaturthi', '2027-09-04'),
+  ('navratri', '2026-10-20'), ('navratri', '2027-10-09'),
+  ('christmas', '2026-12-25'), ('christmas', '2027-12-25')
+ON CONFLICT DO NOTHING;

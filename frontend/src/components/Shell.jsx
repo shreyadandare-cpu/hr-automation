@@ -11,14 +11,14 @@ import NextHolidayPopup from "./NextHolidayPopup.jsx";
 
 /* Pages still in the older single page app are plain links (hash routes under /). Pages already in React stay in the app. */
 const HR_LINKS = [["dashboard", "Dashboard"], ["community", "Community"], ["workforce", "Workforce"], ["onboard", "Onboarding"], ["offboard", "Offboarding"], ["leave", "Leave"], ["attendance", "Attendance"], ["finances", "Finances"], ["audit", "Audit log"]];
-const EMP_LINKS = [["dashboard", "Dashboard"], ["posts", "Posts"], ["workforce", "Workforce"], ["attendance", "Attendance"], ["finances", "Finances"], ["myleave", "My leave"]];
+const EMP_LINKS = [["dashboard", "Dashboard"], ["community", "Community"], ["workforce", "Workforce"], ["attendance", "Attendance"], ["finances", "Finances"], ["myleave", "My leave"]];
 const REACT_PAGES = {
   dashboard: "/app/dashboard", posts: "/app/posts", celebrations: "/app/celebrations", employees: "/app/employees", allocations: "/app/allocations", onboard: "/app/onboarding", offboard: "/app/offboarding", leave: "/app/leave", attendance: "/app/attendance",
   assets: "/app/assets", claude: "/app/claude-requests", reimb: "/app/reimbursements", payroll: "/app/payroll", audit: "/app/audit", myleave: "/app/my-leave", team: "/app/team-leave",
 };
 /* The main page of each module gets a "Back to dashboard" button above it. Detail pages and pages that already have their own Back are left out. */
 const HOME_PAGES = new Set(["/app/attendance", "/app/employees", "/app/allocations", "/app/assets", "/app/audit", "/app/leave", "/app/my-leave", "/app/team-leave", "/app/onboarding", "/app/onboarding/progress", "/app/claude-requests", "/app/documents",
-  "/app/reimbursements", "/app/payroll", "/app/posts", "/app/celebrations", "/app/budgets", "/app/digital-kit"]);
+  "/app/reimbursements", "/app/payroll", "/app/posts", "/app/celebrations", "/app/festivals", "/app/budgets", "/app/digital-kit"]);
 /* Onboarding and Offboarding are HR's pages: employees don't get those menu entries (they upload their documents from My profile). */
 const pathFor = (key) => REACT_PAGES[key];
 
@@ -158,7 +158,7 @@ export default function Shell() {
             <img className="lg lg-light" src="/wohlig-logo.svg" alt="wohlig" /><img className="lg lg-dark" src="/wohlig-logo-dark.svg" alt="" /><small>HR Access Hub</small>
           </a>
           <div className="links" ref={linksRef}>
-            {links.map(([k, label]) => k === "finances" ? <GroupMenu key={k} label={label} items={[["/app/reimbursements", "Reimbursements"], ["/app/payslips", "My payslips"], ...(isHr || payrollReviewer ? [["/app/payroll", "Payroll"]] : [])]} /> : k === "community" ? <GroupMenu key={k} label={label} items={[["/app/posts", "Posts"], ["/app/celebrations", "Celebrations"]]} /> : k === "workforce" ? <GroupMenu key={k} label={label} items={[["/app/employees", "Employees"], ["/app/allocations", "Allocations"]]} /> : <NavLink key={k} to={pathFor(k, isHr)} className={({ isActive }) => (isActive ? "on" : "")}>{label}</NavLink>)}
+            {links.map(([k, label]) => k === "finances" ? <GroupMenu key={k} label={label} items={[["/app/reimbursements", "Reimbursements"], ["/app/payslips", "My payslips"], ...(isHr || payrollReviewer ? [["/app/payroll", "Payroll"]] : [])]} /> : k === "community" ? <GroupMenu key={k} label={label} items={[["/app/posts", "Posts"], ...(isHr ? [["/app/celebrations", "Celebrations"]] : []), ["/app/festivals", "Festival Wishes"]]} /> : k === "workforce" ? <GroupMenu key={k} label={label} items={[["/app/employees", "Employees"], ["/app/allocations", "Allocations"]]} /> : <NavLink key={k} to={pathFor(k, isHr)} className={({ isActive }) => (isActive ? "on" : "")}>{label}</NavLink>)}
           </div>
           <NotificationBell />
           <ThemeButton />

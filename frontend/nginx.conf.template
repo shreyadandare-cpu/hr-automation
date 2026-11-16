@@ -18,6 +18,7 @@ server {
   location /invite/ { proxy_pass ${BACKEND_URL}; }
   # Links in automatic emails (leave, payslips, work email) are /l/<token>; the backend checks the token and redirects to the page.
   location /l/      { proxy_pass ${BACKEND_URL}; }
+  location /p/      { proxy_pass ${BACKEND_URL}; }
 
   # Signed in? The backend answers 200 or 401; the app pages and /login use it like the backend did on its own.
   location = /_auth {

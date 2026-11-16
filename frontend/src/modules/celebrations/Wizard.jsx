@@ -2,16 +2,18 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { api, apiMsg } from "../../api.js";
 import { Field } from "../../components/Modal.jsx";
 import { Pill } from "../../components/ui.jsx";
-import PhotoEditor from "./PhotoEditor.jsx";
+import PhotoEditor from "../../components/PhotoEditor.jsx";
 import PersonAvatar from "../../components/PersonAvatar.jsx";
 import { useToast } from "../../components/toast.jsx";
-import { DEFAULTS, canvasToBlob, loadImage, renderPoster, welcomeMessage } from "./poster.js";
+import { OCCASIONS, canvasToBlob, defaultsFor, loadImage, msgFor, renderPoster } from "./poster.js";
 
 const STEPS = ["Occasion", "Employee photo", "Template", "Customize", "Preview", "Send"];
-const MAX_PHOTO = 5 * 1024 * 1024;
-const TEMPLATE = { birthday: { id: "birthday-classic", name: "Classic birthday", note: "Soft beige with a framed photo and a handwritten name." },
-  welcome: { id: "welcome-blue", name: "Welcome blue", note: "Blue and navy with a round photo and a joining-date badge." } };
+const THEMES = [["maroon", "Maroon", "Deep maroon with cream text."], ["light", "Warm light", "Warm ivory with maroon text."]];
+const ORDER = ["welcome", "birthday", "anniversary", "certified", "newrole"];
 const shortDate = (iso) => { const [y, m, d] = String(iso).split("-").map(Number); return iso ? new Date(Date.UTC(y, m - 1, d)).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" }) : ""; };
+const SUBJECT = (occ, n) => ({ birthday: `Happy Birthday, ${n}!`, welcome: `Welcome to Wohlig, ${n}!`, anniversary: `Happy work anniversary, ${n}!`,
+  certified: `Congratulations, ${n}, on your new certification!`, newrole: `Congratulations, ${n}, on your new role!` }[occ]);
+const EMPTY = { heading: "", emphasis: "", name: "", designation: "", detail: "", joiningDate: "", message: "" };
 
 /* The six-step poster wizard: occasion -> photo -> template -> customize -> preview -> send. */
 export default function Wizard({ overview, start, onClose, onDone }) {
@@ -19,27 +21,26 @@ export default function Wizard({ overview, start, onClose, onDone }) {
   const [step, setStep] = useState(start.email ? 1 : 0);
   const [occasion, setOccasion] = useState(start.occasion || "");
   const [emp, setEmp] = useState(start.email ? overview.employees.find((e) => e.email === start.email) || null : null);
-  const [f, setF] = useState({ heading: "", name: "", designation: "", joiningDate: "", message: "" });
+  const [f, setF] = useState(EMPTY);
+  const [theme, setTheme] = useState("maroon");
   const [msgEdited, setMsgEdited] = useState(false);
-  const [photo, setPhoto] = useState(null);        // { url, label }
+  const [photo, setPhoto] = useState(null);        // { url, label }, optional
   const [poster, setPoster] = useState(null);      // { blob, url }
+  const [thumbs, setThumbs] = useState(null);      // both looks, for the template step
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
   const [draft, setDraft] = useState(0);
   const [job, setJob] = useState(null);            // the sent poster with its delivery progress
-  const [adjust, setAdjust] = useState(false);   // the photo crop dialog
+  const [adjust, setAdjust] = useState(false);     // the photo crop dialog
   const [list, setList] = useState(null);          // recipients, when HR asks to review them
-  const logo = useRef(null);
+  const assets = useRef(null);
 
   const profilePhoto = emp && emp.photoV ? `/api/profile/photo?email=${encodeURIComponent(emp.email)}&v=${emp.photoV}` : "";
 
   // Picking a person fills in everything from the employee record.
   const choose = useCallback((occ, e) => {
     setOccasion(occ); setEmp(e); setErr(""); setDraft(0); setPoster(null); setMsgEdited(false);
-    const d = DEFAULTS[occ];
-    setF(occ === "birthday"
-      ? { heading: d.heading, name: e.name, designation: "", joiningDate: "", message: d.message }
-      : { heading: d.heading, name: e.name, designation: e.title || "", joiningDate: e.start || overview.today, message: welcomeMessage(e.name, e.title) });
+    setF(defaultsFor(occ, e, overview.today));
     setPhoto(e.photoV ? { url: `/api/profile/photo?email=${encodeURIComponent(e.email)}&v=${e.photoV}`, label: "Profile photo" } : null);
   }, [overview.today]);
   useEffect(() => { if (start.email && emp && !f.name) choose(start.occasion, emp); }, []);   // eslint-disable-line react-hooks/exhaustive-deps
@@ -47,7 +48,7 @@ export default function Wizard({ overview, start, onClose, onDone }) {
   const edit = (k, v) => {
     setF((p) => {
       const n = { ...p, [k]: v };
-      if (occasion === "welcome" && !msgEdited && (k === "name" || k === "designation")) n.message = welcomeMessage(n.name, n.designation);
+      if (!msgEdited && ["name", "designation", "detail"].includes(k)) n.message = msgFor(occasion, n);
       return n;
     });
     if (k === "message") setMsgEdited(true);
@@ -55,11 +56,14 @@ export default function Wizard({ overview, start, onClose, onDone }) {
   };
 
   /* ---- drawing ---- */
-  const draw = useCallback(async () => {
-    if (!logo.current) logo.current = await loadImage("/wohlig-logo.png").catch(() => null);
+  const draw = useCallback(async (look = theme) => {
+    if (!assets.current) {
+      const [dark, light, mark] = await Promise.all(["/wohlig-logo-dark.svg", "/wohlig-logo.svg", "/google-cloud-mark.png"].map((u) => loadImage(u).catch(() => null)));
+      assets.current = { logos: { dark, light }, mark };
+    }
     const img = photo ? await loadImage(photo.url).catch(() => null) : null;
-    return renderPoster({ template: TEMPLATE[occasion].id, ...f, category: emp ? emp.employmentType : "", photo: img, logo: logo.current });
-  }, [occasion, f, photo, emp]);
+    return renderPoster({ occasion, theme: look, ...f, photo: img, ...assets.current });
+  }, [occasion, theme, f, photo]);
   const make = useCallback(async () => {
     setBusy(true); setErr("");
     try {
@@ -68,33 +72,33 @@ export default function Wizard({ overview, start, onClose, onDone }) {
     } catch (e) { setErr(e.message); }
     setBusy(false);
   }, [draw]);
-  // small live pictures on the template, customize and preview steps
-  useEffect(() => { if (step >= 2 && step <= 4 && occasion && emp) { const t = setTimeout(make, step === 3 ? 350 : 0); return () => clearTimeout(t); } }, [step, f, photo]);   // eslint-disable-line react-hooks/exhaustive-deps
+  // live pictures on the template, customize and preview steps
+  useEffect(() => {
+    if (step < 2 || step > 4 || !occasion || !emp) return;
+    const t = setTimeout(async () => {
+      if (step === 2) {   // both looks side by side
+        try {
+          const made = await Promise.all(THEMES.map(async ([k]) => [k, URL.createObjectURL(await canvasToBlob(await draw(k)))]));
+          setThumbs((old) => { if (old) Object.values(old).forEach(URL.revokeObjectURL); return Object.fromEntries(made); });
+        } catch (e) { setErr(e.message); }
+      } else make();
+    }, step === 3 ? 350 : 0);
+    return () => clearTimeout(t);
+  }, [step, f, photo, theme]);   // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => () => { if (poster) URL.revokeObjectURL(poster.url); }, []);   // eslint-disable-line react-hooks/exhaustive-deps
 
-  /* ---- photo ---- */
-  const upload = async (file) => {
-    setErr("");
-    if (!file) return;
-    if (!/^image\/(jpeg|png)$/.test(file.type) || !/\.(jpe?g|png)$/i.test(file.name)) return setErr("Use a JPG, JPEG or PNG picture.");
-    if (file.size > MAX_PHOTO) return setErr("The picture is larger than 5 MB. Choose a smaller one.");
-    const url = URL.createObjectURL(file);
-    try { await loadImage(url); } catch { URL.revokeObjectURL(url); return setErr("That file could not be read as a picture."); }
-    if (photo && photo.url.startsWith("blob:")) URL.revokeObjectURL(photo.url);
-    setPhoto({ url, label: file.name }); setPoster(null);
-  };
-
+  /* ---- photo: the person's profile photo from My profile; HR can only crop it or leave it out ---- */
   const adjusted = (url) => {
     if (photo && photo.url.startsWith("blob:")) URL.revokeObjectURL(photo.url);
     setPhoto({ url, label: "Adjusted photo" }); setPoster(null); setAdjust(false);
   };
-
+  
   /* ---- steps 5 -> 6: save the draft and its poster ---- */
   const save = async () => {
     setBusy(true); setErr("");
     try {
       const blob = poster ? poster.blob : await canvasToBlob(await draw());
-      const body = { occasion, email: emp.email, ...f };
+      const body = { occasion, email: emp.email, theme, ...f };
       const r = draft ? await api("PUT", `/api/celebrations/${draft}`, body) : await api("POST", "/api/celebrations", body);
       if (!r.ok) throw new Error(apiMsg(r));
       const id = draft || r.data.id;
@@ -132,17 +136,24 @@ export default function Wizard({ overview, start, onClose, onDone }) {
   };
 
   /* ---- what each step needs before Next ---- */
-  const ready = [!!emp, !!photo, true, f.heading.trim() && f.name.trim() && f.message.trim() && (occasion !== "welcome" || f.joiningDate), !!poster, false][step];
+  const fieldsOk = (f.heading.trim() || f.emphasis.trim()) && f.name.trim()
+    && (occasion !== "certified" || f.detail.trim()) && (occasion !== "newrole" || f.designation.trim())
+    && ((occasion !== "welcome" && occasion !== "anniversary") || f.joiningDate);
+  const ready = [!!emp, true, true, !!fieldsOk, !!poster, false][step];
   const sending = job && job.status === "sending";
   const finished = job && job.status !== "sending" && job.status !== "draft";
   const pct = job && job.counts.total ? Math.round(((job.counts.sent + job.counts.failed + job.counts.skipped) / job.counts.total) * 100) : 0;
 
-  const candidates = occasion === "birthday" ? overview.birthdaysToday : overview.joiners;
-  const taken = (e) => (occasion === "birthday" ? e.birthdayAnnounced || e.announced : e.welcomeAnnounced || e.announced);
+  const NEW_ONLY = occasion === "certified" || occasion === "newrole";
+  const candidates = { birthday: overview.birthdaysToday, welcome: overview.joiners, anniversary: overview.anniversariesToday }[occasion] || [];
+  const taken = (e) => ({ birthday: e.birthdayAnnounced || e.announced, welcome: e.welcomeAnnounced || e.announced, anniversary: e.anniversaryAnnounced || e.announced }[occasion] || null);
   const others = overview.employees.filter((e) => !candidates.some((c) => c.email === e.email));
+  const heading = { birthday: "Today's birthdays", welcome: "Recently joined (last 30 days)", anniversary: "Work anniversaries today" }[occasion];
+  const none = { birthday: "Nobody has a birthday today.", welcome: "Nobody joined in the last 30 days.", anniversary: "Nobody has a work anniversary today." }[occasion];
+  const roleLabel = occasion === "newrole" ? "New role" : "Designation";
 
   return (
-    <div className="cel">
+    <div className="cel-page">
       <ol className="cel-steps" aria-label="Progress">
         {STEPS.map((s, i) => <li key={s} className={i === step ? "on" : i < step ? "done" : ""} aria-current={i === step ? "step" : undefined}><i>{i < step ? "✓" : i + 1}</i>{s}</li>)}
       </ol>
@@ -153,18 +164,20 @@ export default function Wizard({ overview, start, onClose, onDone }) {
         {step === 0 && (
           <div style={{ display: "grid", gap: 22 }}>
             <div className="cel-occ">
-              {[["birthday", "🎂", "Birthday wishes", "A birthday poster for a colleague."], ["welcome", "🎉", "Welcome a new employee or intern", "Announce someone who has just joined."]].map(([k, em, t, d]) => (
-                <button key={k} type="button" className={occasion === k ? "on" : ""} onClick={() => { setOccasion(k); setEmp(null); }}><span className="em">{em}</span><b>{t}</b><span>{d}</span></button>))}
+              {ORDER.map((k) => (
+                <button key={k} type="button" className={occasion === k ? "on" : ""} onClick={() => { setOccasion(k); setEmp(null); }}>
+                  <span className="em">{OCCASIONS[k].emoji}</span><b>{OCCASIONS[k].name}</b><span>{OCCASIONS[k].note}</span></button>))}
             </div>
             {occasion && (
               <div>
-                <h3 style={{ margin: "0 0 4px" }}>{occasion === "birthday" ? "Today's birthdays" : "Recently joined (last 30 days)"}</h3>
-                <div className="cel-pick card" style={{ marginTop: 10 }}>
-                  {!candidates.length && <div className="empty">{occasion === "birthday" ? "Nobody has a birthday today." : "Nobody joined in the last 30 days."} Pick someone from the list below.</div>}
-                  {candidates.map((e) => <PickRow key={e.email} e={e} occasion={occasion} on={emp && emp.email === e.email} taken={taken(e)} onPick={() => choose(occasion, overview.employees.find((x) => x.email === e.email) || e)} />)}
-                </div>
-                <div className="field" style={{ marginTop: 16, maxWidth: 420 }}>
-                  <label htmlFor="cel-other">Someone else</label>
+                {!NEW_ONLY && <>
+                  <h3 style={{ margin: "0 0 4px" }}>{heading}</h3>
+                  <div className="cel-pick card" style={{ marginTop: 10 }}>
+                    {!candidates.length && <div className="empty">{none} Pick someone from the list below.</div>}
+                    {candidates.map((e) => <PickRow key={e.email} e={e} occasion={occasion} on={emp && emp.email === e.email} taken={taken(e)} onPick={() => choose(occasion, overview.employees.find((x) => x.email === e.email) || e)} />)}
+                  </div></>}
+                <div className="field" style={{ marginTop: NEW_ONLY ? 0 : 16, maxWidth: 420 }}>
+                  <label htmlFor="cel-other">{NEW_ONLY ? "Who is it for?" : "Someone else"}</label>
                   <select id="cel-other" className="input" value={emp && !candidates.some((c) => c.email === emp.email) ? emp.email : ""}
                     onChange={(ev) => { const e = overview.employees.find((x) => x.email === ev.target.value); if (e) choose(occasion, e); }}>
                     <option value="">Choose an employee…</option>
@@ -176,39 +189,53 @@ export default function Wizard({ overview, start, onClose, onDone }) {
 
         {step === 1 && emp && (
           <div style={{ display: "grid", gap: 18 }}>
-            <p style={{ margin: 0, color: "var(--ink-dim)" }}>Photo for <b>{emp.name}</b>. JPG, JPEG or PNG, up to 5 MB. A clear, front-facing picture works best.</p>
-            <div className="cel-photo">
-              {photo ? <img src={photo.url} alt={`${emp.name}'s photo`} /> : <label className="cel-drop" style={{ width: 280 }}><input type="file" accept=".jpg,.jpeg,.png,image/jpeg,image/png" onChange={(e) => upload(e.target.files[0])} /><b>Upload a photo</b><span>Click to choose a file</span></label>}
-              <div style={{ display: "grid", gap: 10 }}>
-                {photo && <span className="muted">{photo.label}</span>}
-                <label className="btn glass sm" style={{ cursor: "pointer" }}>{photo ? "Replace photo" : "Choose a file"}<input type="file" hidden accept=".jpg,.jpeg,.png,image/jpeg,image/png" onChange={(e) => { upload(e.target.files[0]); e.target.value = ""; }} /></label>
-                {photo && <button type="button" className="btn glass sm" onClick={() => setAdjust(true)}>Adjust or crop</button>}
-                {profilePhoto && (!photo || photo.url !== profilePhoto) && <button type="button" className="btn glass sm" onClick={() => { setPhoto({ url: profilePhoto, label: "Profile photo" }); setPoster(null); }}>Use their profile photo</button>}
+            <p style={{ margin: 0, color: "var(--ink-dim)" }}>The photo comes from <b>{emp.name}</b>'s profile in this platform. You can crop it or leave it out.</p>
+            {photo ? (
+              <div className="cel-photo">
+                <img src={photo.url} alt={`${emp.name}'s photo`} />
+                <div style={{ display: "grid", gap: 10 }}>
+                  <span className="muted">{photo.label}</span>
+                  <button type="button" className="btn glass sm" onClick={() => setAdjust(true)}>Adjust or crop</button>
+                  <button type="button" className="btn glass sm" onClick={() => setPhoto(null)}>Leave the photo out</button>
+                  {profilePhoto && photo.url !== profilePhoto && <button type="button" className="btn glass sm" onClick={() => { setPhoto({ url: profilePhoto, label: "Profile photo" }); setPoster(null); }}>Back to the original</button>}
+                </div>
               </div>
-            </div>
+            ) : profilePhoto ? (
+              <div className="cel-photo">
+                <div className="cel-drop" style={{ width: 280, cursor: "default" }}><b>No photo on the poster</b><span>It will be text only.</span></div>
+                <button type="button" className="btn glass sm" onClick={() => { setPhoto({ url: profilePhoto, label: "Profile photo" }); setPoster(null); }}>Use their profile photo</button>
+              </div>
+            ) : (
+              <div className="cel-drop" style={{ cursor: "default", maxWidth: 480 }}>
+                <b>{emp.name} has not added a profile photo yet</b>
+                <span>They can add one under My profile. Until then the poster is text only, and you can carry on.</span>
+              </div>
+            )}
           </div>)}
 
         {step === 2 && occasion && (
           <div style={{ display: "grid", gap: 14 }}>
-            <p style={{ margin: 0, color: "var(--ink-dim)" }}>The design for this occasion. Your details are filled in from the employee record.</p>
+            <p style={{ margin: 0, color: "var(--ink-dim)" }}>Choose the look. Your details are filled in from the employee record.</p>
             <div className="cel-tpl">
-              <button type="button" className="on" aria-pressed="true">
-                {poster ? <img className="cel-thumb" src={poster.url} alt="" /> : <div className="cel-thumb" />}
-                <b>{TEMPLATE[occasion].name}</b><span className="muted">{TEMPLATE[occasion].note}</span>
-              </button>
+              {THEMES.map(([k, name, note]) => (
+                <button key={k} type="button" className={theme === k ? "on" : ""} aria-pressed={theme === k} onClick={() => { setTheme(k); setPoster(null); }}>
+                  {thumbs && thumbs[k] ? <img className="cel-thumb" src={thumbs[k]} alt="" /> : <div className="cel-thumb" />}
+                  <b>{name}</b><span className="muted">{note}</span>
+                </button>))}
             </div>
           </div>)}
 
         {step === 3 && (
           <div className="cel-body">
             <div className="cel-form">
-              <Field id="cel-h" label="Announcement heading"><input id="cel-h" className="input" maxLength={60} value={f.heading} onChange={(e) => edit("heading", e.target.value)} /></Field>
+              <div className="wide"><div className="cel-seg" role="group" aria-label="Look">{THEMES.map(([k, name]) => <button key={k} type="button" className={theme === k ? "on" : ""} onClick={() => { setTheme(k); setPoster(null); }}>{name}</button>)}</div></div>
+              <Field id="cel-h" label="Headline"><input id="cel-h" className="input" maxLength={60} value={f.heading} onChange={(e) => edit("heading", e.target.value)} /></Field>
+              <Field id="cel-e" label="Emphasis, in italic"><input id="cel-e" className="input" maxLength={40} value={f.emphasis} onChange={(e) => edit("emphasis", e.target.value)} /></Field>
               <Field id="cel-n" label="Employee name"><input id="cel-n" className="input" maxLength={80} value={f.name} onChange={(e) => edit("name", e.target.value)} /></Field>
-              {occasion === "welcome" && <>
-                <Field id="cel-d" label="Designation"><input id="cel-d" className="input" maxLength={80} value={f.designation} onChange={(e) => edit("designation", e.target.value)} /></Field>
-                <Field id="cel-j" label="Joining date"><input id="cel-j" type="date" className="input" value={f.joiningDate} onChange={(e) => edit("joiningDate", e.target.value)} /></Field>
-              </>}
-              <div className="wide"><Field id="cel-m" label="Greeting message" hint={`${f.message.length}/300. Edit it only if you need to.`}>
+              <Field id="cel-d" label={roleLabel}><input id="cel-d" className="input" maxLength={80} value={f.designation} onChange={(e) => edit("designation", e.target.value)} /></Field>
+              {occasion === "certified" && <div className="wide"><Field id="cel-c" label="Certification"><input id="cel-c" className="input" maxLength={80} placeholder="e.g. Google Cloud Professional Cloud Architect" value={f.detail} onChange={(e) => edit("detail", e.target.value)} /></Field></div>}
+              {(occasion === "welcome" || occasion === "anniversary") && <Field id="cel-j" label="Joining date"><input id="cel-j" type="date" className="input" value={f.joiningDate} onChange={(e) => edit("joiningDate", e.target.value)} /></Field>}
+              <div className="wide"><Field id="cel-m" label="Greeting message" hint={`${f.message.length}/300. Optional. Edit it only if you need to.`}>
                 <textarea id="cel-m" className="input" rows={3} maxLength={300} value={f.message} onChange={(e) => edit("message", e.target.value)} />
               </Field></div>
             </div>
@@ -218,17 +245,18 @@ export default function Wizard({ overview, start, onClose, onDone }) {
         {step === 4 && (
           <div style={{ display: "grid", gap: 18 }}>
             <p style={{ margin: 0, color: "var(--ink-dim)" }}>This is exactly what everyone will receive.</p>
-            <div className="cel-preview">{poster ? <img src={poster.url} alt={`${occasion} poster for ${f.name}`} /> : <div className="empty">{busy ? "Drawing the poster…" : "No poster yet."}</div>}</div>
+            <div className="cel-preview">{poster ? <img src={poster.url} alt={`${OCCASIONS[occasion].name} poster for ${f.name}`} /> : <div className="empty">{busy ? "Drawing the poster…" : "No poster yet."}</div>}</div>
           </div>)}
 
         {step === 5 && (
           <div className="cel-body">
             <div style={{ display: "grid", gap: 18 }}>
               <dl className="cel-facts">
-                <dt>Announcement</dt><dd>{occasion === "birthday" ? "Birthday wishes" : "Welcome new employee"}</dd>
-                <dt>Employee</dt><dd>{f.name}{occasion === "welcome" && f.designation ? ` — ${f.designation}` : ""}</dd>
-                {occasion === "welcome" && <><dt>Joining date</dt><dd>{shortDate(f.joiningDate)}</dd></>}
-                <dt>Subject</dt><dd>{occasion === "birthday" ? `Happy Birthday, ${emp.name}! 🎂` : `Welcome to Wohlig, ${emp.name}! 🎉`}</dd>
+                <dt>Announcement</dt><dd>{OCCASIONS[occasion].name}</dd>
+                <dt>Employee</dt><dd>{f.name}{f.designation ? ` — ${f.designation}` : ""}</dd>
+                {f.detail && <><dt>Certification</dt><dd>{f.detail}</dd></>}
+                {f.joiningDate && <><dt>Joining date</dt><dd>{shortDate(f.joiningDate)}</dd></>}
+                <dt>Subject</dt><dd>{SUBJECT(occasion, emp.name)}</dd>
                 <dt>Recipients</dt><dd>{overview.recipients} people · all active employees</dd>
               </dl>
               {!overview.mailReady && !job && <div className="cel-warn">Email is not set up on this server, so nothing can be sent yet. Add <code>SENDGRID_API_KEY</code> and <code>MAIL_FROM</code> to the backend settings and restart.</div>}
@@ -279,11 +307,12 @@ export default function Wizard({ overview, start, onClose, onDone }) {
 }
 
 function PickRow({ e, occasion, on, taken, onPick }) {
+  const note = occasion === "welcome" && e.start ? ` · joined ${shortDate(e.start)}` : occasion === "anniversary" && e.years ? ` · ${e.years} year${e.years === 1 ? "" : "s"}` : "";
   return (
     <label className={`cel-row${taken ? " off" : ""}`}>
       <input type="radio" name="cel-who" checked={!!on} disabled={!!taken} onChange={onPick} />
       <PersonAvatar email={e.email} name={e.name} />
-      <span className="who"><b>{e.name}</b><span>{e.title || "—"}{occasion === "welcome" && e.start ? ` · joined ${shortDate(e.start)}` : ""}{e.employmentType && e.employmentType !== "Employee" ? ` · ${e.employmentType}` : ""}</span></span>
+      <span className="who"><b>{e.name}</b><span>{e.title || "—"}{note}{e.employmentType && e.employmentType !== "Employee" ? ` · ${e.employmentType}` : ""}</span></span>
       {taken && <Pill tone="ok">Already announced</Pill>}
     </label>
   );

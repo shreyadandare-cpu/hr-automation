@@ -1,0 +1,41 @@
+.fw{display:flex;flex-direction:column;gap:22px}
+.fw-h{margin:6px 0 -6px;font:600 20px/1.2 var(--display)}
+.fw-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:22px}
+.fw-grid.fw-soon{grid-template-columns:repeat(auto-fill,minmax(320px,1fr))}
+.fw-grid.fw-tpls{grid-template-columns:repeat(auto-fill,minmax(260px,1fr))}
+.fw-card{overflow:hidden;display:flex;flex-direction:column}
+.fw-pic{display:block;width:100%;aspect-ratio:1;border:0;padding:0;background:var(--paper-2);cursor:pointer}
+.fw-pic img{display:block;width:100%;height:100%;object-fit:cover}
+.fw-ph{display:grid;place-items:center;width:100%;height:100%;font-size:44px;color:var(--ink-faint)}
+.fw-body{display:flex;flex-direction:column;gap:6px;padding:16px 18px 18px;align-items:flex-start}
+.fw-body h3{font-size:18px;font-weight:600;margin:0}
+.fw-body p{margin:0;color:var(--ink-dim);font-size:14px}
+.fw-body .btn{margin-top:8px}
+.fw-edit{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,440px);gap:24px;align-items:start}
+@media (max-width:900px){.fw-edit{grid-template-columns:1fr}.fw-side{order:-1}}
+.fw-form{display:grid;gap:16px;grid-template-columns:repeat(2,minmax(0,1fr))}
+.fw-form .wide{grid-column:1/-1}
+@media (max-width:620px){.fw-form{grid-template-columns:1fr}}
+.fw-side{position:sticky;top:90px}
+.fw-prev{border-radius:14px;overflow:hidden;box-shadow:0 14px 40px rgba(58,20,15,.2);background:var(--paper-2);aspect-ratio:1}
+.fw-prev img{display:block;width:100%;height:100%}
+.fw-prev .fw-ph{font-size:15px}
+.fw-prev.big{width:min(100%,620px)}
+.fw-seg{display:inline-flex;padding:4px;border-radius:999px;background:var(--paper-2)}
+.fw-seg button{border:0;background:none;padding:9px 18px;border-radius:999px;font:600 14px/1 var(--display);color:var(--ink-dim);cursor:pointer}
+.fw-seg button.on{background:var(--surface);color:var(--purple);box-shadow:0 2px 8px rgba(58,20,15,.12)}
+.fw-photo{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+.fw-photo img{width:64px;height:64px;border-radius:50%;object-fit:cover}
+.fw-actions{display:flex;gap:10px;justify-content:space-between;flex-wrap:wrap}
+.fw-done{display:flex;gap:28px;flex-wrap:wrap;align-items:flex-start}
+.fw-share{display:flex;flex-direction:column;gap:12px;min-width:220px;align-items:stretch}
+.fw-share hr{border:0;border-top:1px solid var(--line);margin:4px 0;width:100%}
+.fw-looks{display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:12px;margin:12px 0}
+.fw-looks button{display:flex;flex-direction:column;gap:8px;padding:8px;border-radius:14px;border:2px solid var(--card-edge);background:var(--surface);cursor:pointer;color:var(--ink);text-align:left;font:inherit}
+.fw-looks button.on{border-color:var(--purple);box-shadow:0 8px 22px rgba(128,13,53,.16)}
+.fw-looks img,.fw-looks .fw-ph{display:block;width:100%;aspect-ratio:1;border-radius:8px;object-fit:cover;background:var(--paper-2);font-size:15px}
+.fw-looks b{font:600 13px/1.2 var(--display)}
+.fw-side{display:grid;gap:16px}
+.fw-btns{display:flex;gap:10px;flex-wrap:wrap}
+.fw-sharebox hr{border:0;border-top:1px solid var(--line);margin:0;width:100%}
+@media (max-width:900px){.fw-side{position:static}}

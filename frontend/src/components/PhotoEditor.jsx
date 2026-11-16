@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import Modal from "../../components/Modal.jsx";
-import { loadImage } from "./poster.js";
+import Modal from "./Modal.jsx";
+
+const loadImage = (src) => new Promise((resolve, reject) => { const img = new Image(); img.onload = () => resolve(img); img.onerror = () => reject(new Error("The picture could not be read.")); img.src = src; });
 
 const VIEW = 340, OUT = 1200;
 

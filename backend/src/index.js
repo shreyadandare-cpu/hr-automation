@@ -13,7 +13,8 @@ import { googleRouter } from "./google-signin.js";
 import { inviteRouter, expireInvites, createInvite, INVITE_MINUTES } from "./invites.js";
 import { leaveRouter } from "./leave.js";
 import { postsRouter } from "./posts.js";
-import { celebrationsRouter, runCelebrationAlerts } from "./celebrations.js";
+import { celebrationsRouter, posterPictureRouter, runCelebrationAlerts } from "./celebrations.js";
+import { festivalsRouter } from "./festivals.js";
 import { leaveDigestRouter, runLeaveDigest } from "./leave-digest.js";
 import { attendanceRouter } from "./attendance.js";
 import { assetsRouter } from "./assets.js";
@@ -590,12 +591,14 @@ app.use("/api/budget-requests", requireAuth, budgetsRouter);   // own requests f
 app.use("/api/payroll", requirePayrollAccess, payrollWorkflowRouter, hrOnly, payslipAutoRouter, payrollRouter);
 app.use("/api/notifications", requireAuth, notificationsRouter);
 app.use("/api/celebrations", requireHr, celebrationsRouter);   // HR: birthday and welcome posters, emailed to everyone
+app.use("/api/festivals", requireAuth, festivalsRouter);   // everyone: festivals and their dates for the Festival Wishes page
 app.use(clearanceRouter(wrap));   // offboarding financial clearance and employee advances (HR only)
 app.use(offboardingRouter(wrap));
 
 // The page itself, so one command serves everything on the same origin.
 app.use("/auth", googleRouter);       // "Continue with Google" (public: it is how people sign in)
 app.use("/invite", inviteRouter);     // the link in the invite email
+app.use("/p", posterPictureRouter);   // the poster picture inside celebration emails (public, long random address)
 app.use("/l", emailLinkRouter);       // short-lived links in automatic emails
 for (const f of ["wohlig-logo.svg", "wohlig-logo-dark.svg", "wohlig-logo.png", "wohlig-logo-dark.png", "wohlig-smile-mark.svg", "wohlig-smile-mark.png", "wohlig-premier-partner-badge.png", "wohlig-logos.zip", "favicon.svg", "favicon.ico", "apple-touch-icon.png"]) app.get("/" + f, (_req, res) => res.sendFile(path.join(frontendDir, "public", f), { maxAge: "1h" }));
 app.use("/sig", express.static(path.join(frontendDir, "public", "sig"), { maxAge: "1h" }));   // small icon pictures used by the email signature (public: mail programs fetch them)

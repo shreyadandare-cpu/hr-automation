@@ -2,17 +2,15 @@ import { useCallback, useEffect, useState } from "react";
 import { api, apiMsg } from "../../api.js";
 import BackButton from "../../components/BackButton.jsx";
 import Modal from "../../components/Modal.jsx";
-import PersonAvatar from "../../components/PersonAvatar.jsx";
 import { Pill, SectionHead } from "../../components/ui.jsx";
 import { useToast } from "../../components/toast.jsx";
 import Wizard from "./Wizard.jsx";
 import "./cel.css";
 
-const day = (iso) => { const [y, m, d] = String(iso).split("-").map(Number); return new Date(Date.UTC(y, m - 1, d)).toLocaleDateString("en-IN", { day: "numeric", month: "short", timeZone: "UTC" }); };
 const when = (t) => (t ? new Date(t).toLocaleString("en-IN", { day: "numeric", month: "short", year: "numeric", hour: "numeric", minute: "2-digit" }) : "—");
 const STATUS = { sent: ["ok", "Sent"], partial: ["warn", "Partly sent"], failed: ["bad", "Failed"], sending: ["info", "Sending…"] };
 
-/* Celebrations (HR): today's birthdays, upcoming birthdays, new joiners and the posters already sent, with a six-step wizard to make a new one. */
+/* Celebrations (HR): a six-step wizard to make a new announcement poster, and the posters already sent. */
 export default function Celebrations() {
   const toast = useToast();
   const [ov, setOv] = useState(null);
@@ -51,31 +49,12 @@ export default function Celebrations() {
     );
   }
 
-  const row = (e, occasion, note) => (
-    <div className="cel-row" key={e.email}>
-      <PersonAvatar email={e.email} name={e.name} />
-      <span className="who"><b>{e.name}</b><span>{note}</span></span>
-      {e.announced ? <Pill tone="ok">Sent</Pill> : <button type="button" className="btn glass sm" onClick={() => setWizard({ occasion, email: e.email })}>Create poster</button>}
-    </div>
-  );
-  const none = (t) => <div className="empty">{t}</div>;
-
   return (
     <div className="cel">
       <BackButton />
-      <SectionHead eyebrow="HR" title="Celebrations &" accent="announcements" sub="Birthdays come from the dates of birth on file and new joiners from their start date. Nothing is emailed until you approve the poster."
+      <SectionHead eyebrow="HR" title="Celebrations &" accent="announcements" sub="Make a birthday or welcome poster and send it to everyone. Nothing is emailed until you approve the poster."
         actions={<button type="button" className="btn primary" onClick={() => setWizard({})}>New announcement</button>} big={false} />
       {!ov.mailReady && <div className="cel-warn">Email is not set up on this server. You can make posters, but sending needs <code>SENDGRID_API_KEY</code> and <code>MAIL_FROM</code> in the backend settings.</div>}
-
-      <div className="cel-grid">
-        <div className="card"><div className="card-h"><h3>Today's birthdays</h3></div>
-          <div className="cel-list">{ov.birthdaysToday.length ? ov.birthdaysToday.map((e) => row(e, "birthday", e.title || "Birthday today")) : none("Nobody has a birthday today.")}</div></div>
-        <div className="card"><div className="card-h"><h3>Upcoming birthdays</h3><span className="muted">next 30 days</span></div>
-          <div className="cel-list">{ov.upcoming.length ? ov.upcoming.slice(0, 8).map((e) => (
-            <div className="cel-row" key={e.email}><PersonAvatar email={e.email} name={e.name} /><span className="who"><b>{e.name}</b><span>{day(e.date)}{e.title ? ` · ${e.title}` : ""}</span></span></div>)) : none("No birthdays in the next 30 days.")}</div></div>
-        <div className="card"><div className="card-h"><h3>Recently joined</h3><span className="muted">last 30 days</span></div>
-          <div className="cel-list">{ov.joiners.length ? ov.joiners.map((e) => row(e, "welcome", `${e.title || "New joiner"} · joined ${day(e.start)}`)) : none("Nobody joined recently. Use New announcement to welcome someone else.")}</div></div>
-      </div>
 
       <div className="card">
         <div className="card-h"><h3>Announcement history</h3></div>

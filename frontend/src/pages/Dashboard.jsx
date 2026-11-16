@@ -61,6 +61,8 @@ function KitCard() {
   );
 }
 
+const SETTLE_DAYS = 30;
+
 function HrDashboard() {
   const { user } = useAuth();
   const { people, docs, leave, profile } = useData();
@@ -89,7 +91,8 @@ function HrDashboard() {
   q.sort((x, y) => rank[x.t] - rank[y.t]);
 
   const soon = onb.filter((p) => p.start > today).sort((x, y) => (x.start < y.start ? -1 : 1));
-  const settling = onb.filter((p) => p.start <= today).sort((x, y) => (x.start < y.start ? 1 : -1));
+  // Someone has moved in once they have been here a month: the Onboarding status is not changed by anything else, so the dashboard decides by the start date.
+  const settling = onb.filter((p) => p.start <= today && diff(p.start, today) <= SETTLE_DAYS).sort((x, y) => (x.start < y.start ? 1 : -1));
   const byDept = {};
   for (const p of here) byDept[p.dept || "Other"] = (byDept[p.dept || "Other"] || 0) + 1;
   const depts = Object.entries(byDept).sort((x, y) => y[1] - x[1]).map(([label, value], i) => ({ label, value, color: AVATAR_COLORS[i % AVATAR_COLORS.length] }));
@@ -108,7 +111,7 @@ function HrDashboard() {
         <a className="rb-stat" href="/app/employees"><span className="lbl">Active people</span><b>{active}</b><span className="sub">{here.length} on the staff list</span></a>
         <a className="rb-stat" href="/app/attendance"><span className="lbl">Away today</span><b>{awayToday}</b><span className="sub">on approved leave</span></a>
         <a className={`rb-stat ${nPend ? "warn" : ""}`} href="/app/leave"><span className="lbl">Leave to approve</span><b>{nPend}</b><span className="sub">{nPend ? "waiting for you" : "nothing waiting"}</span></a>
-        <a className="rb-stat" href="/app/onboarding"><span className="lbl">New joiners</span><b>{onb.length}</b><span className="sub">{leaving.length ? `${leaving.length} leaving` : "no one leaving"}</span></a>
+        <a className="rb-stat" href="/app/onboarding"><span className="lbl">New joiners</span><b>{soon.length + settling.length}</b><span className="sub">{leaving.length ? `${leaving.length} leaving` : "no one leaving"}</span></a>
       </div>
       {/* Rows of two: the cards side by side are stretched to the same height. */}
       <div className="db-grid">

@@ -7,7 +7,8 @@
   "scripts": {
     "start": "node bridge.mjs",
     "once": "node bridge.mjs --once",
-    "test-device": "node bridge.mjs --test"
+    "test-device": "node bridge.mjs --test",
+    "logs": "node viewer.mjs"
   },
   "dependencies": {
     "dotenv": "^16.4.5",

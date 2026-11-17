@@ -16,7 +16,21 @@ const cfg = {
   every: Math.max(30, Number(process.env.INTERVAL_SECONDS || 300)), from: process.env.SYNC_FROM || "",
 };
 const STATE = new URL("./bridge-state.json", import.meta.url);
-const log = (...m) => console.log(new Date().toLocaleString("en-IN"), "-", ...m);
+/* Every message is also written to bridge-events.jsonl (one JSON object per line) so the log viewer (view-logs.bat) can show it as a table:
+   Index, Source, Time Generated, Event Type, Message. Each sync round adds one "resync" entry. The device key is never written. */
+const EVENTS = new URL("./bridge-events.jsonl", import.meta.url);
+const KEEP = 5000;   // the file keeps the newest 5000 entries
+try {   // trim the file when the connector starts
+  const lines = fs.readFileSync(EVENTS, "utf8").split("\n").filter(Boolean);
+  if (lines.length > KEEP) fs.writeFileSync(EVENTS, lines.slice(-KEEP).join("\n") + "\n");
+} catch { /* no file yet */ }
+const record = (o) => { try { fs.appendFileSync(EVENTS, JSON.stringify({ at: new Date().toISOString(), ...o }) + "\n"); } catch { /* the log must never stop a sync */ } };
+const kindOf = (t) => (/failed|stopped|refused|error|unreadable|could not|did not work/i.test(t) ? "Error" : /skipped|incomplete|trying again|waiting for hr/i.test(t) ? "Warning" : "Information");
+const log = (...m) => {
+  const text = m.map(String).join(" ");
+  console.log(new Date().toLocaleString("en-IN"), "-", text);
+  record({ kind: "event", source: "Attendance Connector", type: kindOf(text), message: text });
+};
 // The device library rejects with plain objects ({ err, ip, command }), not Error instances: show what is inside.
 function whyText(e) {
   if (!e) return "unknown error";
@@ -181,6 +195,7 @@ async function syncOnce() {
   const all = await readDevice();
   const fresh = all.filter((p) => p.time > since).sort((a, b) => (a.time < b.time ? -1 : 1));
   log(`Device holds ${all.length} punches, ${fresh.length} newer than ${since}.`);
+  const round = { kind: "resync", device: cfg.name, onDevice: all.length, fresh: fresh.length, since };
   let added = 0, unmatched = new Set();
   for (let i = 0; i < fresh.length; i += 200) {
     const batch = fresh.slice(i, i + 200);
@@ -189,6 +204,7 @@ async function syncOnce() {
     if (!arg("--from-file")) writeState({ lastSynced: batch[batch.length - 1].time, at: new Date().toISOString() });   // only after the app accepted the batch
   }
   if (fresh.length) log(`Sent ${fresh.length}: ${added} added${unmatched.size ? `, waiting for HR to link device IDs: ${[...unmatched].join(", ")}` : ""}.`);
+  record({ ...round, sent: fresh.length, added, unlinked: unmatched.size, status: "Synced" });
 }
 
 /** Prints every user stored on the device (ID and name) so HR can match IDs to people. Reads only. */
@@ -222,7 +238,7 @@ async function main() {
   if (flag("--once") || arg("--from-file")) { await syncOnce(); return; }
   log(`Reading ${cfg.ip}:${cfg.port} every ${cfg.every} s and sending to ${cfg.app}. Press Ctrl+C to stop.`);
   for (;;) {
-    try { await syncOnce(); } catch (e) { log("Skipped this round:", e.message); }   // device off or app unreachable: try again next time
+    try { await syncOnce(); } catch (e) { log("Skipped this round:", e.message); record({ kind: "resync", device: cfg.name, status: "Failed", message: e.message }); }   // device off or app unreachable: try again next time
     await new Promise((r) => setTimeout(r, cfg.every * 1000));
   }
 }

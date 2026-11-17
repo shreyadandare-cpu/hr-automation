@@ -35,3 +35,11 @@ employee number (for example `17` for WT/17) is suggested for you.
 - Times are the device's own clock. Check that the device's date and time are right.
 - Progress is kept in `bridge-state.json`, so a restart never re-sends old punches (and the app ignores repeats anyway).
 - To try the app side without the device: `node bridge.mjs --from-file sample.json --once` with a file like `[{"userId":"17","time":"2026-10-27 09:05:00"}]`.
+
+## Log viewer (on the admin computer)
+Double-click **`view-logs.bat`** (or run `npm run logs`) and the browser opens `http://localhost:4010`. It looks like Keka's sync tool:
+- **Devices**: the device, its address, the last clock entry, the last sync and whether it worked.
+- **Logs, Resync logs**: one row per sync round (punches on the device, new, added, not linked, status).
+- **Logs, Event viewer**: every message the connector writes (Index, Source, Time Generated, Event Type, Message), with From and To dates, Get Logs and Search.
+
+The connector writes these entries to `bridge-events.jsonl` (the newest 5000 are kept; the file stays on this computer and is not committed). The viewer only reads that file, listens on this computer only, and never shows the device key. Restart the connector once after updating so it starts writing the entries.

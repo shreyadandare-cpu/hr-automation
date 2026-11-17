@@ -57,7 +57,6 @@ export function Signature({ p }) {
   const set = (k) => (e) => setF({ ...f, [k]: e.target.value });
   const sig = { ...f, name: f.name.trim() || p.name, title: f.title.trim(), phone: f.phone.trim(), email: p.email };
   const html = signatureHtml(sig, o, false, iconsLive), previewHtml = signatureHtml(sig, o, true), plain = signaturePlain(sig, o);   // the preview loads pictures from this site; the copy loads them from the live one
-  const liBad = f.linkedin.trim() && !webLink(f.linkedin, /(^|\.)linkedin\.com$/i), bkBad = f.booking.trim() && !webLink(f.booking);
   const done = (ok, what) => toast(ok ? `${what} copied.` : "Could not copy. Select it and copy by hand.");
   const BLURB = { classic: "Logo beside your details", executive: "Stacked, with icons and the partner badge", compact: "Text only, light for replies" };
   return (
@@ -72,15 +71,9 @@ export function Signature({ p }) {
         </div>
       </div>
 
-      <div className="card"><div className="card-h"><h3><span className="dk-step">2</span>Your details</h3>
-        <button type="button" className="btn link sm" onClick={() => { setF(base); setO({ ...SIG_DEFAULT_OPTS, style: o.style }); }}>Reset to my record</button></div>
+      <div className="card"><div className="card-h"><h3><span className="dk-step">2</span>What to show</h3></div>
         <div className="card-b form">
-          <Field id="sg-n" label="Name"><input className="input" id="sg-n" value={f.name} maxLength={80} onChange={set("name")} /></Field>
-          <Field id="sg-t" label="Designation"><input className="input" id="sg-t" value={f.title} maxLength={120} placeholder="e.g. Solutions Architect" onChange={set("title")} /></Field>
-          <Field id="sg-p" label={<>Mobile <span className="muted">(optional)</span></>}><input className="input" id="sg-p" type="tel" value={f.phone} maxLength={20} placeholder="+91 98765 43210" onChange={set("phone")} /></Field>
-          <Field id="sg-e" label="Email" hint="Your work address; it can't be changed here."><input className="input" id="sg-e" value={p.email} readOnly /></Field>
-          <Field id="sg-l" label={<>LinkedIn <span className="muted">(optional)</span></>} error={liBad ? "Use a linkedin.com link, like linkedin.com/in/your-name." : ""}><input className="input" id="sg-l" value={f.linkedin} maxLength={200} placeholder="linkedin.com/in/your-name" onChange={set("linkedin")} /></Field>
-          <Field id="sg-b" label={<>Booking link <span className="muted">(optional)</span></>} hint="Adds a Book a meeting link." error={bkBad ? "Enter a web link." : ""}><input className="input" id="sg-b" value={f.booking} maxLength={300} placeholder="calendar.app.google/… or calendly.com/…" onChange={set("booking")} /></Field>
+          <p className="muted dk-hint" style={{ gridColumn: "1 / -1", margin: 0 }}>Your name, designation, mobile and LinkedIn come from your profile. Change them on My profile.</p>
           <div className="dk-togglewrap" style={{ gridColumn: "1 / -1" }}>
             <span className="dk-togglelabel">Show in my signature</span>
             <div className="dk-toggles">{OPT_LABELS.map(([k, l]) => { const off = k === "badge" && o.style === "compact"; return <button key={k} type="button" className={`dk-toggle${o[k] && !off ? " on" : ""}`} aria-pressed={!!o[k] && !off} disabled={off} title={off ? "The compact style is text only, so it has no badge." : undefined} onClick={() => setO({ ...o, [k]: !o[k] })}>{o[k] && !off ? "✓ " : ""}{l}</button>; })}</div>

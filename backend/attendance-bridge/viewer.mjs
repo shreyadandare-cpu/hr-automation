@@ -37,8 +37,8 @@ th{font-weight:400;background:#fafafc}td.msg{word-break:break-word}td:nth-child(
 <main><header><h1>Attendance Sync</h1><div><small>DEVICE</small><b id="hd">-</b></div></header>
 <section id="dev"><div class="tabs"><button class="on">Devices</button></div><div class="body"><table><thead><tr><th>Device</th><th>Integration</th><th>Address</th><th>Last clock entry</th><th>Device connection</th><th>Actions</th></tr></thead><tbody id="devrows"></tbody></table><pre class="actout" id="actout"></pre></div></section>
 <section id="log" class="hide"><div class="tabs"><button id="t-pu" class="on">Punches</button><button id="t-re">Resync logs</button><button id="t-ev">Event viewer</button></div>
-<div class="body"><div class="bar"><label>From Date <input type="date" id="from"></label><label>To Date <input type="date" id="to"></label><button class="btn" id="get">Get Logs</button><input type="search" id="q" placeholder="Search" style="margin-left:auto"></div>
-<p class="total">Total Logs: <b id="total">0</b></p><table><thead id="head"></thead><tbody id="rows"></tbody></table><div class="empty hide" id="empty">No logs for these dates.</div></div></section></main>
+<div class="body"><div class="bar"><label>From Date <input type="date" id="from"></label><label>To Date <input type="date" id="to"></label><button class="btn" id="get">Get Logs</button><button class="btn" id="day" title="Reads the device and fills the list with every punch of the From date (nothing is sent to the app)" style="background:#fff;color:#b5397a;border:1px solid #b5397a;padding:10px 18px">Load day from device</button><input type="search" id="q" placeholder="Search" style="margin-left:auto"></div>
+<pre class="actout" id="actout2"></pre><p class="total">Total Logs: <b id="total">0</b></p><table><thead id="head"></thead><tbody id="rows"></tbody></table><div class="empty hide" id="empty">No logs for these dates.</div></div></section></main>
 <script>
 const $=(i)=>document.getElementById(i);let kind="punch",data=[];
 const day=(d)=>d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");
@@ -58,15 +58,16 @@ const cols=kind==="punch"?["Index","Device user ID","Punch time","Device","Statu
 const tr=document.createElement("tr");cols.forEach((c)=>{const th=document.createElement("th");th.textContent=c;tr.appendChild(th)});head.appendChild(tr);
 const list=data.filter((e)=>!q||JSON.stringify(e).toLowerCase().includes(q));$("total").textContent=list.length;$("empty").classList.toggle("hide",list.length>0);
 list.forEach((e,i)=>{const r=document.createElement("tr");r.appendChild(cell(i+1));
-if(kind==="punch"){r.appendChild(cell(e.userId));r.appendChild(cell(punchTime(e.time)));r.appendChild(cell(e.device||"-"));r.appendChild(cell(e.status,e.status==="Sent"?"Synced":"Warning"));r.appendChild(cell(when(e.at)))}
+if(kind==="punch"){r.appendChild(cell(e.userId));r.appendChild(cell(punchTime(e.time)));r.appendChild(cell(e.device||"-"));r.appendChild(cell(e.status,/^Sent|^On device/.test(e.status)?"Synced":"Warning"));r.appendChild(cell(when(e.at)))}
 else if(kind==="event"){r.appendChild(cell(e.source||"Attendance Connector"));r.appendChild(cell(when(e.at)));r.appendChild(cell(e.type,e.type));r.appendChild(cell(e.message,"msg"))}
 else{r.appendChild(cell(when(e.at)));r.appendChild(cell(e.device||"-"));r.appendChild(cell(e.onDevice??"-"));r.appendChild(cell(e.fresh??"-"));r.appendChild(cell(e.added??"-"));r.appendChild(cell(e.unlinked??"-"));r.appendChild(cell(e.status,e.status));r.appendChild(cell(e.message||"","msg"))}
 rows.appendChild(r)})}
 const link=(t,fn)=>{const a=document.createElement("button");a.type="button";a.textContent=t;a.className="lnk";a.onclick=fn;return a};
 const two=(small,cls,btn)=>{const e=document.createElement("td");const s=document.createElement("div");s.textContent=small;s.className="sm "+(cls||"");e.appendChild(s);e.appendChild(btn);return e};
-async function act(path,msg,btns){const out=$("actout");btns.forEach((b)=>b.disabled=true);out.className="actout";out.textContent=msg;
+async function act(path,msg,btns,outId){const out=$(outId||"actout");btns.forEach((b)=>b.disabled=true);out.className="actout";out.textContent=msg;
 try{const r=await(await fetch(path,{method:"POST",headers:{"X-Requested-With":"viewer"}})).json();out.className="actout "+(r.ok?"Synced":"Failed");out.textContent=r.output}catch{out.className="actout Failed";out.textContent="Could not reach the viewer."}
 dev();}
+$("day").onclick=async()=>{await act("/api/day?date="+$("from").value,"Reading the device for "+$("from").value+"... this can take a minute.",[$("day"),$("get")],"actout2");$("day").disabled=false;$("get").disabled=false;load()};
 async function dev(){const d=await(await fetch("/api/info")).json();$("hd").textContent=d.device+(d.ip?" ("+d.ip+")":"");const r=$("devrows");r.textContent="";const t=document.createElement("tr");
 const ok=d.last&&d.last.status==="Synced";t.appendChild(cell(d.device));t.appendChild(cell("SDK (ZkemSDK)"));t.appendChild(cell(d.ip?d.ip+":"+d.port:"-"));
 t.appendChild(cell(d.state.lastSynced?when(d.state.lastSynced.replace(" ","T")):"-"));
@@ -82,11 +83,13 @@ http.createServer((req, res) => {
   const send = (code, type, body) => { res.writeHead(code, { "Content-Type": type, "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff" }); res.end(body); };
   // The two buttons on the Devices page start the connector's own commands. Only a page served by this program may do that.
   const okHost = /^(localhost|127\.0\.0\.1):\d+$/.test(req.headers.host || ""), okOrigin = !req.headers.origin || /^http:\/\/(localhost|127\.0\.0\.1):\d+$/.test(req.headers.origin);
-  if (req.method === "POST" && (u.pathname === "/api/connect" || u.pathname === "/api/sync")) {
+  if (req.method === "POST" && (u.pathname === "/api/connect" || u.pathname === "/api/sync" || u.pathname === "/api/day")) {
     if (!okHost || !okOrigin || req.headers["x-requested-with"] !== "viewer") return send(403, "application/json", JSON.stringify({ ok: false, output: "Not allowed." }));
     if (busy) return send(409, "application/json", JSON.stringify({ ok: false, output: "Another action is still running. Wait for it to finish." }));
+    if (u.pathname === "/api/day" && !fs.readFileSync(new URL("./bridge.mjs", import.meta.url), "utf8").includes('"--log-day"'))   // an old bridge.mjs would ignore the flag and start syncing forever
+      return send(200, "application/json", JSON.stringify({ ok: false, output: "The bridge.mjs in this folder is the old version and cannot load a day. Copy the new bridge.mjs into this folder, stop the connector, start it again with run.bat, then try again." }));
     busy = true;
-    const child = spawn(process.execPath, ["bridge.mjs", u.pathname === "/api/connect" ? "--test" : "--once"], { cwd: fileURLToPath(new URL(".", import.meta.url)), windowsHide: true });
+    const child = spawn(process.execPath, ["bridge.mjs", ...(u.pathname === "/api/connect" ? ["--test"] : u.pathname === "/api/day" ? ["--log-day", /^\d{4}-\d{2}-\d{2}$/.test(u.searchParams.get("date") || "") ? u.searchParams.get("date") : "today"] : ["--once"])], { cwd: fileURLToPath(new URL(".", import.meta.url)), windowsHide: true });
     let out = "", done = false;
     const finish = (ok, extra) => { if (done) return; done = true; busy = false; clearTimeout(timer); const lines = (out + (extra || "")).trim().split("\n").slice(-6).join("\n"); send(200, "application/json", JSON.stringify({ ok, output: lines || (ok ? "Done." : "No output.") })); };
     const timer = setTimeout(() => { child.kill(); finish(false, "\nStopped: it took longer than 5 minutes."); }, 300000);

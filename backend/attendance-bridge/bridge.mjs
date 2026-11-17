@@ -25,6 +25,18 @@ const trim = (file, keep) => {   // keep only the newest entries; runs when the 
 };
 trim(EVENTS, 5000); trim(PUNCHES, 30000);
 const record = (o, file = EVENTS) => { try { fs.appendFileSync(file, JSON.stringify({ at: new Date().toISOString(), ...o }) + "\n"); } catch { /* the log must never stop a sync */ } };
+/** Puts the device's punches of one day into the punch log (the viewer's Punches tab) when they are not in it yet. Sends nothing to the app.
+    skipAfter: leave out punches newer than this time (the sync is about to log those itself). Returns how many were added. */
+const logDay = (all, day, skipAfter, status) => {
+  const have = new Set();
+  try { for (const l of fs.readFileSync(PUNCHES, "utf8").split("\n")) { if (!l) continue; try { const p = JSON.parse(l); have.add(`${p.userId}|${p.time}`); } catch { /* skip a damaged line */ } } } catch { /* no file yet */ }
+  let n = 0;
+  for (const p of all) {
+    if (!p.time.startsWith(day) || (skipAfter && p.time > skipAfter) || have.has(`${p.userId}|${p.time}`)) continue;
+    record({ device: cfg.name, userId: p.userId, time: p.time, status }, PUNCHES); have.add(`${p.userId}|${p.time}`); n++;
+  }
+  return n;
+};
 const kindOf = (t) => (/failed|stopped|refused|error|unreadable|could not|did not work/i.test(t) ? "Error" : /skipped|incomplete|trying again|waiting for hr/i.test(t) ? "Warning" : "Information");
 const log = (...m) => {
   const text = m.map(String).join(" ");
@@ -195,6 +207,8 @@ async function syncOnce() {
   const all = await readDevice();
   const fresh = all.filter((p) => p.time > since).sort((a, b) => (a.time < b.time ? -1 : 1));
   log(`Device holds ${all.length} punches, ${fresh.length} newer than ${since}.`);
+  const earlier = logDay(all, wall(new Date()).slice(0, 10), since, "Sent earlier");   // so the log shows the whole day, not only the punches of this round
+  if (earlier) log(`Added ${earlier} earlier punch${earlier === 1 ? "" : "es"} of today to the punch log.`);
   const round = { kind: "resync", device: cfg.name, onDevice: all.length, fresh: fresh.length, since };
   let added = 0, unmatched = new Set();
   for (let i = 0; i < fresh.length; i += 200) {
@@ -228,6 +242,12 @@ async function listUsers() {
 
 async function main() {
   if (flag("--users")) { await listUsers(); return; }
+  if (flag("--log-day")) {   // fill the punch log with one whole day from the device (the viewer's "Load day from device" button); sends nothing
+    const day = /^\d{4}-\d{2}-\d{2}$/.test(arg("--log-day") || "") ? arg("--log-day") : wall(new Date()).slice(0, 10);
+    const all = await readDevice(), onDay = all.filter((p) => p.time.startsWith(day)).length;
+    log(`Loaded ${logDay(all, day, null, "On device")} new punches of ${day} into the punch log (the device holds ${onDay} for that day).`);
+    return;
+  }
   if (flag("--test")) {
     const all = await readDevice();
     log(all.newestOnly ? `Connected. Read the newest ${all.length} punches (the device holds ${all.expected}).` : `Connected. Read ${all.length} punches${all.expected ? ` (the device says it holds ${all.expected})` : ""}.`);

@@ -27,6 +27,7 @@ backend/.env
 backend/attendance-bridge/.env
 backend/attendance-bridge/bridge-state.json
 backend/attendance-bridge/bridge-events.jsonl
+backend/attendance-bridge/bridge-punches.jsonl
 backend/attendance-bridge/bridge.log
 backend/attendance-bridge/device-users.txt
 backend/.start-logs/

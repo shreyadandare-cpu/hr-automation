@@ -19,12 +19,12 @@ const STATE = new URL("./bridge-state.json", import.meta.url);
 /* Every message is also written to bridge-events.jsonl (one JSON object per line) so the log viewer (view-logs.bat) can show it as a table:
    Index, Source, Time Generated, Event Type, Message. Each sync round adds one "resync" entry. The device key is never written. */
 const EVENTS = new URL("./bridge-events.jsonl", import.meta.url);
-const KEEP = 5000;   // the file keeps the newest 5000 entries
-try {   // trim the file when the connector starts
-  const lines = fs.readFileSync(EVENTS, "utf8").split("\n").filter(Boolean);
-  if (lines.length > KEEP) fs.writeFileSync(EVENTS, lines.slice(-KEEP).join("\n") + "\n");
-} catch { /* no file yet */ }
-const record = (o) => { try { fs.appendFileSync(EVENTS, JSON.stringify({ at: new Date().toISOString(), ...o }) + "\n"); } catch { /* the log must never stop a sync */ } };
+const PUNCHES = new URL("./bridge-punches.jsonl", import.meta.url);   // one line per punch sent: device user ID and the time on the device
+const trim = (file, keep) => {   // keep only the newest entries; runs when the connector starts
+  try { const lines = fs.readFileSync(file, "utf8").split("\n").filter(Boolean); if (lines.length > keep) fs.writeFileSync(file, lines.slice(-keep).join("\n") + "\n"); } catch { /* no file yet */ }
+};
+trim(EVENTS, 5000); trim(PUNCHES, 30000);
+const record = (o, file = EVENTS) => { try { fs.appendFileSync(file, JSON.stringify({ at: new Date().toISOString(), ...o }) + "\n"); } catch { /* the log must never stop a sync */ } };
 const kindOf = (t) => (/failed|stopped|refused|error|unreadable|could not|did not work/i.test(t) ? "Error" : /skipped|incomplete|trying again|waiting for hr/i.test(t) ? "Warning" : "Information");
 const log = (...m) => {
   const text = m.map(String).join(" ");
@@ -201,6 +201,8 @@ async function syncOnce() {
     const batch = fresh.slice(i, i + 200);
     const r = await send(batch);
     added += r.added; r.unmatchedIds.forEach((u) => unmatched.add(u));
+    const open = new Set((r.unmatchedIds || []).map(String));
+    for (const p of batch) record({ device: cfg.name, userId: p.userId, time: p.time, status: open.has(p.userId) ? "Waiting for HR to link this ID" : "Sent" }, PUNCHES);
     if (!arg("--from-file")) writeState({ lastSynced: batch[batch.length - 1].time, at: new Date().toISOString() });   // only after the app accepted the batch
   }
   if (fresh.length) log(`Sent ${fresh.length}: ${added} added${unmatched.size ? `, waiting for HR to link device IDs: ${[...unmatched].join(", ")}` : ""}.`);

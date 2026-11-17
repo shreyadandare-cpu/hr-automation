@@ -114,13 +114,13 @@ h1,h2,h3{margin:0;font-weight:600;font-family:var(--display);color:var(--ink);te
 .view>.back-home{align-self:flex-start;margin-bottom:-36px}
 .eyebrow{font:800 12.5px/1.2 var(--body);letter-spacing:.14em;text-transform:uppercase;color:var(--terracotta,#c85f44)}
 .hero{display:flex;flex-direction:column;align-items:center;text-align:center;gap:20px;padding-top:18px}
-.hero h1{font-weight:300;font-size:clamp(44px,6.4vw,84px);line-height:1.02;letter-spacing:-.03em}
+.hero h1{font-weight:400;font-size:clamp(44px,6.4vw,84px);line-height:1.02;letter-spacing:-.03em}
 .grad{font-style:italic;font-weight:400;background:var(--grad-accent);-webkit-background-clip:text;background-clip:text;color:transparent;padding-right:.06em}
 .hero p{color:var(--ink-dim);font-size:17.5px;max-width:58ch;margin:0}
 .hero .row{justify-content:center;margin-top:8px}
 .sec-head{display:flex;align-items:flex-end;justify-content:space-between;gap:20px;flex-wrap:wrap}
 .sec-head h2{font-weight:600;font-size:clamp(28px,3.4vw,44px);line-height:1.08;letter-spacing:-.02em;margin-top:12px}
-.sec-head h2.big{font-weight:300;font-size:clamp(36px,4.6vw,60px)}
+.sec-head h2.big{font-weight:400;font-size:clamp(36px,4.6vw,60px)}
 .smile{display:block;width:34px;height:10px;margin-top:10px;color:var(--purple)}
 .sec-head p{color:var(--ink-dim);max-width:60ch;margin:10px 0 0}
 .section{display:flex;flex-direction:column;gap:24px}
@@ -507,7 +507,7 @@ body.ro [data-tool],body.ro [data-retry],body.ro [data-provision],body.ro [data-
 .db-avatar{width:92px;height:92px;border-radius:50%;display:grid;place-items:center;overflow:hidden;flex:none;font:600 32px/1 var(--body);color:#fff;box-shadow:0 0 0 4px var(--tint);text-decoration:none}
 .db-avatar img{width:100%;height:100%;object-fit:cover;display:block}
 .db-hero .eyebrow{color:var(--terracotta,#c85f44)}
-.db-hero h1{color:var(--ink);font-weight:300;font-size:clamp(32px,4.4vw,52px);line-height:1.06;letter-spacing:-.02em;margin-top:6px}
+.db-hero h1{color:var(--ink);font-weight:400;font-size:clamp(32px,4.4vw,52px);line-height:1.06;letter-spacing:-.02em;margin-top:6px}
 .db-hero h1 em{font-style:italic;font-weight:400;color:var(--purple)}
 .db-hero p{margin:10px 0 0;color:var(--ink-dim);max-width:62ch}
 .db-hero .row{margin-top:18px}

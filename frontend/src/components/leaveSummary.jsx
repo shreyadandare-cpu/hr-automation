@@ -101,6 +101,43 @@ export function LeaveHistory({ list, who = false, onCancel, title = "Leave histo
   );
 }
 
+/* Compensatory off request history: every comp off someone asked for or was given, with who asked, who decided and when. */
+export function CompOffHistory({ list, who = false, title = "Compensatory off request history", onRequest }) {
+  const lv = useLeave();
+  const [f, setF] = useState({ status: "", q: "" });
+  const nameOf = (e) => (e ? (lv.empBy(e) || {}).name || e : "—");
+  const rows = list.filter((c) => (!f.status || c.status === f.status) && (!f.q || lc(`${c.reason} ${nameOf(c.email)}`).includes(lc(f.q))))
+    .sort((a, b) => (a.workedOn < b.workedOn ? 1 : a.workedOn > b.workedOn ? -1 : b.id - a.id));
+  const { rows: page, pager } = usePaged(rows, JSON.stringify(f) + list.length);
+  const wd = (d) => new Date(d + "T00:00:00").toLocaleDateString("en-IN", { weekday: "long" });
+  return (
+    <div className="card"><div className="card-h"><h3>{title}</h3><div className="row" style={{ gap: 12, alignItems: "center" }}><span className="muted">Total: {rows.length}</span>{onRequest && <button type="button" className="btn primary sm" onClick={onRequest}>Request credit for comp off</button>}</div></div>
+      <div className="lv-filters" role="search">
+        <label className="lv-fsel"><span>Status</span>
+          <select value={f.status} onChange={(e) => setF({ ...f, status: e.target.value })}><option value="">All status</option>{["pending", "approved", "declined"].map((s) => <option key={s} value={s}>{LSTAT[s][0]}</option>)}</select></label>
+        <label className="lv-fsearch"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7" /><path d="m20 20-3.5-3.5" /></svg>
+          <input type="search" placeholder={who ? "Search name or note" : "Search notes"} aria-label="Search comp off requests" value={f.q} onChange={(e) => setF({ ...f, q: e.target.value })} /></label>
+        {(f.status || f.q) && <button type="button" className="btn link" onClick={() => setF({ status: "", q: "" })}>Clear filters</button>}
+      </div>
+      <div className="tbl-wrap"><table className="lv-hist">
+        <thead><tr>{who && <th>Employee</th>}<th>Worked on</th><th>Days</th><th>Status</th><th className="hide-sm">Requested on</th><th className="hide-sm">Action taken on</th><th className="hide-sm">Note</th></tr></thead>
+        <tbody>{page.length ? page.map((c) => (
+          <tr key={c.id}>
+            {who && <td><b>{nameOf(c.email)}</b></td>}
+            <td><b>{shortDate(c.workedOn)}</b><small>{wd(c.workedOn)}</small></td>
+            <td>{dd(c.days)}</td>
+            <td><Pill tone={LSTAT[c.status][1]}>{LSTAT[c.status][0]}</Pill>{c.status === "pending" ? <small>Waiting for {lv.approverName(c.email)}</small> : c.decidedBy ? <small>by {nameOf(c.decidedBy)}</small> : null}</td>
+            <td className="hide-sm">{c.createdAt ? when(c.createdAt) : "—"}{c.createdBy && lc(c.createdBy) !== lc(c.email) ? <small>by {nameOf(c.createdBy)}</small> : null}</td>
+            <td className="hide-sm">{c.status === "pending" || !c.decidedAt ? "—" : when(c.decidedAt)}</td>
+            <td className="hide-sm lv-note">{c.reason}</td>
+          </tr>))
+          : <tr><td colSpan={who ? 7 : 6}><div className="empty">{list.length ? "Nothing matches these filters." : "No comp off requests yet."}</div></td></tr>}</tbody>
+      </table></div>
+      {rows.length > 10 && <Pager {...pager} />}
+    </div>
+  );
+}
+
 /* Every change to one leave type's balance in the year, oldest first, with the running balance. */
 function ledger(type, year, emp, b, reqs, comps) {
   const rows = [], start = emp.start && yearOf(emp.start) === year ? emp.start : `${year}-01-01`;

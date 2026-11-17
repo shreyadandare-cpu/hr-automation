@@ -137,6 +137,9 @@ ALTER TABLE comp_off_credits ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAU
 ALTER TABLE comp_off_credits ADD COLUMN IF NOT EXISTS decided_at TIMESTAMPTZ;
 ALTER TABLE comp_off_credits DROP CONSTRAINT IF EXISTS comp_off_credits_status_check;
 ALTER TABLE comp_off_credits ADD CONSTRAINT comp_off_credits_status_check CHECK (status IN ('pending','approved','declined'));
+-- Who asked for a comp off and who decided it, for the comp off request history.
+ALTER TABLE comp_off_credits ADD COLUMN IF NOT EXISTS created_by TEXT;
+ALTER TABLE comp_off_credits ADD COLUMN IF NOT EXISTS decided_by TEXT;
 DROP INDEX IF EXISTS comp_off_once_per_day;
 CREATE UNIQUE INDEX IF NOT EXISTS comp_off_once_per_day ON comp_off_credits (lower(work_email), worked_on) WHERE status <> 'declined';
 

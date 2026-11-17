@@ -5,13 +5,13 @@ import { useAuth } from "../auth.jsx";
 import { useData } from "../data.jsx";
 import { Pill, SectionHead, shortDate } from "../components/ui.jsx";
 import { CompRequestModal, HolidayCalendar } from "../components/leaveParts.jsx";
-import { LeaveHistory, LeaveLeftPopup, LeaveStats, PolicyExplain, Ring, ViewTabs } from "../components/leaveSummary.jsx";
+import { CompOffHistory, LeaveHistory, LeaveLeftPopup, LeaveStats, PolicyExplain, Ring, ViewTabs } from "../components/leaveSummary.jsx";
 import TodayCards from "../components/TodayCards.jsx";
 import { useToast } from "../components/toast.jsx";
 import { R } from "../lib/leave.js";
 import { LTYPE, dd, rangeText, useLeave } from "../lib/useLeave.js";
 
-const VIEWS = [["summary", "Summary"], ["history", "Leave history"], ["holidays", "Holidays"]];
+const VIEWS = [["summary", "Summary"], ["history", "Leave history"], ["compoff", "Comp off history"], ["holidays", "Holidays"]];
 
 /* The employee's own leave, laid out like a standard HR leave screen: a summary (waiting requests, stats, balances),
    the full history with filters and pages, and the holiday list, each on its own tab. */
@@ -55,7 +55,7 @@ export default function MyLeave() {
   return (
     <section className="section">
       {top}
-      <div className="row" style={{ justifyContent: "space-between", flexWrap: "wrap", gap: 12 }}><ViewTabs views={VIEWS} view={view} onView={setView} />{view !== "holidays" && yearPicker}</div>
+      <div className="row" style={{ justifyContent: "space-between", flexWrap: "wrap", gap: 12 }}><ViewTabs views={VIEWS} view={view} onView={setView} />{view !== "holidays" && view !== "compoff" && yearPicker}</div>
 
       {view === "summary" && <>
         {future && <div className="callout"><div><b>Looking ahead to {year}.</b> Casual leave carried over assumes you take no more casual leave before 31 Dec {thisYear}. Requests still waiting for approval are not deducted until they are approved.</div></div>}
@@ -75,6 +75,7 @@ export default function MyLeave() {
             <Link className="btn primary" to="/app/leave/apply?self=1">Request leave</Link>
             <button type="button" className="btn link" onClick={() => setModal("comp")}>Request credit for comp off</button>
             <button type="button" className="btn link" onClick={() => setModal("policy")}>Leave policy explanation</button>
+            <button type="button" className="btn link" onClick={() => setView("compoff")}>Compensatory off request history</button>
           </div></div>
         </div>
         {year === thisYear && <TodayCards />}
@@ -90,6 +91,7 @@ export default function MyLeave() {
       </>}
 
       {view === "history" && <LeaveHistory list={mine} onCancel={cancel} title={`Leave history ${year}`} />}
+      {view === "compoff" && <CompOffHistory list={lv.compsOf(me.email)} onRequest={() => setModal("comp")} />}
       {view === "holidays" && <HolidayCalendar editable={false} />}
 
       {view === "summary" && year === thisYear && <LeaveLeftPopup email={me.email} year={year} onRequest={() => nav("/app/leave/apply?self=1")} />}

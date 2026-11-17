@@ -16,7 +16,8 @@ const toRequest = (r) => ({
   status: r.status, paidDays: num(r.paid_days), lopDays: num(r.lop_days), decidedAt: r.decided_at, createdAt: r.created_at,
   createdBy: r.created_by || null, decidedBy: r.decided_by || null,
 });
-const toCompOff = (c) => ({ id: c.id, email: c.work_email, workedOn: c.worked_on, days: num(c.days), reason: c.reason, status: c.status });
+const toCompOff = (c) => ({ id: c.id, email: c.work_email, workedOn: c.worked_on, days: num(c.days), reason: c.reason, status: c.status,
+  createdAt: c.created_at, decidedAt: c.decided_at, createdBy: c.created_by || null, decidedBy: c.decided_by || null });
 const toEmp = (e) => ({ name: e.name, status: e.status, start: e.start_date, casualOpening: num(e.casual_opening) });
 
 // Employees see and act on their own leave only; HR sees everyone and makes the decisions.
@@ -255,8 +256,8 @@ export function leaveRouter(wrap) {
       if (Object.keys(errors).length) return [400, { errors }];
       const final = status;
       const { rows } = await client.query(
-        "INSERT INTO comp_off_credits (work_email, worked_on, reason, status, decided_at) VALUES ($1,$2,$3,$4,$5) RETURNING *",
-        [emp.work_email, workedOn, String(reason).trim(), final, final === "approved" ? new Date() : null]);
+        "INSERT INTO comp_off_credits (work_email, worked_on, reason, status, decided_at, created_by, decided_by) VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *",
+        [emp.work_email, workedOn, String(reason).trim(), final, final === "approved" ? new Date() : null, self(req), final === "approved" ? self(req) : null]);
       await audit(client, final === "approved" ? `Comp off earned for working on ${workedOn}` : `Comp off credit requested for working on ${workedOn}`, emp.work_email);
       const compOff = toCompOff(rows[0]);
       return [201, compOff, () => tellLeave(final === "approved" ? "compoff_decided" : "compoff_requested", { compOff, actor: self(req), decision: "approved" })];
@@ -273,7 +274,7 @@ export function leaveRouter(wrap) {
       const approver = await approverOf(client, rows[0].work_email);
       if (!mayDecide(req, approver, rows[0].work_email)) return [403, notYours(approver)];
       if (rows[0].status !== "pending") return [409, { error: `This comp off was already ${rows[0].status}.` }];
-      const { rows: out } = await client.query("UPDATE comp_off_credits SET status=$2, decided_at=now() WHERE id=$1 RETURNING *", [rows[0].id, decision]);
+      const { rows: out } = await client.query("UPDATE comp_off_credits SET status=$2, decided_at=now(), decided_by=$3 WHERE id=$1 RETURNING *", [rows[0].id, decision, self(req)]);
       await audit(client, `Comp off credit ${decision} by ${req.user.email} for working on ${rows[0].worked_on}`, rows[0].work_email);
       const compOff = toCompOff(out[0]);
       return [200, compOff, () => tellLeave("compoff_decided", { compOff, actor: self(req), decision })];

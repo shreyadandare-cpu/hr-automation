@@ -12,6 +12,8 @@ import { buildLines, recalcRun, loadRun, totalsOfLines, staffFor, structuresFor,
 import { buildWorkbook } from "./excel.js";
 import { buildBankFile } from "./bank.js";
 import { readPayslipPdf } from "./payslip-read.js";
+import { previewFromFile, templateCsv, templateXlsx } from "./tax-import.js";
+import { DEFAULT_TAX_RULES } from "./tax-defaults.js";
 
 /*
  * Payroll processing, review and disbursement. Mounted at /api/payroll behind requirePayrollAccess (HR or a payroll reviewer).
@@ -483,6 +485,29 @@ R.put("/tax-rules/:fy/:regime", hrOnly, wrap(async (req, res) => {
     await audit(client, req.user.email, "Tax rules saved", { detail: { fy, regime, before: old || null, after: { rules: clean, source } } });
   });
   res.json({ ok: true });
+}));
+
+/* The tax rules as a sheet for the CA to fill in (Excel, or ?format=csv), and reading one back. Reading saves nothing: the page shows
+   what would change and HR confirms, which saves each rule set through PUT /tax-rules/:fy/:regime above. */
+R.get("/tax-rules/template", hrOnly, wrap(async (req, res) => {
+  const { rows } = await pool.query("SELECT fy, regime, rules FROM tax_rules ORDER BY fy DESC, regime");
+  const sets = rows.length ? rows : DEFAULT_TAX_RULES;
+  if (req.query.format === "csv") {
+    res.set({ "Content-Type": "text/csv; charset=utf-8", "Content-Disposition": 'attachment; filename="tax-rules-template.csv"' });
+    return res.send(templateCsv(sets));
+  }
+  res.set({ "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "Content-Disposition": 'attachment; filename="tax-rules-template.xlsx"' });
+  res.send(await templateXlsx(sets));
+}));
+
+R.post("/tax-rules/import", hrOnly, express.raw({ type: () => true, limit: 2 * 1024 * 1024 }), wrap(async (req, res) => {
+  const buf = req.body;
+  if (!Buffer.isBuffer(buf) || !buf.length) return res.status(400).json({ error: "Choose the Excel or CSV file with the tax rules." });
+  const { rows } = await pool.query("SELECT fy, regime, rules FROM tax_rules");
+  let out;
+  try { out = await previewFromFile(buf, rows); } catch (err) { return res.status(422).json({ error: err.message }); }
+  await audit(pool, req.user.email, "Tax rules file read (nothing saved yet)", { detail: { sets: out.sets.map((x) => `${x.fy} ${x.regime}`), errors: out.errors.length } });
+  res.json(out);
 }));
 
 /* ---------- adjustments to finalized months ---------- */

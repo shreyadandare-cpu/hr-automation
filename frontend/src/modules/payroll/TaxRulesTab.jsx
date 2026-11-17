@@ -74,14 +74,77 @@ function RulesModal({ row, onClose }) {
   );
 }
 
+/* HR uploads the CA's tax-rules sheet (Excel or CSV). The page shows what would change; nothing is saved until HR confirms. */
+function UploadModal({ onClose }) {
+  const toast = useToast();
+  const [file, setFile] = useState(null);       // { name }
+  const [out, setOut] = useState(null);         // { sets, errors }
+  const [err, setErr] = useState("");
+  const [source, setSource] = useState("");
+  const [busy, setBusy] = useState(false);
+  const pick = async (f) => {
+    setErr(""); setOut(null); setFile(null);
+    if (!f) return;
+    if (f.size > 2 * 1024 * 1024) return setErr("The file is larger than 2 MB.");
+    setBusy(true);
+    const r = await fetch("/api/payroll/tax-rules/import", { method: "POST", headers: { "Content-Type": "application/octet-stream" }, body: f });
+    const data = await r.json().catch(() => null);
+    setBusy(false);
+    if (r.status === 401) { location.href = "/login"; return; }
+    if (!r.ok) return setErr((data && data.error) || "The file could not be read.");
+    setFile({ name: f.name }); setOut(data); setSource(`Uploaded sheet: ${f.name}`);
+  };
+  const bad = out && (out.errors.length > 0 || out.sets.some((x) => x.problems.length));
+  const changed = out ? out.sets.filter((x) => x.isNew || x.changes.length) : [];
+  const save = async () => {
+    setBusy(true);
+    for (const x of changed) {
+      const r = await api("PUT", `/api/payroll/tax-rules/${x.fy}/${x.regime}`, { rules: x.rules, source });
+      if (!r.ok) { setBusy(false); return toast(`FY ${x.fy} ${x.regime}: ${apiMsg(r)}`); }
+    }
+    setBusy(false);
+    toast(`Saved ${changed.length} rule set${changed.length === 1 ? "" : "s"}. Recalculate any open payroll to apply them.`); onClose(true);
+  };
+  return (
+    <Modal wide onClose={() => onClose()}>
+      <div className="card-h" style={{ paddingTop: 24 }}><h3>Upload tax rules</h3></div>
+      <div className="card-b form">
+        <Callout>Download the template, have your CA fill it in, then upload it here. You see what would change first, and nothing is saved until you confirm.</Callout>
+        <div className="row" style={{ gap: 10, flexWrap: "wrap" }}>
+          <a className="btn glass sm" href="/api/payroll/tax-rules/template" download>Download template (Excel)</a>
+          <a className="btn glass sm" href="/api/payroll/tax-rules/template?format=csv" download>Download template (CSV)</a>
+          <label className="btn primary sm" style={{ cursor: "pointer" }}>{busy && !out ? "Reading…" : file ? "Choose another file" : "Choose the filled file"}
+            <input type="file" hidden accept=".xlsx,.csv,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" onChange={(e) => { pick(e.target.files[0]); e.target.value = ""; }} /></label>
+        </div>
+        {err && <div className="ferr" role="alert">{err}</div>}
+        {out && <>
+          {out.errors.length > 0 && <div className="callout"><div><b>Fix these in the sheet and upload it again</b>
+            <ul style={{ margin: "6px 0 0 18px" }}>{out.errors.slice(0, 12).map((e, i) => <li key={i}>{e}</li>)}{out.errors.length > 12 && <li>…and {out.errors.length - 12} more</li>}</ul></div></div>}
+          {out.sets.map((x) => (
+            <div key={`${x.fy}-${x.regime}`} className="card" style={{ padding: "14px 18px" }}>
+              <b>FY {x.fy} · {x.regime === "new" ? "New regime" : "Old regime"}</b> <span className="muted">{x.isNew ? (x.copiedFrom ? `new, starting from FY ${x.copiedFrom}` : "new") : x.changes.length ? "changed" : "no change"}</span>
+              {x.problems.length > 0 && <ul style={{ margin: "6px 0 0 18px", color: "var(--bad)" }}>{x.problems.map((p, i) => <li key={i}>{p}</li>)}</ul>}
+              {!x.problems.length && x.changes.length > 0 && <ul style={{ margin: "6px 0 0 18px" }}>{x.changes.map((c, i) => <li key={i}>{c}</li>)}</ul>}
+            </div>))}
+          {!bad && changed.length === 0 && <div className="muted">The sheet matches the rules already saved. There is nothing to change.</div>}
+          {!bad && changed.length > 0 && <Field id="ur-src" label="Source of this change (required)" hint="e.g. the CA's sheet of 2 April 2026."><input className="input" id="ur-src" maxLength={200} value={source} onChange={(e) => setSource(e.target.value)} /></Field>}
+        </>}
+      </div>
+      <div className="modal-f"><button type="button" className="btn glass" onClick={() => onClose()}>Cancel</button>
+        <button type="button" className="btn primary" disabled={busy || !out || bad || !changed.length || source.trim().length < 3} onClick={save}>{busy && out ? "Saving…" : `Save ${changed.length || ""} rule set${changed.length === 1 ? "" : "s"}`}</button></div>
+    </Modal>
+  );
+}
+
 export default function TaxRulesTab() {
   const [rows, setRows] = useState(null);
   const [edit, setEdit] = useState(null);
+  const [upload, setUpload] = useState(false);
   const load = useCallback(async () => { const r = await api("GET", "/api/payroll/tax-rules"); setRows(r.ok ? r.data : []); }, []);
   useEffect(() => { load(); }, [load]);
   return (
     <div className="card">
-      <div className="card-h"><div><h3>Income-tax rules by financial year</h3><div className="muted">TDS is calculated from the row for the payroll month's financial year and the employee's regime. A year with no row can't be calculated.</div></div></div>
+      <div className="card-h"><div><h3>Income-tax rules by financial year</h3><div className="muted">TDS is calculated from the row for the payroll month's financial year and the employee's regime. A year with no row can't be calculated.</div></div><button type="button" className="btn primary sm" onClick={() => setUpload(true)}>Upload rules</button></div>
       <div className="tbl-wrap"><table><thead><tr><th>Year</th><th>Regime</th><th>Slabs</th><th className="num">Std. deduction</th><th>87A rebate</th><th>Source</th><th /></tr></thead><tbody>
         {rows && rows.length ? rows.map((r) => (
           <tr key={`${r.fy}-${r.regime}`}><td><b>FY {r.fy}</b></td><td>{r.regime === "new" ? "New" : "Old"}</td>
@@ -92,6 +155,7 @@ export default function TaxRulesTab() {
               {!rows.some((x) => x.fy === nextFy(r.fy) && x.regime === r.regime) && <button type="button" className="btn glass sm" onClick={() => setEdit({ ...r, fy: nextFy(r.fy), copy: true })}>Copy to FY {nextFy(r.fy)}</button>}</div></td></tr>))
           : <tr><td colSpan={7}><div className="empty">{rows ? "No tax rules." : "Loading…"}</div></td></tr>}
       </tbody></table></div>
+      {upload && <UploadModal onClose={(saved) => { setUpload(false); if (saved) load(); }} />}
       {edit && <RulesModal row={edit} onClose={(saved) => { setEdit(null); if (saved) load(); }} />}
     </div>
   );

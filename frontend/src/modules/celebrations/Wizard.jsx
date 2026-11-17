@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api, apiMsg } from "../../api.js";
-import { Field } from "../../components/Modal.jsx";
+import Modal, { Field } from "../../components/Modal.jsx";
 import { Pill } from "../../components/ui.jsx";
 import PhotoEditor from "../../components/PhotoEditor.jsx";
 import PersonAvatar from "../../components/PersonAvatar.jsx";
@@ -32,6 +32,7 @@ export default function Wizard({ overview, start, onClose, onDone }) {
   const [draft, setDraft] = useState(0);
   const [job, setJob] = useState(null);            // the sent poster with its delivery progress
   const [adjust, setAdjust] = useState(false);     // the photo crop dialog
+  const [confirm, setConfirm] = useState(false);  // the "are you sure?" before anything is emailed
   const [list, setList] = useState(null);          // recipients, when HR asks to review them
   const assets = useRef(null);
 
@@ -297,10 +298,22 @@ export default function Wizard({ overview, start, onClose, onDone }) {
           {step < 4 && <button type="button" className="btn primary" disabled={!ready} onClick={() => { setErr(""); setStep(step + 1); }}>Next</button>}
           {step === 5 && !job && <>
             <button type="button" className="btn glass" onClick={() => setStep(4)}>Back</button>
-            <button type="button" className="btn primary" disabled={busy || !overview.mailReady} onClick={() => send(false)}>{busy ? "Starting…" : "Send announcement"}</button>
+            <button type="button" className="btn primary" disabled={busy || !overview.mailReady} onClick={() => setConfirm(true)}>{busy ? "Starting…" : "Send announcement"}</button>
           </>}
         </div>
       </div>
+      {confirm && (
+        <Modal onClose={() => !busy && setConfirm(false)}>
+          <div className="card-h" style={{ paddingTop: 24 }}><h3>Send announcement?</h3></div>
+          <div className="card-b" style={{ display: "grid", gap: 10 }}>
+            <p style={{ margin: 0 }}>Are you sure you want to send this announcement?</p>
+            <p className="muted" style={{ margin: 0 }}>{OCCASIONS[occasion].name} for <b>{f.name}</b> will be emailed to {overview.recipients} people. It cannot be taken back once it is sent.</p>
+          </div>
+          <div className="modal-f">
+            <button type="button" className="btn glass" disabled={busy} onClick={() => setConfirm(false)}>Cancel</button>
+            <button type="button" className="btn primary" disabled={busy} onClick={async () => { await send(false); setConfirm(false); }}>{busy ? "Sending…" : "Yes, send"}</button>
+          </div>
+        </Modal>)}
       {adjust && photo && <PhotoEditor src={photo.url} onApply={adjusted} onClose={() => setAdjust(false)} />}
     </div>
   );

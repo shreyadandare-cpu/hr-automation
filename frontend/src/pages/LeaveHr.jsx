@@ -4,14 +4,14 @@ import { useData } from "../data.jsx";
 import { useAuth } from "../auth.jsx";
 import { PersonCell, Pill, SectionHead, Stat, shortDate } from "../components/ui.jsx";
 import { CompOffModal, DecideButtons, HolidayCalendar } from "../components/leaveParts.jsx";
-import { LeaveHistory, ViewTabs } from "../components/leaveSummary.jsx";
+import { CompOffHistory, LeaveHistory, ViewTabs } from "../components/leaveSummary.jsx";
 import { R } from "../lib/leave.js";
 import { LSTAT, LTYPE, dd, lc, rangeText, useLeave } from "../lib/useLeave.js";
 import MyLeave from "./MyLeave.jsx";
 import Pager, { usePaged } from "../components/Pager.jsx";
 
 
-const VIEWS = [["requests", "Requests"], ["balances", "Balances"], ["history", "History"], ["holidays", "Holidays"]];
+const VIEWS = [["requests", "Requests"], ["balances", "Balances"], ["history", "History"], ["compoff", "Comp off history"], ["holidays", "Holidays"]];
 
 /* A table's rows a page at a time, with the page controls under it once there are more than 10. */
 function PagedTable({ items, reset, head, row, cols, empty }) {
@@ -96,6 +96,7 @@ export default function LeaveHr() {
                 <td className="num-cell hide-sm muted">{b.casual.carried} + {b.casual.quota} − {b.casual.used}</td><td className="num-cell">{b.sick.left}</td><td className="num-cell">{b.compoff.left}</td><td className="num-cell">{b.lopDays || "—"}</td></tr>); }} /></div>}
 
       {view === "history" && <LeaveHistory list={all} who title="All leave" />}
+      {view === "compoff" && <CompOffHistory list={lv.compOffs} who />}
       {view === "holidays" && <HolidayCalendar editable />}
       {modal === "comp" && <CompOffModal onClose={() => setModal(null)} />}
     </section>

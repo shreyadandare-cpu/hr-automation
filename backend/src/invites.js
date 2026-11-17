@@ -56,12 +56,12 @@ function inviteEmail({ name, link }) {
     + `Click the link below to accept your invitation and activate your account.\n\nAccept Invitation: ${link}\n\n`
     + `This invitation link is valid for ${VALID_MINUTES} minutes from the time it was generated. If it expires, please contact your HR administrator to request a new invitation.\n\n`
     + `If you were not expecting this invitation, please contact your HR team.\n\nRegards,\nHR Administration Team\n`;
-  const ink = "#1c1b3a", dim = "#555177", blue = "#4254d4";
+  const ink = "#2a1016", dim = "#6b5654", blue = "#800d35";
   const html = `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="light"></head>
-<body style="margin:0;padding:0;background:#f4f4fb">
+<body style="margin:0;padding:0;background:#fff7e9">
 <div style="display:none;max-height:0;overflow:hidden;opacity:0">You have been invited to join the HR Automation Platform. The link is valid for ${VALID_MINUTES} minutes.</div>
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f4f4fb"><tr><td align="center" style="padding:28px 12px">
- <table role="presentation" width="600" cellpadding="0" cellspacing="0" style="width:100%;max-width:600px;background:#ffffff;border:1px solid #d9d9ea">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#fff7e9"><tr><td align="center" style="padding:28px 12px">
+ <table role="presentation" width="600" cellpadding="0" cellspacing="0" style="width:100%;max-width:600px;background:#ffffff;border:1px solid #e9d9c3">
   <tr><td align="center" style="padding:36px 40px 8px;font:700 22px/1.3 Arial,Helvetica,sans-serif;color:${ink}">Invitation
     <table role="presentation" cellpadding="0" cellspacing="0" style="margin-top:10px"><tr><td style="width:56px;height:3px;background:${blue};font-size:0;line-height:0">&nbsp;</td></tr></table></td></tr>
   <tr><td style="padding:28px 44px 0;font:15px/1.65 Arial,Helvetica,sans-serif;color:${ink}">

@@ -24,11 +24,11 @@ export async function emailLink(path, minutes = linkMinutes()) {
 
 const page = (title, text) => `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>${title}</title><meta name="robots" content="noindex"></head>
-<body style="margin:0;font:16px/1.6 Arial,Helvetica,sans-serif;color:#1c1b3a;background:#f4f4fb">
-<div style="max-width:460px;margin:12vh auto 0;padding:32px 32px 28px;background:#fff;border:1px solid #d9d9ea">
-<p style="margin:0 0 6px;font-weight:700;font-size:20px">${title}</p><div style="width:48px;height:3px;background:#4254d4;margin:0 0 18px"></div>
+<body style="margin:0;font:16px/1.6 Arial,Helvetica,sans-serif;color:#2a1016;background:#fff7e9">
+<div style="max-width:460px;margin:12vh auto 0;padding:32px 32px 28px;background:#fff;border:1px solid #e9d9c3">
+<p style="margin:0 0 6px;font-weight:700;font-size:20px">${title}</p><div style="width:48px;height:3px;background:#800d35;margin:0 0 18px"></div>
 <p style="margin:0 0 22px">${text}</p>
-<a href="/login" style="display:inline-block;padding:12px 26px;background:#4254d4;color:#fff;text-decoration:none;font-weight:bold">Sign in</a>
+<a href="/login" style="display:inline-block;padding:12px 26px;background:#800d35;color:#fff;text-decoration:none;font-weight:bold">Sign in</a>
 </div></body></html>`;
 
 export const emailLinkRouter = express.Router();

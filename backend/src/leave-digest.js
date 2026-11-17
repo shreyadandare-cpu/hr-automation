@@ -80,30 +80,30 @@ export function renderDigest(d) {
     "", "Regards,", "HR Access Hub", "WOHLIG TRANSFORMATIONS PRIVATE LIMITED",
   ].join("\n");
   const row = (p) => `
-    <tr><td style="padding:14px 0;border-top:1px solid #ececf6;vertical-align:top;width:56px">
-      <div style="width:44px;height:44px;border-radius:50%;background:#eef0ff;color:#3242b2;font:600 15px/44px Arial,Helvetica,sans-serif;text-align:center">${esc(initials(p.name))}</div></td>
-      <td style="padding:14px 0 14px 12px;border-top:1px solid #ececf6;vertical-align:top;font:14px/1.5 Arial,Helvetica,sans-serif;color:#1c1b3a">
+    <tr><td style="padding:14px 0;border-top:1px solid #f1e4d0;vertical-align:top;width:56px">
+      <div style="width:44px;height:44px;border-radius:50%;background:#fbeee2;color:#5c0926;font:600 15px/44px Arial,Helvetica,sans-serif;text-align:center">${esc(initials(p.name))}</div></td>
+      <td style="padding:14px 0 14px 12px;border-top:1px solid #f1e4d0;vertical-align:top;font:14px/1.5 Arial,Helvetica,sans-serif;color:#2a1016">
         <div style="font-weight:700;font-size:15px">${esc(p.name)}</div>
-        ${p.title ? `<div style="color:#7c7aa0;font-size:13px">${esc(p.title)}</div>` : ""}
-        ${p.leaves.map((l) => `<div style="margin-top:4px"><span style="display:inline-block;padding:2px 8px;border-radius:10px;background:${l.half ? "#fdf1dc" : "#eef0ff"};color:${l.half ? "#9a5a07" : "#3242b2"};font-size:12px;font-weight:700">${esc(l.type)}${l.half ? ` · ${esc(l.half)}` : ""}</span>
-          <span style="color:#555177;font-size:13px">${l.half || l.from === l.to ? "Today only" : `${esc(short(l.from))} – ${esc(short(l.to))} · ${esc(dd(l.days))}`}</span></div>`).join("")}
+        ${p.title ? `<div style="color:#8a7a78;font-size:13px">${esc(p.title)}</div>` : ""}
+        ${p.leaves.map((l) => `<div style="margin-top:4px"><span style="display:inline-block;padding:2px 8px;border-radius:10px;background:${l.half ? "#fdf1dc" : "#fbeee2"};color:${l.half ? "#9a5a07" : "#5c0926"};font-size:12px;font-weight:700">${esc(l.type)}${l.half ? ` · ${esc(l.half)}` : ""}</span>
+          <span style="color:#6b5654;font-size:13px">${l.half || l.from === l.to ? "Today only" : `${esc(short(l.from))} – ${esc(short(l.to))} · ${esc(dd(l.days))}`}</span></div>`).join("")}
       </td>
-      <td style="padding:14px 0;border-top:1px solid #ececf6;vertical-align:top;text-align:right;font:13px/1.5 Arial,Helvetica,sans-serif;color:#555177;white-space:nowrap">
-        ${p.back !== d.day ? `Back on<br><b style="color:#1c1b3a">${esc(short(p.back))}</b>` : `<b style="color:#9a5a07">Half day</b>`}</td></tr>`;
-  const html = `<!doctype html><html><body style="margin:0;background:#f4f4fb;padding:24px 12px">
-  <div style="max-width:600px;margin:0 auto;background:#ffffff;border-radius:14px;overflow:hidden;border:1px solid #e3e3f1">
-    <div style="background:#4254d4;padding:30px 32px">
-      <div style="font:600 13px/1.4 Arial,Helvetica,sans-serif;letter-spacing:.18em;color:#dfe3ff">DAILY LEAVE DIGEST</div>
+      <td style="padding:14px 0;border-top:1px solid #f1e4d0;vertical-align:top;text-align:right;font:13px/1.5 Arial,Helvetica,sans-serif;color:#6b5654;white-space:nowrap">
+        ${p.back !== d.day ? `Back on<br><b style="color:#2a1016">${esc(short(p.back))}</b>` : `<b style="color:#9a5a07">Half day</b>`}</td></tr>`;
+  const html = `<!doctype html><html><body style="margin:0;background:#fff7e9;padding:24px 12px">
+  <div style="max-width:600px;margin:0 auto;background:#ffffff;border-radius:14px;overflow:hidden;border:1px solid #eadfcf">
+    <div style="background:#800d35;padding:30px 32px">
+      <div style="font:600 13px/1.4 Arial,Helvetica,sans-serif;letter-spacing:.18em;color:#f3dcc6">DAILY LEAVE DIGEST</div>
       <div style="font:600 20px/1.4 Arial,Helvetica,sans-serif;letter-spacing:.06em;color:#ffffff;margin-top:6px">${esc(longDay(d.day).toUpperCase())}</div>
     </div>
     <div style="padding:24px 32px 8px">
-      <div style="font:700 26px/1.2 Arial,Helvetica,sans-serif;color:#1c1b3a">${n ? `${n} ${n === 1 ? "person" : "people"} on leave today` : "Everyone is in today"}</div>
-      <div style="font:14px/1.5 Arial,Helvetica,sans-serif;color:#7c7aa0;margin-top:4px">${n ? "Approved leave covering today." : "No approved leave covers today."}</div>
+      <div style="font:700 26px/1.2 Arial,Helvetica,sans-serif;color:#2a1016">${n ? `${n} ${n === 1 ? "person" : "people"} on leave today` : "Everyone is in today"}</div>
+      <div style="font:14px/1.5 Arial,Helvetica,sans-serif;color:#8a7a78;margin-top:4px">${n ? "Approved leave covering today." : "No approved leave covers today."}</div>
       ${n ? `<table role="presentation" cellpadding="0" cellspacing="0" style="width:100%;margin-top:16px;border-collapse:collapse">${d.people.map(row).join("")}</table>` : ""}
       ${d.waiting ? `<div style="margin-top:12px;padding:12px 14px;border-radius:10px;background:#fdf1dc;font:13.5px/1.5 Arial,Helvetica,sans-serif;color:#7a4705">${d.waiting} leave request${d.waiting === 1 ? "" : "s"} for today ${d.waiting === 1 ? "is" : "are"} still waiting for approval.</div>` : ""}
-      <div style="margin:22px 0 18px"><a href="${esc(link)}" style="display:inline-block;background:#4254d4;color:#ffffff;text-decoration:none;font:600 14px/1 Arial,Helvetica,sans-serif;padding:12px 20px;border-radius:999px">Open Leave in HR Access Hub</a></div>
+      <div style="margin:22px 0 18px"><a href="${esc(link)}" style="display:inline-block;background:#800d35;color:#ffffff;text-decoration:none;font:600 14px/1 Arial,Helvetica,sans-serif;padding:12px 20px;border-radius:999px">Open Leave in HR Access Hub</a></div>
     </div>
-    <div style="padding:16px 32px 22px;border-top:1px solid #ececf6;font:12px/1.5 Arial,Helvetica,sans-serif;color:#8a87a6">HR Access Hub · WOHLIG TRANSFORMATIONS PRIVATE LIMITED</div>
+    <div style="padding:16px 32px 22px;border-top:1px solid #f1e4d0;font:12px/1.5 Arial,Helvetica,sans-serif;color:#8a7a78">HR Access Hub · WOHLIG TRANSFORMATIONS PRIVATE LIMITED</div>
   </div></body></html>`;
   return { subject, text, html };
 }

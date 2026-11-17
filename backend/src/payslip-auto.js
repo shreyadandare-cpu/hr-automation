@@ -17,6 +17,8 @@ import { audit } from "./payroll/routes.js";
  *                              employees when the reviewer approves (payroll/routes.js). Nothing unapproved is ever published.
  *
  * PAYSLIP_AUTO_FROM=YYYY-MM (optional): the first month started automatically; earlier months are left alone.
+ * PAYSLIP_AUTO=off (optional): turns this whole job off, so nothing is created or recalculated automatically. Use it while salaries
+ * are still being entered, or whenever payroll should only change when HR does something.
  */
 const names = (list) => list.slice(0, 15).map((l) => l.name).join(", ") + (list.length > 15 ? ` and ${list.length - 15} more` : "");
 
@@ -29,6 +31,7 @@ export const tellReady = (people, period) => PAYROLL_SEPARATE
 
 /** One check. `now` can be set for tests. Returns what it did. */
 export async function runPayslips(now = new Date()) {
+  if (String(process.env.PAYSLIP_AUTO || "").trim().toLowerCase() === "off") return { skipped: "PAYSLIP_AUTO=off" };   // before any database work
   const period = previousMonth(istMonth(now));
   const from = process.env.PAYSLIP_AUTO_FROM;
   if (from && period < from) return { period, skipped: `before PAYSLIP_AUTO_FROM (${from})` };

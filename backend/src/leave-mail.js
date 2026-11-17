@@ -138,10 +138,10 @@ const esc = (v) => String(v ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "
 
 /** The HTML version of a template: the same text, the link clickable, and a button for it when the template names one. */
 export function leaveHtml(t, url) {
-  const text = esc(t.body).split(esc(url)).join(`<a href="${esc(url)}" style="color:#4254d4">${esc(url)}</a>`)
+  const text = esc(t.body).split(esc(url)).join(`<a href="${esc(url)}" style="color:#800d35">${esc(url)}</a>`)
     .split("\n\n").map((p) => `<p style="margin:0 0 14px">${p.replace(/\n/g, "<br>")}</p>`).join("");
-  const button = t.button === null ? "" : `<p style="margin:6px 0 20px"><a href="${esc(url)}" style="display:inline-block;padding:12px 26px;background:#4254d4;color:#fff;text-decoration:none;font-weight:bold;border-radius:6px">${esc(t.button || "Open HR Access Hub")}</a></p>`;
-  return `<!doctype html><html><body style="margin:0;background:#f4f4fb"><div style="max-width:560px;margin:0 auto;padding:28px 28px 20px;background:#fff;font:15px/1.6 Arial,Helvetica,sans-serif;color:#1c1b3a">${button}${text}</div></body></html>`;
+  const button = t.button === null ? "" : `<p style="margin:6px 0 20px"><a href="${esc(url)}" style="display:inline-block;padding:12px 26px;background:#800d35;color:#fff;text-decoration:none;font-weight:bold;border-radius:6px">${esc(t.button || "Open HR Access Hub")}</a></p>`;
+  return `<!doctype html><html><body style="margin:0;background:#fff7e9"><div style="max-width:560px;margin:0 auto;padding:28px 28px 20px;background:#fff;font:15px/1.6 Arial,Helvetica,sans-serif;color:#2a1016">${button}${text}</div></body></html>`;
 }
 
 /**

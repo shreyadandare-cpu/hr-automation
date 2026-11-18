@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import AuthLayout from "./AuthLayout.jsx";
+import PasswordField from "./PasswordField.jsx";
 
 /* The link in the invitation email. Opening the page only checks the link: nothing is used up or activated until the
    person chooses a password and presses the button. (Mail scanners open links on their own.) */
@@ -34,29 +35,23 @@ export default function Invite() {
   const pending = info && info.state === "pending";
   return (
     <AuthLayout>
-    <main className="card">
-      <div className="logo"><img className="lg lg-light" src="/wohlig-logo.svg" alt="wohlig" /><img className="lg lg-dark" src="/wohlig-logo-dark.svg" alt="" /></div>
-      <div className="app-name">HR Access Hub</div>
-      {!info && <p className="sub">Checking your invitation…</p>}
+      {!info && <p className="auth-sub" role="status">Checking your invitation…</p>}
       {info && !pending && <>
         <h1>{info.state === "used" ? "Already accepted" : info.state === "expired" ? "Invitation expired" : "Invitation not valid"}</h1>
-        <div className="err" role="alert">{info.message}</div>
-        <p className="hint"><a href="/login">Go to sign in</a></p>
+        <div className="auth-alert" role="alert">{info.message}</div>
+        <a className="btn btn-primary" href="/login">Go to sign in</a>
       </>}
       {pending && <>
         <h1>Welcome, {info.firstName}.</h1>
-        <p className="sub">Choose a password to activate your account. This link works once and only for a short time.</p>
+        <p className="auth-sub">Choose a password to activate your account. This link works once and only for a short time.</p>
         <form onSubmit={submit} noValidate>
-          {error && <div className="err" role="alert">{error}</div>}
-          <div className="field"><label htmlFor="pw1">New password</label>
-            <input id="pw1" type="password" autoComplete="new-password" autoFocus value={password} onChange={(e) => setPassword(e.target.value)} /></div>
-          <div className="field"><label htmlFor="pw2">Repeat the password</label>
-            <input id="pw2" type="password" autoComplete="new-password" value={again} onChange={(e) => setAgain(e.target.value)} /></div>
-          <button type="submit" disabled={busy}>{busy ? "Activating…" : "Accept invitation"}</button>
+          {error && <div className="auth-alert" role="alert">{error}</div>}
+          <PasswordField id="pw1" label="New password" autoComplete="new-password" autoFocus value={password} onChange={setPassword} />
+          <PasswordField id="pw2" label="Repeat the password" autoComplete="new-password" value={again} onChange={setAgain} />
+          <button type="submit" className="btn btn-primary" disabled={busy}>{busy ? "Activating…" : "Accept invitation"}</button>
         </form>
-        <p className="hint">Next time, sign in with “Continue with Google” using your @wohlig.com account.</p>
+        <p className="auth-hint">Next time, sign in with “Continue with Google” using your @wohlig.com account.</p>
       </>}
-    </main>
     </AuthLayout>
   );
 }

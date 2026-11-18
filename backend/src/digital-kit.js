@@ -1,4 +1,5 @@
 import crypto from "node:crypto";
+import { geminiConfigured, suggestHeadlines } from "./gemini.js";
 import fs from "node:fs/promises";
 import { readdirSync } from "node:fs";
 import path from "node:path";
@@ -443,6 +444,26 @@ digitalKitRouter.get("/", wrap(async (req, res) => {
   const rows = (await pool.query("SELECT * FROM digital_kit_resources WHERE published ORDER BY sort_order, id")).rows.filter((r) => forPerson(r.audience, me.person));   // only what is for this person's designation
   const resources = Object.fromEntries(MODULES.map((m) => [m, rows.filter((r) => r.module === m).map((r) => shape(r))]));
   res.json({ ...me, resources, isHr: req.user.role === "hr" });
+}));
+
+// LinkedIn headline ideas from Gemini. Only the person's own designation and department (read here, never taken from the request) go out;
+// see gemini.js. Each person can ask 10 times an hour.
+const aiAsked = new Map();
+digitalKitRouter.post("/headline-ai", wrap(async (req, res) => {
+  const me = await personOf(req.user.email, req.user.role);
+  if (!me) return res.status(404).json({ error: "There is no employee record for your account yet. Ask HR." });
+  if (!geminiConfigured()) return res.status(409).json({ error: "Gemini AI is not set up on this server yet. Ask IT to add the GEMINI_API_KEY setting." });
+  const now = Date.now(), recent = (aiAsked.get(me.person.email) || []).filter((t) => now - t < 3600_000);
+  if (recent.length >= 10) return res.status(429).json({ error: "You have asked Gemini a lot in the last hour. Try again a little later." });
+  aiAsked.set(me.person.email, [...recent, now]);
+  try {
+    // "avoid" = the ideas already on screen, so Shuffle brings new ones (a few short strings, nothing else is taken from the request)
+    const avoid = (Array.isArray(req.body && req.body.avoid) ? req.body.avoid : []).filter((t) => typeof t === "string").slice(0, 6).map((t) => line(t, 220)).filter(Boolean);
+    const headlines = await suggestHeadlines({ title: me.person.title, dept: me.person.dept, avoid });
+    res.json({ headlines });
+  } catch (err) {
+    res.status(err.code === "NOT_SET_UP" ? 409 : 502).json({ error: err.message });
+  }
 }));
 
 /* ----- HR administration (separate from employee access) ----- */

@@ -10,8 +10,8 @@ import NotificationBell from "./NotificationBell.jsx";
 import NextHolidayPopup from "./NextHolidayPopup.jsx";
 
 /* The main menu: each key maps to its page in REACT_PAGES below. HR and employees get different lists. */
-const HR_LINKS = [["dashboard", "Dashboard"], ["community", "Community"], ["workforce", "Workforce"], ["onboard", "Onboarding"], ["offboard", "Offboarding"], ["leave", "Leave"], ["attendance", "Attendance"], ["finances", "Finances"], ["audit", "Audit log"]];
-const EMP_LINKS = [["dashboard", "Dashboard"], ["community", "Community"], ["workforce", "Workforce"], ["attendance", "Attendance"], ["finances", "Finances"], ["myleave", "My leave"]];
+const HR_LINKS = [["dashboard", "Dashboard"], ["community", "Community"], ["workforce", "Workforce"], ["onboard", "Onboarding"], ["offboard", "Offboarding"], ["timeoff", "Attendance & leave"], ["finances", "Finances"], ["audit", "Audit log"]];
+const EMP_LINKS = [["dashboard", "Dashboard"], ["community", "Community"], ["workforce", "Workforce"], ["timeoff", "Attendance & leave"], ["finances", "Finances"]];
 const REACT_PAGES = {
   dashboard: "/app/dashboard", posts: "/app/posts", celebrations: "/app/celebrations", employees: "/app/employees", allocations: "/app/allocations", onboard: "/app/onboarding", offboard: "/app/offboarding", leave: "/app/leave", attendance: "/app/attendance",
   assets: "/app/assets", claude: "/app/claude-requests", reimb: "/app/reimbursements", payroll: "/app/payroll", audit: "/app/audit", myleave: "/app/my-leave", team: "/app/team-leave",
@@ -148,7 +148,7 @@ export default function Shell() {
     return () => window.removeEventListener("resize", fit);
   });
   const { pathname } = useLocation();
-  const base = isHr ? (isManager ? HR_LINKS.flatMap((l) => (l[0] === "leave" ? [l, ["team", "Team leave"]] : [l])) : HR_LINKS) : [...EMP_LINKS, ...(isManager ? [["team", "Team leave"]] : [])];   // the payroll reviewer (PAYROLL_REVIEWERS) approves payroll
+  const base = isHr ? HR_LINKS : EMP_LINKS;   // the payroll reviewer (PAYROLL_REVIEWERS) approves payroll
   const links = itAdmin ? [...base.filter(([k]) => k !== "audit"), ["assets", "Assets"], ...(isHr ? [] : [["claude", "Claude"]]), ...base.filter(([k]) => k === "audit")] : base;   // HR reaches the Claude requests from Onboarding; an IT admin who is not HR gets their own link
   return (
     <>
@@ -158,7 +158,7 @@ export default function Shell() {
             <img className="lg lg-light" src="/wohlig-logo.svg" alt="wohlig" /><img className="lg lg-dark" src="/wohlig-logo-dark.svg" alt="" /><small>Wohlig One</small>
           </a>
           <div className="links" ref={linksRef}>
-            {links.map(([k, label]) => k === "finances" ? <GroupMenu key={k} label={label} items={[["/app/reimbursements", "Reimbursements"], ["/app/payslips", "My payslips"], ...(isHr || payrollReviewer ? [["/app/payroll", "Payroll"]] : [])]} /> : k === "community" ? <GroupMenu key={k} label={label} items={[["/app/posts", "Posts"], ...(isHr ? [["/app/celebrations", "Celebrations"]] : []), ["/app/festivals", "Festival Wishes"]]} /> : k === "workforce" ? <GroupMenu key={k} label={label} items={[["/app/employees", "Employees"], ["/app/allocations", "Allocations"]]} /> : <NavLink key={k} to={pathFor(k, isHr)} className={({ isActive }) => (isActive ? "on" : "")}>{label}</NavLink>)}
+            {links.map(([k, label]) => k === "finances" ? <GroupMenu key={k} label={label} items={[["/app/reimbursements", "Reimbursements"], ["/app/payslips", "My payslips"], ...(isHr || payrollReviewer ? [["/app/payroll", "Payroll"]] : [])]} /> : k === "community" ? <GroupMenu key={k} label={label} items={[["/app/posts", "Posts"], ...(isHr ? [["/app/celebrations", "Celebrations"]] : []), ["/app/festivals", "Festival Wishes"]]} /> : k === "timeoff" ? <GroupMenu key={k} label={label} items={[["/app/attendance", "Attendance"], isHr ? ["/app/leave", "Leave management"] : ["/app/my-leave", "My leave"]]} /> : k === "workforce" ? <GroupMenu key={k} label={label} items={[["/app/employees", "Employees"], ["/app/allocations", "Allocations"]]} /> : <NavLink key={k} to={pathFor(k, isHr)} className={({ isActive }) => (isActive ? "on" : "")}>{label}</NavLink>)}
           </div>
           <NotificationBell />
           <ThemeButton />

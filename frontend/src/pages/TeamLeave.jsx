@@ -3,6 +3,7 @@ import { PersonCell, Pill, SectionHead, Stat, shortDate } from "../components/ui
 import { DecideButtons } from "../components/leaveParts.jsx";
 import { LSTAT, LTYPE, dd, lc, rangeText, useLeave } from "../lib/useLeave.js";
 import Pager, { Paged } from "../components/Pager.jsx";
+import LeaveSwitch from "../components/LeaveSwitch.jsx";
 
 /* A reporting manager approves their own team's leave and comp-off requests; the directors also approve HR staff's. */
 export default function TeamLeave() {
@@ -21,6 +22,7 @@ export default function TeamLeave() {
   const pendDays = (e) => all.filter((r) => r.status === "pending" && lc(r.email) === lc(e.email)).reduce((n, r) => n + Number(r.days || 0), 0);
   return (
     <section className="section">
+      <LeaveSwitch current="team" />
       <SectionHead eyebrow="Team" title="Team" accent="leave." sub={`Leave and comp-off requests from the people who report to you${approvesHr ? ", and from the HR team" : ""}. You approve them.${approvesHr ? ` HR's leave can be approved by ${lv.approverName(team.find((e) => lv.approverOf(e.email) === "directors").email)}; whoever acts first decides.` : ""} Your own leave goes to your reporting manager, or to HR if you have none.`} />
       <div className="grid g4">
         <Stat value={team.length} label="People in your team" />

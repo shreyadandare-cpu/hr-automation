@@ -63,13 +63,13 @@ export default function CelebrateCard() {
         <div className="cc-body" role="tabpanel">
           {tab === "birthdays" && <>
             <Block title="Birthdays today">{bToday.length ? <div className="cc-grid">{bToday.map((b) => <Person key={b.email} p={b} sub="Today 🎂" today />)}</div> : <Empty art={<Cake />} text="No birthdays today." />}</Block>
-            <Block title="Upcoming birthdays">{bSoon.length ? <div className="cc-grid">{bSoon.slice(0, 12).map((b) => <Person key={b.email} p={b} sub={dayLabel(b.date)} />)}</div> : <div className="cc-none">{d ? "None in the next 30 days." : "Loading…"}</div>}</Block>
+            <Block title="Upcoming birthdays">{bSoon.length ? <div className="cc-grid">{bSoon.slice(0, 8).map((b) => <Person key={b.email} p={b} sub={dayLabel(b.date)} />)}</div> : <div className="cc-none">{d ? "None in the next 30 days." : "Loading…"}</div>}</Block>
           </>}
           {tab === "anniversaries" && <>
             <Block title="Work anniversaries today">{aToday.length ? <div className="cc-grid">{aToday.map((a) => <Person key={a.p.id || a.p.email} p={a.p} sub={`${years(a.n)} · Today 🎉`} today />)}</div> : <Empty art={<Party />} text="No work anniversaries today." />}</Block>
-            <Block title="Upcoming work anniversaries">{aSoon.length ? <div className="cc-grid">{aSoon.slice(0, 12).map((a) => <Person key={a.p.id || a.p.email} p={a.p} sub={`${years(a.n)} · ${dayLabel(a.date)}`} />)}</div> : <div className="cc-none">None in the next 30 days. Anniversaries start at one year.</div>}</Block>
+            <Block title="Upcoming work anniversaries">{aSoon.length ? <div className="cc-grid">{aSoon.slice(0, 8).map((a) => <Person key={a.p.id || a.p.email} p={a.p} sub={`${years(a.n)} · ${dayLabel(a.date)}`} />)}</div> : <div className="cc-none">None in the next 30 days. Anniversaries start at one year.</div>}</Block>
           </>}
-          {tab === "joiners" && <Block title="Joined in the last 30 days">{joiners.length ? <div className="cc-grid">{joiners.slice(0, 12).map((x) => <Person key={x.id || x.email} p={x} sub={dayLabel(x.start)} />)}</div> : <Empty art={<Crowd />} text="No new joiners lately." />}</Block>}
+          {tab === "joiners" && <Block title="Joined in the last 30 days">{joiners.length ? <div className="cc-grid">{joiners.slice(0, 8).map((x) => <Person key={x.id || x.email} p={x} sub={dayLabel(x.start)} />)}</div> : <Empty art={<Crowd />} text="No new joiners lately." />}</Block>}
         </div>)}
     </div>
   );

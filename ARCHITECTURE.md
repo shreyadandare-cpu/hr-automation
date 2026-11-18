@@ -86,6 +86,7 @@ Values live in `backend/.env` (never committed). Names from [backend/.env.exampl
 - Reimbursements: `REIMB_REMINDER_DAYS`, `REIMB_NO_RECEIPT_MAX`, `OCR_PROVIDER`
 - Claude access: `ANTHROPIC_ADMIN_KEY`, `ANTHROPIC_INVITE_ROLE`
 - Attendance: `ATTENDANCE_DEVICE_KEY`, `PORTAL_ATTENDANCE_SYNC`, `PORTAL_ATTENDANCE_SYNC_SECONDS`
+- AI (LinkedIn headline ideas in the Digital Kit): `GEMINI_API_KEY`, `GEMINI_MODEL`
 - Payroll: `PAYROLL_DATABASE_URL`, `PAYROLL_DB_SCHEMA`, `PAYROLL_REVIEWERS`, `PAYROLL_ENCRYPTION_KEY`, `PAYROLL_DEBIT_ACCOUNT`, `PAYROLL_DEBIT_BANK_CODE`, `PAYSLIP_AUTO`
 
 The code also reads these, which the example file does not list: `UPLOAD_DIR`, `MAIL_REPLY_TO`, `EMAIL_LINK_MINUTES`,
@@ -194,6 +195,7 @@ later `/api` route require sign-in. The pages router comes last. The JSON body l
 | [profile.js](backend/src/profile.js) | `/api/profile` | "My profile" sections and profile photo |
 | [documents.js](backend/src/documents.js) | `/api/documents` | Personal document uploads; owns `UPLOAD_DIR` |
 | [digital-kit.js](backend/src/digital-kit.js) | `/api/digital-kit` | Each person's kit; HR manages shared resources under `/admin` |
+| [gemini.js](backend/src/gemini.js) | none | LinkedIn headline ideas from Gemini for the Digital Kit. Sends only designation, department and an optional note; cleans the replies |
 | [leave.js](backend/src/leave.js) | absolute `/api/leave/*`, `/api/employees/:email/pay` | Leave requests, decisions, comp offs, holidays, salary cuts |
 | [leave-digest.js](backend/src/leave-digest.js) | `/api/leave/digest` | Daily "who is on leave" email to HR |
 | [leave-mail.js](backend/src/leave-mail.js), [teams.js](backend/src/teams.js) | none | Leave emails; who approves whose leave |
@@ -261,7 +263,7 @@ All paths below were read from the code. Unless noted, a signed-in session is re
 | Assets | `GET/POST /api/assets`, `PUT /api/assets/:id`, `POST /api/assets/:id/assign`, `POST /api/assets/:id/return` | IT admins, HR |
 | Feed | `GET/POST /api/posts`, `PATCH/DELETE /api/posts/:id`, `PUT/DELETE /api/posts/:id/like`, `GET/POST /api/posts/:id/comments`, `POST /api/posts/images` | Everyone |
 | Celebrations and festivals | `GET/POST /api/celebrations`, `POST /api/celebrations/:id/send`, `GET /p/:file` (public), `GET /api/festivals`, `POST /api/festivals/share` | HR; festivals for everyone |
-| Digital Kit | `GET /api/digital-kit`, `GET /api/digital-kit/resources/:id/file`, `/api/digital-kit/admin/*` | Everyone; admin part HR |
+| Digital Kit | `GET /api/digital-kit`, `GET /api/digital-kit/resources/:id/file`, `POST /api/digital-kit/headline-ai` (10 an hour each), `/api/digital-kit/admin/*` | Everyone; admin part HR |
 | Other | `GET /api/notifications`, `POST /api/notifications/read`, `GET /api/audit` | Everyone; audit HR |
 
 ### Pages and static files served by Express
@@ -333,7 +335,8 @@ The "HR only" marks come from the `HR_ONLY` list in `App.jsx`. Every other page 
 - [src/data.jsx](frontend/src/data.jsx): `useData()` loads roster, tool access, documents, profile and leave once, with `reload()`.
 - [src/components/](frontend/src/components/): `Shell.jsx` (top bar, menus, layout), `Modal`, `ConfirmDialog`, `DatePicker`, `Pager`,
   `PeoplePicker`, `PersonAvatar`, `PhotoEditor`, `OrgChart`, `NotificationBell`, `TodayCards`, `toast.jsx`, `ui.jsx`,
-  `charts.jsx`, `leaveParts.jsx`, `leaveSummary.jsx`, `attendance.jsx`, `BackButton`, `BirthdayPopup`, `CelebrateCard`, `NextHolidayPopup`.
+  `charts.jsx`, `leaveParts.jsx`, `leaveSummary.jsx`, `attendance.jsx`, `BackButton`, `BirthdayPopup`, `CelebrateCard`, `NextHolidayPopup`,
+  `LeaveSwitch` (tabs joining Leave management, My leave and Team leave). The top menu groups Attendance and the leave pages under "Attendance & leave".
 - [src/lib/](frontend/src/lib/): `leave.js` (re-exports `window.LeaveRules`), `useLeave.js`, `people.js`.
 - [src/modules/](frontend/src/modules/): `budgets`, `celebrations`, `digitalkit`, `employee`, `festivals`, `offboarding`, `onboarding`, `payroll`, `posts`, `reimbursements`.
 

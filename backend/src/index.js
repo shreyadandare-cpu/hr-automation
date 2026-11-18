@@ -108,4 +108,13 @@ if (process.env.BACKGROUND_JOBS === "off") console.log("Background jobs are off 
 else startBackgroundJobs();
 console.log(`Email: ${emailMode() === "sendgrid" ? "sending through SendGrid" : "SendGrid not configured, emails are logged and skipped"}`);
 const port = process.env.PORT || 3000;
-app.listen(port, () => console.log(`Wohlig One on http://localhost:${port}`));
+const server = app.listen(port, () => console.log(`Wohlig One on http://localhost:${port}`));
+// Another program on the same port (a second copy of this app, another project's dev server) is the usual reason it won't start locally.
+server.on("error", (err) => {
+  if (err.code !== "EADDRINUSE") throw err;
+  console.error(`\nCannot start: port ${port} is already in use by another program on this computer.\n`
+    + `  See which one:  lsof -nP -iTCP:${port} -sTCP:LISTEN\n`
+    + `  Then stop it, or run this app on another port:  PORT=3001 npm start\n`
+    + `  (If you change the port, set PUBLIC_URL and FRONTEND_URL in backend/.env to match, and Google sign-in needs that address added as a redirect.)\n`);
+  process.exit(1);
+});

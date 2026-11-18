@@ -63,7 +63,7 @@ export default function LeaveApply() {
   const set = (patch) => setW((x) => ({ ...x, ...patch }));
   if (!people) return <section className="section"><div className="empty">Loading…</div></section>;
 
-  const back = self ? (isHr ? "/app/leave?tab=mine" : "/app/my-leave") : "/app/leave";
+  const back = self ? "/app/my-leave" : "/app/leave";
   const e = lv.empBy(w.email);
   const val = { email: w.email, type: w.type, from: w.from, to: w.dur === "half" ? w.from : w.to, half: w.dur === "half" ? w.half : null, reason: w.reason, notify: w.notify.slice() };
   const days = R.validDate(val.from) && R.validDate(val.to) && val.to >= val.from ? R.requestDays(val.from, val.to, val.half, lv.holDays) : 0;

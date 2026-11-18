@@ -118,7 +118,7 @@ app.get("/api/directory", wrap(async (_req, res) => {
 // The company roster, for everyone signed in. Only non-personal fields are sent, so this is safe for employees too.
 app.get("/api/roster", wrap(async (_req, res) => {
   const { rows } = await pool.query(
-    `SELECT e.id, e.emp_no, e.name, e.work_email, e.title, e.sub_title, e.work_location, e.manager, e.start_date, e.last_day, e.status, e.employment_type,
+    `SELECT e.id, e.emp_no, e.name, e.work_email, e.title, e.sub_title, e.work_location, e.manager, e.start_date, e.last_day, e.status, e.onboarding_closed_at, e.employment_type,
        (SELECT COALESCE(json_agg(json_build_object('project', p.name, 'lead', a.project_lead, 'location', a.location,
                                                    'status', a.status, 'start', a.start_date, 'end', a.end_date)
                                  ORDER BY (a.status = 'Active') DESC, p.name), '[]'::json)
@@ -126,7 +126,7 @@ app.get("/api/roster", wrap(async (_req, res) => {
        (SELECT extract(epoch FROM ph.updated_at)::bigint FROM profile_photos ph WHERE lower(ph.email) = lower(e.work_email)) AS photo_v
      FROM employees e ORDER BY e.id`);
   res.json(rows.map((r) => ({ id: r.id, no: r.emp_no, name: r.name, email: r.work_email, title: r.title, subTitle: r.sub_title,
-    location: r.work_location, manager: r.manager, start: r.start_date, lastDay: r.last_day, status: r.status, employmentType: r.employment_type, mailPlan: mailPlanOf(r.title), projects: r.projects, photoV: r.photo_v })));
+    location: r.work_location, manager: r.manager, start: r.start_date, lastDay: r.last_day, status: r.status, onboarded: !!r.onboarding_closed_at, employmentType: r.employment_type, mailPlan: mailPlanOf(r.title), projects: r.projects, photoV: r.photo_v })));
 }));
 
 // Who the signed-in person is for project work: HR, a manager (has a team) or a project lead may start projects; HR or a project's lead manages its members.
@@ -332,6 +332,18 @@ app.put("/api/employees/number", requireHr, wrap(async (req, res) => {
   await pool.query("UPDATE employees SET emp_no=$2 WHERE id=$1", [emp.id, no]);
   await pool.query("INSERT INTO audit_log (action, work_email) VALUES ($1,$2)", [`Employee ID of ${emp.name} changed from ${emp.emp_no || "none"} to ${no} by ${req.user.email}`, email]);
   res.json({ email, number: no });
+}));
+
+// HR marks someone who is still onboarding as active. It is saved on the server, so everyone sees it and it survives a page reload.
+app.put("/api/employees/status", requireHr, wrap(async (req, res) => {
+  const email = String(req.body?.email || "").trim().toLowerCase();
+  const emp = (await pool.query("SELECT id, name, status FROM employees WHERE lower(work_email)=$1", [email])).rows[0];
+  if (!emp) return res.status(404).json({ error: "Employee not found." });
+  if (String(req.body?.status) !== "active") return res.status(400).json({ error: "Only the change from Onboarding to Active is allowed here." });
+  if (emp.status === "offboarded") return res.status(400).json({ error: `${emp.name} has left, so the status cannot be changed here.` });
+  await pool.query("UPDATE employees SET status='active', onboarding_closed_at=coalesce(onboarding_closed_at, now()) WHERE id=$1", [emp.id]);
+  await pool.query("INSERT INTO audit_log (action, work_email) VALUES ($1,$2)", [`Onboarding of ${emp.name} marked finished: status Active, by ${req.user.email}`, email]);
+  res.json({ email, status: "active" });
 }));
 
 // A manager adds someone to their OWN team. Allowed for anyone who already has people reporting to them (and for HR). The person

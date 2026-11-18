@@ -166,10 +166,20 @@ function EmployeeView({ p }) {
   const total = auto.length + manual.length, done = auto.filter((x) => x.done).length + manual.filter((x) => x.done).length;
   const pct = total ? Math.round((done / total) * 100) : 0;
 
+  // HR marks onboarding as finished. The server saves it, so it stays Active after a reload and everyone sees it.
+  const [activating, setActivating] = useState(false);
+  const markActive = async () => {
+    setActivating(true);
+    const r = await api("PUT", "/api/employees/status", { email: p.email, status: "active" });
+    setActivating(false);
+    if (!r.ok) { toast((r.data && r.data.error) || "Could not change the status."); return; }
+    patchLocal(p.email, { status: "active" }); await reload(); toast(`${e.name} is now active`);
+  };
   // Onboarding closes by itself once every item is done (the server does the same for offboarding).
   useEffect(() => {
     if (status === "onboarding" && total > 0 && done === total && !loc.status) {
       patchLocal(p.email, { status: "active" }); toast(`${e.name} is fully onboarded`);
+      if (isHr) api("PUT", "/api/employees/status", { email: p.email, status: "active" }).then(() => reload());
     }
   }, [status, total, done]);   // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -223,6 +233,7 @@ function EmployeeView({ p }) {
       <div className="card">
         <div className="profile"><Avatar person={e} /><div style={{ flex: 1, minWidth: 0 }}><div className="eyebrow">{e.dept}</div><h2 style={{ marginTop: 6 }}>{e.name}</h2><div style={{ color: "var(--ink-dim)", marginTop: 2 }}>{e.title}</div><div className="muted" style={{ marginTop: 6, fontSize: 13 }}>{e.email} · <span className={`pill ${e.mailPlan === "Business" ? "p-info" : "p-mute"}`}>{e.mailPlan} mail</span></div></div>
           <div className="row"><EmpPill e={e} />
+            {isHr && p.status === "onboarding" && <button className="btn primary sm" disabled={activating} onClick={markActive}>{activating ? "Saving…" : "Mark as active"}</button>}
             {isHr && status !== "offboarded" && <button className="btn glass sm" onClick={() => setModal("edit")}>Edit details</button>}
             {isHr && pending.length > 0 && <button className="btn primary sm" disabled={!!busy} onClick={() => setAsking(true)}>{byRequest ? "Request Claude access" : "Give Claude access"}</button>}
             {isHr && canOff && <Link className="btn glass sm" to={`/app/offboarding?email=${encodeURIComponent(p.email)}`}><Icon name="offboard" />Offboard</Link>}</div></div>

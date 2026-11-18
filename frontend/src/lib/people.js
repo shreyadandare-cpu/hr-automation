@@ -30,7 +30,7 @@ export const STATUS = { onboarding: ["Onboarding", "info"], active: ["Active", "
 /** One person, built from the server's roster row, their tool access and any offboarding in progress. */
 export function buildPerson(r, i, toolRows, offs) {
   const start = String(r.start || "").slice(0, 10), title = r.title || "—";
-  let status = r.status === "offboarded" ? "offboarded" : start >= NEW_FROM ? "onboarding" : "active";
+  let status = r.status === "offboarded" ? "offboarded" : start >= NEW_FROM && !r.onboarded ? "onboarding" : "active";
   const off = offs.get(String(r.email).toLowerCase());
   let lastDay = String(r.lastDay || "").slice(0, 10) || undefined;
   if (off) {

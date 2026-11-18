@@ -424,6 +424,9 @@ DELETE FROM offboarding_steps WHERE kind = 'task' AND key IN ('idcard', 'exit_in
 -- Company data (projects, who works on them, attendance) and the office each person works from.
 ALTER TABLE employees ADD COLUMN IF NOT EXISTS work_location TEXT;
 ALTER TABLE employees ADD COLUMN IF NOT EXISTS sub_title TEXT;
+-- Set when HR marks someone's onboarding as finished (the Mark as active button). Until then a recent joiner shows as Onboarding.
+-- (Not onboarded_at: that one means the person was added through the onboarding form.)
+ALTER TABLE employees ADD COLUMN IF NOT EXISTS onboarding_closed_at TIMESTAMPTZ;
 CREATE TABLE IF NOT EXISTS projects (
   id SERIAL PRIMARY KEY, name TEXT NOT NULL, project_lead TEXT, start_date DATE, end_date DATE,
   status TEXT NOT NULL DEFAULT 'Active', description TEXT);

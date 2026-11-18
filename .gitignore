@@ -15,7 +15,8 @@ hr-automation/backups/
 
 # macOS
 .DS_Store
-.claude/
+.claude/*
+!.claude/settings.json
 
 # Python virtual environment (local tool folder)
 .venv/

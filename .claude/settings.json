@@ -1,0 +1,16 @@
+{
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR/backend/scripts/check-architecture.mjs\" --hook",
+            "timeout": 30,
+            "statusMessage": "Checking ARCHITECTURE.md against the code"
+          }
+        ]
+      }
+    ]
+  }
+}

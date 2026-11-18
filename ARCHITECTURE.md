@@ -1,6 +1,7 @@
 ---
-title: HR Access Hub — Architecture
+title: Wohlig One (hr-automation) — Architecture
 aliases:
+  - Wohlig One
   - HR Access Hub
   - hr-automation architecture
   - HR Hub
@@ -16,7 +17,7 @@ role: Wohlig's internal HR portal — one Express API plus a React interface, on
 updated: 2026-11-18
 ---
 
-# HR Access Hub — Architecture
+# Wohlig One — Architecture
 
 > [!info] Read this first
 > This is the map of the `hr-automation` repo, for people and LLMs. Read it before you open the code.
@@ -30,7 +31,7 @@ updated: 2026-11-18
 
 ## 1. Purpose
 
-The HR Access Hub is the staff portal for Wohlig (`@wohlig.com` accounts only). HR uses it to onboard and offboard people,
+Wohlig One (formerly "HR Access Hub"; the signed-in app, emails and the attendance tool still use the old name) is the staff portal for Wohlig (`@wohlig.com` accounts only). HR uses it to onboard and offboard people,
 manage logins, approve leave, run payroll and review expense claims. Employees use it for their profile, documents, leave,
 attendance, payslips, reimbursements, the company feed and their Digital Kit (signature, templates, greetings).
 
@@ -138,13 +139,15 @@ people to the Claude organization and removes them. The app does not call a Clau
 ```
 hr-automation/
 ├── docker-compose.yml          frontend (nginx) + backend + optional db
+├── .claude/settings.json       shared Claude Code hook: checks this file at the end of each turn
+├── docs/                       BRAND_GUIDELINES.md and the brand PDF
 ├── backend/
 │   ├── src/                    the server: index.js plus one file per feature
 │   │   ├── index.js            app set-up, route mounts, onboarding and project routes, background timers
 │   │   ├── schema.sql          every table; applied on each start
 │   │   └── payroll/            payroll workflow (routes, engine, tax, bank file, Excel, own schema.sql)
 │   ├── migrations/hrhub-schema.sql   generated copy of schema.sql for a SQL console
-│   ├── scripts/                one-off and operations scripts (migrate, imports, relay)
+│   ├── scripts/                one-off and operations scripts (migrate, imports, relay, check-architecture)
 │   ├── seed/                   roster.json (first-run staff list) and digital-kit/ official files
 │   ├── test/                   unit tests (*.test.mjs) and flow tests
 │   ├── docs/                   DEPLOY-CHECKLIST.md, PAYROLL.md
@@ -373,7 +376,8 @@ People are linked mostly by work email (text, compared in lower case), not by fo
 - **Sensitive data.** Aadhaar, PAN and account numbers are stored masked at onboarding. Payroll bank numbers and bank files are encrypted with `PAYROLL_ENCRYPTION_KEY`.
 - **Migrations.** There is no migration tool. `initDb()` runs all of `schema.sql` on every start, so every statement is written to be repeatable (`CREATE TABLE IF NOT EXISTS`, `ADD COLUMN IF NOT EXISTS`, guarded `DO` blocks, `app_migrations` keys). `npm run migrate` does the same by hand, with `-- --dry-run`. `npm run migrate:sql` regenerates [backend/migrations/hrhub-schema.sql](backend/migrations/hrhub-schema.sql).
 - **Tests.** Run from `backend/`:
-  - `npm test` runs `test/*.test.mjs` (`leave-rules`, `payroll-calc`, `tax-import`). No database needed.
+  - `npm test` runs `test/*.test.mjs` (`leave-rules`, `payroll-calc`, `tax-import`, `architecture`). No database needed.
+  - `npm run check:docs` runs [backend/scripts/check-architecture.mjs](backend/scripts/check-architecture.mjs): it fails when this file no longer names every server file, route mount, table, `.env.example` variable, page, module and component, or when the docs link to a missing file. The `architecture` test runs the same check, and a Claude Code Stop hook in [.claude/settings.json](.claude/settings.json) runs it at the end of each Claude turn.
   - `npm run test:invites` and `npm run test:device` start a throwaway server and use the database in `DATABASE_URL`; they create and remove temporary rows.
   - The frontend has no tests and no lint script.
 

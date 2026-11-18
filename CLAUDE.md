@@ -6,9 +6,43 @@ Wohlig's internal HR portal: one Express server on Postgres ([backend/](backend/
 ## Read first, every task
 
 1. [ARCHITECTURE.md](ARCHITECTURE.md): the map of the repo (routes, pages, tables, how it runs). Read it before opening
-   code, and update it in the same change when routes, pages, tables or env vars change.
+   code, and update it in the same change when routes, pages, tables or env vars change (see "Keep ARCHITECTURE.md
+   current" below).
 2. [docs/BRAND_GUIDELINES.md](docs/BRAND_GUIDELINES.md): the Wohlig brand rules. Read it before any change a person
    can see: a screen, an email, a PDF, a document template.
+
+## Keep ARCHITECTURE.md current (always, checked automatically)
+
+Anyone who changes this repo keeps [ARCHITECTURE.md](ARCHITECTURE.md) true in the same change. Three things enforce it:
+
+- **The check:** `cd backend && npm run check:docs` ([backend/scripts/check-architecture.mjs](backend/scripts/check-architecture.mjs)).
+  It fails when the code has a server file, route mount, table, env var in `.env.example`, page, module or component
+  that ARCHITECTURE.md does not name, or when ARCHITECTURE.md, CLAUDE.md or the brand guide link to a missing file.
+- **The tests:** `npm test` runs the same check ([backend/test/architecture.test.mjs](backend/test/architecture.test.mjs)), so a stale map fails the tests.
+- **Claude Code:** a Stop hook in [.claude/settings.json](.claude/settings.json) (committed, so it reaches everyone) runs the check
+  when Claude finishes a turn and sends it back once to fix the map.
+
+When you update it: change the right section (routes, endpoints, pages, data model, env vars, known gaps), set
+`updated:` in the front matter to today, and keep the Obsidian front matter, the `> [!info]` callout and the links.
+The check only sees names; you still describe what changed in plain words.
+
+## Skills: always pick the right one first
+
+Before a task, check the skills list and use the one that fits. If none fits, say so and propose one.
+
+| Task | Skill |
+|---|---|
+| New or reshaped screen | `frontend-design:frontend-design`, then `redesign-existing-projects` for an existing page |
+| Check a screen in a browser, every size | `playwright-cli` (or the Playwright browser tools) |
+| Accessibility, contrast, focus | `chrome-devtools-mcp:a11y-debugging` |
+| Layout, network or console problems | `chrome-devtools-mcp:chrome-devtools` |
+| Slow page load | `chrome-devtools-mcp:debug-optimize-lcp` |
+| Diagram for ARCHITECTURE.md or a flow | `archify` (or a mermaid block) |
+| Review a change before the pull request | `code-review`, then `security-review` for auth, uploads or payroll |
+| Tidy changed code | `simplify` |
+| Commit message or pull request | `commit-credit` (no AI attribution) |
+| Update this file after a session | `claude-md-management:revise-claude-md` |
+| Spec for a new feature | `product-management:write-spec` |
 
 ## Design: always the Wohlig brand
 
@@ -121,7 +155,8 @@ This applies to everyone who works in this repo, on every screen they add or cha
 | Run the server | `cd backend && npm run dev` (needs `backend/.env`, see `backend/.env.example`) |
 | Run the interface with hot reload | `cd frontend && npm run dev` (proxies the API to port 3000) |
 | Build the interface | `cd backend && npm run build:ui` |
-| Unit tests | `cd backend && npm test` |
+| Unit tests (includes the ARCHITECTURE.md check) | `cd backend && npm test` |
+| Check ARCHITECTURE.md against the code | `cd backend && npm run check:docs` |
 | Everything in Docker | `docker compose up --build` (http://localhost:8080) |
 
 ## Things that are easy to get wrong

@@ -1,4 +1,4 @@
-# HR Access Hub (Wohlig HR portal)
+# Wohlig One (the Wohlig employee portal, formerly "HR Access Hub")
 
 Wohlig's internal HR portal: one Express server on Postgres ([backend/](backend/)) and one React interface
 ([frontend/](frontend/)). Staff sign in with their @wohlig.com Google account.
@@ -40,12 +40,45 @@ Text that staff read (screens, emails, PDFs, error messages) is professional and
 - Say what happened and what to do next. Ask with "Please"; never blame the person.
 - One word per thing everywhere: "Sign in" (not "Log in"), "HR team", "work email".
 - No technical words in front of staff: no "token", "session", "payload", status codes or stack traces.
-- "Wohlig" takes a capital in sentences. The product name is "HR Access Hub".
+- "Wohlig" takes a capital in sentences.
+- The product name is **"Wohlig One"**: the portal is for every employee, not only the HR team. The sign-in page uses
+  it. The older name "HR Access Hub" is still in the signed-in app, emails and the attendance tool; use "Wohlig One"
+  in anything new, and rename the old places only in a change made for that purpose.
+
+## Responsive on every screen, tested with Playwright (always)
+
+This applies to everyone who works in this repo, on every screen they add or change.
+
+- Every screen must work on every screen size: small phone, phone, tablet, laptop, desktop and large monitor, in
+  portrait and landscape. No sideways scroll, no cut-off or overlapping content, no text below 14px.
+- Build it responsive from the start: fluid widths, `clamp()` sizes, grid or flex that reflows, container or media
+  queries. Never fixed pixel widths for layout.
+- **Test with Playwright before calling the work done.** Load the `playwright-cli` skill, or use the Playwright
+  browser tools, and open the built page at these sizes:
+
+  | Screen | Size |
+  |---|---|
+  | Small phone | 320 x 568 |
+  | Phone | 390 x 844 |
+  | Phone, landscape | 844 x 390 |
+  | Tablet | 768 x 1024 |
+  | Small laptop | 1024 x 768 |
+  | Laptop | 1280 x 720 and 1440 x 900 |
+  | Large monitor | 1920 x 1080 |
+
+- At each size: check `scrollWidth` is not wider than the window, take a screenshot and look at it, in light and
+  dark. Click through the screen's main actions and read the console; there must be no errors.
+- Use the browser skills for deeper checks: `chrome-devtools-mcp:a11y-debugging` for accessibility,
+  `chrome-devtools-mcp:chrome-devtools` for layout and network problems.
+- In the pull request, list the sizes tested and anything that was not tested. Never write "responsive" or
+  "verified" from reading the code alone.
+- To see a page without the database, serve `frontend/dist` and `frontend/public` from a small local server with the
+  API calls stubbed, as was done for the sign-in page.
 
 ## Done means checked
 
-- A UI change is checked in a real browser before it is called done: desktop and phone width (down to 320px), light
-  and dark, keyboard focus visible, no sideways scroll, no console errors. Say what was checked.
+- A UI change is checked in a real browser before it is called done (sizes above), light and dark, keyboard focus
+  visible, no sideways scroll, no console errors. Say what was checked.
 - Text contrast is 4.5:1 or better (3:1 for text 24px and larger). Inputs have labels; errors use `role="alert"`.
 - Touch targets are 44px or taller.
 

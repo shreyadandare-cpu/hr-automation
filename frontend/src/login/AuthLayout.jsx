@@ -19,12 +19,12 @@ export default function AuthLayout({ children }) {
   const [theme, setTheme] = useState(currentTheme);
   return (
     <div className="auth">
-      <aside className="auth-panel" aria-label="About HR Access Hub">
+      <aside className="auth-panel" aria-label="About Wohlig One">
         <img className="auth-logo rise" src="/wohlig-logo-dark.svg" alt="Wohlig" />
         <div className="auth-pitch">
-          <p className="auth-eyebrow rise" style={{ "--d": 1 }}>HR Access Hub</p>
+          <p className="auth-eyebrow rise" style={{ "--d": 1 }}>Wohlig One</p>
           <p className="auth-headline rise" style={{ "--d": 2 }}>Your workday, made <em>wohlig.</em></p>
-          <p className="auth-lede rise" style={{ "--d": 3 }}>One secure home for your attendance, leave, pay and everything else you need from the HR team.</p>
+          <p className="auth-lede rise" style={{ "--d": 3 }}>One secure place for everyone at Wohlig, with your attendance, leave, pay and more.</p>
           <ul className="auth-points">
             {POINTS.map(([ico, title, text], i) => <li key={title} className="rise" style={{ "--d": 4 + i * 0.5 }}><span className="ico">{ico}</span><div><b>{title}</b><span>{text}</span></div></li>)}
           </ul>

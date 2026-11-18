@@ -128,7 +128,7 @@ a{color:var(--focus);text-underline-offset:3px}
   .auth-panel::after{width:70%;height:100%}
   .auth-logo{height:32px}
   .auth-pitch{margin:0;padding:24px 0 0}
-  .auth-eyebrow{margin-bottom:12px;font-size:12px}
+  .auth-eyebrow{margin-bottom:12px}
   .auth-headline{font-size:clamp(30px,8vw,44px);margin-bottom:10px}
   .auth-lede{margin:0;font-size:16px}
   .auth-points,.auth-foot{display:none}

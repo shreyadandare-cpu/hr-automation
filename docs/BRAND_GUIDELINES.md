@@ -1,5 +1,5 @@
 ---
-title: Wohlig Brand Guidelines (working copy for the HR Access Hub)
+title: Wohlig Brand Guidelines (working copy for Wohlig One, the employee portal)
 aliases: [Brand Guidelines, Wohlig Brand, Design Tokens]
 tags: [brand, design, ui, standard]
 repo: hr-automation
@@ -118,7 +118,7 @@ The live reference is [wohlig.com](https://www.wohlig.com). What this repo takes
 - **Paper.** A plain ivory page. No glow blobs.
 - **Headline with one italic accent.** A light Fraunces headline with one closing word in italic and a warm orange
   ("Your workday, made *wohlig.*"). One accent per screen, 24px or larger only.
-- **Section marker.** A short orange dash, then small spaced capitals ("HR ACCESS HUB"). One per screen.
+- **Section marker.** A short orange dash, then small spaced capitals ("WOHLIG ONE"). One per screen.
 - **Split layout for entry pages.** A maroon brand panel on one side (logo, headline, three short points), only the
   form on the other, on plain ivory. Nothing decorative behind the form.
 - **Pill buttons.** Primary: maroon gradient `#A8493F → #7D1535 → #5C0926` with ivory Fraunces text and a soft glow;
@@ -158,7 +158,8 @@ Writing rules for every screen and email:
 - [ ] Logo is a master file, right version for the surface, with clear space.
 - [ ] Serif headline, Lato for everything else, 16px body.
 - [ ] Text contrast is 4.5:1 or better in light and dark.
-- [ ] Works at 320px wide with no sideways scroll; touch targets are 44px or taller.
+- [ ] Works at every size in the CLAUDE.md table (320px phone to 1920px monitor) with no sideways scroll, tested with
+      Playwright; touch targets are 44px or taller.
 - [ ] Visible keyboard focus; labels on every input; errors announced with `role="alert"`.
 - [ ] Reduced motion respected.
 - [ ] Checked in a real browser, light and dark, desktop and phone, before calling it done.

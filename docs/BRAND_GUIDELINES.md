@@ -101,6 +101,9 @@ Traditional in spirit, modern in form. Three motifs, drawn as thin line art (abo
 
 Abstract them, don't imitate real ornaments. Use one motif per screen, lightly, with generous empty space around it.
 
+**In this product, only the dot grid is used.** The flower was tried on the sign-in page (it read as a sun behind the
+form) and was rejected on 2026-11-18. Do not use sun, flower, petal, starburst or glowing-orb shapes on any screen.
+
 ## 6. Imagery
 
 Seek tactile surfaces, warm daylight, grounded human moments, real collaboration. Avoid generic robot imagery, neon
@@ -112,17 +115,16 @@ Editorial scale, calm surfaces, intentional colour, subtle motion.
 
 The live reference is [wohlig.com](https://www.wohlig.com). What this repo takes from it:
 
-- **Paper and glow.** Ivory page with a soft orange "sunset" glow in one corner and a beige wash in another.
-- **Headline with one italic accent.** A light Fraunces headline in maroon, with one closing word in italic and a
-  terracotta-to-orange gradient ("Your workday, made *wohlig.*"). One accent per screen, 24px or larger only.
-- **Section marker.** A short orange dash, then small spaced capitals in maroon ("HR ACCESS HUB"). One per screen.
-- **Glass cards.** Translucent ivory, 1px light edge, large soft maroon-tinted shadow, 18 to 28px corners.
+- **Paper.** A plain ivory page. No glow blobs.
+- **Headline with one italic accent.** A light Fraunces headline with one closing word in italic and a warm orange
+  ("Your workday, made *wohlig.*"). One accent per screen, 24px or larger only.
+- **Section marker.** A short orange dash, then small spaced capitals ("HR ACCESS HUB"). One per screen.
+- **Split layout for entry pages.** A maroon brand panel on one side (logo, headline, three short points), only the
+  form on the other, on plain ivory. Nothing decorative behind the form.
 - **Pill buttons.** Primary: maroon gradient `#A8493F → #7D1535 → #5C0926` with ivory Fraunces text and a soft glow;
   lifts 2px on hover. Secondary: light fill with a maroon outline.
-- **Line art.** Large, faint petals or arches behind the content.
-- **Motion.** One entrance sequence when the page opens (pieces rise in order, about 90ms apart), line art that draws
-  itself in, and slow ambient movement (the flower turns once in 160 seconds, the glow drifts). Buttons answer hover and
-  press. Nothing flashes, bounces or loops quickly.
+- **Motion.** One entrance sequence when the page opens (pieces rise in order, about 90ms apart). Buttons answer hover
+  and press. Nothing loops, flashes or bounces, and nothing moves in the background.
 
 - One large serif statement, then quiet supporting text. Plenty of space.
 - Rounded shapes: pill buttons, 12px inputs, 16 to 24px cards.

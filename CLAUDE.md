@@ -23,9 +23,12 @@ Every screen follows the brand guidelines and the look of wohlig.com. The sign-i
 - Headlines in Fraunces (`--brand-display`), everything else in Lato (`--brand-body`). Body text 16px.
 - The logo is always a master file from [frontend/public/](frontend/public/): `wohlig-logo.svg` on light,
   `wohlig-logo-dark.svg` on maroon or dark, `wohlig-smile-mark.svg` for small marks. Never redraw, stretch or recolour it.
-- Graphic motifs: flower, arch, dot grid, as thin line art. One per screen, with space around it.
-- Animation is part of the brand: one entrance sequence per screen, line art that draws in, slow ambient movement,
-  buttons that answer hover and press. Every animation switches off under `prefers-reduced-motion`.
+- **No sun, flower, petal, starburst or glowing-orb shapes, anywhere.** They were tried on the sign-in page and
+  rejected. The only background motif allowed is the faint dot grid; when unsure, use none.
+- **Clean layouts.** One clear job per area. The sign-in page is the pattern: the brand panel on one side, only the
+  form on the other. No decoration behind or around a form.
+- Animation stays quiet: one entrance sequence per screen (pieces rise in order) and buttons that answer hover and
+  press. No looping or ambient background animation. Everything switches off under `prefers-reduced-motion`.
 - Both themes: every screen works in light and dark ([frontend/src/theme.js](frontend/src/theme.js)).
 - Use the `frontend-design:frontend-design` skill for new or reshaped screens.
 

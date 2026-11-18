@@ -7,7 +7,6 @@ import { Callout, SectionHead } from "../../components/ui.jsx";
 import { Background, Card, LinkedIn, MissingNotice, Signature } from "./Personal.jsx";
 import { Downloads, ReadyText, Templates } from "./Company.jsx";
 import Manage from "./Manage.jsx";
-import "./dk.css";
 
 const IC = {
   mail: <><rect x="3" y="5" width="18" height="14" rx="2.5" /><path d="M3.5 7.5l8.5 6 8.5-6" /></>,

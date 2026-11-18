@@ -1,6 +1,6 @@
 #!/bin/bash
 # Double-click this file on the Mac to start everything the office attendance connector needs:
-# the database proxy, the HR Hub, the relay and the tunnel. Leave the window open; closing it (or Ctrl+C) stops it all.
+# the database proxy, Wohlig One, the relay and the tunnel. Leave the window open; closing it (or Ctrl+C) stops it all.
 # When the tunnel address is ready it is printed and copied, so you can paste it into the Keka desktop's .env as APP_URL=...
 cd "$(dirname "$0")/.." || exit 1
 BACKEND="$(pwd)"
@@ -20,10 +20,10 @@ if running 5432; then echo "Database proxy already running."; else
   if ! running 5432; then echo "The database proxy did not start. Run 'gcloud auth login' in Terminal, then double-click this again."; tail -3 "$LOGS/proxy.log"; read -r -p "Press Enter to close."; exit 1; fi
 fi
 
-if running 3000; then echo "HR Hub already running."; else
-  echo "Starting the HR Hub..."; (exec npm start >"$LOGS/app.log" 2>&1) & PIDS+=($!)
+if running 3000; then echo "Wohlig One already running."; else
+  echo "Starting Wohlig One..."; (exec npm start >"$LOGS/app.log" 2>&1) & PIDS+=($!)
   for i in $(seq 1 30); do running 3000 && break; sleep 1; done
-  running 3000 || { echo "The HR Hub did not start. Last lines:"; tail -5 "$LOGS/app.log"; read -r -p "Press Enter to close."; exit 1; }
+  running 3000 || { echo "Wohlig One did not start. Last lines:"; tail -5 "$LOGS/app.log"; read -r -p "Press Enter to close."; exit 1; }
 fi
 
 if running 3100; then echo "Relay already running."; else

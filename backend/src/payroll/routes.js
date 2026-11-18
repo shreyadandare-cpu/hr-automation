@@ -326,7 +326,7 @@ R.post("/runs/:id/actions/:action", wrap(async (req, res) => {
     return fail(400, "Unknown action.");
   });
   if (out.error) return send(res, out);
-  for (const [to, n] of after.tell) await notify(to, { ...n, email: { subject: n.title, body: `${n.title}\n\n${n.body}\n\nOpen Payroll in the HR Access Hub to see it.` } });
+  for (const [to, n] of after.tell) await notify(to, { ...n, email: { subject: n.title, body: `${n.title}\n\n${n.body}\n\nOpen Payroll in Wohlig One to see it.` } });
   if (after.claims) { const { tellIncluded } = await import("../payroll.js"); await tellIncluded(after.claims, after.period); }
   if (after.ready) { const { tellReady } = await import("../payslip-auto.js"); await tellReady(after.ready, after.period); }
   if (after.paid) { const { tellPaid } = await import("../payroll.js"); await tellPaid(after.paid, after.period); }

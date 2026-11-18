@@ -12,15 +12,14 @@
     "migrate:sql": "node scripts/migrate.mjs --write-sql",
     "test:device": "node test/device-flow.mjs",
     "sync:portal-attendance": "node scripts/sync-portal-attendance.mjs",
-    "test": "node --test test/*.test.mjs"
+    "test": "node --test test/*.test.mjs",
+    "check:docs": "node scripts/check-architecture.mjs"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.135.0",
     "dotenv": "^16.4.5",
     "exceljs": "^4.4.0",
     "express": "^4.19.2",
     "google-auth-library": "^9.15.1",
-    "nodemailer": "^6.10.1",
     "pdfkit": "^0.15.2",
     "pg": "^8.12.0"
   }

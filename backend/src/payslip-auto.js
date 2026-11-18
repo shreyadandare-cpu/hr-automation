@@ -27,7 +27,7 @@ export const tellReady = (people, period) => PAYROLL_SEPARATE
   ? Promise.resolve(console.log(`Payroll on its own database: payslip-ready notices for ${period} not sent`))
   : Promise.all(people.map(async (email) => notify(email, {
     title: `Your payslip for ${monthName(period)} is ready.`, body: "View or download it in My payslips.", link: "/app/payslips",
-    email: { subject: `Payslip for ${monthName(period)}`, body: `Your payslip for ${monthName(period)} is ready.\n\nView or download it here: ${await emailLink("/app/payslips")} (works for ${linkMinutes()} minutes). After that, sign in to the HR Access Hub and open My payslips.` } })));
+    email: { subject: `Payslip for ${monthName(period)}`, body: `Your payslip for ${monthName(period)} is ready.\n\nView or download it here: ${await emailLink("/app/payslips")} (works for ${linkMinutes()} minutes). After that, sign in to Wohlig One and open My payslips.` } })));
 
 /** One check. `now` can be set for tests. Returns what it did. */
 export async function runPayslips(now = new Date()) {

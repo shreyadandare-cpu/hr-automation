@@ -1,4 +1,4 @@
-/* Leave rules shared by the server (Node) and the HR Access Hub page (browser), so both count days,
+/* Leave rules shared by the server (Node) and the Wohlig One pages (browser), so both count days,
    balances and salary cuts the same way. Dates are plain "YYYY-MM-DD" strings throughout. */
 (function (root, factory) {
   if (typeof module === "object" && module.exports) module.exports = factory();

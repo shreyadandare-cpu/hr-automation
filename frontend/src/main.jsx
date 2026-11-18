@@ -6,7 +6,7 @@ import { AuthProvider } from "./auth.jsx";
 import { ToastProvider } from "./components/toast.jsx";
 import { DataProvider } from "./data.jsx";
 import { applyTheme, currentTheme } from "./theme.js";
-import "./legacy.css";
+import "./styles.css";
 
 applyTheme(currentTheme());
 createRoot(document.getElementById("root")).render(

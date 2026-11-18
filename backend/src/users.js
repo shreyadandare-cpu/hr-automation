@@ -24,12 +24,12 @@ sessionRouter.post("/login", wrap(async (req, res) => {
   const password = String(req.body?.password || "");
   if (email && !isCompanyEmail(email)) return res.status(403).json({ error: COMPANY_EMAIL_MESSAGE.replace("have an account", "sign in") });
   const key = email || req.ip;
-  const mins = lockedFor(key);
+  const mins = await lockedFor(key);
   if (mins) return res.status(429).json({ error: `Too many wrong passwords. Try again in ${mins} minute${mins === 1 ? "" : "s"}.` });
   const { rows } = await pool.query("SELECT * FROM users WHERE lower(email)=$1", [email]);
   const ok = await verifyPassword(password, rows[0]?.password_hash);
-  if (!rows[0] || !ok) { noteFailure(key); return res.status(401).json({ error: "Wrong email or password." }); }
-  clearFailures(key);
+  if (!rows[0] || !ok) { await noteFailure(key); return res.status(401).json({ error: "Wrong email or password." }); }
+  await clearFailures(key);
   await pool.query("UPDATE users SET last_login=now() WHERE lower(email)=$1", [email]);
   await startSession(res, rows[0].email);
   res.json({ ok: true });
@@ -37,7 +37,7 @@ sessionRouter.post("/login", wrap(async (req, res) => {
 
 // The new employee opens the emailed link, picks a password and is signed in. Public, so it is rate limited.
 sessionRouter.post("/auth/accept-invitation", wrap(async (req, res) => {
-  if (tooMany(`accept:${req.ip}`, 10, 15 * 60 * 1000)) return res.status(429).json({ error: "Too many attempts. Try again in a few minutes." });
+  if (await tooMany(`accept:${req.ip}`, 10, 15 * 60 * 1000)) return res.status(429).json({ error: "Too many attempts. Try again in a few minutes." });
   const r = await acceptInvitation(String(req.body?.token || ""), req.body?.password);
   if (!r.ok) return res.status(r.status).json({ error: r.error });
   await startSession(res, r.email);
@@ -46,7 +46,7 @@ sessionRouter.post("/auth/accept-invitation", wrap(async (req, res) => {
 
 // HR sends a fresh invitation (the old link stops working). The answer never says whether an address has an account.
 sessionRouter.post("/auth/resend-invitation", requireHr, wrap(async (req, res) => {
-  if (tooMany(`resend:${req.user.email}`, 30, 60 * 60 * 1000)) return res.status(429).json({ error: "Too many invitations sent. Try again later." });
+  if (await tooMany(`resend:${req.user.email}`, 30, 60 * 60 * 1000)) return res.status(429).json({ error: "Too many invitations sent. Try again later." });
   const email = String(req.body?.email || "").trim().toLowerCase();
   let mode = "email";
   if (V.email(email) && isCompanyEmail(email)) {

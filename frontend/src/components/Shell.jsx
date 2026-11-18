@@ -9,7 +9,7 @@ import { useToast } from "./toast.jsx";
 import NotificationBell from "./NotificationBell.jsx";
 import NextHolidayPopup from "./NextHolidayPopup.jsx";
 
-/* Pages still in the older single page app are plain links (hash routes under /). Pages already in React stay in the app. */
+/* The main menu: each key maps to its page in REACT_PAGES below. HR and employees get different lists. */
 const HR_LINKS = [["dashboard", "Dashboard"], ["community", "Community"], ["workforce", "Workforce"], ["onboard", "Onboarding"], ["offboard", "Offboarding"], ["leave", "Leave"], ["attendance", "Attendance"], ["finances", "Finances"], ["audit", "Audit log"]];
 const EMP_LINKS = [["dashboard", "Dashboard"], ["community", "Community"], ["workforce", "Workforce"], ["attendance", "Attendance"], ["finances", "Finances"], ["myleave", "My leave"]];
 const REACT_PAGES = {

@@ -166,9 +166,9 @@ This applies to everyone who works in this repo, on every screen they add or cha
   `frontend/src`, rebuild and commit `dist` in the same change.
 - **The schema lives in `backend/src/schema.sql`**, applied on every server start. `backend/migrations/hrhub-schema.sql`
   is an older copy. Schema changes must be safe to run again on a live database.
-- **A new public path needs two edits**: `backend/src/index.js` and `frontend/nginx.conf.template`.
+- **A new public path needs two edits**: `backend/src/pages.js` and `frontend/nginx.conf.template`.
 - **Logos are served from the site root by Express**, not copied by Vite (`publicDir` is off). A new file in
-  `frontend/public` must be added to the list in `backend/src/index.js` and to the dev proxy in `frontend/vite.config.js`.
+  `frontend/public` must be added to the list in `backend/src/pages.js` and to the dev proxy in `frontend/vite.config.js`.
 - Never commit `backend/.env`, database dumps or anything with staff data.
 
 ## Git

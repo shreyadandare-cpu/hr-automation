@@ -143,7 +143,7 @@ hr-automation/
 ├── docs/                       BRAND_GUIDELINES.md and the brand PDF
 ├── backend/
 │   ├── src/                    the server: index.js plus one file per feature
-│   │   ├── index.js            app set-up, route mounts, onboarding and project routes, background timers
+│   │   ├── index.js            app set-up and route mounts only (routes live in their own files)
 │   │   ├── schema.sql          every table; applied on each start
 │   │   └── payroll/            payroll workflow (routes, engine, tax, bank file, Excel, own schema.sql)
 │   ├── migrations/hrhub-schema.sql   generated copy of schema.sql for a SQL console
@@ -166,12 +166,14 @@ hr-automation/
 ### Layering
 
 There are no controller, service or repository layers. Each feature file in [backend/src/](backend/src/) holds its routes,
-its SQL and its helpers, and exports a router. [backend/src/index.js](backend/src/index.js) wires them together and also
-holds the onboarding, roster, project and tool-access routes itself. [backend/src/db.js](backend/src/db.js) exports `pool`
+its SQL and its helpers, and exports a router. [backend/src/index.js](backend/src/index.js) (about 110 lines) only wires
+them together: middleware, the routers in order, start-up and the background jobs. [backend/src/db.js](backend/src/db.js) exports `pool`
 (main database) and `payPool` (payroll database, the same pool unless `PAYROLL_DATABASE_URL` is set).
 
-Mount order matters. The documents and Digital Kit routers are mounted before `express.json()` because they read raw file
-bodies. The JSON body limit is 100 kb.
+Mount order matters. `security.js` runs first (security headers, then the same-origin check on changes). The documents and
+Digital Kit routers are mounted before `express.json()` because they read raw file bodies. `accountRouter` makes every
+later `/api` route require sign-in. The pages router comes last. The JSON body limit is 100 kb. `trust proxy` is set from
+`TRUST_PROXY` (default 1), so `req.ip` is the caller behind nginx or Cloud Run.
 
 ### Routers and modules
 
@@ -179,7 +181,15 @@ bodies. The JSON body limit is 100 kb.
 |---|---|---|
 | [users.js](backend/src/users.js) | `/api` (`sessionRouter`, `accountRouter`), `/api/users` | Password login (testing only), logout, invite acceptance, `/api/me`, HR user management |
 | [google-signin.js](backend/src/google-signin.js) | `/auth` | Google OAuth code flow with PKCE |
-| [invites.js](backend/src/invites.js) | `/invite` | One-time 30-minute invite links; also the in-memory rate limiter `tooMany` |
+| [onboarding-routes.js](backend/src/onboarding-routes.js) | `/api/onboarding/*`, `/api/work-email` (HR only) | New joiners: draft, work email, Google account, first login, final record |
+| [people.js](backend/src/people.js) | `/api/directory`, `/api/roster`, `/api/managers`, `/api/employees/{manager,number,status}`, `/api/team/members` | Who is at the company, reporting lines, employee IDs |
+| [projects.js](backend/src/projects.js) | `/api/allocations`, `/api/projects` | Projects and who works on them; handovers |
+| [tool-access.js](backend/src/tool-access.js) | `/api/audit`, `/api/tool-access` | The audit log and Claude access |
+| [pages.js](backend/src/pages.js) | `/`, `/login`, `/app/*`, `/auth`, `/invite`, `/l`, `/p`, `/sig`, logos, `/leave-rules.js` | The pages and public links; mounted last |
+| [jobs.js](backend/src/jobs.js) | none (timers) | Every scheduled job; started unless `BACKGROUND_JOBS=off` |
+| [security.js](backend/src/security.js) | every request | Security headers; refuses changes (POST, PUT, PATCH, DELETE) sent from another website |
+| [limits.js](backend/src/limits.js) | none | Sign-in lockout and rate limits, kept in the `rate_limits` table |
+| [invites.js](backend/src/invites.js) | `/invite` | One-time 30-minute invite links |
 | [email-links.js](backend/src/email-links.js) | `/l` | Short-lived links used in automatic emails |
 | [profile.js](backend/src/profile.js) | `/api/profile` | "My profile" sections and profile photo |
 | [documents.js](backend/src/documents.js) | `/api/documents` | Personal document uploads; owns `UPLOAD_DIR` |
@@ -263,7 +273,7 @@ output. A fixed list of logo and favicon files and `/sig` come from `frontend/pu
 
 ### Background jobs
 
-Timers in `index.js` (all skipped when `BACKGROUND_JOBS=off`): scheduled offboardings and invite expiry every minute; leave
+Timers in `jobs.js` (all skipped when `BACKGROUND_JOBS=off`): scheduled offboardings and invite expiry every minute; leave
 digest every 10 minutes; reimbursement and budget reminders, automatic payroll draft, Claude request reminders and
 celebration alerts every hour; optional Employee Portal attendance sync. They run in the server process, so two running
 servers on one database would both run them.
@@ -344,6 +354,7 @@ People are linked mostly by work email (text, compared in lower case), not by fo
 | Table | Purpose | Key relations |
 |---|---|---|
 | `employees` | Everyone on staff; status `onboarding`, `active` or `offboarded`; masked ID numbers only | Hub of the model |
+| `rate_limits` | One row per sign-in failure or rate-limited attempt, by key; rows older than a day are removed | none |
 | `users`, `sessions`, `settings`, `invites` | Logins (`role`, `it_admin`), session hashes, default password, invite link hashes | `users.email` = `employees.work_email` |
 | `onboarding_drafts` | One unsaved onboarding form per HR user | keyed by HR email |
 | `audit_log` | Every recorded action (`action`, `work_email`, `ts`) | by email |
@@ -394,15 +405,19 @@ People are linked mostly by work email (text, compared in lower case), not by fo
 
 ## 11. Known gaps and risks
 
-- **`migrations/hrhub-schema.sql` is stale.** It has 530 lines against 779 in `src/schema.sql` and lacks later tables (for example `salary_structures`, `email_links`, `device_users`, `posts`, `assets`, `celebrations`, `digital_kits`, `festivals`). Regenerate it with `npm run migrate:sql` before using it.
+Fixed on 2026-11-18: `index.js` split into route files; limits moved to the database; `trust proxy` set; security headers
+and a same-origin check on changes; unused packages removed; the SQL copy regenerated (a test now keeps it in step);
+duplicate tables removed from `schema.sql`; stale paths and comments corrected; the dev proxy completed.
+
+Still open:
+
+- **Name-based links.** Managers and project leads are stored as names, not ids, so renaming someone or two people with the
+  same name breaks reporting lines. Fixing it needs new id columns, a backfill of live data and changes to every reader;
+  it is a data migration and needs its own planned change.
 - **`frontend/dist` is committed.** A source change without `npm run build:ui` leaves the non-Docker server on the old interface.
-- **Two servers decide page access.** Express does it without Docker; nginx does it in Docker. A new public path (like `/l/` or `/p/`) must be added to both `index.js` and `nginx.conf.template`.
-- **`index.js` is 706 lines** and mixes set-up with onboarding, project and tool-access routes.
-- **Name-based links.** Managers and project leads are matched by name, so a rename or two people with the same name breaks reporting lines.
-- **In-memory limits.** Login lockout and `tooMany` rate limits live in process memory: they reset on restart and are not shared between instances. Some key on `req.ip`, and Express `trust proxy` is not set, so behind nginx all callers share one address.
-- **No CSRF token, `helmet` or CORS set-up.** Protection rests on the SameSite=Lax cookie and same-origin serving.
-- **Unused dependencies:** `@anthropic-ai/sdk`, `nodemailer`.
-- **Stale wording:** two start-up errors in `auth.js` say `server/.env` and `.gitignore` names `hr-automation/server/data/` (the folder is now `backend/`); `Shell.jsx` and `documents.js` comments mention an older single-page app that is no longer in the repo.
-- **Vite dev proxy is partial.** It forwards `/api`, `/auth`, `/invite`, the leave rules and some logo files, but not `/sig`, `/l` or `/p`.
-- **Defaults in code:** `MAIL_SKIP_RECIPIENTS` and `PAYROLL_REVIEWERS` fall back to named addresses when unset.
-- **`users`, `sessions` and `settings` are each declared twice** in `schema.sql`; harmless, but confusing.
+- **Two servers decide page access.** Express does it without Docker; nginx does it in Docker. A new public path (like
+  `/l/` or `/p/`) must be added to both `pages.js` and `nginx.conf.template`.
+- **The frontend has no tests and no lint script.**
+- **Named defaults, on purpose.** When unset, `MAIL_SKIP_RECIPIENTS` stops email to the two directors and
+  `PAYROLL_REVIEWERS` makes a director the payroll reviewer. The deploy checklist relies on these defaults, so they stay;
+  set the variables to change them.

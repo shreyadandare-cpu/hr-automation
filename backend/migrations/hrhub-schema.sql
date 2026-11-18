@@ -80,25 +80,13 @@ CREATE TABLE IF NOT EXISTS settings (
   value TEXT NOT NULL
 );
 
-CREATE TABLE IF NOT EXISTS users (
-  email         TEXT PRIMARY KEY,
-  password_hash TEXT NOT NULL,
-  role          TEXT NOT NULL CHECK (role IN ('hr','employee')),
-  created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
-  last_login    TIMESTAMPTZ
+-- Attempt counters for sign-in lockout and rate limits (limits.js). In the database, not in memory, so they survive a
+-- restart and every server instance shares them. Old rows are removed as they expire.
+CREATE TABLE IF NOT EXISTS rate_limits (
+  key        TEXT NOT NULL,
+  hit_at     TIMESTAMPTZ NOT NULL DEFAULT now()
 );
-
-CREATE TABLE IF NOT EXISTS sessions (
-  token_hash TEXT PRIMARY KEY,
-  email      TEXT NOT NULL,
-  expires_at TIMESTAMPTZ NOT NULL
-);
-CREATE INDEX IF NOT EXISTS sessions_email_idx ON sessions (email);
-
-CREATE TABLE IF NOT EXISTS settings (
-  key   TEXT PRIMARY KEY,
-  value TEXT NOT NULL
-);
+CREATE INDEX IF NOT EXISTS rate_limits_key_idx ON rate_limits (key, hit_at);
 
 -- Leave management. Rules (quotas, carry-over, salary cut) live in frontend/leave-rules.cjs.
 ALTER TABLE employees ADD COLUMN IF NOT EXISTS monthly_gross  NUMERIC(12,2);
@@ -122,6 +110,9 @@ CREATE TABLE IF NOT EXISTS leave_requests (
 -- Allowed leave types and half days. Re-applied on every start so existing databases pick up new types.
 ALTER TABLE leave_requests ADD COLUMN IF NOT EXISTS half TEXT;
 ALTER TABLE leave_requests ADD COLUMN IF NOT EXISTS notify JSONB NOT NULL DEFAULT '[]';
+-- Who asked for it (the employee, or HR on their behalf) and who approved, declined or cancelled it. Empty on older rows.
+ALTER TABLE leave_requests ADD COLUMN IF NOT EXISTS created_by TEXT;
+ALTER TABLE leave_requests ADD COLUMN IF NOT EXISTS decided_by TEXT;
 ALTER TABLE leave_requests DROP CONSTRAINT IF EXISTS leave_requests_status_check;
 ALTER TABLE leave_requests ADD CONSTRAINT leave_requests_status_check CHECK (status IN ('pending','approved','declined','cancelled'));
 ALTER TABLE leave_requests DROP CONSTRAINT IF EXISTS leave_requests_type_check;
@@ -143,6 +134,9 @@ ALTER TABLE comp_off_credits ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAU
 ALTER TABLE comp_off_credits ADD COLUMN IF NOT EXISTS decided_at TIMESTAMPTZ;
 ALTER TABLE comp_off_credits DROP CONSTRAINT IF EXISTS comp_off_credits_status_check;
 ALTER TABLE comp_off_credits ADD CONSTRAINT comp_off_credits_status_check CHECK (status IN ('pending','approved','declined'));
+-- Who asked for a comp off and who decided it, for the comp off request history.
+ALTER TABLE comp_off_credits ADD COLUMN IF NOT EXISTS created_by TEXT;
+ALTER TABLE comp_off_credits ADD COLUMN IF NOT EXISTS decided_by TEXT;
 DROP INDEX IF EXISTS comp_off_once_per_day;
 CREATE UNIQUE INDEX IF NOT EXISTS comp_off_once_per_day ON comp_off_credits (lower(work_email), worked_on) WHERE status <> 'declined';
 
@@ -274,6 +268,40 @@ CREATE TABLE IF NOT EXISTS payroll_items (
 );
 CREATE UNIQUE INDEX IF NOT EXISTS payroll_items_once ON payroll_items (run_id, lower(work_email));
 
+-- Payslips. HR enters each person's salary breakdown with the first month it applies to; a new row for a raise keeps the old one.
+-- Processing a month stores the whole payslip in payroll_items.slip, so a later salary change never alters a past payslip.
+-- How the amounts are worked out (TDS included) is in payroll-calc.js.
+CREATE TABLE IF NOT EXISTS salary_structures (
+  id               SERIAL PRIMARY KEY,
+  work_email       TEXT NOT NULL,
+  effective_from   TEXT NOT NULL CHECK (effective_from ~ '^[0-9]{4}-(0[1-9]|1[0-2])$'),
+  earnings         JSONB NOT NULL,
+  pf_employee      NUMERIC(12,2) NOT NULL DEFAULT 0,
+  professional_tax NUMERIC(12,2) NOT NULL DEFAULT 0,
+  other_deductions JSONB NOT NULL DEFAULT '[]',
+  tds_monthly      NUMERIC(12,2),
+  updated_by       TEXT NOT NULL,
+  updated_at       TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE UNIQUE INDEX IF NOT EXISTS salary_structures_once ON salary_structures (lower(work_email), effective_from);
+ALTER TABLE employees ADD COLUMN IF NOT EXISTS pf_number TEXT;
+ALTER TABLE payroll_items ADD COLUMN IF NOT EXISTS slip JSONB;
+-- Payslips made automatically start as a draft HR can check; employees see them from published_at (set at publish_at, or by HR).
+-- Runs HR processes by hand, and every run from before this, are published.
+ALTER TABLE payroll_runs ADD COLUMN IF NOT EXISTS publish_at TIMESTAMPTZ;
+-- Links in automatic emails work for a short time (email-links.js). Only a hash of each link's token is kept.
+CREATE TABLE IF NOT EXISTS email_links (
+  id         SERIAL PRIMARY KEY,
+  token_hash TEXT NOT NULL UNIQUE,
+  path       TEXT NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  expires_at TIMESTAMPTZ NOT NULL
+);
+ALTER TABLE payroll_runs ADD COLUMN IF NOT EXISTS published_at TIMESTAMPTZ;
+-- Only runs from before the review workflow ('processed'/'paid' with no publish date); workflow runs are published on approval.
+UPDATE payroll_runs SET published_at = processed_at WHERE published_at IS NULL AND publish_at IS NULL AND status IN ('processed','paid')
+  AND NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='payroll_runs' AND column_name='workflow' AND table_schema=current_schema());
+
 CREATE TABLE IF NOT EXISTS reimbursements (
   id               SERIAL PRIMARY KEY,
   claim_no         TEXT UNIQUE,
@@ -393,6 +421,9 @@ DELETE FROM offboarding_steps WHERE kind = 'task' AND key IN ('idcard', 'exit_in
 -- Company data (projects, who works on them, attendance) and the office each person works from.
 ALTER TABLE employees ADD COLUMN IF NOT EXISTS work_location TEXT;
 ALTER TABLE employees ADD COLUMN IF NOT EXISTS sub_title TEXT;
+-- Set when HR marks someone's onboarding as finished (the Mark as active button). Until then a recent joiner shows as Onboarding.
+-- (Not onboarded_at: that one means the person was added through the onboarding form.)
+ALTER TABLE employees ADD COLUMN IF NOT EXISTS onboarding_closed_at TIMESTAMPTZ;
 CREATE TABLE IF NOT EXISTS projects (
   id SERIAL PRIMARY KEY, name TEXT NOT NULL, project_lead TEXT, start_date DATE, end_date DATE,
   status TEXT NOT NULL DEFAULT 'Active', description TEXT);
@@ -407,6 +438,17 @@ CREATE TABLE IF NOT EXISTS attendance_punches (
   employee_id INTEGER NOT NULL REFERENCES employees(id) ON DELETE CASCADE,
   work_date DATE NOT NULL, punch_time TIME NOT NULL, direction TEXT NOT NULL, source TEXT, note TEXT, created_by TEXT);
 CREATE INDEX IF NOT EXISTS attendance_punches_day ON attendance_punches (employee_id, work_date);
+
+-- Office biometric device: which device user ID is which employee, and punches from IDs nobody has linked yet.
+CREATE TABLE IF NOT EXISTS device_users (
+  device_user_id TEXT PRIMARY KEY,
+  employee_id    INTEGER NOT NULL REFERENCES employees(id) ON DELETE CASCADE,
+  created_at     TIMESTAMPTZ NOT NULL DEFAULT now());
+CREATE TABLE IF NOT EXISTS device_unmatched (
+  device_user_id TEXT NOT NULL,
+  punched_at     TIMESTAMP NOT NULL,   -- Indian wall-clock time, as the device shows it
+  PRIMARY KEY (device_user_id, punched_at));
+CREATE UNIQUE INDEX IF NOT EXISTS attendance_punches_device_once ON attendance_punches (employee_id, work_date, punch_time) WHERE source = 'device';
 
 -- ---------- Invoice-first claims, partial approval, travel policy, budget requests, holiday calendar ----------
 CREATE TABLE IF NOT EXISTS app_migrations (key TEXT PRIMARY KEY, ran_at TIMESTAMPTZ NOT NULL DEFAULT now());
@@ -526,5 +568,211 @@ END $$;
 CREATE TABLE IF NOT EXISTS tool_access (
   work_email TEXT NOT NULL, tool TEXT NOT NULL, status TEXT NOT NULL, detail TEXT, updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   PRIMARY KEY (work_email, tool));
+-- Claude access asked for by HR and waiting for the Claude admin to invite the person (status 'requested').
+ALTER TABLE tool_access ADD COLUMN IF NOT EXISTS requested_by TEXT;
+ALTER TABLE tool_access ADD COLUMN IF NOT EXISTS requested_at TIMESTAMPTZ;
+ALTER TABLE tool_access ADD COLUMN IF NOT EXISTS reminded_at TIMESTAMPTZ;
+
+-- People who have already left are not on any project any more.
+UPDATE employee_project_allocations a SET status='Ended', end_date=coalesce(a.end_date, e.last_day, CURRENT_DATE), end_reason=coalesce(a.end_reason, 'Left the company')
+  FROM employees e WHERE e.id = a.employee_id AND e.status = 'offboarded' AND a.status = 'Active';
+
+-- Whether someone joined as a regular employee or an intern.
+ALTER TABLE employees ADD COLUMN IF NOT EXISTS employment_type TEXT NOT NULL DEFAULT 'Employee';
+
+-- The company feed on the dashboard: HR posts, everyone likes and comments.
+CREATE TABLE IF NOT EXISTS posts (
+  id SERIAL PRIMARY KEY, author_email TEXT NOT NULL, body TEXT NOT NULL, created_at TIMESTAMPTZ NOT NULL DEFAULT now());
+CREATE TABLE IF NOT EXISTS post_likes (
+  post_id INT NOT NULL REFERENCES posts(id) ON DELETE CASCADE, email TEXT NOT NULL, created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (post_id, email));
+CREATE TABLE IF NOT EXISTS post_comments (
+  id SERIAL PRIMARY KEY, post_id INT NOT NULL REFERENCES posts(id) ON DELETE CASCADE, author_email TEXT NOT NULL,
+  body TEXT NOT NULL, created_at TIMESTAMPTZ NOT NULL DEFAULT now());
+CREATE INDEX IF NOT EXISTS post_comments_post ON post_comments (post_id, id);
+-- Pictures on feed posts. Uploaded first (post_id empty), then attached when the post is published.
+CREATE TABLE IF NOT EXISTS post_images (
+  id SERIAL PRIMARY KEY, post_id INT REFERENCES posts(id) ON DELETE CASCADE, uploaded_by TEXT NOT NULL,
+  stored_name TEXT NOT NULL, mime TEXT NOT NULL, position INT NOT NULL DEFAULT 0, created_at TIMESTAMPTZ NOT NULL DEFAULT now());
+CREATE INDEX IF NOT EXISTS post_images_post ON post_images (post_id, position);
+
+-- Posts get an optional title, an edited time and internal shares (to colleagues through the bell, or a copied link).
+ALTER TABLE posts ADD COLUMN IF NOT EXISTS title TEXT;
+ALTER TABLE posts ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ;
+CREATE TABLE IF NOT EXISTS post_shares (
+  id SERIAL PRIMARY KEY, post_id INT NOT NULL REFERENCES posts(id) ON DELETE CASCADE, shared_by TEXT NOT NULL,
+  shared_with TEXT, created_at TIMESTAMPTZ NOT NULL DEFAULT now());   -- shared_with empty = the link was copied
+CREATE INDEX IF NOT EXISTS post_shares_post ON post_shares (post_id);
+
+-- Money paid to an employee ahead of time (a travel advance, a salary advance) and what has been recovered of it.
+-- Outstanding = amount - recoveries; the offboarding financial clearance deducts what is still outstanding.
+CREATE TABLE IF NOT EXISTS employee_advances (
+  id SERIAL PRIMARY KEY, work_email TEXT NOT NULL, advance_date DATE NOT NULL, reason TEXT NOT NULL,
+  amount NUMERIC(12,2) NOT NULL CHECK (amount > 0), created_by TEXT NOT NULL, created_at TIMESTAMPTZ NOT NULL DEFAULT now());
+CREATE INDEX IF NOT EXISTS employee_advances_email ON employee_advances (lower(work_email));
+CREATE TABLE IF NOT EXISTS advance_recoveries (
+  id SERIAL PRIMARY KEY, advance_id INT NOT NULL REFERENCES employee_advances(id), amount NUMERIC(12,2) NOT NULL CHECK (amount > 0),
+  recovered_on DATE NOT NULL, note TEXT, recorded_by TEXT NOT NULL, offboarding_id INT REFERENCES offboardings(id),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now());
+CREATE INDEX IF NOT EXISTS advance_recoveries_advance ON advance_recoveries (advance_id);
+
+-- Each time HR confirms an offboarding's financial clearance: the figures as they were, who confirmed it and when.
+CREATE TABLE IF NOT EXISTS offboarding_clearances (
+  id SERIAL PRIMARY KEY, offboarding_id INT NOT NULL REFERENCES offboardings(id), work_email TEXT NOT NULL, exit_date DATE NOT NULL,
+  final_salary NUMERIC(12,2), reimbursements_payable NUMERIC(12,2) NOT NULL DEFAULT 0, advance_outstanding NUMERIC(12,2) NOT NULL DEFAULT 0,
+  total_recovery NUMERIC(12,2) NOT NULL DEFAULT 0, net_salary NUMERIC(12,2), final_payout NUMERIC(12,2),
+  month_end_window BOOLEAN NOT NULL DEFAULT false, status TEXT NOT NULL CHECK (status IN ('cleared','recovery_confirmed')),
+  details JSONB NOT NULL DEFAULT '{}', completed_by TEXT NOT NULL, completed_at TIMESTAMPTZ NOT NULL DEFAULT now());
+CREATE INDEX IF NOT EXISTS offboarding_clearances_off ON offboarding_clearances (offboarding_id, id DESC);
+
+-- IT admins manage company assets (laptops, phones...). HR can switch this on per login in Manage users. It starts on for anyone whose title is IT Admin.
+ALTER TABLE users ADD COLUMN IF NOT EXISTS it_admin BOOLEAN NOT NULL DEFAULT false;
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM app_migrations WHERE key = 'it-admin-from-title') THEN
+    UPDATE users u SET it_admin = true FROM employees e WHERE lower(e.work_email) = lower(u.email) AND e.title ILIKE '%IT admin%';
+    INSERT INTO app_migrations (key) VALUES ('it-admin-from-title');
+  END IF;
+END $$;
+
+CREATE TABLE IF NOT EXISTS assets (
+  id SERIAL PRIMARY KEY,
+  tag TEXT NOT NULL UNIQUE,
+  category TEXT NOT NULL,
+  name TEXT NOT NULL,
+  serial_no TEXT,
+  purchased_on DATE, warranty_until DATE,
+  status TEXT NOT NULL DEFAULT 'In stock' CHECK (status IN ('In stock','Assigned','In repair','Retired')),
+  assigned_to INTEGER REFERENCES employees(id) ON DELETE SET NULL,
+  assigned_on DATE,
+  notes TEXT,
+  created_by TEXT, created_at TIMESTAMPTZ NOT NULL DEFAULT now(), updated_at TIMESTAMPTZ NOT NULL DEFAULT now());
+CREATE TABLE IF NOT EXISTS asset_events (
+  id SERIAL PRIMARY KEY,
+  asset_id INTEGER NOT NULL REFERENCES assets(id) ON DELETE CASCADE,
+  at TIMESTAMPTZ NOT NULL DEFAULT now(), by_email TEXT, action TEXT NOT NULL);
+CREATE INDEX IF NOT EXISTS asset_events_asset ON asset_events (asset_id, at DESC);
+ALTER TABLE projects ADD COLUMN IF NOT EXISTS location TEXT;
+
+-- Celebrations: birthday and welcome posters HR creates and emails to everyone. One row per poster; the row is a draft until HR
+-- sends it. A person gets one birthday poster a year (occasion_key birthday:YYYY) and one welcome poster ever (welcome); the
+-- unique index covers every poster that was sent, so retrying a failed one never makes a second.
+CREATE TABLE IF NOT EXISTS celebrations (
+  id             SERIAL PRIMARY KEY,
+  occasion       TEXT NOT NULL CHECK (occasion IN ('birthday','welcome')),
+  occasion_key   TEXT NOT NULL,
+  employee_email TEXT NOT NULL,
+  employee_name  TEXT NOT NULL,
+  template       TEXT NOT NULL,
+  heading        TEXT,
+  designation    TEXT,
+  joining_date   DATE,
+  message        TEXT,
+  poster_file    TEXT,
+  status         TEXT NOT NULL DEFAULT 'draft' CHECK (status IN ('draft','sending','sent','partial','failed')),
+  created_by     TEXT NOT NULL,
+  created_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
+  send_started_at TIMESTAMPTZ,
+  sent_at        TIMESTAMPTZ
+);
+CREATE UNIQUE INDEX IF NOT EXISTS celebrations_once ON celebrations (lower(employee_email), occasion_key) WHERE status <> 'draft';
+CREATE INDEX IF NOT EXISTS celebrations_recent ON celebrations (id DESC);
+-- Who a poster was emailed to (fixed when sending starts) and how each delivery went, so a retry only touches the ones not sent.
+CREATE TABLE IF NOT EXISTS celebration_recipients (
+  celebration_id INT NOT NULL REFERENCES celebrations(id) ON DELETE CASCADE,
+  email          TEXT NOT NULL,
+  name           TEXT,
+  status         TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','sent','failed','skipped')),
+  error          TEXT,
+  sent_at        TIMESTAMPTZ,
+  PRIMARY KEY (celebration_id, email)
+);
+-- The daily check tells HR about a birthday or a new joiner once; this remembers what it already said.
+CREATE TABLE IF NOT EXISTS celebration_alerts (
+  employee_email TEXT NOT NULL,
+  alert_key      TEXT NOT NULL,
+  created_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (employee_email, alert_key)
+);
+
+-- Digital Kit: one small record per employee (personal details used to personalise the kit), and the shared master resources HR manages.
+CREATE TABLE IF NOT EXISTS digital_kits (
+  employee_id INTEGER PRIMARY KEY REFERENCES employees(id) ON DELETE CASCADE,
+  source      TEXT NOT NULL DEFAULT 'migration',
+  overrides   JSONB NOT NULL DEFAULT '{}',
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE TABLE IF NOT EXISTS digital_kit_resources (
+  id          SERIAL PRIMARY KEY,
+  module      TEXT NOT NULL CHECK (module IN ('text','template','download','background','linkedin','card')),
+  category    TEXT NOT NULL DEFAULT '',
+  title       TEXT NOT NULL,
+  description TEXT NOT NULL DEFAULT '',
+  body        TEXT,
+  filename    TEXT,
+  mime        TEXT,
+  size        INTEGER,
+  stored_name TEXT,
+  published   BOOLEAN NOT NULL DEFAULT false,
+  sort_order  INTEGER NOT NULL DEFAULT 0,
+  version     INTEGER NOT NULL DEFAULT 1,
+  created_by  TEXT,
+  updated_by  TEXT,
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS digital_kit_resources_module ON digital_kit_resources (module, published);
+CREATE TABLE IF NOT EXISTS digital_kit_state (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+
+-- Digital Kit: who a shared resource is for. Empty means everyone; otherwise words matched against a person's designation and department (and "hr" for the HR role).
+ALTER TABLE digital_kit_resources ADD COLUMN IF NOT EXISTS audience TEXT[] NOT NULL DEFAULT '{}';
+
+-- Celebrations: more occasions (work anniversary, new certification, new role), a headline emphasis (shown in italic), a look
+-- (maroon or warm light) and one extra detail line (the certification).
+ALTER TABLE celebrations ADD COLUMN IF NOT EXISTS emphasis TEXT;
+ALTER TABLE celebrations ADD COLUMN IF NOT EXISTS detail   TEXT;
+ALTER TABLE celebrations ADD COLUMN IF NOT EXISTS theme    TEXT NOT NULL DEFAULT 'maroon';
+ALTER TABLE celebrations DROP CONSTRAINT IF EXISTS celebrations_occasion_check;
+ALTER TABLE celebrations ADD CONSTRAINT celebrations_occasion_check CHECK (occasion IN ('birthday','welcome','anniversary','certified','newrole'));
+
+-- The poster in a celebration email is a linked picture (not an attachment) at /p/<token>.png.
+ALTER TABLE celebrations ADD COLUMN IF NOT EXISTS poster_token TEXT;
+CREATE UNIQUE INDEX IF NOT EXISTS celebrations_poster_token ON celebrations (poster_token) WHERE poster_token IS NOT NULL;
+
+-- Festival Wishes (everyone): the festivals employees can make greeting images for, and the dates they fall on. The look of each
+-- festival's templates lives in the frontend (src/modules/festivals); this is what changes year to year. Dates of lunar festivals
+-- (Eid, Diwali...) differ each year, so add the new year's dates here (INSERT INTO festival_dates) and nothing else needs a release.
+CREATE TABLE IF NOT EXISTS festivals (
+  slug        TEXT PRIMARY KEY,
+  name        TEXT NOT NULL,
+  description TEXT NOT NULL DEFAULT '',
+  sort        INT  NOT NULL DEFAULT 0,
+  active      BOOLEAN NOT NULL DEFAULT true
+);
+CREATE TABLE IF NOT EXISTS festival_dates (
+  slug TEXT NOT NULL REFERENCES festivals(slug) ON DELETE CASCADE,
+  day  DATE NOT NULL,
+  PRIMARY KEY (slug, day)
+);
+INSERT INTO festivals (slug, name, description, sort) VALUES
+  ('diwali',           'Diwali',               'The festival of lights: diyas, rangoli and new beginnings.', 1),
+  ('holi',             'Holi',                 'The festival of colours that welcomes spring.', 2),
+  ('eid-ul-fitr',      'Eid-ul-Fitr',          'Eid Mubarak: the joyful end of Ramadan.', 3),
+  ('eid-ul-adha',      'Eid-ul-Adha (Bakrid)', 'The festival of sacrifice, generosity and togetherness.', 4),
+  ('ganesh-chaturthi', 'Ganesh Chaturthi',     'Welcoming Lord Ganesha, the remover of obstacles.', 5),
+  ('navratri',         'Navratri / Dussehra',  'Nine nights of dance and devotion, and the victory of good over evil.', 6),
+  ('christmas',        'Christmas',            'Warm wishes for the season of joy and giving.', 7)
+ON CONFLICT (slug) DO NOTHING;
+-- Check these against the calendar each year: moon-sighted dates (Eid) can move by a day.
+INSERT INTO festival_dates (slug, day) VALUES
+  ('diwali', '2026-11-08'), ('diwali', '2027-10-29'),
+  ('holi', '2026-03-04'), ('holi', '2027-03-22'),
+  ('eid-ul-fitr', '2026-03-21'), ('eid-ul-fitr', '2027-03-10'),
+  ('eid-ul-adha', '2026-05-27'), ('eid-ul-adha', '2027-05-17'),
+  ('ganesh-chaturthi', '2026-09-14'), ('ganesh-chaturthi', '2027-09-04'),
+  ('navratri', '2026-10-20'), ('navratri', '2027-10-09'),
+  ('christmas', '2026-12-25'), ('christmas', '2027-12-25')
+ON CONFLICT DO NOTHING;
 
 COMMIT;

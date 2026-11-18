@@ -39,7 +39,7 @@ a{color:var(--focus);text-underline-offset:3px}
 .auth{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);min-height:100vh;min-height:100dvh}
 
 /* ---------- Brand panel (left) ---------- */
-.auth-panel{position:relative;overflow:hidden;display:flex;flex-direction:column;padding:40px clamp(32px,5vw,72px) 56px;
+.auth-panel{position:relative;overflow:hidden;container-type:inline-size;display:flex;flex-direction:column;padding:40px clamp(32px,5vw,72px) 36px;
   background:linear-gradient(160deg,#8a1039,var(--brand-maroon) 45%,#5c0926);color:var(--brand-ivory)}
 /* The brand's dot grid, faint, in the lower corner. */
 .auth-panel::after{content:"";position:absolute;right:0;bottom:0;width:60%;height:55%;pointer-events:none;
@@ -47,17 +47,29 @@ a{color:var(--focus);text-underline-offset:3px}
   -webkit-mask-image:linear-gradient(315deg,#000,transparent 62%);mask-image:linear-gradient(315deg,#000,transparent 62%)}
 .auth-panel>*{position:relative;z-index:1}
 .auth-logo{display:block;height:40px;width:auto;align-self:flex-start}
-.auth-pitch{margin:auto 0;padding:48px 0 24px}
+.auth-pitch{margin:auto 0;padding:48px 0 32px}
 .auth-eyebrow{display:flex;align-items:center;gap:12px;margin:0 0 22px;font-weight:700;font-size:13px;letter-spacing:.2em;text-transform:uppercase;color:var(--brand-beige)}
 .auth-eyebrow::before{content:"";width:28px;height:2px;border-radius:2px;background:var(--brand-orange)}
 .auth-headline{margin:0 0 20px;font:380 clamp(38px,4.6vw,66px)/1.05 var(--brand-display);letter-spacing:-.025em;text-wrap:balance}
 .auth-headline em{font-style:italic;font-weight:400;color:#ff9a4d}
-.auth-lede{margin:0 0 36px;max-width:30rem;font-size:18px;line-height:1.6;color:rgba(255,247,233,.82)}
-.auth-points{list-style:none;margin:0;padding:0;display:grid;gap:12px;max-width:29rem}
-.auth-points li{display:flex;align-items:center;gap:16px;padding:14px 18px;border:1px solid rgba(255,247,233,.13);border-radius:18px;background:rgba(255,247,233,.07)}
-.auth-points .ico{flex:none;display:grid;place-items:center;width:42px;height:42px;border-radius:13px;background:rgba(255,247,233,.12)}
-.auth-points b{display:block;font-weight:700;line-height:1.3}
-.auth-points span{display:block;font-size:14.5px;line-height:1.4;color:rgba(255,247,233,.76)}
+.auth-lede{margin:0;max-width:31rem;font-size:18px;line-height:1.6;color:rgba(255,247,233,.84)}
+
+/* What is inside: six short entries in two columns, set on hairlines (no boxes). */
+.auth-points{list-style:none;margin:40px 0 0;padding:0;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));column-gap:32px;max-width:40rem;border-top:1px solid rgba(255,247,233,.16)}
+.auth-points li{display:flex;align-items:flex-start;gap:14px;padding:18px 0;border-bottom:1px solid rgba(255,247,233,.16)}
+.auth-points .ico{flex:none;display:grid;place-items:center;width:40px;height:40px;border-radius:12px;background:rgba(255,247,233,.10);color:#ffb37a}
+.auth-points b{display:block;font-weight:700;line-height:1.35}
+.auth-points span{display:block;margin-top:2px;font-size:14.5px;line-height:1.45;color:rgba(255,247,233,.74)}
+@container (max-width:519px){
+  .auth-points{column-gap:20px}
+  .auth-points li{align-items:center;padding:12px 0}
+  .auth-points span{display:none}
+}
+
+.auth-foot{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:10px 24px;font-size:14px;color:rgba(255,247,233,.74)}
+.auth-motto{margin:0;font:italic 400 17px/1.3 var(--brand-display);color:var(--brand-beige)}
+.auth-secure{display:inline-flex;align-items:center;gap:8px;margin:0}
+.auth-secure svg{flex:none;width:16px;height:16px}
 
 /* ---------- Form side (right) ---------- */
 .auth-pane{position:relative;display:grid;place-items:center;padding:88px 24px 48px}
@@ -119,7 +131,7 @@ a{color:var(--focus);text-underline-offset:3px}
   .auth-eyebrow{margin-bottom:12px;font-size:12px}
   .auth-headline{font-size:clamp(30px,8vw,44px);margin-bottom:10px}
   .auth-lede{margin:0;font-size:16px}
-  .auth-points{display:none}
+  .auth-points,.auth-foot{display:none}
   .auth-pane{display:block;padding:32px 20px 48px}
   .auth-theme{top:26px;right:20px}
   .auth-card{margin:0 auto}

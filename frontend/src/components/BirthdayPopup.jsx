@@ -3,7 +3,6 @@ import { api } from "../api.js";
 import { useAuth } from "../auth.jsx";
 import Modal from "./Modal.jsx";
 import PersonAvatar from "./PersonAvatar.jsx";
-import "./birthday.css";
 
 /* A pop-up on the dashboard, only when it is someone's birthday today. Everyone sees it once that day: the birthday person gets a personal
    greeting, everyone else a note naming who to wish. (Only the day and month are ever shared, never the year.) Nothing pops up on other days. */

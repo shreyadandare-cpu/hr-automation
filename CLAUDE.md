@@ -13,9 +13,9 @@ Wohlig's internal HR portal: one Express server on Postgres ([backend/](backend/
 ## Design: always the Wohlig brand
 
 Every screen follows the brand guidelines and the look of wohlig.com. The sign-in page
-([frontend/src/login/](frontend/src/login/), [frontend/src/login.css](frontend/src/login.css)) is the reference build.
+([frontend/src/login/](frontend/src/login/), section 7 of [frontend/src/styles.css](frontend/src/styles.css)) is the reference build.
 
-- Colours and fonts come from the tokens in [frontend/src/brand.css](frontend/src/brand.css). Never type a brand hex
+- Colours and fonts come from the brand tokens at the top of [frontend/src/styles.css](frontend/src/styles.css). Never type a brand hex
   value or a font name into a component.
 - Deep Maroon `#800D35` for identity and the primary action, Warm Ivory `#FFF7E9` as the page base, Sunset Orange
   `#F7781D` for one focal point per screen. Beige, terracotta and olive are supporting colours.
@@ -31,6 +31,38 @@ Every screen follows the brand guidelines and the look of wohlig.com. The sign-i
   press. No looping or ambient background animation. Everything switches off under `prefers-reduced-motion`.
 - Both themes: every screen works in light and dark ([frontend/src/theme.js](frontend/src/theme.js)).
 - Use the `frontend-design:frontend-design` skill for new or reshaped screens.
+
+## One stylesheet (always)
+
+All CSS for the interface lives in one file: [frontend/src/styles.css](frontend/src/styles.css). Both entry pages
+load it.
+
+- Never add another `.css` file, a `<style>` block or a CSS-in-JS library. Add to the right numbered section of
+  `styles.css` (the list is at the top of the file), or start a new numbered section there.
+- Prefix a feature's classes (`.dk-*`, `.fw-*`, `.auth-*`) so sections cannot collide. The app's element rules
+  (`body`, `h1`, `button`, `input`) reach every page, so scope new page styles under one wrapper class.
+- Inline `style={{…}}` is only for values computed at run time (a width from data, an animation delay).
+- A section's phone and tablet rules go at the end of that section.
+
+## Buttons: always the wohlig.com button
+
+There is one button, copied from wohlig.com (measured on the live site, 2026-11-18). Its values are the `--btn-*`
+tokens in `styles.css`.
+
+| Use | Classes |
+|---|---|
+| Main action (one per view) | `btn primary` |
+| Second action | `btn glass` |
+| Page-level size, 50px tall as on wohlig.com | add `lg` |
+| Full width (forms, phones) | add `block` |
+| Dense rows and tables | add `sm` |
+
+- Primary: maroon gradient `#C85F44 → #800D35 → #6A0A2B`, ivory text, Fraunces 600 16px, pill shape, soft maroon
+  shadow. On hover it lifts 2px, deepens, and a light sweeps across. Focus ring: 2px orange.
+- Second: white glass with maroon text on light; ivory glass with ivory text on dark (wohlig.com has no dark theme).
+- The primary button is the same in light and dark. Never an orange button.
+- Never write a new button style, change a `--btn-*` value, or restyle a button inside a feature. If a screen needs
+  something the standard lacks, add a size or variant to the standard, checked against wohlig.com.
 
 ## Wording: always professional
 

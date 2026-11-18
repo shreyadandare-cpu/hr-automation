@@ -4,7 +4,6 @@ import BackButton from "../../components/BackButton.jsx";
 import Modal from "../../components/Modal.jsx";
 import { Pill, SectionHead } from "../../components/ui.jsx";
 import { OCCASIONS } from "./poster.js";
-import "./cel.css";
 
 const when = (t) => (t ? new Date(t).toLocaleString("en-IN", { day: "numeric", month: "short", year: "numeric", hour: "numeric", minute: "2-digit" }) : "—");
 const STATUS = { sent: ["ok", "Sent"], partial: ["warn", "Partly sent"], failed: ["bad", "Failed"], sending: ["info", "Sending…"] };

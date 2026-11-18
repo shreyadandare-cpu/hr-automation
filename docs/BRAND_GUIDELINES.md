@@ -12,8 +12,8 @@ updated: 2026-11-18
 
 > [!info] Read this before any UI, email or document work
 > This is the text form of the brand deck in [brand/Wohlig_Brand_Guidelines_2026.pdf](brand/Wohlig_Brand_Guidelines_2026.pdf).
-> The CSS tokens live in [frontend/src/brand.css](../frontend/src/brand.css). The sign-in page
-> ([frontend/src/login/](../frontend/src/login/), [frontend/src/login.css](../frontend/src/login.css)) is the reference
+> The CSS tokens are at the top of the one stylesheet, [frontend/src/styles.css](../frontend/src/styles.css). The sign-in page
+> ([frontend/src/login/](../frontend/src/login/), section 7 of that file) is the reference
 > build. See also [[ARCHITECTURE]] and [CLAUDE.md](../CLAUDE.md).
 
 The deck calls itself a concept guideline: the master logo, typeface and contrast choices still need formal approval.
@@ -55,10 +55,10 @@ Contrast (measured for this repo, WCAG AA needs 4.5:1 for text):
 | Olive on ivory | 4.3:1 | Large text only. |
 
 The deck's website mock shows white text on an orange button. Because of the contrast failure above, this repo uses the
-wohlig.com maroon button (ivory text) on light surfaces and an orange button with dark ink text on dark surfaces.
+wohlig.com maroon button (ivory text) in both themes and never an orange button.
 
 Dark theme (this repo's extension, not in the deck): page `#1C0D11`, text ivory, the action colour switches from maroon
-to orange. The maroon brand panel stays maroon in both themes.
+to orange for links and focus rings. Buttons and the maroon brand panel stay the same in both themes.
 
 ## 3. Logo
 
@@ -84,7 +84,7 @@ Production rules:
 | Body and interface | Lato regular / medium | `--brand-body`: Lato 400 and 700 |
 
 - Serif is for headlines, short statements and button text. Labels, inputs and body are Lato.
-- The signed-in app ([frontend/src/legacy.css](../frontend/src/legacy.css)) still uses Source Serif 4. Move it to Fraunces
+- The signed-in app (section 6 of `styles.css`) still uses Source Serif 4 for headings; its buttons are already Fraunces. Move it to Fraunces
   in its own change; don't mix the two on one screen.
 - Body text is 16px with 1.55 line height. Nothing a person must read goes below 14px.
 - Sentence case for headings and buttons. The deck uses small capitals for section markers; in the product keep that
@@ -121,8 +121,20 @@ The live reference is [wohlig.com](https://www.wohlig.com). What this repo takes
 - **Section marker.** A short orange dash, then small spaced capitals ("WOHLIG ONE"). One per screen.
 - **Split layout for entry pages.** A maroon brand panel on one side (logo, headline, three short points), only the
   form on the other, on plain ivory. Nothing decorative behind the form.
-- **Pill buttons.** Primary: maroon gradient `#A8493F → #7D1535 → #5C0926` with ivory Fraunces text and a soft glow;
-  lifts 2px on hover. Secondary: light fill with a maroon outline.
+- **Buttons.** One button, copied from wohlig.com and kept as the `--btn-*` tokens (classes `btn primary`,
+  `btn glass`, sizes `lg`, `sm`, `block`). Measured on the live site on 2026-11-18:
+
+  | | Primary ("Contact us") | Second ("See how it looks") |
+  |---|---|---|
+  | Fill | `linear-gradient(135deg, #C85F44 -20%, #800D35 45%, #6A0A2B)` | `linear-gradient(135deg, rgba(255,255,255,.9), rgba(255,255,255,.6))`, 1px white edge |
+  | Text | `#FFF7E9`, Fraunces 600, 16px, letter-spacing -0.005em | `#800D35`, same type |
+  | Shape | 50px tall, 28px side padding, full pill | same |
+  | Shadow | `inset 0 1px 0 rgba(255,255,255,.28), 0 2px 6px rgba(46,26,31,.08), 0 14px 30px -12px rgba(128,13,53,.6)` | `0 2px 6px rgba(46,26,31,.04), 0 14px 30px -14px rgba(128,13,53,.28)` |
+  | Hover | lifts 2px; gradient `-40% / 35% / #5C0925`; shadow `0 18px 36px -12px rgba(128,13,53,.7)`; a light sweeps across in 0.75s | lifts 2px; fill turns solid white; same sweep |
+  | Motion | `transform .35s cubic-bezier(.34,1.4,.64,1)` | same |
+  | Focus | 2px `#F7781D` outline, 3px offset | same |
+
+  Dark theme (ours; the site has none): primary unchanged, second becomes ivory glass with ivory text.
 - **Motion.** One entrance sequence when the page opens (pieces rise in order, about 90ms apart). Buttons answer hover
   and press. Nothing loops, flashes or bounces, and nothing moves in the background.
 
@@ -153,7 +165,7 @@ Writing rules for every screen and email:
 
 ## 9. Checklist for any new screen
 
-- [ ] Colours and fonts come from `brand.css` tokens; no brand hex typed into a component.
+- [ ] Colours and fonts come from the brand tokens in `styles.css`; no brand hex typed into a component.
 - [ ] Ivory base, maroon for identity and primary action, orange once.
 - [ ] Logo is a master file, right version for the surface, with clear space.
 - [ ] Serif headline, Lato for everything else, 16px body.

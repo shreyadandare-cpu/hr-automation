@@ -39,7 +39,7 @@ export default function Invite() {
       {info && !pending && <>
         <h1>{info.state === "used" ? "Already accepted" : info.state === "expired" ? "Invitation expired" : "Invitation not valid"}</h1>
         <div className="auth-alert" role="alert">{info.message}</div>
-        <a className="btn btn-primary" href="/login">Go to sign in</a>
+        <a className="btn primary lg block" href="/login">Go to sign in</a>
       </>}
       {pending && <>
         <h1>Welcome, {info.firstName}.</h1>
@@ -48,7 +48,7 @@ export default function Invite() {
           {error && <div className="auth-alert" role="alert">{error}</div>}
           <PasswordField id="pw1" label="New password" autoComplete="new-password" autoFocus value={password} onChange={setPassword} />
           <PasswordField id="pw2" label="Repeat the password" autoComplete="new-password" value={again} onChange={setAgain} />
-          <button type="submit" className="btn btn-primary" disabled={busy}>{busy ? "Activating…" : "Accept invitation"}</button>
+          <button type="submit" className="btn primary lg block" disabled={busy}>{busy ? "Activating…" : "Accept invitation"}</button>
         </form>
         <p className="auth-hint">Next time, sign in with “Continue with Google” using your @wohlig.com account.</p>
       </>}

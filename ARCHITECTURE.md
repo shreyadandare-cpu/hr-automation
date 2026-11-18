@@ -326,9 +326,9 @@ The "HR only" marks come from the `HR_ONLY` list in `App.jsx`. Every other page 
 
 ### Styling and theme
 
-- [src/legacy.css](frontend/src/legacy.css) is the app's one global stylesheet (about 1,200 lines of CSS variables and classes).
-- [src/brand.css](frontend/src/brand.css) holds the Wohlig brand tokens (`--brand-*` colours and fonts). [src/login.css](frontend/src/login.css) imports it and styles the login entry only: [login/AuthLayout.jsx](frontend/src/login/AuthLayout.jsx) is the shared layout for sign-in and invitation, [login/PasswordField.jsx](frontend/src/login/PasswordField.jsx) the password box. The rules are in [docs/BRAND_GUIDELINES.md](docs/BRAND_GUIDELINES.md). The signed-in app has not moved to `brand.css` yet.
-- Feature styles: `components/birthday.css`, `modules/celebrations/cel.css`, `modules/digitalkit/dk.css`, `modules/festivals/festivals.css`.
+- [src/styles.css](frontend/src/styles.css) is the one stylesheet for the whole interface; both entries import it and no other CSS file exists. Its numbered sections: 1 brand tokens (`--brand-*`, `--btn-*`), 2 celebrations (`.cel-*`), 3 Digital Kit (`.dk-*`), 4 festival wishes (`.fw-*`), 5 birthday cards (`.bd-*`, `.cc-*`), 6 the signed-in app, 7 the sign-in and invitation pages (everything under `.auth`; `login.html` puts `auth-page` on `<body>`).
+- Buttons are one standard, the wohlig.com button: `btn primary`, `btn glass`, with `lg`, `sm`, `block`. The rules are in [CLAUDE.md](CLAUDE.md) and [docs/BRAND_GUIDELINES.md](docs/BRAND_GUIDELINES.md).
+- Sign-in components: [login/AuthLayout.jsx](frontend/src/login/AuthLayout.jsx) (shared layout), [login/PasswordField.jsx](frontend/src/login/PasswordField.jsx).
 - Theme: [src/theme.js](frontend/src/theme.js) stores `light` or `dark` under `localStorage` key `hr_theme` and sets `data-theme` on `<html>`.
   With nothing stored it follows the system setting. The CSS answers both `:root[data-theme="dark"]` and `prefers-color-scheme`.
 

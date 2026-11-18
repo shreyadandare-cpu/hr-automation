@@ -20,16 +20,16 @@ export default function AuthLayout({ children }) {
   return (
     <div className="auth">
       <aside className="auth-panel" aria-label="About Wohlig One">
-        <img className="auth-logo rise" src="/wohlig-logo-dark.svg" alt="Wohlig" />
+        <img className="auth-logo auth-rise" src="/wohlig-logo-dark.svg" alt="Wohlig" />
         <div className="auth-pitch">
-          <p className="auth-eyebrow rise" style={{ "--d": 1 }}>Wohlig One</p>
-          <p className="auth-headline rise" style={{ "--d": 2 }}>Your workday, made <em>wohlig.</em></p>
-          <p className="auth-lede rise" style={{ "--d": 3 }}>One secure place for everyone at Wohlig, with your attendance, leave, pay and more.</p>
+          <p className="auth-eyebrow auth-rise" style={{ "--d": 1 }}>Wohlig One</p>
+          <p className="auth-headline auth-rise" style={{ "--d": 2 }}>Your workday, made <em>wohlig.</em></p>
+          <p className="auth-lede auth-rise" style={{ "--d": 3 }}>One secure place for everyone at Wohlig, with your attendance, leave, pay and more.</p>
           <ul className="auth-points">
-            {POINTS.map(([ico, title, text], i) => <li key={title} className="rise" style={{ "--d": 4 + i * 0.5 }}><span className="ico">{ico}</span><div><b>{title}</b><span>{text}</span></div></li>)}
+            {POINTS.map(([ico, title, text], i) => <li key={title} className="auth-rise" style={{ "--d": 4 + i * 0.5 }}><span className="auth-ico">{ico}</span><div><b>{title}</b><span>{text}</span></div></li>)}
           </ul>
         </div>
-        <div className="auth-foot rise" style={{ "--d": 8 }}>
+        <div className="auth-foot auth-rise" style={{ "--d": 8 }}>
           <p className="auth-motto">Rooted in warmth. Built for what's next.</p>
           <p className="auth-secure"><Icon><rect x="5" y="11" width="14" height="9.5" rx="2.5" /><path d="M8 11V8a4 4 0 0 1 8 0v3" /></Icon>Protected by your Wohlig Google account</p>
         </div>
@@ -40,7 +40,7 @@ export default function AuthLayout({ children }) {
             ? <Icon><circle cx="12" cy="12" r="4" /><path d="M12 3v2M12 19v2M3 12h2M19 12h2M5.6 5.6l1.4 1.4M17 17l1.4 1.4M5.6 18.4 7 17M17 7l1.4-1.4" /></Icon>
             : <Icon><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z" /></Icon>}
         </button>
-        <main className="auth-card rise" style={{ "--d": 2 }}>{children}</main>
+        <main className="auth-card auth-rise" style={{ "--d": 2 }}>{children}</main>
       </div>
     </div>
   );

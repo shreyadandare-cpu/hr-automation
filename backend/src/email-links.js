@@ -40,6 +40,6 @@ emailLinkRouter.get("/:token", async (req, res, next) => {
       ? await pool.query("SELECT path, expires_at < now() AS expired FROM email_links WHERE token_hash=$1", [sha(t)]) : { rows: [] };
     if (l && !l.expired) return res.redirect(l.path);
     res.status(410).type("html").send(page("This link has expired",
-      "Links in our emails work for a limited time. Sign in to the HR Access Hub to see the latest details."));
+      "Links in our emails work for a limited time. Sign in to Wohlig One to see the latest details."));
   } catch (e) { next(e); }
 });

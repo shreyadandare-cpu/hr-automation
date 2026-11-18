@@ -1,6 +1,6 @@
 # Payroll processing and salary disbursement
 
-This covers the monthly payroll in the HR Access Hub: salary set-up, calculation, the Excel report, review and approval, the bank transfer file and the history. The database is the record. The Excel and bank files are stored copies of it.
+This covers the monthly payroll in Wohlig One: salary set-up, calculation, the Excel report, review and approval, the bank transfer file and the history. The database is the record. The Excel and bank files are stored copies of it.
 
 ```
 Onboarding → salary structure + bank account (Payroll › Salary & bank)

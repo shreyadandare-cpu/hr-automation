@@ -1,4 +1,4 @@
-// A tiny front door for the office attendance connector, so a tunnel can reach THIS computer's HR Hub without exposing the rest of the app.
+// A tiny front door for the office attendance connector, so a tunnel can reach the Wohlig One server on THIS computer without exposing the rest of the app.
 // It passes one request through, POST /api/attendance/device/punches, to the local app (which checks the device key), and refuses everything else.
 //   node scripts/device-relay.mjs            listens on RELAY_PORT (default 3100) and forwards to http://localhost:3000
 // Then expose it:  cloudflared tunnel --url http://localhost:3100   and put the https address it prints into the connector's APP_URL.
@@ -23,6 +23,6 @@ http.createServer((req, res) => {
       });
       res.writeHead(r.status, { "Content-Type": "application/json" });
       res.end(await r.text());
-    } catch (e) { reply(502, { error: `The HR Hub on this computer did not answer: ${e.message}` }); }
+    } catch (e) { reply(502, { error: `Wohlig One on this computer did not answer: ${e.message}` }); }
   });
 }).listen(PORT, "127.0.0.1", () => console.log(`Relay on http://127.0.0.1:${PORT}, passing ${PATH} to ${TARGET}`));

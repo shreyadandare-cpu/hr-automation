@@ -1,7 +1,7 @@
 import { pool, SCHEMA } from "./db.js";
 
 /* Punches from the office device reach the Employee Portal's table (public.attendance_punches), because the program on the Keka
-   desktop sends them there. This copies the ones the HR Hub is missing into its own table. Employee ids are the same in both
+   desktop sends them there. This copies the ones Wohlig One is missing into its own table. Employee ids are the same in both
    schemas, so punches map one to one. It only READS public.*, and only adds punches (same person, day and time = skipped). */
 
 /** Counts, and with apply = true copies, the portal punches that are missing here. Returns { portal, missing, added, bySource }. */

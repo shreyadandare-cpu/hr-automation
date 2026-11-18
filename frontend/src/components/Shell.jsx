@@ -154,8 +154,8 @@ export default function Shell() {
     <>
       <div className="wrap navbar">
         <nav className="pill-nav" aria-label="Main" ref={navRef}>
-          <a className="logo" href="/app/dashboard" aria-label="wohlig HR Access Hub, dashboard">
-            <img className="lg lg-light" src="/wohlig-logo.svg" alt="wohlig" /><img className="lg lg-dark" src="/wohlig-logo-dark.svg" alt="" /><small>HR Access Hub</small>
+          <a className="logo" href="/app/dashboard" aria-label="Wohlig One, dashboard">
+            <img className="lg lg-light" src="/wohlig-logo.svg" alt="wohlig" /><img className="lg lg-dark" src="/wohlig-logo-dark.svg" alt="" /><small>Wohlig One</small>
           </a>
           <div className="links" ref={linksRef}>
             {links.map(([k, label]) => k === "finances" ? <GroupMenu key={k} label={label} items={[["/app/reimbursements", "Reimbursements"], ["/app/payslips", "My payslips"], ...(isHr || payrollReviewer ? [["/app/payroll", "Payroll"]] : [])]} /> : k === "community" ? <GroupMenu key={k} label={label} items={[["/app/posts", "Posts"], ...(isHr ? [["/app/celebrations", "Celebrations"]] : []), ["/app/festivals", "Festival Wishes"]]} /> : k === "workforce" ? <GroupMenu key={k} label={label} items={[["/app/employees", "Employees"], ["/app/allocations", "Allocations"]]} /> : <NavLink key={k} to={pathFor(k, isHr)} className={({ isActive }) => (isActive ? "on" : "")}>{label}</NavLink>)}

@@ -28,7 +28,7 @@ const MON = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct
 const day = (iso) => { const [y, m, d] = String(iso).slice(0, 10).split("-").map(Number); return `${d} ${MON[m - 1]} ${y}`; };
 const daysText = (n) => `${n} day${Number(n) === 1 ? "" : "s"}`;
 
-const sign = "\n\nRegards,\nHR Access Hub\nWOHLIG TRANSFORMATIONS PRIVATE LIMITED";
+const sign = "\n\nRegards,\nWohlig One\nWOHLIG TRANSFORMATIONS PRIVATE LIMITED";
 // "" is a blank line between paragraphs; null leaves a line out.
 const lines = (...l) => l.filter((x) => x !== null && x !== undefined && x !== false).join("\n");
 
@@ -140,7 +140,7 @@ const esc = (v) => String(v ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "
 export function leaveHtml(t, url) {
   const text = esc(t.body).split(esc(url)).join(`<a href="${esc(url)}" style="color:#800d35">${esc(url)}</a>`)
     .split("\n\n").map((p) => `<p style="margin:0 0 14px">${p.replace(/\n/g, "<br>")}</p>`).join("");
-  const button = t.button === null ? "" : `<p style="margin:6px 0 20px"><a href="${esc(url)}" style="display:inline-block;padding:12px 26px;background:#800d35;color:#fff;text-decoration:none;font-weight:bold;border-radius:6px">${esc(t.button || "Open HR Access Hub")}</a></p>`;
+  const button = t.button === null ? "" : `<p style="margin:6px 0 20px"><a href="${esc(url)}" style="display:inline-block;padding:12px 26px;background:#800d35;color:#fff;text-decoration:none;font-weight:bold;border-radius:6px">${esc(t.button || "Open Wohlig One")}</a></p>`;
   return `<!doctype html><html><body style="margin:0;background:#fff7e9"><div style="max-width:560px;margin:0 auto;padding:28px 28px 20px;background:#fff;font:15px/1.6 Arial,Helvetica,sans-serif;color:#2a1016">${button}${text}</div></body></html>`;
 }
 

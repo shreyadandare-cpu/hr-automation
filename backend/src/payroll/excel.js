@@ -62,7 +62,7 @@ export async function buildWorkbook(data, meta) {
   const held = data.lines.filter((l) => l.status !== "ready");
   const t = data.totals;
   const wb = new ExcelJS.Workbook();
-  wb.creator = "HR Access Hub"; wb.company = COMPANY; wb.created = new Date(meta.generatedAt);
+  wb.creator = "Wohlig One"; wb.company = COMPANY; wb.created = new Date(meta.generatedAt);
   wb.calcProperties.fullCalcOnLoad = true;   // formulas are recalculated when opened; cached results are the database figures
   const fyText = fyOf(run.period);
   // The totals row, in the same columns as the rows (from the database totals).

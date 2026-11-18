@@ -1,4 +1,4 @@
-# Redeploy checklist (HR Access Hub)
+# Redeploy checklist (Wohlig One)
 
 Build **both** images from `main` and redeploy **both**. The email links, the poster pictures and the new pages need the new frontend
 (nginx) image; the new features and the director email block need the new backend image.

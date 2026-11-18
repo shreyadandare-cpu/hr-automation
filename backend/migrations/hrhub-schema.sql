@@ -1,4 +1,4 @@
--- HR Access Hub: all tables, safe to run more than once (it only creates what is missing).
+-- Wohlig One: all tables, safe to run more than once (it only creates what is missing).
 -- Generated from src/schema.sql by `npm run migrate:sql`. Run it as a user that may create tables, for example:
 --   psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f migrations/hrhub-schema.sql
 -- The tables go into the schema "hrhub", so they never mix with another app's tables in the same database.

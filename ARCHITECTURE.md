@@ -31,7 +31,7 @@ updated: 2026-11-18
 
 ## 1. Purpose
 
-Wohlig One (formerly "HR Access Hub"; the signed-in app, emails and the attendance tool still use the old name) is the staff portal for Wohlig (`@wohlig.com` accounts only). HR uses it to onboard and offboard people,
+Wohlig One (formerly "HR Access Hub") is the staff portal for Wohlig (`@wohlig.com` accounts only). HR uses it to onboard and offboard people,
 manage logins, approve leave, run payroll and review expense claims. Employees use it for their profile, documents, leave,
 attendance, payslips, reimbursements, the company feed and their Digital Kit (signature, templates, greetings).
 

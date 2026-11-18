@@ -107,9 +107,10 @@ Text that staff read (screens, emails, PDFs, error messages) is professional and
 - One word per thing everywhere: "Sign in" (not "Log in"), "HR team", "work email".
 - No technical words in front of staff: no "token", "session", "payload", status codes or stack traces.
 - "Wohlig" takes a capital in sentences.
-- The product name is **"Wohlig One"**: the portal is for every employee, not only the HR team. The sign-in page uses
-  it. The older name "HR Access Hub" is still in the signed-in app, emails and the attendance tool; use "Wohlig One"
-  in anything new, and rename the old places only in a change made for that purpose.
+- The product name is **"Wohlig One"**: the portal is for every employee, not only the HR team. Use it on every screen,
+  email, PDF, Excel file and script message, without "the" ("Sign in to Wohlig One"). Never write "HR Access Hub" or
+  "HR Hub" again. The old name survives only in technical names that would lose data or break deploys if renamed: the
+  `hrhub` database schema and volumes, the `hrhub_after` cookie, the Docker image tags and the npm package names.
 
 ## Responsive on every screen, tested with Playwright (always)
 

@@ -473,7 +473,7 @@ app.post("/api/onboarding/work-email", wrap(async (req, res) => {
   }
   if (workPassword && mailConfigured()) {
     try {
-      // Their HR Access Hub login, and a one-time 30-minute link (invites.js) where they choose its password.
+      // Their Wohlig One login, and a one-time 30-minute link (invites.js) where they choose its password.
       await createLogin(pool, email, "employee");
       const link = await createInvite(email, req.user.email);
       await sendWorkAccountEmail({ to: d.pemail.trim(), name: full, workEmail: email, password: workPassword, link, minutes: INVITE_MINUTES });
@@ -703,4 +703,4 @@ else {
 }
 console.log(`Email: ${emailMode() === "sendgrid" ? "sending through SendGrid" : "SendGrid not configured, emails are logged and skipped"}`);
 const port = process.env.PORT || 3000;
-app.listen(port, () => console.log(`HR Access Hub on http://localhost:${port}`));
+app.listen(port, () => console.log(`Wohlig One on http://localhost:${port}`));

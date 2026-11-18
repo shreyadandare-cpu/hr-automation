@@ -7,6 +7,7 @@ import { Pill, SectionHead, shortDate } from "../components/ui.jsx";
 import { CompRequestModal, HolidayCalendar } from "../components/leaveParts.jsx";
 import { CompOffHistory, LeaveHistory, LeaveLeftPopup, LeaveStats, PolicyExplain, Ring, ViewTabs } from "../components/leaveSummary.jsx";
 import TodayCards from "../components/TodayCards.jsx";
+import LeaveSwitch from "../components/LeaveSwitch.jsx";
 import { useToast } from "../components/toast.jsx";
 import { R } from "../lib/leave.js";
 import { LTYPE, dd, rangeText, useLeave } from "../lib/useLeave.js";
@@ -54,6 +55,7 @@ export default function MyLeave() {
 
   return (
     <section className="section">
+      <LeaveSwitch current="my" />
       {top}
       <div className="row" style={{ justifyContent: "space-between", flexWrap: "wrap", gap: 12 }}><ViewTabs views={VIEWS} view={view} onView={setView} />{view !== "holidays" && view !== "compoff" && yearPicker}</div>
 

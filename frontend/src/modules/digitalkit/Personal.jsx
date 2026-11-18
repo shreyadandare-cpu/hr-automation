@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
+import { api, apiMsg } from "../../api.js";
 import { Field } from "../../components/Modal.jsx";
 import { Callout, DownloadIcon } from "../../components/ui.jsx";
 import { useToast } from "../../components/toast.jsx";
@@ -51,6 +52,7 @@ export function Signature({ p }) {
   const saved = (() => { try { return JSON.parse(localStorage.getItem(key) || "null"); } catch { return null; } })();
   const [f, setF] = useState({ ...base, ...(saved && saved.f) });
   const [o, setO] = useState({ ...SIG_DEFAULT_OPTS, ...(saved && saved.o) });
+  const [openApp, setOpenApp] = useState("gmail");   // which "how to add it" panel is open: opening one closes the others
   const [iconsLive, setIconsLive] = useState(false);   // are the signature icons already on the live site? (they arrive with the next deploy)
   useEffect(() => { const im = new Image(); im.onload = () => setIconsLive(true); im.onerror = () => setIconsLive(false); im.src = `${ICON_PROD}/icon-mail.png?probe=${Date.now()}`; }, []);
   useEffect(() => { try { localStorage.setItem(key, JSON.stringify({ f, o })); } catch { /* storage blocked: the page still works */ } }, [f, o, key]);
@@ -88,13 +90,11 @@ export function Signature({ p }) {
           <div className="row dk-actions">
             <button type="button" className="btn primary" onClick={async () => done(await copyHtml(html, plain), "Signature")}>Copy signature</button>
             <button type="button" className="btn glass" onClick={async () => done(await copyText(plain), "Plain text")}>Copy plain text</button>
-            <button type="button" className="btn glass" onClick={async () => done(await copyText(html), "HTML code")}>Copy HTML code</button>
-            <button type="button" className="btn glass" onClick={() => saveText(html, `${fileSafe(sig.name)}-signature.html`, "text/html;charset=utf-8")}><DownloadIcon />Download .html</button>
           </div>
           <p className="muted dk-hint">Paste with <kbd className="dk-kbd">⌘V</kbd> / <kbd className="dk-kbd">Ctrl V</kbd>, not "paste as plain text", so the logo, icons and colours come with it.</p>
           {o.style === "executive" && !iconsLive && <p className="muted dk-hint">The icon pictures reach the live site with the next update. Until then a copied Executive signature uses the letters E, M, W and A instead of icons; the preview already shows the icons.</p>}
           <div className="dk-acc">{Object.entries(SIG_APPS).map(([k, [l, steps]]) => (
-            <details key={k} open={k === "gmail"}><summary>{l}<span className="caret" aria-hidden="true" /></summary><ol className="dk-ol">{steps.map((t) => <li key={t}>{t}</li>)}</ol></details>))}</div>
+            <details key={k} open={openApp === k}><summary onClick={(e) => { e.preventDefault(); setOpenApp(openApp === k ? null : k); }}>{l}<span className="caret" aria-hidden="true" /></summary><ol className="dk-ol">{steps.map((t) => <li key={t}>{t}</li>)}</ol></details>))}</div>
         </div>
       </div>
     </div>
@@ -169,7 +169,27 @@ export function Background({ p }) {
 
 export function LinkedIn({ p }) {
   const toast = useToast();
-  const hs = headlines(p), [pick, setPick] = useState(0), [about, setAbout] = useState(aboutText(p));
+  const [ai, setAi] = useState([]), [aiBusy, setAiBusy] = useState(false), [aiErr, setAiErr] = useState("");   // headlines Gemini wrote for me
+  // Exactly three ideas are shown: Gemini's three once they arrive, the three standard ones until then (or if Gemini is off).
+  // A headline HR has set takes the first of the three.
+  const base = headlines(p), setBy = base.filter((h) => h.tag === "Set by HR"), std = base.filter((h) => h.tag !== "Set by HR");
+  const hs = [...setBy, ...(ai.length ? ai.map((text) => ({ text, tag: "Gemini AI" })) : std)].slice(0, 3), [pick, setPick] = useState(0), [about, setAbout] = useState(aboutText(p));
+  const aiKey = `dk-ai:${p.email}`;
+  // Gemini's suggestions appear by themselves when this page opens (kept for the visit, so going back and forth doesn't ask again);
+  // "Suggest again" asks for new ones. A quiet first try shows nothing if Gemini is off or busy, the standard headlines are still there.
+  const suggest = async (quiet = false) => {
+    setAiBusy(true); setAiErr("");
+    const r = await api("POST", "/api/digital-kit/headline-ai", { avoid: ai });
+    setAiBusy(false);
+    if (!r.ok) { if (!quiet) setAiErr(apiMsg(r)); return; }
+    setAi(r.data.headlines); setPick(setBy.length);
+    try { sessionStorage.setItem(aiKey, JSON.stringify(r.data.headlines)); } catch { /* storage blocked: it just asks again next time */ }
+  };
+  useEffect(() => {
+    try { const c = JSON.parse(sessionStorage.getItem(aiKey) || "null"); if (Array.isArray(c) && c.length) { setAi(c); return; } } catch { /* ask instead */ }
+    suggest(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const [theme, setTheme] = useState("light"), [preset, setPreset] = useState(0), [bh, setBh] = useState(""), [be, setBe] = useState("");
   const tags = hashtags(p), copy = async (t, what) => toast((await copyText(t)) ? `${what} copied.` : "Could not copy. Select it and copy by hand.");
   // Your own words win; with nothing typed, the chosen tagline is used.
@@ -178,13 +198,15 @@ export function LinkedIn({ p }) {
   const banner = async () => { try { saveBlob(await toBlob(await drawBanner(bopts(false))), `${fileSafe(p.name)}-linkedin-banner.png`); } catch { toast("Could not make the file."); } };
   return (
     <div className="dk-stack">
-      <div className="card"><div className="card-h"><h3>Headline</h3><span className="muted">up to 220 characters</span></div>
+      <div className="card"><div className="card-h"><h3>Headline</h3><button type="button" className="btn glass sm" disabled={aiBusy} onClick={() => suggest(false)}>Suggest with Gemini AI</button></div>
         <div className="card-b dk-list">
           {hs.map((h, i) => (
             <div className={`dk-opt${pick === i ? " on" : ""}`} key={h.text}>
               <label><input type="radio" name="hl" checked={pick === i} onChange={() => setPick(i)} /><span>{h.text}{h.tag && <em className="dk-tag">{h.tag}</em>}</span></label>
-              <span className="muted">{h.text.length}</span>
             </div>))}
+          {aiBusy && <span className="muted">Gemini is writing your headline ideas…</span>}
+          {aiErr && <p className="ferr" role="alert" style={{ margin: 0 }}>{aiErr}</p>}
+          <p className="muted dk-hint" style={{ margin: 0 }}>Gemini sees only your designation and department, never your name or contact details. Check what it writes before you use it.</p>
           <div className="row dk-actions"><button type="button" className="btn primary sm" onClick={() => copy(hs[pick].text, "Headline")}>Copy headline</button>
             <a className="btn link sm" href={p.linkedin || "https://www.linkedin.com/"} target="_blank" rel="noopener noreferrer">{p.linkedin ? "Open my LinkedIn" : "Open LinkedIn"}</a></div>
           {!p.linkedin && <p className="muted dk-hint">Add your LinkedIn link in <Link to="/app/profile">My profile</Link> and this opens your own page.</p>}

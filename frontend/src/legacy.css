@@ -516,6 +516,17 @@ body.ro [data-tool],body.ro [data-retry],body.ro [data-provision],body.ro [data-
 .db-col>.card,.db>.card{margin:0}
 .db-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:22px;align-items:stretch}
 .db-grid>.card{margin:0}
+.db-grid>.card,.db-grid>.db-wide>.card{margin:0}
+.db-grid>.card{display:flex;flex-direction:column}
+.db-wide{grid-column:1/-1}
+/* The leave card: a smaller card, with the 'everyone is working' message in the middle and 'Upcoming leave' kept at the bottom, so it sits level with its neighbour */
+.db-grid .td-main{flex:1;display:flex;flex-direction:column;justify-content:center}
+.db-grid .td-main .lv-hurray{padding:6px 24px}
+.db-grid .td-main .lv-hurray>span{width:42px;height:42px;font-size:20px}
+.db-grid>.card>.card-h{padding:16px 24px 8px}
+.db-grid>.card>.td-more{margin-top:auto}
+.db-grid .td-more summary{padding:11px 24px}
+.db-grid .td-faces{padding:8px 24px 14px}
 @media (max-width:1080px){.db-grid{grid-template-columns:minmax(0,1fr)}}
 .db{display:flex;flex-direction:column;gap:22px}
 .db-strip a.rb-stat{text-decoration:none;color:inherit;transition:box-shadow .15s,transform .15s}

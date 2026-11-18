@@ -17,6 +17,7 @@ docker build -t hrhub-frontend frontend
 | `SENDGRID_API_KEY`, `MAIL_FROM` | the SendGrid key and the verified sender | Without them nothing is emailed (Festival Wishes sharing shows a message instead). |
 | `MAIL_SKIP_RECIPIENTS` | leave **unset** (default is Chirag and Chintan) | Directors get no email. Setting it to empty turns the block off. |
 | `PAYSLIP_AUTO` | `off` **until HR has entered the real salaries** | Stops the hourly job that starts and recalculates the monthly payroll draft. With it off, payroll changes only when HR does something. Remove it (or set anything else) to turn the automation back on. |
+| `GEMINI_API_KEY` | a Gemini API key (Google AI Studio) | LinkedIn kit: the headline suggestions. Without it the button says Gemini isn't set up. Model defaults to `gemini-flash-lite-latest` (`GEMINI_MODEL` to change). Keep the key in the server settings only. |
 | `PAYROLL_REVIEWERS`, `PAYROLL_ENCRYPTION_KEY` | as in `backend/.env.example` | Payroll approval and bank details. |
 | `BACKGROUND_JOBS` | leave on only on the **one** server that should run scheduled jobs | Daily leave digest, reminders, payslip notices. |
 

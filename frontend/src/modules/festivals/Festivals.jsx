@@ -83,7 +83,7 @@ function Studio({ fest, onBack }) {
   const me = (people || []).find((p) => p.email.toLowerCase() === user.email.toLowerCase());
   const mine = me && me.photoV ? `/api/profile/photo?email=${encodeURIComponent(user.email)}&v=${me.photoV}` : "";
   const [theme, setTheme] = useState(THEMES[0]);
-  const [f, setF] = useState({ ...FESTIVALS[fest.slug].say, sender: user.name || "", recipient: "", align: "left" });
+  const [f, setF] = useState({ ...FESTIVALS[fest.slug].say, sender: "Team Wohlig", recipient: "", align: "left" });
   const [photo, setPhoto] = useState(null);   // { url, label }
   const [adjust, setAdjust] = useState(false);
   const [looks, setLooks] = useState({});     // small pictures of the four looks
@@ -140,14 +140,7 @@ function Studio({ fest, onBack }) {
   };
   const deviceShare = async () => {
     try { await navigator.share({ files: [new File([final], name, { type: "image/png" })], title: `${fest.name} greeting`, text: `${fest.name} wishes from Wohlig` }); }
-    catch (e) { if (e && e.name !== "AbortError") { download(); toast("Sharing did not work, so the image was downloaded instead."); } }
-  };
-  const chat = async () => {   // Google Chat takes no picture from a web page, so copy it and open Chat to paste
-    const who = to.map((e) => (people.find((p) => p.email === e) || {}).name).filter(Boolean);
-    const ok = await copy(true);
-    window.open("https://chat.google.com/", "_blank", "noopener");
-    toast(ok ? `Image copied. In Google Chat, open your chat with ${who.length ? who.join(" or ") : "the person"} and paste (Ctrl or Cmd + V).` : "Google Chat opened. Download the image first, then attach it to your message.");
-    if (!ok && final) download();
+    catch (e) { if (e && e.name !== "AbortError") toast("Sharing did not work on this device. Use Send by email or Copy image."); }
   };
   const email = async () => {
     setBusy("email"); setResult(null); setErr("");
@@ -208,24 +201,23 @@ function Studio({ fest, onBack }) {
             <div className="field">
               <label htmlFor="fw-to">Share with a colleague</label>
               <PeoplePicker id="fw-to" people={others} value={to} onChange={(v) => setTo(v.slice(0, MAX_TO))} multi placeholder="Search by name…" />
-              <span className="hint">Up to {MAX_TO} people. Pick someone to email it to, or to paste it to in Google Chat.</span>
+              <span className="hint">Up to {MAX_TO} people. They get the greeting by email.</span>
             </div>
             {to.length > 0 && <input className="input" maxLength={300} placeholder="Add a short note (optional)" aria-label="Note" value={note} onChange={(e) => setNote(e.target.value)} />}
             <div className="fw-btns">
               <button type="button" className="btn primary" disabled={!to.length || busy === "email"} onClick={email}>{busy === "email" ? "Sending…" : "Send by email"}</button>
-              <button type="button" className="btn glass" disabled={!ready} onClick={chat}>Google Chat</button>
             </div>
             {result && (
               <div className="muted" role="status">
                 {result.sent.length > 0 && <div>Emailed to {result.sent.map(name1).join(", ")}.</div>}
-                {result.skipped.length > 0 && <div>No email is sent to {result.skipped.map(name1).join(", ")}. Use Google Chat or Download instead.</div>}
+                {result.skipped.length > 0 && <div>No email is sent to {result.skipped.map(name1).join(", ")}. Use Download or Copy image instead.</div>}
                 {result.failed.length > 0 && <div style={{ color: "var(--bad)" }}>Could not reach {result.failed.map((x) => name1(x.email)).join(", ")}.</div>}
               </div>)}
             <hr />
             <div className="fw-btns">
               <button type="button" className="btn glass" disabled={!ready} onClick={download}>Download</button>
               <button type="button" className="btn glass" disabled={!ready} onClick={() => copy(false)}>Copy image</button>
-              <button type="button" className="btn glass" disabled={!canShare} onClick={deviceShare} title={canShare ? "" : "Sharing from this browser is not supported. Use Send by email, Download or Copy."}>Share…</button>
+              {canShare && <button type="button" className="btn glass" onClick={deviceShare}>Share…</button>}
             </div>
             <span className="muted">{ready ? "Ready. Download, Copy image and Share use the full-size picture." : "Getting the full-size picture ready…"}</span>
           </div></div>

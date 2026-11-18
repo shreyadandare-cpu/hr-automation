@@ -54,9 +54,11 @@ export default function TodayCards({ bare = false, only = null }) {
   const soon = d.upcomingLeave || [];
   const leaveCard = (
       <div className="card"><div className="card-h"><h3>Who is on leave today</h3><span className="muted">{d.onLeave.length ? `${d.onLeave.length} away` : ""}</span></div>
-        {d.onLeave.length
-          ? <div className="td-faces">{d.onLeave.map((p) => <Face key={p.email} p={p} sub={p.half ? "Half day" : "On leave"} />)}</div>
-          : <Empty icon="✅" title="Everyone is working today!" sub="No one is on leave today." />}
+        <div className="td-main">
+          {d.onLeave.length
+            ? <div className="td-faces">{d.onLeave.map((p) => <Face key={p.email} p={p} sub={p.half ? "Half day" : "On leave"} />)}</div>
+            : <Empty icon="✅" title="Everyone is working today!" sub="No one is on leave today." />}
+        </div>
         <details className="td-more">
           <summary>Upcoming leave <span className="muted">· next {d.upcomingDays || 14} days{soon.length ? ` · ${soon.length}` : ""}</span></summary>
         {soon.length

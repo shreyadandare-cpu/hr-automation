@@ -204,3 +204,6 @@ button.dk-thumb2{cursor:pointer}
 .dk-cb-check{display:flex;align-items:center;gap:12px;padding:16px 18px;border-radius:16px;background:var(--paper-2);font:500 16px/1.2 var(--body);cursor:pointer}
 .dk-cb-check input{width:20px;height:20px;accent-color:var(--purple)}
 @media (max-width:900px){.dk-cb-body{grid-template-columns:1fr}}
+
+.dk-ai{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-top:6px}
+.dk-ai .input{flex:1 1 260px;min-width:0}

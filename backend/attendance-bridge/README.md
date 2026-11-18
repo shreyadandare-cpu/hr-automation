@@ -43,3 +43,10 @@ Double-click **`view-logs.bat`** (or run `npm run logs`) and the browser opens `
 - **Logs, Event viewer**: every message the connector writes (Index, Source, Time Generated, Event Type, Message), with From and To dates, Get Logs and Search.
 
 The connector writes these entries to `bridge-events.jsonl` (the newest 5000 are kept; the file stays on this computer and is not committed). The viewer only reads that file, listens on this computer only, and never shows the device key. Restart the connector once after updating so it starts writing the entries.
+
+## Desktop icon (Wohlig Attendance Sync)
+Double-click **`install-desktop-icon.bat`** once. It puts a **Wohlig Attendance Sync** icon (the Wohlig smile) on the desktop, next to the Keka Sync Tool.
+Opening that icon starts the connector and the log viewer in the background (each only if it is not already running) and shows the viewer as its own
+window, with the Devices page, Punches, Resync logs and Event viewer. It needs no black window. Closing the window leaves the connector running.
+To stop everything, double-click **`stop-attendance-sync.bat`**. The connector's own output goes to `bridge.log`, the viewer's to `viewer.log`.
+If the connector already starts with Windows (`install-startup.bat`), the icon just opens the viewer.

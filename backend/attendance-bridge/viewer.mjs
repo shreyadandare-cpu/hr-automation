@@ -19,7 +19,7 @@ const info = () => ({
 });
 
 const PAGE = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Attendance Sync</title><style>
+<title>Wohlig Attendance Sync</title><style>
 *{box-sizing:border-box}body{margin:0;font:14px/1.4 "Segoe UI",Lato,Arial,sans-serif;color:#2b2b3a;background:#fff;display:flex;min-height:100vh}
 nav{width:200px;background:#2b3147;color:#fff;flex:none}nav .brand{background:#4a3a52;padding:22px;font-size:22px;font-weight:700;height:110px;display:flex;align-items:center}
 nav button{display:block;width:100%;background:none;border:0;color:#fff;padding:20px;font:inherit;text-align:center;cursor:pointer}nav button.on{background:#3b415a}
@@ -37,7 +37,7 @@ th{font-weight:400;background:#fafafc}td.msg{word-break:break-word}td:nth-child(
 <main><header><h1>Attendance Sync</h1><div><small>DEVICE</small><b id="hd">-</b></div></header>
 <section id="dev"><div class="tabs"><button class="on">Devices</button></div><div class="body"><table><thead><tr><th>Device</th><th>Integration</th><th>Address</th><th>Last clock entry</th><th>Device connection</th><th>Actions</th></tr></thead><tbody id="devrows"></tbody></table><pre class="actout" id="actout"></pre></div></section>
 <section id="log" class="hide"><div class="tabs"><button id="t-pu" class="on">Punches</button><button id="t-re">Resync logs</button><button id="t-ev">Event viewer</button></div>
-<div class="body"><div class="bar"><label>From Date <input type="date" id="from"></label><label>To Date <input type="date" id="to"></label><button class="btn" id="get">Get Logs</button><button class="btn" id="day" title="Reads the device and fills the list with every punch of the From date (nothing is sent to the app)" style="background:#fff;color:#b5397a;border:1px solid #b5397a;padding:10px 18px">Load day from device</button><input type="search" id="q" placeholder="Search" style="margin-left:auto"></div>
+<div class="body"><div class="bar"><label>From Date <input type="date" id="from"></label><label>To Date <input type="date" id="to"></label><button class="btn" id="get">Get Logs</button><input type="search" id="q" placeholder="Search" style="margin-left:auto"></div>
 <pre class="actout" id="actout2"></pre><p class="total">Total Logs: <b id="total">0</b></p><table><thead id="head"></thead><tbody id="rows"></tbody></table><div class="empty hide" id="empty">No logs for these dates.</div></div></section></main>
 <script>
 const $=(i)=>document.getElementById(i);let kind="punch",data=[];
@@ -50,7 +50,9 @@ function show(w){$("dev").classList.toggle("hide",w!=="dev");$("log").classList.
 $("n-dev").onclick=()=>show("dev");$("n-log").onclick=()=>show("log");
 const tabs={punch:"t-pu",resync:"t-re",event:"t-ev"};
 Object.entries(tabs).forEach(([k,i])=>{$(i).onclick=()=>{kind=k;Object.values(tabs).forEach((t)=>$(t).classList.toggle("on",t===i));load()}});
-$("get").onclick=load;$("q").oninput=draw;
+$("get").onclick=async()=>{   // on the Punches tab, Get Logs reads the device itself for the chosen dates, then shows them
+  if(kind==="punch"){await act("/api/day?from="+$("from").value+"&to="+$("to").value,"Reading the device for "+$("from").value+" to "+$("to").value+"... this can take about a minute.",[$("get")],"actout2");$("get").disabled=false}
+  load()};$("q").oninput=draw;
 async function load(){const r=await fetch("/api/logs?kind="+kind+"&from="+$("from").value+"&to="+$("to").value);data=await r.json();
 $("empty").textContent="No logs for these dates.";if(!data.length){const d=await(await fetch("/api/info")).json();if(!d.file)$("empty").textContent="No log file yet. The connector has not written any entries. Stop it, copy the updated files into this folder, start it again with run.bat, wait a minute, then press Get Logs."}draw()}
 function draw(){const q=$("q").value.trim().toLowerCase(),head=$("head"),rows=$("rows");rows.textContent="";head.textContent="";
@@ -67,7 +69,6 @@ const two=(small,cls,btn)=>{const e=document.createElement("td");const s=documen
 async function act(path,msg,btns,outId){const out=$(outId||"actout");btns.forEach((b)=>b.disabled=true);out.className="actout";out.textContent=msg;
 try{const r=await(await fetch(path,{method:"POST",headers:{"X-Requested-With":"viewer"}})).json();out.className="actout "+(r.ok?"Synced":"Failed");out.textContent=r.output}catch{out.className="actout Failed";out.textContent="Could not reach the viewer."}
 dev();}
-$("day").onclick=async()=>{await act("/api/day?date="+$("from").value,"Reading the device for "+$("from").value+"... this can take a minute.",[$("day"),$("get")],"actout2");$("day").disabled=false;$("get").disabled=false;load()};
 async function dev(){const d=await(await fetch("/api/info")).json();$("hd").textContent=d.device+(d.ip?" ("+d.ip+")":"");const r=$("devrows");r.textContent="";const t=document.createElement("tr");
 const ok=d.last&&d.last.status==="Synced";t.appendChild(cell(d.device));t.appendChild(cell("SDK (ZkemSDK)"));t.appendChild(cell(d.ip?d.ip+":"+d.port:"-"));
 t.appendChild(cell(d.state.lastSynced?when(d.state.lastSynced.replace(" ","T")):"-"));
@@ -89,7 +90,7 @@ http.createServer((req, res) => {
     if (u.pathname === "/api/day" && !fs.readFileSync(new URL("./bridge.mjs", import.meta.url), "utf8").includes('"--log-day"'))   // an old bridge.mjs would ignore the flag and start syncing forever
       return send(200, "application/json", JSON.stringify({ ok: false, output: "The bridge.mjs in this folder is the old version and cannot load a day. Copy the new bridge.mjs into this folder, stop the connector, start it again with run.bat, then try again." }));
     busy = true;
-    const child = spawn(process.execPath, ["bridge.mjs", ...(u.pathname === "/api/connect" ? ["--test"] : u.pathname === "/api/day" ? ["--log-day", /^\d{4}-\d{2}-\d{2}$/.test(u.searchParams.get("date") || "") ? u.searchParams.get("date") : "today"] : ["--once"])], { cwd: fileURLToPath(new URL(".", import.meta.url)), windowsHide: true });
+    const child = spawn(process.execPath, ["bridge.mjs", ...(u.pathname === "/api/connect" ? ["--test"] : u.pathname === "/api/day" ? ["--log-day", u.searchParams.get("from") || "today", u.searchParams.get("to") || ""] : ["--once"])], { cwd: fileURLToPath(new URL(".", import.meta.url)), windowsHide: true });
     let out = "", done = false;
     const finish = (ok, extra) => { if (done) return; done = true; busy = false; clearTimeout(timer); const lines = (out + (extra || "")).trim().split("\n").slice(-6).join("\n"); send(200, "application/json", JSON.stringify({ ok, output: lines || (ok ? "Done." : "No output.") })); };
     const timer = setTimeout(() => { child.kill(); finish(false, "\nStopped: it took longer than 5 minutes."); }, 300000);
@@ -106,8 +107,8 @@ http.createServer((req, res) => {
     const day = /^\d{4}-\d{2}-\d{2}$/;
     const fromD = day.test(u.searchParams.get("from") || "") ? u.searchParams.get("from") : "0000-01-01", toD = day.test(u.searchParams.get("to") || "") ? u.searchParams.get("to") : "9999-12-31";
     let out;
-    if (kind === "punch") {   // punches are filtered on the time the device recorded, newest first
-      out = read(PUNCHES).filter((p) => p.time >= `${fromD} 00:00:00` && p.time <= `${toD} 23:59:59`).sort((a, b) => (a.time < b.time ? 1 : a.time > b.time ? -1 : 0)).slice(0, 5000);
+    if (kind === "punch") {   // punches are filtered on the time the device recorded and listed by device user ID, then time
+      out = read(PUNCHES).filter((p) => p.time >= `${fromD} 00:00:00` && p.time <= `${toD} 23:59:59`).sort((a, b) => (Number(a.userId) - Number(b.userId)) || (a.time < b.time ? -1 : a.time > b.time ? 1 : 0)).slice(0, 5000);
     } else {
       const f = new Date(`${fromD}T00:00:00`), t = new Date(`${toD}T23:59:59.999`);
       out = read().filter((e) => e.kind === kind && new Date(e.at) >= f && new Date(e.at) <= t).reverse();

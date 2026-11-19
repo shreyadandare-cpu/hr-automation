@@ -18,7 +18,7 @@ const REACT_PAGES = {
 };
 /* The main page of each module gets a "Back to dashboard" button above it. Detail pages and pages that already have their own Back are left out. */
 const HOME_PAGES = new Set(["/app/attendance", "/app/employees", "/app/allocations", "/app/assets", "/app/audit", "/app/leave", "/app/my-leave", "/app/team-leave", "/app/onboarding", "/app/onboarding/progress", "/app/claude-requests", "/app/documents",
-  "/app/reimbursements", "/app/payroll", "/app/posts", "/app/celebrations", "/app/festivals", "/app/budgets", "/app/digital-kit"]);
+  "/app/reimbursements", "/app/payroll", "/app/posts", "/app/celebrations", "/app/festivals", "/app/budgets", "/app/digital-kit", "/app/project-reports"]);
 /* Onboarding and Offboarding are HR's pages: employees don't get those menu entries (they upload their documents from My profile). */
 const pathFor = (key) => REACT_PAGES[key];
 
@@ -158,7 +158,7 @@ export default function Shell() {
             <img className="lg lg-light" src="/wohlig-logo.svg" alt="wohlig" /><img className="lg lg-dark" src="/wohlig-logo-dark.svg" alt="" /><small>HR Access Hub</small>
           </a>
           <div className="links" ref={linksRef}>
-            {links.map(([k, label]) => k === "finances" ? <GroupMenu key={k} label={label} items={[["/app/reimbursements", "Reimbursements"], ["/app/payslips", "My payslips"], ...(isHr || payrollReviewer ? [["/app/payroll", "Payroll"]] : [])]} /> : k === "community" ? <GroupMenu key={k} label={label} items={[["/app/posts", "Posts"], ...(isHr ? [["/app/celebrations", "Celebrations"]] : []), ["/app/festivals", "Festival Wishes"]]} /> : k === "timeoff" ? <GroupMenu key={k} label={label} items={[["/app/attendance", "Attendance"], isHr ? ["/app/leave", "Leave management"] : ["/app/my-leave", "My leave"]]} /> : k === "workforce" ? <GroupMenu key={k} label={label} items={[["/app/employees", "Employees"], ["/app/allocations", "Allocations"]]} /> : <NavLink key={k} to={pathFor(k, isHr)} className={({ isActive }) => (isActive ? "on" : "")}>{label}</NavLink>)}
+            {links.map(([k, label]) => k === "finances" ? <GroupMenu key={k} label={label} items={[["/app/reimbursements", "Reimbursements"], ["/app/payslips", "My payslips"], ...(isHr || payrollReviewer ? [["/app/payroll", "Payroll"]] : [])]} /> : k === "community" ? <GroupMenu key={k} label={label} items={[["/app/posts", "Posts"], ...(isHr ? [["/app/celebrations", "Celebrations"]] : []), ["/app/festivals", "Festival Wishes"]]} /> : k === "timeoff" ? <GroupMenu key={k} label={label} items={[["/app/attendance", "Attendance"], isHr ? ["/app/leave", "Leave management"] : ["/app/my-leave", "My leave"]]} /> : k === "workforce" ? <GroupMenu key={k} label={label} items={[["/app/employees", "Employees"], ["/app/allocations", "Allocations"], ["/app/project-reports", "Project reports"]]} /> : <NavLink key={k} to={pathFor(k, isHr)} className={({ isActive }) => (isActive ? "on" : "")}>{label}</NavLink>)}
           </div>
           <NotificationBell />
           <ThemeButton />

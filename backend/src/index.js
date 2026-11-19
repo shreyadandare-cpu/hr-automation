@@ -20,6 +20,7 @@ import { attendanceRouter } from "./attendance.js";
 import { assetsRouter } from "./assets.js";
 import { deviceRouter, linkDeviceUserByEmployeeNo } from "./device.js";
 import { startPortalAttendanceSync } from "./portal-attendance.js";
+import { gmailIntelRouter, projectReportRouter, startGmailIntel } from "./gmail-intel-routes.js";
 import { payslipsRouter } from "./payslips.js";
 import { claudeMode, grantClaude, removeClaude, recordAccess, syncClaude, syncClaudeSoon } from "./anthropic.js";
 import { claudeRequestsRouter, confirmOwnClaude, requestClaude, runClaudeReminders } from "./claude-requests.js";
@@ -87,9 +88,11 @@ app.use("/api/digital-kit", requireAuth, digitalKitRouter); // employees: only t
 app.use(express.json({ limit: "100kb" }));
 app.use("/api", sessionRouter); // login and logout are the only public API routes
 app.use(deviceRouter()); // the office device posts punches with its own key (no session); the linking screens check for HR themselves
+app.use(gmailIntelRouter());   // Gmail Intelligence Engine: each HR route checks for HR itself; Google's Pub/Sub push has no session and proves itself with a token, so this sits before the login-guarded routers (off until GMAIL_INTEL_ENABLED=true)
 app.use("/api", accountRouter);
 app.use("/api/users", usersRouter);
 app.use("/api/profile", profileRouter);
+app.use(projectReportRouter());   // weekly project reports built from the collected emails: HR sees all projects, others only their own
 // Onboarding is HR work; employees only reach their own account and documents.
 app.use(["/api/onboarding", "/api/work-email"], requireHr);
 const draftId = (req) => req.user.email.toLowerCase(); // each HR user has their own draft
@@ -699,6 +702,7 @@ else {
     .catch((err) => console.error("Celebration check failed:", err));
   checkCelebrations();
   setInterval(checkCelebrations, 60 * 60_000);
+  startGmailIntel();   // reads project emails from the mailboxes HR switched on (only when GMAIL_INTEL_ENABLED=true)
   startPortalAttendanceSync();   // copies the office device punches the Employee Portal received (only when PORTAL_ATTENDANCE_SYNC=true)
 }
 console.log(`Email: ${emailMode() === "sendgrid" ? "sending through SendGrid" : "SendGrid not configured, emails are logged and skipped"}`);

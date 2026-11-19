@@ -217,6 +217,24 @@ export function attendanceRouter(wrap) {
   }));
 
   // HR: add a missed punch. A reason is required and goes in the audit log.
+  // HR: switch a person between working from the office (On-site) and from somewhere else (Off-site). Off-site people are not
+  // marked "No punch" on days without an office punch. The place is the person's work location on record.
+  r.put("/api/attendance/work-site", requireHr, wrap(async (req, res) => {
+    const email = String(req.body?.email || "").trim().toLowerCase();
+    const emp = (await pool.query("SELECT id, name, work_location FROM employees WHERE lower(work_email)=$1", [email])).rows[0];
+    if (!emp) return res.status(404).json({ error: "Employee not found." });
+    let place;
+    if (req.body?.site === "on") place = (process.env.OFFICE_LOCATION || "Office").trim();
+    else if (req.body?.site === "off") {
+      place = String(req.body?.location || "").trim().slice(0, 80);
+      if (!place) return res.status(400).json({ error: "Enter where they work from, for example Client site or Pune." });
+      if (/office/i.test(place)) return res.status(400).json({ error: "That counts as the office. Use a place that is not the office, for example Client site." });
+    } else return res.status(400).json({ error: "Choose On-site or Off-site." });
+    await pool.query("UPDATE employees SET work_location=$2 WHERE id=$1", [emp.id, place]);
+    await audit(pool, `${emp.name} marked ${req.body.site === "on" ? "On-site" : "Off-site"} (work location ${emp.work_location || "none"} → ${place}) by ${req.user.email}`, email);
+    res.json({ email, location: place, offSite: offSite(place) });
+  }));
+
   r.post("/api/attendance/punches", requireHr, wrap(async (req, res) => {
     const { email, date, time, direction, note } = req.body || {};
     const now = await nowIst(pool);

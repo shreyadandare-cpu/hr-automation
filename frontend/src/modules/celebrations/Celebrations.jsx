@@ -1,25 +1,27 @@
 import { useCallback, useEffect, useState } from "react";
 import { api } from "../../api.js";
-import BackButton from "../../components/BackButton.jsx";
+import { useAuth } from "../../auth.jsx";
 import Modal from "../../components/Modal.jsx";
-import { Pill, SectionHead } from "../../components/ui.jsx";
+import { Pill, SectionHead, CardSkeleton } from "../../components/ui.jsx";
 import { OCCASIONS } from "./poster.js";
 
 const when = (t) => (t ? new Date(t).toLocaleString("en-IN", { day: "numeric", month: "short", year: "numeric", hour: "numeric", minute: "2-digit" }) : "—");
 const STATUS = { sent: ["ok", "Sent"], partial: ["warn", "Partly sent"], failed: ["bad", "Failed"], sending: ["info", "Sending…"] };
 
-/* Celebrations (HR): the posters already sent. Viewing only: the page offers no way to create or send a poster
+/* Celebrations (celebrations.manage, company-wide): the posters already sent. Viewing only: the page offers no way to create or send a poster
    (today's birthdays, anniversaries and new joiners are on the dashboard). */
 export default function Celebrations() {
+  const manages = useAuth().canAll("celebrations.manage");   // "Celebrations", company-wide
   const [history, setHistory] = useState(null);
   const [view, setView] = useState(null);       // a poster in a dialog
   const [failed, setFailed] = useState(false);
 
   const load = useCallback(async () => {
+    if (!manages) return;
     const h = await api("GET", "/api/celebrations");
     if (!h.ok) { setFailed(true); return; }
     setFailed(false); setHistory(h.data.items);
-  }, []);
+  }, [manages]);
   useEffect(() => { load(); }, [load]);
   useEffect(() => {   // a poster still going out refreshes itself
     if (!history || !history.some((h) => h.status === "sending")) return;
@@ -27,13 +29,13 @@ export default function Celebrations() {
     return () => clearInterval(t);
   }, [history, load]);
 
+  if (!manages) return <div className="cel-page"><SectionHead title="Celebrations" /><div className="card"><div className="empty">Only the people who run celebrations can see this.</div></div></div>;
   if (failed) return <div className="cel-page"><div className="card"><div className="empty">Celebrations could not be loaded. <button type="button" className="btn link" onClick={load}>Try again</button></div></div></div>;
-  if (!history) return <div className="cel-page"><div className="card"><div className="empty">Loading…</div></div></div>;
+  if (!history) return <div className="cel-page"><CardSkeleton lines={4} /></div>;
 
   return (
     <div className="cel-page">
-      <BackButton />
-      <SectionHead eyebrow="HR" title="Celebrations &" accent="announcements" sub="The birthday and welcome posters that have already gone out." big={false} />
+      <SectionHead eyebrow="HR" title="Celebrations" sub="The birthday and welcome posters that have already gone out." />
       <div className="card">
         <div className="card-h"><h3>Announcement history</h3></div>
         <div className="tbl-wrap"><table>

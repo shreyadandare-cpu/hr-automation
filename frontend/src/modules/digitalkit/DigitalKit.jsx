@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { api, apiMsg } from "../../api.js";
+import { useAuth } from "../../auth.jsx";
 import { useData } from "../../data.jsx";
-import BackButton from "../../components/BackButton.jsx";
-import { Callout, SectionHead } from "../../components/ui.jsx";
+import { Callout, SectionHead, PageSkeleton } from "../../components/ui.jsx";
 import { Background, Card, LinkedIn, MissingNotice, Signature } from "./Personal.jsx";
 import { Downloads, ReadyText, Templates } from "./Company.jsx";
 import Manage from "./Manage.jsx";
@@ -27,6 +27,7 @@ const PERSONAL = ["signature", "card", "background", "linkedin"];
 /* My Digital Kit: what I can use as a Wohlig employee. The first four are made from my own details; the next three are the company's shared resources. */
 export default function DigitalKit() {
   const { profile } = useData();
+  const manages = useAuth().canAll("engage.manage");   // the Manage tab: company pages, company-wide (the server checks it again)
   const [kit, setKit] = useState(null);
   const [err, setErr] = useState("");
   const [sp, setSp] = useSearchParams();
@@ -40,13 +41,13 @@ export default function DigitalKit() {
   const go = (k) => setSp({ tab: k }, { replace: true });
   const count = (k, r) => ({ text: r.text.length, templates: r.template.length, downloads: 8 + r.download.length + r.card.length + r.background.length + r.linkedin.length })[k];
 
-  if (err) return <section className="section"><BackButton /><SectionHead eyebrow="Me" title="My Digital" accent="Kit." /><Callout>{err}</Callout></section>;
-  if (!kit) return <section className="section"><BackButton /><div className="empty">Loading your Digital Kit…</div></section>;
+  if (err) return <section className="section"><SectionHead eyebrow="Me" title="My Digital Kit" /><Callout>{err}</Callout></section>;
+  if (!kit) return <PageSkeleton />;
   const p = kit.person, r = kit.resources;
 
   return (
     <section className="section dk">
-      <SectionHead eyebrow="Me" title="My Digital" accent="Kit."
+      <SectionHead eyebrow="Me" title="My Digital Kit"
         sub="Everything you need to look and sound like Wohlig: made from your own details, plus the company's text, templates and files." />
       <div className="dk-shell">
         <nav className="dk-side" aria-label="Digital Kit sections">
@@ -59,7 +60,7 @@ export default function DigitalKit() {
                 </button>))}
             </div>))}
           <p className="dk-side-note">{p.title ? <>Matched to your designation: <b>{p.title}</b>. Some company resources show only for certain roles.</> : <>Add your designation (ask HR) and the company resources for your role appear here.</>}</p>
-          {kit.isHr && <div className="dk-side-group"><h4>HR</h4>
+          {manages && <div className="dk-side-group"><h4>Admin</h4>
             <button type="button" className={tab === "manage" ? "on" : ""} aria-current={tab === "manage" ? "page" : undefined} onClick={() => go("manage")}>
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{IC.gear}</svg><span>Manage</span></button></div>}
         </nav>
@@ -72,8 +73,8 @@ export default function DigitalKit() {
           {tab === "text" && <ReadyText items={r.text} p={p} />}
           {tab === "templates" && <Templates items={r.template} p={p} />}
           {tab === "downloads" && <Downloads items={r.download} p={p} photoV={profile && profile.photoV} extra={{ background: r.background, linkedin: r.linkedin, card: r.card }} />}
-          {tab === "manage" && kit.isHr && <Manage onChanged={load} />}
-          {tab === "manage" && !kit.isHr && <Callout>Only HR can manage the Digital Kit. <Link to="/app/digital-kit">Back to my kit</Link></Callout>}
+          {tab === "manage" && manages && <Manage onChanged={load} />}
+          {tab === "manage" && !manages && <Callout>Only the people who run company pages can manage the Digital Kit. <Link to="/app/digital-kit">Back to my kit</Link></Callout>}
         </div>
       </div>
     </section>

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { api, apiMsg } from "../../api.js";
 import ConfirmDialog from "../../components/ConfirmDialog.jsx";
 import Modal, { Field } from "../../components/Modal.jsx";
-import { Pill, shortDate } from "../../components/ui.jsx";
+import { Pill, shortDate, ViewTabs, TableSkeletonRow } from "../../components/ui.jsx";
 import { useToast } from "../../components/toast.jsx";
 import { kb } from "./kit.js";
 
@@ -16,10 +16,7 @@ export default function Manage({ onChanged }) {
   const [sub, setSub] = useState("resources");
   return (
     <div className="dk-stack">
-      <div className="subtabs" role="tablist" aria-label="Manage">
-        <button type="button" role="tab" className={sub === "resources" ? "on" : ""} aria-selected={sub === "resources"} onClick={() => setSub("resources")}>Shared resources</button>
-        <button type="button" role="tab" className={sub === "people" ? "on" : ""} aria-selected={sub === "people"} onClick={() => setSub("people")}>People</button>
-      </div>
+      <ViewTabs label="Manage" views={[["resources", "Shared resources"], ["people", "People"]]} view={sub} onView={setSub} />
       {sub === "resources" ? <Resources onChanged={onChanged} /> : <People onChanged={onChanged} />}
     </div>
   );
@@ -63,7 +60,7 @@ function Resources({ onChanged }) {
         <div className="tbl-wrap"><table>
           <thead><tr><th>Title</th><th>Section</th><th>For</th><th>Status</th><th>File</th><th>Version</th><th>Updated</th><th aria-label="Actions" /></tr></thead>
           <tbody>
-            {rows === null ? <tr><td colSpan="8"><div className="empty">Loading…</div></td></tr>
+            {rows === null ? <TableSkeletonRow cols={8} />
               : list.length ? list.map((r) => (
                 <tr key={r.id}>
                   <td><b>{r.title}</b>{r.category && <div className="muted" style={{ fontSize: 12.5 }}>{r.category}</div>}</td>
@@ -141,7 +138,7 @@ function People({ onChanged }) {
         <div className="tbl-wrap"><table>
           <thead><tr><th>Employee</th><th>Designation</th><th>Phone</th><th>Kit</th><th>Missing</th><th aria-label="Actions" /></tr></thead>
           <tbody>
-            {rows === null ? <tr><td colSpan="6"><div className="empty">Loading…</div></td></tr>
+            {rows === null ? <TableSkeletonRow cols={6} />
               : list.length ? list.map((r) => (
                 <tr key={r.id}>
                   <td><b>{r.name}</b><div className="muted" style={{ fontSize: 12.5 }}>{r.email}{r.empNo ? ` · ${r.empNo}` : ""}</div></td>

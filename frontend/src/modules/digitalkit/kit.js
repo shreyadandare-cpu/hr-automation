@@ -1,8 +1,9 @@
+import { BRAND } from "../../brand.js";
 /* Digital Kit helpers: placeholders, and the brand designs drawn on a canvas from the person's own details.
    Colours and layout follow the Wohlig brand guidelines: warm ivory and deep maroon, sunset orange as the accent, the shipped logo files only. */
-export const C = { maroon: "#800d35", maroonDeep: "#5c0926", orange: "#f7781d", orangeDeep: "#d9630f", terracotta: "#c85f44", beige: "#ead9c2", ivory: "#fff7e9", ink: "#2a1016", inkDim: "#6b4a52" };
-export const LOGO_LIGHT = "/wohlig-logo.svg";   // maroon lettering, for ivory and white
-export const LOGO_DARK = "/wohlig-logo-dark.svg";   // ivory lettering, for maroon and dark backgrounds
+export const C = { maroon: "#800d35", maroonDeep: "#5c0926", orange: "#f7781d", orangeDeep: "#d9630f", terracotta: "#c85f44", beige: "#ead9c2", ivory: "#fff7e9", ink: "#2e1a1f", inkDim: "#6b5654" };
+export const LOGO_LIGHT = BRAND.logos.light;   // maroon lettering, for ivory and white
+export const LOGO_DARK = BRAND.logos.dark;   // ivory lettering, for maroon and dark backgrounds
 export const EMAIL_LOGO = "https://wohlig.com/assets/brand/wohlig-logo.png";
 export const ICON_PROD = "https://hr.wohlig.com/sig";   // the signature icons on the live site
 export const BADGE_URL = "https://wohlig.com/assets/clients/google-cloud-premier-partner.png";   // the same badge, hosted on the public site, so it loads in every mail program   // an address mail programs can fetch from anywhere
@@ -279,25 +280,25 @@ export function signatureHtml(s, o = SIG_DEFAULT_OPTS, forPreview = false, icons
   const style = o.style || "classic";
   const link = (href, text, extra = "") => `<a href="${esc(href)}" style="color:#800d35;text-decoration:none;${extra}">${esc(text)}</a>`;
   const li = webLink(s.linkedin, /(^|\.)linkedin\.com$/i), bk = webLink(s.booking);
-  const font = "font-family:Lato,Arial,Helvetica,sans-serif;color:#2a1016;font-size:14px;line-height:1.4";
+  const font = "font-family:Lato,Arial,Helvetica,sans-serif;color:#2e1a1f;font-size:14px;line-height:1.4";
   const serif = "font-family:Georgia,'Times New Roman',serif;font-weight:bold;color:#800d35";
   const sep = '<span style="color:#c4a99f"> &nbsp;|&nbsp; </span>';
   const links = [o.cases ? link(CASE_STUDIES_URL, "Case studies", "font-weight:bold") : "", bk ? link(bk, "Book a meeting", "font-weight:bold") : "", li ? link(li, "LinkedIn", "font-weight:bold") : ""].filter(Boolean).join(sep);
-  const tel = s.phone ? `<a href="tel:${esc(s.phone.replace(/[^+\d]/g, ""))}" style="color:#2a1016;text-decoration:none">${esc(s.phone)}</a>` : "";
-  const mail = link(`mailto:${s.email}`, s.email, "color:#2a1016");
+  const tel = s.phone ? `<a href="tel:${esc(s.phone.replace(/[^+\d]/g, ""))}" style="color:#2e1a1f;text-decoration:none">${esc(s.phone)}</a>` : "";
+  const mail = link(`mailto:${s.email}`, s.email, "color:#2e1a1f");
   const web = link("https://wohlig.com", "wohlig.com", "font-weight:bold");
-  const row = (k, html) => `<tr><td style="width:26px;padding:2px 8px 2px 0;font-size:12px;font-weight:bold;color:#9c8077;vertical-align:top">${k}</td><td style="padding:2px 0;font-size:14px;color:#2a1016">${html}</td></tr>`;
+  const row = (k, html) => `<tr><td style="width:26px;padding:2px 8px 2px 0;font-size:12px;font-weight:bold;color:#7a645f;vertical-align:top">${k}</td><td style="padding:2px 0;font-size:14px;color:#2e1a1f">${html}</td></tr>`;
   const rows = [row("E", mail), s.phone ? row("M", tel) : "", row("W", web), o.offices ? row("A", esc(OFFICES)) : ""].join("");
   const logoImg = (w) => `<a href="https://${SITE}"><img src="${EMAIL_LOGO}" width="${w}" alt="Wohlig" style="display:block;border:0;width:${w}px;height:auto"></a>`;
-  const foot = o.badge && style !== "compact" ? `<table cellpadding="0" cellspacing="0" border="0" style="margin-top:14px;border-top:1px solid #ead9c2;width:100%"><tr><td style="padding-top:10px;width:34px;vertical-align:middle"><img src="${BADGE_URL}" width="28" alt="Google Cloud Premier Partner" style="display:block;border:0;width:28px;height:auto"></td><td style="padding-top:10px;padding-left:8px;font-size:12px;color:#6b4a52;vertical-align:middle">${esc(PARTNER_LINE)}</td></tr></table>` : "";
-  const conf = o.conf ? `<div style="margin-top:12px;font-size:11px;line-height:1.4;color:#9c8077;max-width:520px">${esc(CONFIDENTIALITY)}</div>` : "";
+  const foot = o.badge && style !== "compact" ? `<table cellpadding="0" cellspacing="0" border="0" style="margin-top:14px;border-top:1px solid #ead9c2;width:100%"><tr><td style="padding-top:10px;width:34px;vertical-align:middle"><img src="${BADGE_URL}" width="28" alt="Google Cloud Premier Partner" style="display:block;border:0;width:28px;height:auto"></td><td style="padding-top:10px;padding-left:8px;font-size:12px;color:#6b5654;vertical-align:middle">${esc(PARTNER_LINE)}</td></tr></table>` : "";
+  const conf = o.conf ? `<div style="margin-top:12px;font-size:11px;line-height:1.4;color:#7a645f;max-width:520px">${esc(CONFIDENTIALITY)}</div>` : "";
   const wrapT = (inner, w) => `<table cellpadding="0" cellspacing="0" border="0"${w ? ` width="${w}"` : ""} style="${font}${w ? `;width:${w}px;max-width:100%` : ""}">${inner}</table>`;
 
   if (style === "compact") {
-    const line1 = `<span style="${serif};font-size:16px">${esc(s.name)}</span><span style="color:#6b4a52"> &nbsp;|&nbsp; ${s.title ? `${esc(s.title)}, ` : ""}Wohlig</span>`;
+    const line1 = `<span style="${serif};font-size:16px">${esc(s.name)}</span><span style="color:#6b5654"> &nbsp;|&nbsp; ${s.title ? `${esc(s.title)}, ` : ""}Wohlig</span>`;
     const line2 = [mail, tel, web].filter(Boolean).join('<span style="color:#c4a99f"> &nbsp;·&nbsp; </span>');
     return wrapT(`<tr><td style="border-left:3px solid #f7781d;padding-left:12px"><div>${line1}</div><div style="margin-top:3px;font-size:13px">${line2}</div>`
-      + `${o.offices ? `<div style="font-size:12px;color:#6b4a52">${esc(OFFICES)}</div>` : ""}${links ? `<div style="margin-top:3px;font-size:13px">${links}</div>` : ""}</td></tr>`) + conf;
+      + `${o.offices ? `<div style="font-size:12px;color:#6b5654">${esc(OFFICES)}</div>` : ""}${links ? `<div style="margin-top:3px;font-size:13px">${links}</div>` : ""}</td></tr>`) + conf;
   }
   if (style === "executive") {
     // Line icons are small pictures that must load from the internet. The preview uses this site's copies; a copied signature uses the live site's,
@@ -305,19 +306,19 @@ export function signatureHtml(s, o = SIG_DEFAULT_OPTS, forPreview = false, icons
     const showIcons = forPreview || iconsLive;
     const iconBase = forPreview && typeof location !== "undefined" ? `${location.origin}/sig` : ICON_PROD;
     const ic = (name, alt) => `<img src="${iconBase}/icon-${name}.png" width="18" height="18" alt="${alt}" style="display:block;border:0;width:18px;height:18px">`;
-    const irow = (name, letter, html, pad = 3) => `<tr><td style="width:32px;padding:${pad}px 0;vertical-align:middle">${showIcons ? ic(name, letter) : (letter ? `<span style="font-size:12px;font-weight:bold;color:#9c8077">${letter}</span>` : "")}</td><td style="padding:${pad}px 0;font-size:15px;color:#2a1016;vertical-align:middle">${html}</td></tr>`;
-    const contact = [irow("mail", "E", mail), s.phone ? irow("phone", "M", tel) : "", irow("web", "W", web), o.offices ? irow("pin", "A", `<span style="color:#6b4a52">${esc(OFFICES)}</span>`) : ""].join("");
+    const irow = (name, letter, html, pad = 3) => `<tr><td style="width:32px;padding:${pad}px 0;vertical-align:middle">${showIcons ? ic(name, letter) : (letter ? `<span style="font-size:12px;font-weight:bold;color:#7a645f">${letter}</span>` : "")}</td><td style="padding:${pad}px 0;font-size:15px;color:#2e1a1f;vertical-align:middle">${html}</td></tr>`;
+    const contact = [irow("mail", "E", mail), s.phone ? irow("phone", "M", tel) : "", irow("web", "W", web), o.offices ? irow("pin", "A", `<span style="color:#6b5654">${esc(OFFICES)}</span>`) : ""].join("");
     const more = [o.cases ? irow("case", "", link(CASE_STUDIES_URL, "Case studies", "font-weight:bold")) : "", bk ? irow("calendar", "", link(bk, "Book a meeting", "font-weight:bold")) : "", li ? irow("linkedin", "", link(li, "LinkedIn", "font-weight:bold")) : ""].join("");
-    const badge = o.badge ? `<td align="right" style="padding-top:16px;padding-left:24px;vertical-align:middle;white-space:nowrap"><table cellpadding="0" cellspacing="0" border="0" align="right"><tr><td style="vertical-align:middle"><img src="${BADGE_URL}" width="40" alt="Google Cloud Premier Partner" style="display:block;border:0;width:40px;height:auto"></td><td style="padding-left:10px;font-size:15px;line-height:1.3;vertical-align:middle;white-space:nowrap"><div style="font-weight:bold;color:#800d35">Google Cloud</div><div style="color:#6b4a52">Premier Partner</div></td></tr></table></td>` : "";
+    const badge = o.badge ? `<td align="right" style="padding-top:16px;padding-left:24px;vertical-align:middle;white-space:nowrap"><table cellpadding="0" cellspacing="0" border="0" align="right"><tr><td style="vertical-align:middle"><img src="${BADGE_URL}" width="40" alt="Google Cloud Premier Partner" style="display:block;border:0;width:40px;height:auto"></td><td style="padding-left:10px;font-size:15px;line-height:1.3;vertical-align:middle;white-space:nowrap"><div style="font-weight:bold;color:#800d35">Google Cloud</div><div style="color:#6b5654">Premier Partner</div></td></tr></table></td>` : "";
     return wrapT(`<tr><td><div style="${serif};font-size:24px;line-height:1.2">${esc(s.name)}</div>`
-      + `${s.title ? `<div style="font-size:15px;font-weight:bold;color:#2a1016;margin-top:2px">${esc(s.title)}</div>` : ""}<div style="font-size:15px;color:#6b4a52;margin-top:2px">${esc(COMPANY)}</div>`
+      + `${s.title ? `<div style="font-size:15px;font-weight:bold;color:#2e1a1f;margin-top:2px">${esc(s.title)}</div>` : ""}<div style="font-size:15px;color:#6b5654;margin-top:2px">${esc(COMPANY)}</div>`
       + `<div style="width:56px;height:3px;line-height:3px;font-size:3px;background-color:#f7781d;margin:14px 0 14px">&nbsp;</div>`
       + `<table cellpadding="0" cellspacing="0" border="0">${contact}</table>${more ? `<table cellpadding="0" cellspacing="0" border="0" style="margin-top:8px">${more}</table>` : ""}`
       + `<table cellpadding="0" cellspacing="0" border="0" style="width:100%;margin-top:16px;border-top:1px solid #ead9c2"><tr><td align="left" style="padding-top:16px;vertical-align:middle;width:100%">${logoImg(140)}</td>${badge}</tr></table></td></tr>`, 480) + conf;
   }
   return wrapT(`<tr><td style="padding-right:18px;border-right:3px solid #f7781d;vertical-align:middle">${logoImg(150)}</td>`
     + `<td style="padding-left:18px;vertical-align:top"><div style="${serif};font-size:19px">${esc(s.name)}</div>`
-    + `${s.title ? `<div style="font-size:14px;color:#2a1016;font-weight:bold;margin-top:1px">${esc(s.title)}</div>` : ""}<div style="font-size:14px;color:#6b4a52;margin-bottom:8px">${esc(COMPANY)}</div>`
+    + `${s.title ? `<div style="font-size:14px;color:#2e1a1f;font-weight:bold;margin-top:1px">${esc(s.title)}</div>` : ""}<div style="font-size:14px;color:#6b5654;margin-bottom:8px">${esc(COMPANY)}</div>`
     + `<table cellpadding="0" cellspacing="0" border="0">${rows}</table>${links ? `<div style="margin-top:8px">${links}</div>` : ""}</td></tr>`) + foot + conf;
 }
 export function signaturePlain(s, o = SIG_DEFAULT_OPTS) {

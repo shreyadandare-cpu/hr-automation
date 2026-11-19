@@ -11,7 +11,7 @@ export default function PersonAvatar({ email, name }) {
   const photoV = known && known.photoV;
   return (
     <span className="avatar" style={{ background: photoV ? "transparent" : color }}>
-      {photoV ? <img src={`/api/profile/photo?email=${encodeURIComponent(email)}&v=${photoV}`} alt="" /> : initials(name)}
+      {photoV ? <img src={`/api/profile/photo?email=${encodeURIComponent(email)}&v=${photoV}`} alt="" loading="lazy" decoding="async" /> : initials(name)}
     </span>
   );
 }

@@ -4,6 +4,7 @@ import { useSearchParams } from "react-router-dom";
 import { api, apiMsg } from "../api.js";
 import { useAuth } from "../auth.jsx";
 import { useData } from "../data.jsx";
+import { scopeSet } from "../lib/useLeave.js";
 import { Callout, DownloadIcon, Pill, SectionHead, shortDate } from "../components/ui.jsx";
 
 const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
@@ -41,10 +42,12 @@ function SlipView({ s, pdf, onClose }) {
 }
 
 export default function Payslips() {
-  const { user, isHr } = useAuth();
+  const auth = useAuth(), { user, can } = auth;
   const { people } = useData();
   const [params, setParams] = useSearchParams();
-  const who = isHr && params.get("email") ? params.get("email").toLowerCase() : "";
+  // payroll.view opens other people's payslips: everyone's for the whole company, or the people below the team roots it was given for.
+  const seesOthers = can("payroll.view");
+  const who = seesOthers && params.get("email") ? params.get("email").toLowerCase() : "";
   const q = who ? `?email=${encodeURIComponent(who)}` : "";
   const [data, setData] = useState(null);
   const [error, setError] = useState("");
@@ -73,17 +76,18 @@ export default function Payslips() {
   const pdf = (period) => `/api/payslips/${period}/pdf${q}`;
   const list = data ? data.payslips : [];
   const emp = data && data.employee;
-  const others = isHr && people ? people.filter((p) => p.status !== "offboarded" || p.email.toLowerCase() === who).sort((a, b) => (a.name < b.name ? -1 : 1)) : [];
+  const inScope = seesOthers ? scopeSet(auth, "payroll.view", people) : new Set();
+  const others = seesOthers && people ? people.filter((p) => (!inScope || inScope.has(p.email.toLowerCase())) && (p.status !== "offboarded" || p.email.toLowerCase() === who)).sort((a, b) => (a.name < b.name ? -1 : 1)) : [];
   const chosen = list.find((x) => x.period === pick);
 
   return (
     <section className="section">
-      <BackButton />
-      <SectionHead eyebrow="Me" title={who ? "Payslips" : "My"} accent={who ? "." : "payslips."} sub="Your payslip for each month appears here early the next month. View it or download the PDF any time."
-        actions={isHr && others.length > 0 && (
+      {who && <BackButton to="/app/employees" />}
+      <SectionHead eyebrow="Me" title={who ? "Payslips" : "My pay"} sub="Your payslip for each month appears here early the next month. View it or download the PDF any time."
+        actions={seesOthers && others.length > 0 && (
           <select className="input" aria-label="Whose payslips" style={{ width: "auto", maxWidth: "100%" }} value={who || user.email.toLowerCase()}
             onChange={(e) => { const v = e.target.value.toLowerCase(); const n = new URLSearchParams(params); if (v === user.email.toLowerCase()) n.delete("email"); else n.set("email", v); setParams(n, { replace: true }); }}>
-            <option value={user.email.toLowerCase()}>My payslips</option>
+            <option value={user.email.toLowerCase()}>My pay</option>
             {others.filter((p) => p.email.toLowerCase() !== user.email.toLowerCase()).map((p) => <option key={p.email} value={p.email.toLowerCase()}>{p.name}</option>)}
           </select>)} />
       {error && <Callout>{error}</Callout>}

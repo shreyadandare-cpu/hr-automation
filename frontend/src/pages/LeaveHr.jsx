@@ -2,10 +2,9 @@ import { useState } from "react";
 import { Link, Navigate, useSearchParams } from "react-router-dom";
 import { useData } from "../data.jsx";
 import { useAuth } from "../auth.jsx";
-import { PersonCell, Pill, SectionHead, Stat, shortDate } from "../components/ui.jsx";
+import { PersonCell, Pill, SectionHead, Stat, shortDate, PageSkeleton } from "../components/ui.jsx";
 import { CompOffModal, DecideButtons, HolidayCalendar } from "../components/leaveParts.jsx";
 import { CompOffHistory, LeaveHistory, ViewTabs } from "../components/leaveSummary.jsx";
-import LeaveSwitch from "../components/LeaveSwitch.jsx";
 import { R } from "../lib/leave.js";
 import { LSTAT, LTYPE, dd, lc, rangeText, useLeave } from "../lib/useLeave.js";
 import Pager, { usePaged } from "../components/Pager.jsx";
@@ -21,7 +20,9 @@ function PagedTable({ items, reset, head, row, cols, empty }) {
 }
 
 export default function LeaveHr() {
-  const { isHr } = useAuth();
+  const { can, canAny, canAll } = useAuth();
+  // leave.approve (company or a team) decides requests and records leave for others; leave.manage (whole company) edits holidays.
+  const decides = can("leave.approve"), manages = canAll("leave.manage");
   const { people } = useData();
   const lv = useLeave();
   const [q, setQ] = useState("");
@@ -29,8 +30,8 @@ export default function LeaveHr() {
   const [params, setParams] = useSearchParams();
   const view = VIEWS.some(([k]) => k === params.get("view")) ? params.get("view") : "requests";
   const setView = (k) => setParams(k === "requests" ? {} : { view: k }, { replace: true });
-  if (!isHr) return <section className="section"><SectionHead eyebrow="Time off" title="Leave" accent="management." /><div className="empty">Only HR can manage leave.</div></section>;
-  if (!people) return <section className="section"><div className="empty">Loading…</div></section>;
+  if (!canAny("leave.approve", "leave.manage")) return <section className="section"><SectionHead eyebrow="Time off" title="Leave management" /><div className="empty">You do not have access to leave management. Please ask a super admin if you need it.</div></section>;
+  if (!people) return <PageSkeleton />;
 
   // HR manage everyone's leave here. Their own leave is the "My leave" tab of the shared switch (the directors approve it).
   if (params.get("tab") === "mine") return <Navigate to="/app/my-leave" replace />;
@@ -41,16 +42,16 @@ export default function LeaveHr() {
   const pend = all.filter((r) => r.status === "pending").sort((a, b) => (a.from < b.from ? -1 : 1));
   const compPend = lv.compOffs.filter((c) => c.status === "pending").map((c) => ({ ...c, emp: lv.empBy(c.email) })).filter((c) => c.emp);
   const away = all.filter((r) => r.status === "approved" && r.to >= today).sort((a, b) => (a.from < b.from ? -1 : 1));
-  const here = people.filter((e) => e.status !== "offboarded" && (!q || lc(e.name + e.email).includes(lc(q))));
+  const covered = new Set((lv.L.pay || []).map((p) => lc(p.email)));   // the server sends leave data only for the people this person may see
+  const here = people.filter((e) => e.status !== "offboarded" && covered.has(lc(e.email)) && (!q || lc(e.name + e.email).includes(lc(q))));
   const lopNow = lv.lopDaysIn(today.slice(0, 7));
   const waitingForMe = pend.filter((r) => lv.canDecide(r.email)).length + compPend.filter((c) => lv.canDecide(c.email)).length;
 
   return (
     <section className="section">
-      <LeaveSwitch current="hr" />
-      <SectionHead eyebrow="Time off" title="Leave" accent="management."
+      <SectionHead eyebrow="Time off" title="Leave management"
         sub="Days beyond someone's balance, and all unpaid leave, are loss of pay. The salary cut is monthly gross ÷ 30 for each loss-of-pay day. Saturdays, Sundays and holidays are never counted."
-        actions={<><button type="button" className="btn link" onClick={() => setView("compoff")}>Compensatory off request history</button><button type="button" className="btn glass" onClick={() => setModal("comp")}>Record comp off</button><Link className="btn glass" to="/app/leave/apply">Add leave for someone</Link></>} />
+        actions={decides && <><button type="button" className="btn glass" onClick={() => setModal("comp")}>Record comp off</button><Link className="btn primary" to="/app/leave/apply">Add leave for someone</Link></>} />
       <div className="grid g4">
         <Stat value={waitingForMe} label="Waiting for you" />
         <Stat value={away.filter((r) => r.from <= today).length} label="Away today" />
@@ -90,7 +91,7 @@ export default function LeaveHr() {
 
       {view === "history" && <LeaveHistory list={all} who title="All leave" />}
       {view === "compoff" && <CompOffHistory list={lv.compOffs} who />}
-      {view === "holidays" && <HolidayCalendar editable />}
+      {view === "holidays" && <HolidayCalendar editable={manages} />}
       {modal === "comp" && <CompOffModal onClose={() => setModal(null)} />}
     </section>
   );

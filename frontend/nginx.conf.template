@@ -6,6 +6,13 @@ server {
   absolute_redirect off;
   # Invoices and documents go up to 10 MB.
   client_max_body_size 12m;
+  # Scripts, styles and API answers go compressed (about a quarter of the size), so the app opens faster.
+  gzip on;
+  gzip_comp_level 6;
+  gzip_min_length 1024;
+  gzip_proxied any;
+  gzip_vary on;
+  gzip_types text/css application/javascript text/javascript application/json image/svg+xml;
 
   proxy_set_header Host $host;
   proxy_set_header X-Real-IP $remote_addr;

@@ -7,6 +7,7 @@ import PersonAvatar from "../../components/PersonAvatar.jsx";
 import { useToast } from "../../components/toast.jsx";
 import { lc } from "../../lib/useLeave.js";
 import { Svg, errOf, postUrl } from "./lib.jsx";
+import { PRODUCT } from "../../brand.js";
 
 const MAX = 25;
 
@@ -45,7 +46,7 @@ export default function ShareModal({ post, onShared, onClose }) {
       <div className="card-h"><h3>Share post</h3></div>
       <div className="card-b sh-body">
         <button type="button" className="sh-link" onClick={copy}><span className="sh-link-ic"><Svg name="link" /></span>
-          <span><b>Copy link</b><small>Opens this post in Wohlig One</small></span></button>
+          <span><b>Copy link</b><small>Opens this post in {PRODUCT}</small></span></button>
         <div className="sh-or"><span>or send to colleagues</span></div>
         <input className="input" type="search" placeholder="Search by name or team" value={q} onChange={(e) => setQ(e.target.value)} aria-label="Search colleagues" />
         {picked.length > 0 && <div className="sh-chips">{picked.map((e) => { const p = colleagues.find((x) => x.email === e);

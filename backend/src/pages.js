@@ -3,6 +3,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import zlib from "node:zlib";
 import express from "express";
 import { googleRouter } from "./google-signin.js";
 import { inviteRouter } from "./invites.js";
@@ -24,6 +25,7 @@ export function pagesRouter() {
   const distDir = path.join(frontendDir, "dist");
   const hasDist = () => fs.existsSync(path.join(distDir, "index.html"));
   const notBuilt = (res) => res.status(503).type("text").send("The interface has not been built yet. Run `npm run build:ui` in the backend folder, then reload.");
+  app.use("/app/assets", compressedAssets(path.join(distDir, "assets")));   // scripts and styles sent compressed (about a quarter of the size)
   app.use("/app/assets", express.static(path.join(distDir, "assets"), { immutable: true, maxAge: "1y" }));
   // A page opened while signed out (say, a leave request from an email) is remembered for 15 minutes and opened after sign-in.
   const AFTER = "hrhub_after";
@@ -45,4 +47,35 @@ export function pagesRouter() {
   // Leave rules shared by the page and the server (no personal data in it).
   app.get("/leave-rules.js", (_req, res) => res.type("js").sendFile(path.join(frontendDir, "leave-rules.cjs")));
   return app;
+}
+
+/* The built scripts and styles, compressed once (Brotli, or gzip for older browsers) and kept in memory. The file names carry a
+   content hash, so a compressed copy never goes stale. Anything else, or a browser that accepts neither, falls through to
+   express.static. */
+function compressedAssets(dir) {
+  const cache = new Map();
+  return (req, res, next) => {
+    if (req.method !== "GET" && req.method !== "HEAD") return next();
+    const name = path.basename(req.path);
+    if (!/^[\w.-]+\.(js|css)$/.test(name) || name !== req.path.slice(1)) return next();
+    const accepts = String(req.headers["accept-encoding"] || "");
+    const enc = /\bbr\b/.test(accepts) ? "br" : /\bgzip\b/.test(accepts) ? "gzip" : null;
+    if (!enc) return next();
+    const key = `${enc}:${name}`;
+    let body = cache.get(key);
+    if (!body) {
+      let raw;
+      try { raw = fs.readFileSync(path.join(dir, name)); } catch { return next(); }
+      body = enc === "br"
+        ? zlib.brotliCompressSync(raw, { params: { [zlib.constants.BROTLI_PARAM_QUALITY]: 9 } })
+        : zlib.gzipSync(raw, { level: 9 });
+      cache.set(key, body);
+    }
+    res.set({
+      "Content-Type": name.endsWith(".css") ? "text/css; charset=utf-8" : "text/javascript; charset=utf-8",
+      "Content-Encoding": enc, "Vary": "Accept-Encoding", "Cache-Control": "public, max-age=31536000, immutable",
+      "Content-Length": String(body.length),
+    });
+    return req.method === "HEAD" ? res.end() : res.end(body);
+  };
 }

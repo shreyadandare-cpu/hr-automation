@@ -6,6 +6,8 @@ import { pool } from "./db.js";
 import { UPLOAD_DIR } from "./documents.js";
 import { mailConfigured, publicUrl, sendMail } from "./mail.js";
 import { mailSkipped, notify } from "./notify.js";
+import { COMPANY_LEGAL } from "./brand.js";
+import { needAll } from "./access.js";
 
 /*
  * Celebrations: birthday and welcome posters. HR picks the person (birthdays come from the date of birth on file, new joiners
@@ -99,11 +101,11 @@ function mailFor(c) {
     newrole: [`Congratulations, ${name}, on your new role!`, `${name} is stepping into a new role${c.designation ? ` as ${c.designation}` : ""}. Please join us in congratulating ${first}!`],
   };
   const [subject, line] = MAILS[c.occasion];
-  const text = `Hello team,\n\n${line}\n\nWith warm wishes,\nWOHLIG TRANSFORMATIONS PRIVATE LIMITED\n`;
+  const text = `Hello team,\n\n${line}\n\nWith warm wishes,\n${COMPANY_LEGAL.toUpperCase()}\n`;
   const html = `<div style="font:15px/1.6 Arial,Helvetica,sans-serif;color:#2a1016;max-width:560px;margin:0 auto">`
     + `<p style="margin:0 0 14px">Hello team,</p><p style="margin:0 0 18px">${esc(line)}</p>`
     + `<p style="margin:0 0 18px"><img src="${esc(publicUrl())}/p/${c.poster_token}.png" width="560" alt="${esc(subject)}" style="display:block;width:100%;max-width:560px;height:auto;border:0;border-radius:6px"></p>`
-    + `<p style="margin:0">With warm wishes,<br><b>WOHLIG TRANSFORMATIONS PRIVATE LIMITED</b></p></div>`;
+    + `<p style="margin:0">With warm wishes,<br><b>${COMPANY_LEGAL.toUpperCase()}</b></p></div>`;
   return { subject, text, html };
 }
 
@@ -172,13 +174,13 @@ export async function runCelebrationAlerts() {
   const once = async (e, key) => (await pool.query(
     "INSERT INTO celebration_alerts (employee_email, alert_key) VALUES ($1,$2) ON CONFLICT DO NOTHING RETURNING 1", [e.email.toLowerCase(), key])).rowCount > 0;
   for (const b of c.birthdaysToday.filter((x) => !x.announced)) {
-    if (await once(b, `birthday:${c.today}`)) { told.push(b.name); await notify("hr", { title: `Today is ${b.name}'s birthday`, body: "", link: "/app/celebrations" }); }
+    if (await once(b, `birthday:${c.today}`)) { told.push(b.name); await notify("perm:celebrations.manage", { title: `Today is ${b.name}'s birthday`, body: "", link: "/app/celebrations" }); }
   }
   for (const a of c.anniversariesToday.filter((x) => !x.announced)) {
-    if (await once(a, `anniversary:${c.today}`)) { told.push(a.name); await notify("hr", { title: `${a.name}'s ${a.years}-year work anniversary is today`, body: "", link: "/app/celebrations" }); }
+    if (await once(a, `anniversary:${c.today}`)) { told.push(a.name); await notify("perm:celebrations.manage", { title: `${a.name}'s ${a.years}-year work anniversary is today`, body: "", link: "/app/celebrations" }); }
   }
   for (const j of c.joiners.filter((x) => !x.announced)) {
-    if (await once(j, "welcome")) { told.push(j.name); await notify("hr", { title: `${j.name} joined the team`, body: j.title || "", link: "/app/celebrations" }); }
+    if (await once(j, "welcome")) { told.push(j.name); await notify("perm:celebrations.manage", { title: `${j.name} joined the team`, body: j.title || "", link: "/app/celebrations" }); }
   }
   return { told };
 }
@@ -199,6 +201,7 @@ const NEEDS_PUBLIC = { error: "The poster is shown in the email from the public 
 
 /* ---------- routes ---------- */
 export const celebrationsRouter = express.Router();
+celebrationsRouter.use(needAll("celebrations.manage"));   // "Celebrations", company-wide (checked here, whatever index.js mounts it behind)
 const forbid = (res, r) => res.status(r.code).json({ error: r.error });
 
 const counts = async (id) => {

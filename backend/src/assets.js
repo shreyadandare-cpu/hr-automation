@@ -1,15 +1,11 @@
 import express from "express";
 import L from "../../frontend/leave-rules.cjs";
 import { pool } from "./db.js";
+import { needAll } from "./access.js";
 
-/* Company assets (laptops, phones, monitors...). Only IT admins and HR can see or change them. */
+/* Company assets (laptops, phones, monitors...). Only people with "Company assets" (assets.manage) can see or change them. */
 export const CATEGORIES = ["Laptop", "Desktop", "Monitor", "Phone", "Tablet", "Keyboard / Mouse", "Headset", "Network", "Software licence", "Other"];
 const STATUSES = ["In stock", "Assigned", "In repair", "Retired"];
-
-export const requireItAdmin = (req, res, next) =>
-  !req.user ? res.status(401).json({ error: "Please sign in." })
-  : !(req.user.it_admin || req.user.role === "hr") ? res.status(403).json({ error: "IT admins and HR only." })
-  : next();
 
 const text = (v, max) => String(v ?? "").trim().slice(0, max);
 const date = (v) => (v ? (L.validDate(String(v)) ? String(v) : false) : null);
@@ -39,7 +35,7 @@ function readFields(b, partial = false) {
 
 export function assetsRouter(wrap) {
   const r = express.Router();
-  r.use("/api/assets", requireItAdmin);
+  r.use("/api/assets", needAll("assets.manage"));
 
   r.get("/api/assets", wrap(async (_req, res) => {
     const { rows } = await pool.query(`${SELECT} ORDER BY a.id DESC`);

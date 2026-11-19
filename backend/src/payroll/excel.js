@@ -2,6 +2,7 @@ import ExcelJS from "exceljs";
 import { STATUS } from "./workflow.js";
 import { monthName } from "./store.js";
 import { fyOf } from "./tax.js";
+import { BRAND, PRODUCT } from "../brand.js";
 
 /*
  * The month's payroll workbook, built from the run as stored in the database (loadRun). Three sheets:
@@ -10,7 +11,7 @@ import { fyOf } from "./tax.js";
  *   3. Payroll Summary            totals as formulas over sheet 1, next to the database's figures, and whether they match
  * Sheet 1 has only the columns of HR's sample sheet. Bank details are not in the report at all: they are only in the bank file.
  */
-export const COMPANY = "Wohlig Transformations Pvt Ltd";
+export const COMPANY = BRAND.company.legalNameShort;
 // Rows show "-" for nothing, like the sample sheet; totals always show the amount.
 const ROW = '[>=100000]"₹"##\\,##\\,##0.00;[=0]"-";"₹"##,##0.00';
 const INR = '[>=10000000]"₹"##\\,##\\,##\\,##0.00;[>=100000]"₹"##\\,##\\,##0.00;"₹"##,##0.00';
@@ -62,7 +63,7 @@ export async function buildWorkbook(data, meta) {
   const held = data.lines.filter((l) => l.status !== "ready");
   const t = data.totals;
   const wb = new ExcelJS.Workbook();
-  wb.creator = "Wohlig One"; wb.company = COMPANY; wb.created = new Date(meta.generatedAt);
+  wb.creator = PRODUCT; wb.company = COMPANY; wb.created = new Date(meta.generatedAt);
   wb.calcProperties.fullCalcOnLoad = true;   // formulas are recalculated when opened; cached results are the database figures
   const fyText = fyOf(run.period);
   // The totals row, in the same columns as the rows (from the database totals).

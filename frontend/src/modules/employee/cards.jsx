@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { api, apiMsg } from "../../api.js";
+import { useAuth } from "../../auth.jsx";
 import Modal, { Field } from "../../components/Modal.jsx";
-import { Icon, shortDate } from "../../components/ui.jsx";
+import { Icon, shortDate, pill, ListSkeleton } from "../../components/ui.jsx";
 import { useToast } from "../../components/toast.jsx";
 import { PayModal } from "../../components/leaveParts.jsx";
 import { useData } from "../../data.jsx";
@@ -21,8 +22,8 @@ const DOCS = [
   { k: "voter", name: "Voter ID" }, { k: "exp", name: "Previous experience letters" }, { k: "edu", name: "Education certificates" },
   { k: "bank", name: "Bank passbook or cancelled cheque" },
 ];
-export function RecordCard({ e, record, docs, isMe, isHr }) {
-  if (!isHr && !isMe) return null;   // personal details and documents belong to HR and the person themselves
+export function RecordCard({ e, record, docs, isMe, mayView }) {
+  if (!mayView && !isMe) return null;   // personal details and documents: the person, and people.view / documents.view (the server sends only those in scope)
   const mine = docs.filter((d) => lc(d.email) === lc(e.baseEmail)), by = {};
   for (const d of mine) (by[d.key] = by[d.key] || []).push(d);
   const n = mine.length, r = record || {};
@@ -60,15 +61,20 @@ export function ProjectsCard({ e }) {
 }
 
 /* Who works under this person: their direct reports, from the reporting managers. Anyone signed in can see it, like the rest of the roster.
-   HR, and the manager themself, get an Add member button (the server decides again who may do what). */
-export function TeamCard({ e, isHr = false, isMe = false }) {
+   "Edit people" for the whole company gets an Add member button anywhere; a reporting manager or people.edit holder on their own
+   page too, for people with no manager yet (the server decides again). */
+export function TeamCard({ e, isMe = false }) {
+  const { can, canAll } = useAuth();
+  const asHr = canAll("people.edit");   // may move anyone into this team
   const { people } = useData();
   const nav = useNavigate();
   const [adding, setAdding] = useState(false);
   const me = String(e.name || "").trim().toLowerCase();
-  const mine = useMemo(() => (people || []).filter((x) => x.status !== "offboarded" && String(x.manager || "").trim().toLowerCase() === me && x.id !== e.id)
-    .sort((a, b) => String(a.no).localeCompare(String(b.no), undefined, { numeric: true })), [people, e, me]);
-  const canAdd = e.status !== "offboarded" && (isHr || (isMe && mine.length > 0));
+  const myEmail = String(e.email || "").toLowerCase();
+  const mine = useMemo(() => (people || []).filter((x) => x.status !== "offboarded" && x.id !== e.id
+      && (x.managerEmail ? x.managerEmail === myEmail : String(x.manager || "").trim().toLowerCase() === me))
+    .sort((a, b) => String(a.no).localeCompare(String(b.no), undefined, { numeric: true })), [people, e, me, myEmail]);
+  const canAdd = e.status !== "offboarded" && (asHr || (isMe && (can("people.edit") || mine.length > 0)));
   if (!mine.length && !canAdd) return null;
   return (
     <div className="card"><div className="card-h"><h3>Team</h3>
@@ -81,7 +87,7 @@ export function TeamCard({ e, isHr = false, isMe = false }) {
             <span><b>{p.name}</b><span className="muted">{p.title}</span></span>
           </button>))}</div> : <p className="muted" style={{ margin: 0 }}>Use “Add member” to put someone in {String(e.name).split(" ")[0]}'s team.</p>}
       </div>
-      {adding && <AddMemberModal boss={e} asHr={isHr} onClose={() => setAdding(false)} />}
+      {adding && <AddMemberModal boss={e} asHr={asHr} onClose={() => setAdding(false)} />}
     </div>
   );
 }
@@ -133,7 +139,7 @@ export function AddMemberModal({ boss, asHr = false, onClose }) {
   );
 }
 
-export function LeaveCard({ e, isHr }) {
+export function LeaveCard({ e, maySetPay }) {
   const lv = useLeave();
   const { leave } = useData();
   const [pay, setPay] = useState(false);
@@ -141,7 +147,7 @@ export function LeaveCard({ e, isHr }) {
   const year = Number(lv.today.slice(0, 4)), b = lv.bal(e, year), p = lv.payOf(e.baseEmail);
   const mine = [...lv.reqsOf(e.baseEmail)].sort((a, c) => (a.from < c.from ? 1 : -1)).slice(0, 5);
   return (
-    <div className="card"><div className="card-h"><h3>Leave {year}</h3>{isHr && <button className="btn glass sm" onClick={() => setPay(true)}>Pay &amp; balance</button>}</div>
+    <div className="card"><div className="card-h"><h3>Leave {year}</h3>{maySetPay && <button className="btn glass sm" onClick={() => setPay(true)}>Pay &amp; balance</button>}</div>
       <dl className="facts" style={{ borderTop: 0, paddingTop: 0 }}>
         <div><dt>Casual left</dt><dd>{b.casual.left} <span className="muted">({b.casual.carried} carried + {b.casual.quota} − {b.casual.used})</span></dd></div>
         <div><dt>Sick left</dt><dd>{b.sick.left} <span className="muted">of {b.sick.quota}</span></dd></div>
@@ -152,7 +158,7 @@ export function LeaveCard({ e, isHr }) {
       {mine.map((r) => (
         <div className="li" key={r.id}><div className="grow"><b style={{ fontWeight: 600 }}>{LTYPE[r.type]}</b> · {rangeText(r, fdate)}
           <div className="meta">{r.status === "approved" ? <>{dd(r.paidDays)} paid{r.lopDays ? `, ${dd(r.lopDays)} loss of pay` : ""}</> : dd(r.days)}</div></div>
-          <span className={`pill p-${LSTAT[r.status][1]}`}>{LSTAT[r.status][0]}</span></div>
+          <span className={pill(LSTAT[r.status][1])}>{LSTAT[r.status][0]}</span></div>
       ))}
       {pay && <PayModal email={e.baseEmail} onClose={() => setPay(false)} />}
     </div>
@@ -160,7 +166,7 @@ export function LeaveCard({ e, isHr }) {
 }
 
 /* ---------- offboarding status ---------- */
-function SettlementBlock({ e, s, onPay, isHr }) {
+function SettlementBlock({ e, s, onPay, maySetPay }) {
   if (!s) return null;
   const mon = fdate(s.month + "-01").replace(/^1 /, "");
   const amt = (v) => (s.monthlyGross ? inr(v) : "—");
@@ -168,11 +174,11 @@ function SettlementBlock({ e, s, onPay, isHr }) {
     <div className="field"><span className="lab">Final settlement: leave</span><div className="settle">
       <div><span>Unused casual leave paid out<small>{s.carried} carried + {s.quota} for months worked − {s.used} used</small></span><b>{dd(s.casualLeft)} · {amt(s.encashment)}</b></div>
       <div><span>Loss of pay in {mon}</span><b className="neg">{dd(s.lopDays)} · {s.monthlyGross ? "−" + inr(s.deduction) : "—"}</b></div>
-      <div className="tot"><span>Leave adjustment</span><b>{s.monthlyGross ? inr(s.net) : isHr ? <button type="button" className="btn link" onClick={onPay}>Add monthly salary to see amounts</button> : "—"}</b></div>
+      <div className="tot"><span>Leave adjustment</span><b>{s.monthlyGross ? inr(s.net) : maySetPay ? <button type="button" className="btn link" onClick={onPay}>Add monthly salary to see amounts</button> : "—"}</b></div>
     </div></div>
   );
 }
-export function OffCard({ e, rec, scheduled, isHr, onChanged }) {
+export function OffCard({ e, rec, scheduled, mayRun, maySetPay, onChanged }) {
   const toast = useToast();
   const lv = useLeave();
   const { people, reloadLeave } = useData();
@@ -194,13 +200,13 @@ export function OffCard({ e, rec, scheduled, isHr, onChanged }) {
     toast(okMsg); reloadLeave(); onChanged();
   };
   return (
-    <div className="card"><div className="card-h"><h3>Offboarding</h3>{scheduled ? <span className="pill p-warn">Scheduled</span> : e.status === "offboarded" ? <span className="pill p-mute">Completed</span> : <span className="pill p-warn">In progress</span>}</div>
+    <div className="card"><div className="card-h"><h3>Offboarding</h3>{scheduled ? <span className={pill("warn")}>Scheduled</span> : e.status === "offboarded" ? <span className={pill("mute")}>Completed</span> : <span className={pill("warn")}>In progress</span>}</div>
       <div className="card-b" style={{ display: "flex", flexDirection: "column", gap: 16 }}>
         {scheduled ? <>
           <div className="callout"><InfoIcon /><div>Access is removed automatically on <b>{fdate(e.lastDay)} at 6:00 pm</b>{toName ? <>. Drive files and email go to <b>{toName}</b></> : ""}.</div></div>
-          {isHr && <div className="row"><button className="btn danger sm" disabled={busy} onClick={() => call("run", `Access removed for ${e.name}.`)}>Remove access now</button><button className="btn glass sm" disabled={busy} onClick={() => call("cancel", `Offboarding for ${e.name} called off.`)}>Call off offboarding</button></div>}
+          {mayRun && rec && <div className="row"><button className="btn danger sm" disabled={busy} onClick={() => call("run", `Access removed for ${e.name}.`)}>Remove access now</button><button className="btn glass sm" disabled={busy} onClick={() => call("cancel", `Offboarding for ${e.name} called off.`)}>Call off offboarding</button></div>}
         </> : toName ? <div className="muted">Drive files and email moved to <b style={{ color: "var(--ink)" }}>{toName}</b>.</div> : null}
-        <SettlementBlock e={e} s={s} isHr={isHr} onPay={() => setPay(true)} />
+        <SettlementBlock e={e} s={s} maySetPay={maySetPay} onPay={() => setPay(true)} />
       </div>
       {pay && <PayModal email={e.baseEmail} onClose={() => setPay(false)} />}
     </div>
@@ -295,7 +301,7 @@ function QuickApprove({ id, cats, onClose, onDone }) {
               <td className="desc">{it.description || ""}</td>
               <td className="num"><b>{money(it.amount)}</b>{x && x.nonEligible > 0 && <div className="muted" style={{ fontSize: 12 }}>eligible {money(x.eligible)}</div>}</td>
               <td>{it.document ? <><a className="btn link sm nolink" href={`/api/reimbursements/${c.id}/documents/${it.document.id}`} target="_blank" rel="noopener"><Icon name="filedoc" />View</a> {m && m.status === "match" ? <span className="flag ok"><Icon name="check" />Matches</span> : m && m.status === "mismatch" ? <span className="flag" title="Amount on the invoice"><Warn />Invoice {money(m.invoiceTotal)}</span> : null}</>
-                : it.noReceipt ? <span className="pill p-mute">No receipt</span> : <span className="pill p-warn">Missing</span>}</td></tr>;
+                : it.noReceipt ? <span className={pill("mute")}>No receipt</span> : <span className={pill("warn")}>Missing</span>}</td></tr>;
           })}
           {items.length > 1 && <tr className="rb-total"><td></td><td colSpan="2"><b>Total</b></td><td className="num"><b>{money(items.reduce((n, it) => n + (it.amount || 0), 0))}</b></td><td></td></tr>}
         </tbody></table></div>}
@@ -309,6 +315,8 @@ function QuickApprove({ id, cats, onClose, onDone }) {
 }
 
 export function ReimbCard({ e }) {
+  const { user } = useAuth();
+  const own = lc(e.baseEmail) === lc(user.email);   // nobody decides their own claim
   const [st, setSt] = useState({ state: "loading" });
   const [quick, setQuick] = useState(null);
   const [tick, setTick] = useState(0);
@@ -341,8 +349,8 @@ export function ReimbCard({ e }) {
       {shown.slice(0, 6).map((c) => (
         <div className="li wrap" key={c.id}><div className="grow"><b style={{ fontWeight: 600 }}>{catNames(c)} · {money(c.amount)}</b> <span className="muted mono">{c.claimNo}</span>
           <div className="meta">{fdate(c.expenseDate)} · {c.description}</div></div>
-          <div className="row" style={{ gap: 8 }}><span className={`pill ${(RB_STATUS[c.status] || ["", ""])[1]}`}>{(RB_STATUS[c.status] || [c.status])[0]}</span><Flags c={c} />
-            {OPEN.includes(c.status) ? <><Link className="btn glass sm" to={`/app/reimbursements/${c.id}`}>Review</Link><button className="btn primary sm" onClick={() => setQuick(c.id)}>Approve</button></>
+          <div className="row" style={{ gap: 8 }}><span className={pill((RB_STATUS[c.status] || ["", ""])[1])}>{(RB_STATUS[c.status] || [c.status])[0]}</span><Flags c={c} />
+            {OPEN.includes(c.status) && !own ? <><Link className="btn glass sm" to={`/app/reimbursements/${c.id}`}>Review</Link><button className="btn primary sm" onClick={() => setQuick(c.id)}>Approve</button></>
               : <Link className="btn glass sm" to={`/app/reimbursements/${c.id}`}>View</Link>}</div></div>
       ))}
       {!shown.length && <div className="empty">No reimbursement claims yet.</div>}
@@ -360,7 +368,7 @@ export function HistoryCard({ email }) {
   return (
     <div className="card"><div className="card-h"><h3>History</h3><Link className="btn link" to="/app/audit">Full audit log</Link></div>
       <div style={{ paddingBottom: 12 }}>
-        {rows === null ? <div className="empty">Loading…</div> : rows.length ? rows.map((a) => (
+        {rows === null ? <ListSkeleton /> : rows.length ? rows.map((a) => (
           <div className="tl" key={a.id}><span className="dot" style={{ background: /failed/i.test(a.action) ? "var(--bad)" : "var(--ok)" }} /><div style={{ minWidth: 0 }}>
             <div style={{ fontSize: 14 }}><b style={{ fontWeight: 600 }}>{a.name || a.email}</b> · {a.action}</div><div className="meta">{fts(new Date(a.ts))}</div></div></div>
         )) : <div className="empty">No recorded actions yet.</div>}

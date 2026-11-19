@@ -4,6 +4,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import express from "express";
 import { pool } from "./db.js";
+import { can, scopeOf } from "./access.js";
 
 export const UPLOAD_DIR = path.resolve(process.env.UPLOAD_DIR || fileURLToPath(new URL("../uploads", import.meta.url)));
 const MAX_BYTES = 5 * 1024 * 1024;
@@ -29,14 +30,14 @@ const wrap = (fn) => (req, res) => fn(req, res).catch((err) => {
 
 export const documentsRouter = express.Router();
 
-// HR can see and download everyone's documents; an employee can only reach their own.
-const isHr = (req) => req.user.role === "hr";
+// "See documents" opens the documents of the people it covers (everyone, or a reporting tree); everyone reaches their own.
 const mine = (req, row) => row.work_email.toLowerCase() === req.user.email.toLowerCase();
 
 documentsRouter.get("/", wrap(async (req, res) => {
-  const { rows } = isHr(req)
+  const scope = await scopeOf(req, "documents.view"), me = req.user.email.toLowerCase();
+  const { rows } = scope === null
     ? await pool.query("SELECT * FROM documents ORDER BY id")
-    : await pool.query("SELECT * FROM documents WHERE lower(work_email)=$1 ORDER BY id", [req.user.email.toLowerCase()]);
+    : await pool.query("SELECT * FROM documents WHERE lower(work_email) = ANY($1::text[]) ORDER BY id", [[me, ...scope]]);
   res.json(rows.map(toApi));
 }));
 
@@ -91,7 +92,7 @@ documentsRouter.put("/:docKey", express.raw({ type: () => true, limit: MAX_BYTES
 
 documentsRouter.get("/:id/file", wrap(async (req, res) => {
   const { rows } = await pool.query("SELECT * FROM documents WHERE id=$1", [Number(req.params.id) || 0]);
-  if (!rows[0] || !(isHr(req) || mine(req, rows[0]))) return res.status(404).json({ error: "Not found" });
+  if (!rows[0] || !(mine(req, rows[0]) || (await can(req, "documents.view", rows[0].work_email)))) return res.status(404).json({ error: "Not found" });
   res.set({
     "Content-Type": rows[0].mime,
     "Content-Disposition": `${req.query.download ? "attachment" : "inline"}; filename="${rows[0].filename.replace(/"/g, "")}"`,

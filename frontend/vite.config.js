@@ -1,10 +1,11 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
+import tailwindcss from "@tailwindcss/vite";
 import { resolve } from "node:path";
 
 // Builds into dist/, which the Express server serves: index.html under /app, login.html at /login.
 export default defineConfig({
-  plugins: [react()],
+  plugins: [react(), tailwindcss()],
   base: "/app/",
   // The logos in public/ are served by Express at the site root, so they are not copied into dist.
   publicDir: false,

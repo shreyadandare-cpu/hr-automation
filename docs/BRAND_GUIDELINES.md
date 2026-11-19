@@ -5,7 +5,7 @@ tags: [brand, design, ui, standard]
 repo: hr-automation
 role: design standard for every screen, email and document this repo produces
 source: brand/Wohlig_Brand_Guidelines_2026.pdf (Brand Identity Guidelines, Edition 01 / 2026)
-updated: 2026-11-18
+updated: 2026-11-19
 ---
 
 # Wohlig Brand Guidelines
@@ -57,8 +57,13 @@ Contrast (measured for this repo, WCAG AA needs 4.5:1 for text):
 The deck's website mock shows white text on an orange button. Because of the contrast failure above, this repo uses the
 wohlig.com maroon button (ivory text) in both themes and never an orange button.
 
-Dark theme (this repo's extension, not in the deck): page `#1C0D11`, text ivory, the action colour switches from maroon
-to orange for links and focus rings. Buttons and the maroon brand panel stay the same in both themes.
+Dark theme (this repo's extension, not in the deck): a warm neutral charcoal, not a maroon-tinted black, so the screen does not
+read as red. Page `#151312`, cards `#1D1A18`, raised surfaces `#262220`, the rail `#100E0D`, text ivory `#FBF3E6`; hairlines and
+hover tints are ivory at low opacity. Orange is the one accent (links, the current tab, focus rings). Maroon appears only where
+the brand speaks: the primary button, the dashboard's welcome banner and the sign-in brand panel, the same in both themes.
+
+The values above are kept once, in `frontend/brand.config.json` (`colors`), and reach the interface as the `--brand-*`
+variables and the server through `backend/src/brand.js`. Change a brand colour there, not in a component.
 
 ## 3. Logo
 
@@ -84,8 +89,10 @@ Production rules:
 | Body and interface | Lato regular / medium | `--brand-body`: Lato 400 and 700 |
 
 - Serif is for headlines, short statements and button text. Labels, inputs and body are Lato.
-- The signed-in app (section 6 of `styles.css`) still uses Source Serif 4 for headings; its buttons are already Fraunces. Move it to Fraunces
-  in its own change; don't mix the two on one screen.
+- The signed-in app (section 6 of `styles.css`) uses Fraunces for page and card titles, like the sign-in page. Source Serif 4 and
+  Playfair are loaded only for the poster and greeting designs drawn on canvas.
+- The signed-in app is a working dashboard, not a landing page: one floating top bar, as on wohlig.com (a rounded ivory glass capsule with a soft maroon shadow), with the logo, the sections (each opens its pages in a panel with an icon per page; the current one is marked), quick search, notifications and the account menu, which also holds Appearance (light, dark or the device setting). Light colours match wohlig.com: ink #2E1A1F, muted text #6B5654, maroon headings, beige rules #E9D9C3, cards with a white edge and a soft maroon shadow; under 1024px the sections move into a drawer; and pages that
+  open with a plain name ("Employees", not "Everyone, *at a glance.*"). The italic accent and the section marker belong to entry pages only.
 - Body text is 16px with 1.55 line height. Nothing a person must read goes below 14px.
 - Sentence case for headings and buttons. The deck uses small capitals for section markers; in the product keep that
   to rare, short markers, not every label.
@@ -122,7 +129,7 @@ The live reference is [wohlig.com](https://www.wohlig.com). What this repo takes
 - **Split layout for entry pages.** A maroon brand panel on one side (logo, headline, three short points), only the
   form on the other, on plain ivory. Nothing decorative behind the form.
 - **Buttons.** One button, copied from wohlig.com and kept as the `--btn-*` tokens (classes `btn primary`,
-  `btn glass`, sizes `lg`, `sm`, `block`). Measured on the live site on 2026-11-18:
+  `btn glass`, sizes `lg`, `sm`; full width is Tailwind's `flex w-full`). Measured on the live site on 2026-11-18:
 
   | | Primary ("Contact us") | Second ("See how it looks") |
   |---|---|---|
@@ -165,7 +172,7 @@ Writing rules for every screen and email:
 
 ## 9. Checklist for any new screen
 
-- [ ] Colours and fonts come from the brand tokens in `styles.css`; no brand hex typed into a component.
+- [ ] Colours and fonts come from the brand tokens in `styles.css`, used through the Tailwind theme names; no brand hex typed into a component.
 - [ ] Ivory base, maroon for identity and primary action, orange once.
 - [ ] Logo is a master file, right version for the surface, with clear space.
 - [ ] Serif headline, Lato for everything else, 16px body.

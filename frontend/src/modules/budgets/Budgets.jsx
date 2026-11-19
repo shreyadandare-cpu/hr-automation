@@ -3,17 +3,13 @@ import { useNavigate } from "react-router-dom";
 import { api } from "../../api.js";
 import { useAuth } from "../../auth.jsx";
 import { useData } from "../../data.jsx";
-import { SectionHead, PersonCell } from "../../components/ui.jsx";
+import { PageTabs, SectionHead, PersonCell } from "../../components/ui.jsx";
 import { BQ_STATUS, BqPill, ClaimPill, Ico, SkelRows, fdate, money, useCats } from "./util.jsx";
 
+/* The two views of Reimbursements: expense claims and budget requests. */
 export function Tabs({ cur }) {
-  const navigate = useNavigate();
-  return (
-    <div className="subtabs" role="tablist">
-      <button type="button" role="tab" className={cur === "reimb" ? "on" : ""} aria-selected={cur === "reimb"} onClick={() => navigate("/app/reimbursements")}>Expense claims</button>
-      <button type="button" role="tab" className={cur === "budgets" ? "on" : ""} aria-selected={cur === "budgets"} onClick={() => navigate("/app/budgets")}>Budget requests</button>
-    </div>
-  );
+  const { can } = useAuth();
+  return <PageTabs label="Expenses" current={cur} items={[["reimb", "Expense claims", "/app/reimbursements"], ["budgets", "Budget requests", "/app/budgets"], ["adv", "Advance requests", can("advances.approve") ? "/app/hr-requests?type=advance" : "/app/requests?type=advance"]]} />;
 }
 
 const Stat = ({ lbl, val, sub, tone = "" }) => (
@@ -25,7 +21,8 @@ const BqBill = ({ b }) => !["approved", "partially_approved"].includes(b.status)
   : <span className="muted">Not filed yet</span>;
 
 export default function Budgets() {
-  const { isHr: hr } = useAuth();
+  const { user, can } = useAuth();
+  const hr = can("budgets.approve");   // the list holds the requests of the people in scope, and your own
   const { people } = useData();
   const navigate = useNavigate();
   useCats();
@@ -47,12 +44,12 @@ export default function Budgets() {
 
   const personOf = (b) => { const e = (people || []).find((p) => p.email.toLowerCase() === b.email.toLowerCase()); return { name: b.employee.name, color: e ? e.color : "var(--purple)", email: b.email }; };
   const isOpen = (b) => ["submitted", "under_review"].includes(b.status);
+  const decides = (b) => hr && isOpen(b) && b.email.toLowerCase() !== user.email.toLowerCase();   // never your own request
   const open = list.filter(isOpen), ok = list.filter((b) => ["approved", "partially_approved"].includes(b.status));
 
   return (
     <section className="section">
-      <Tabs cur="budgets" />
-      <SectionHead eyebrow={hr ? "Finance" : "Me"} title="Budget" accent="requests."
+      <SectionHead title={hr ? "Expenses" : "My expenses"} tabs={<Tabs cur="budgets" />}
         sub={hr ? "Approve spending before it happens. The final bill is reimbursed up to the approved budget, never more." : "Planning a team dinner or event? Ask HR for a budget first. After the event, upload the final bill and up to the approved budget is reimbursed."}
         actions={<button className="btn primary" onClick={() => navigate("/app/budgets/new")}><Ico name="plus" />New budget request</button>} />
       <div className="rb-stats four">
@@ -82,7 +79,7 @@ export default function Budgets() {
                 <td className="hide-sm num-cell">{fdate(b.eventDate)}</td>
                 <td><BqPill status={b.status} /></td>
                 <td className="hide-sm"><BqBill b={b} /></td>
-                <td className="num"><button className={`btn ${hr && isOpen(b) ? "primary" : "glass"} sm`} onClick={(e) => { e.stopPropagation(); navigate(`/app/budgets/${b.id}`); }}>{hr && isOpen(b) ? "Review" : "View"}</button></td>
+                <td className="num"><button className={`btn ${decides(b) ? "primary" : "glass"} sm`} onClick={(e) => { e.stopPropagation(); navigate(`/app/budgets/${b.id}`); }}>{decides(b) ? "Review" : "View"}</button></td>
               </tr>
             ))}
           </tbody></table></div>}

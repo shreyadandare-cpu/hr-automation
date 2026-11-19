@@ -3,16 +3,18 @@ import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { api, apiMsg } from "../../api.js";
 import { useAuth } from "../../auth.jsx";
 import { useData } from "../../data.jsx";
-import { Callout, Person, Pill, SectionHead, ToolIcon, shortDate } from "../../components/ui.jsx";
+import { Callout, Person, Pill, SectionHead, ToolIcon, shortDate, pill, PageSkeleton } from "../../components/ui.jsx";
 import Modal, { Field } from "../../components/Modal.jsx";
 import { useToast } from "../../components/toast.jsx";
 import { R } from "../../lib/leave.js";
 import { TOOLS } from "../../lib/people.js";
 import { lc, useLeave } from "../../lib/useLeave.js";
 import SettlementSummary from "./SettlementSummary.jsx";
-import { OffTabs, StatusPill } from "./shared.jsx";
+import { StatusPill } from "./shared.jsx";
+import BackButton from "../../components/BackButton.jsx";
 import { ClearancePanel, useClearance, windowText } from "./FinancialClearance.jsx";
 import { inr } from "../../lib/useLeave.js";
+import { PRODUCT } from "../../brand.js";
 
 const OW_STEPS = ["Who is leaving", "Access", "Last day & settlement", "Assets & checklist", "Review"];
 const OFF_TOOLS = ["claude"];   // offboarding handles Claude only for now
@@ -59,7 +61,7 @@ function OffboardView({ people }) {
   const list = people.filter((e) => ["offboarding", "offboarded"].includes(e.status) || e.lastDay).sort((a, b) => a.name.localeCompare(b.name));
   return (
     <section className="section">
-      <SectionHead eyebrow="Offboarding" title="How people" accent="leave." sub="When someone leaves, HR suspends their Google account first, then removes each tool and records it." />
+      <SectionHead eyebrow="Offboarding" title="Offboarding" sub="When someone leaves, HR suspends their Google account first, then removes each tool and records it." />
       <div className="card"><div className="card-h"><h3>Leaving and left</h3><span className="muted">{list.length}</span></div>
         {list.length ? list.map((c) => (
           <div key={c.id} className="radio-li" style={{ cursor: "pointer" }} onClick={() => nav(`/app/employees/${encodeURIComponent(c.email)}`)}>
@@ -183,7 +185,7 @@ function Wizard({ people, offs, initial }) {
       <div className="card"><div className="card-h"><h3>Who is leaving?</h3><span className="muted">{cands.length} people</span></div>
         <div className="card-b" style={{ display: "flex", flexDirection: "column", gap: 12, paddingBottom: 16 }}>
           <input className="input" id="ow-q" type="search" placeholder="Search by name, job title or team" aria-label="Search employees" value={w.q} autoComplete="off" onChange={(x) => set({ q: x.target.value })} />
-          {e && <div className="picked"><Person name={e.name} sub={`${e.title} · ${e.dept}`} color={e.color} /><span className="pill p-info">Selected</span></div>}
+          {e && <div className="picked"><Person name={e.name} sub={`${e.title} · ${e.dept}`} color={e.color} /><span className={pill("info")}>Selected</span></div>}
           {er.emp && <span className="ferr" role="alert">{er.emp}</span>}
           <div className="pick-list" role="radiogroup" aria-label="Employees">
             {shown.map((c) => (
@@ -233,7 +235,7 @@ function Wizard({ people, offs, initial }) {
       </div></div>
       <div className="card"><div className="card-h"><h3>Final settlement</h3><span className="muted">Leave only</span></div><div className="card-b" id="ow-settle"><SettlementSummary person={e} lastDay={w.lastDay} open /></div></div>
       <div className="card" id="ow-clearance"><div className="card-h"><h3>Financial clearance</h3>
-        {fc && (fc.monthEndWindow ? <span className="pill p-warn">Month-end exit · check required</span> : <span className="muted">Reimbursements and advances</span>)}</div>
+        {fc && (fc.monthEndWindow ? <span className={pill("warn")}>Month-end exit · check required</span> : <span className="muted">Reimbursements and advances</span>)}</div>
         <div className="card-b">{fc ? <ClearancePanel c={fc} onReload={clr.reload} /> : <div className="empty">{clr.error || "Working out the clearance…"}</div>}</div></div>
     </>
   );
@@ -241,7 +243,7 @@ function Wizard({ people, offs, initial }) {
     const a = w.assets;
     body = (
       <>
-        <div className="card"><div className="card-h"><h3>Company laptop</h3><span className={`pill ${a.laptop.status === "pending" ? "p-warn" : "p-ok"}`}>{OW_RET[a.laptop.status]}</span></div>
+        <div className="card"><div className="card-h"><h3>Company laptop</h3><span className={pill(a.laptop.status === "pending" ? "p-warn" : "p-ok")}>{OW_RET[a.laptop.status]}</span></div>
           <div className="card-b" style={{ display: "flex", flexDirection: "column", gap: 18 }}>
             <div className="field"><span className="lab">Has {first} returned the laptop?</span>
               <div className="seg" role="radiogroup" style={{ alignSelf: "flex-start" }}>{Object.entries(OW_RET).map(([k, v]) => (
@@ -279,7 +281,7 @@ function Wizard({ people, offs, initial }) {
         {open.length > 0 && <Info>Still open after you submit: <b>{open.join(", ")}</b>. The offboarding closes once {open.length === 1 ? "it is" : "they are"} ticked on the employee's checklist.</Info>}
         <div className="callout bad">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M12 3 2 20h20z" /><path d="M12 10v4M12 17h.01" /></svg>
-          <div>{first} will lose access to <b>{tools.length} tool{tools.length === 1 ? "" : "s"}</b>{w.when === "later" ? ` on ${shortDate(w.lastDay)} at 6:00 pm` : " right away"}, and their Wohlig One login is removed. Every step is written to the audit log.</div></div>
+          <div>{first} will lose access to <b>{tools.length} tool{tools.length === 1 ? "" : "s"}</b>{w.when === "later" ? ` on ${shortDate(w.lastDay)} at 6:00 pm` : " right away"}, and their {PRODUCT} login is removed. Every step is written to the audit log.</div></div>
         {needsCheck && <label className="check" style={{ border: 0, padding: 0 }}><input type="checkbox" id="ow-clearance-ok" checked={w.clearanceReviewed} onChange={(x) => set({ clearanceReviewed: x.target.checked })} />
           <div className="grow"><div className="lbl">I have checked the outstanding reimbursements and advances (financial clearance)</div>
             <div className="tag">{!fc ? "Working out the clearance…" : fc.totals.totalRecovery > 0 ? `${inr(fc.totals.totalRecovery)} will be recovered from the final salary` : "No outstanding employee recovery found"}</div></div></label>}
@@ -293,8 +295,8 @@ function Wizard({ people, offs, initial }) {
 
   return (
     <section className="section">
-      <OffTabs cur="new" />
-      <SectionHead eyebrow="Offboarding" title="Remove access," accent="step by step." sub="Pick who is leaving, confirm the access to remove, set the last day, then review. Nothing happens until you submit." />
+      <BackButton to="/app/offboarding/leavers" label="Offboarding" />
+      <SectionHead eyebrow="Offboarding" title="Offboard someone" sub="Pick who is leaving, confirm the access to remove, set the last day, then review. Nothing happens until you submit." />
       {busy.length > 0 && <Info>{busy.map((b, i) => <span key={b.id}>{i > 0 && ", "}<b>{b.name}</b></span>)} {busy.length > 1 ? "are" : "is"} still being offboarded. <Link className="btn link" to={link(busy[0])}>Open checklist</Link></Info>}
       {schedPeople.length > 0 && <Info>Scheduled: {schedPeople.map((b, i) => <span key={b.id}>{i > 0 && " · "}<Link className="btn link" to={link(b)}>{b.name}, {shortDate(b.lastDay)}</Link></span>)}</Info>}
       <Stepper cur={w.step} />
@@ -311,18 +313,19 @@ function Wizard({ people, offs, initial }) {
 }
 
 export default function Offboarding() {
-  const { isHr } = useAuth();
+  const { canAll } = useAuth();
+  const mayRun = canAll("offboarding.manage");   // "Run offboarding", company-wide
   const { people } = useData();
   const [params] = useSearchParams();
   const [offs, setOffs] = useState(null);
 
   useEffect(() => {
-    if (!isHr) return;
+    if (!mayRun) return;
     api("GET", "/api/offboarding").then((r) => setOffs(r.ok && Array.isArray(r.data) ? r.data : []));
-  }, [isHr]);
+  }, [mayRun]);
 
-  if (!people || (isHr && !offs)) return <section className="section"><div className="empty">Loading…</div></section>;
-  if (!isHr) return <OffboardView people={people} />;
+  if (!people || (mayRun && !offs)) return <PageSkeleton />;
+  if (!mayRun) return <OffboardView people={people} />;
   const want = params.get("email");
   const initial = want ? people.find((p) => lc(p.email) === lc(want) && (p.status === "active" || p.status === "onboarding") && !offs.some((o) => lc(o.email) === lc(p.email) && o.status === "scheduled")) : null;
   return <Wizard people={people} offs={offs} initial={initial || null} key={initial ? initial.id : "new"} />;

@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { api, apiMsg } from "../../api.js";
 import { Field } from "../../components/Modal.jsx";
-import { Callout, DownloadIcon } from "../../components/ui.jsx";
+import { Callout, DownloadIcon, Skeleton } from "../../components/ui.jsx";
 import { useToast } from "../../components/toast.jsx";
 import { BANNER_PRESETS, BANNER_THEMES, ICON_PROD, SIG_DEFAULT_OPTS, SIG_STYLES, aboutText, copyHtml, copyText, drawBackground, drawBanner, drawCard, fileSafe, hashtags, headlines, jpegOf,
   pdfFromJpegs, saveBlob, saveText, signatureHtml, signaturePlain, toBlob, webLink } from "./kit.js";
@@ -18,7 +18,7 @@ function Drawn({ draw, deps, alt, className = "" }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, deps);
   if (bad) return <div className="empty">Could not draw this. Reload the page and try again.</div>;
-  return url ? <img className={`dk-img ${className}`} src={url} alt={alt} /> : <div className="dk-img dk-loading" aria-label="Drawing" />;
+  return url ? <img className={`dk-img ${className}`} src={url} alt={alt} /> : <div className="dk-img dk-loading" role="status" aria-label="Drawing"><Skeleton className="size-full rounded-[inherit]" /></div>;
 }
 const Btn = ({ children, ...p }) => <button type="button" className="btn glass sm" {...p}>{children}</button>;
 
@@ -28,7 +28,7 @@ export function MissingNotice({ missing }) {
   return (
     <Callout>
       <b>Some of your details are missing.</b> Your kit leaves them out instead of guessing.
-      <ul className="dk-missing">{missing.map((m) => <li key={m.key}><b>{m.label}:</b> {m.hint} {m.link && <Link to={m.link}>Complete my profile</Link>}</li>)}</ul>
+      <ul className="dk-missing">{missing.map((m) => <li key={m.key}><b>{m.label}:</b> {m.hint} {m.link && <Link to={m.link} className="font-bold text-accent underline underline-offset-2 hover:text-maroon">Complete my profile</Link>}</li>)}</ul>
     </Callout>
   );
 }

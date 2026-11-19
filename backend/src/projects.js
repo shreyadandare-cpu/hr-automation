@@ -3,13 +3,14 @@
 import express from "express";
 import { pool } from "./db.js";
 import { requireAuth } from "./auth.js";
+import { canAll, scopeOf } from "./access.js";
 
-// Who the signed-in person is for project work: HR, a manager (has a team) or a project lead may start projects; HR or a project's lead manages its members.
+// Who the signed-in person is for project work: "Edit people" for the whole company (isHr), a manager (has a team) or a project lead may start projects; HR or a project's lead manages its members.
 async function projectActor(req) {
   const me = (await pool.query("SELECT name, status FROM employees WHERE lower(work_email)=$1", [req.user.email.toLowerCase()])).rows[0];
-  const isHr = req.user.role === "hr", name = me?.name || "";
+  const isHr = canAll(req, "people.edit"), name = me?.name || "";
   const lead = name ? (await pool.query("SELECT 1 FROM projects WHERE lower(project_lead)=lower($1) LIMIT 1", [name])).rowCount > 0 : false;
-  const hasTeam = name ? (await pool.query("SELECT 1 FROM employees WHERE lower(manager)=lower($1) AND status <> 'offboarded' LIMIT 1", [name])).rowCount > 0 : false;
+  const hasTeam = (await pool.query("SELECT 1 FROM employees WHERE lower(manager_email)=$1 AND status <> 'offboarded' LIMIT 1", [req.user.email.toLowerCase()])).rowCount > 0;
   return { isHr, name, canCreate: isHr || hasTeam || lead };
 }
 // A project is closed once it is marked Completed or its end date has passed. Closed projects cannot be changed by anyone.
@@ -23,6 +24,9 @@ export function projectsRouter(wrap) {
   // Every project (even ones nobody is on yet) and every allocation, for everyone signed in. `canManage` says whether this person may add people to a project.
   r.get("/api/allocations", wrap(async (req, res) => {
     const actor = await projectActor(req);
+    // "Left the company" as an end reason tells who left; it is shown only to people who may see that person's details.
+    const pv = await scopeOf(req, "people.view"), me = req.user.email.toLowerCase();
+    const leaveSeen = (email) => canAll(req, "offboarding.manage") || !pv || pv.has(String(email).toLowerCase()) || String(email).toLowerCase() === me;
     const { rows } = await pool.query(
       `SELECT a.id, p.id AS project_id, p.name AS project, e.name AS employee, e.work_email AS email, e.emp_no,
               a.start_date, a.end_date, coalesce(a.project_lead, p.project_lead) AS lead, a.location, a.status,
@@ -36,7 +40,7 @@ export function projectsRouter(wrap) {
       projects: projects.map((p) => ({ id: p.id, name: p.name, lead: p.project_lead, start: p.start_date, end: p.end_date, status: p.status,
         description: p.description, location: p.location, closed: isClosed(p), canManage: !isClosed(p) && canManageProject(actor, p), canHandover: !isClosed(p) && canManageProject(actor, p) })),
       rows: rows.map((r) => ({ id: r.id, projectId: r.project_id, project: r.project, employee: r.employee, email: r.email, no: r.emp_no,
-        start: r.start_date, end: r.end_date, lead: r.lead, location: r.location, status: r.status, handedOverTo: r.handed_over_to, movedTo: r.moved_to, endReason: r.end_reason })),
+        start: r.start_date, end: r.end_date, lead: r.lead, location: r.location, status: r.status, handedOverTo: r.handed_over_to, movedTo: r.moved_to, endReason: r.end_reason === "Left the company" && !leaveSeen(r.email) ? null : r.end_reason })),
     });
   }));
 

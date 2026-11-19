@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import CelebrateCard from "../../components/CelebrateCard.jsx";
+import FestivalTile from "../festivals/FestivalTile.jsx";
 import { useParams } from "react-router-dom";
 import { api } from "../../api.js";
 import { useAuth } from "../../auth.jsx";
@@ -12,9 +14,11 @@ import { Svg, errOf } from "./lib.jsx";
 import PostCard, { PostSkeleton } from "./PostCard.jsx";
 import PostEditor from "./PostEditor.jsx";
 
-/* The company feed: HR's posts, newest first, 10 at a time (more load as you scroll). Only HR sees Create post. */
-export default function Posts() {
-  const { user, isHr } = useAuth();
+/* The company feed: HR's posts, newest first, 10 at a time (more load as you scroll). Only people who run company pages see Create post. */
+/* The announcements feed. `embedded` draws just the feed column (the composer and the posts), for the Home page. */
+export default function Posts({ embedded = false }) {
+  const { user, canAll } = useAuth();
+  const mayPost = canAll("engage.manage");   // company posts belong to whoever runs company pages
   const { people } = useData();
   const toast = useToast();
   const [posts, setPosts] = useState(null);
@@ -51,25 +55,34 @@ export default function Posts() {
   const replace = (p) => setPosts((ps) => ps.map((x) => (x.id === p.id ? p : x)));
   const saved = (p) => { setPosts((ps) => (ps.some((x) => x.id === p.id) ? ps.map((x) => (x.id === p.id ? p : x)) : [p, ...ps])); setEditor(null); };
 
-  return (
-    <section className="section">
-      <SectionHead eyebrow="Posts" title="Company" accent="feed." sub={isHr ? "Share announcements, celebrations and photos with everyone. Colleagues can like, comment and share." : "Announcements, celebrations and photos from HR. Like, comment and share them with colleagues."}
-        actions={isHr ? <button type="button" className="btn primary" onClick={() => setEditor({ post: null })}><Svg name="plus" size={18} />Create post</button> : null} />
+  const feed = (
       <div className="ps-col">
-        {isHr && (
+        {mayPost && (
           <button type="button" className="card ps-start" onClick={() => setEditor({ post: null })}>
             <PersonAvatar email={user.email} name={me ? me.name : user.email} />
-            <span className="ps-start-pill">Share an update with everyone at Wohlig…</span>
+            <span className="ps-start-pill">Share an update with everyone at Wohlig</span>
             <span className="ps-start-ic" aria-hidden="true"><Svg name="photo" /></span>
           </button>)}
         {!posts ? <><PostSkeleton /><PostSkeleton /></>
-          : failed ? <div className="card ps-empty"><span aria-hidden="true">⚠️</span><b>Posts couldn't be loaded</b><span>Check your connection and try again.</span><button type="button" className="btn glass sm" onClick={first}>Try again</button></div>
+          : failed ? <div className="card ps-empty"><span aria-hidden="true"><Svg name="megaphone" size={30} /></span><b>Posts could not be loaded</b><span>Please check your connection and try again.</span><button type="button" className="btn glass sm" onClick={first}>Try again</button></div>
           : !posts.length ? <div className="card ps-empty"><span aria-hidden="true"><Svg name="megaphone" size={30} /></span><b>No posts yet</b>
-              <span>{isHr ? "Share the first announcement, celebration or photo with everyone." : "When HR shares announcements and photos, they'll show up here."}</span>
-              {isHr && <button type="button" className="btn primary sm" onClick={() => setEditor({ post: null })}>Create the first post</button>}</div>
+              <span>{mayPost ? "Use the box above to share the first announcement, celebration or photo." : "When HR shares announcements and photos, they'll show up here."}</span></div>
           : posts.map((p) => <PostCard key={p.id} p={p} onChange={replace} onRemoved={(id) => setPosts((ps) => ps.filter((x) => x.id !== id))} onEdit={(post) => setEditor({ post })} />)}
         {more && <div ref={sentinel} className="ps-more">{loadingMore ? <PostSkeleton /> : <button type="button" className="btn glass sm" onClick={older}>Show older posts</button>}</div>}
-        {posts && posts.length > 0 && !more && <div className="ps-end">You're all caught up</div>}
+        {posts && posts.length > 0 && !more && <div className="ps-end">You are all caught up.</div>}
+      </div>
+  );
+  if (embedded) return <>{feed}{editor && <PostEditor post={editor.post} onSaved={saved} onClose={() => setEditor(null)} />}</>;
+  return (
+    <section className="section">
+      <SectionHead eyebrow="Posts" title="Announcements" sub={mayPost ? "Share announcements, celebrations and photos with everyone. Colleagues can like, comment and share." : "Announcements, celebrations and photos from HR. Like, comment and share them with colleagues."} />
+      <div className="ps-layout">
+      {feed}
+      {/* Beside the feed: what the company is celebrating, and the next festival. */}
+      <aside className="ps-side" aria-label="Celebrations and festivals">
+        <CelebrateCard />
+        <FestivalTile />
+      </aside>
       </div>
       {editor && <PostEditor post={editor.post} onSaved={saved} onClose={() => setEditor(null)} />}
     </section>

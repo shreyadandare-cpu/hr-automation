@@ -1,6 +1,6 @@
 import express from "express";
 import { pool } from "./db.js";
-import { requireHr } from "./auth.js";
+import { can, mayDecide, need, scopeOf } from "./access.js";
 import { notify } from "./notify.js";
 
 /*
@@ -11,10 +11,10 @@ import { notify } from "./notify.js";
  * HR approves the requested budget or a lower amount (never more; the database enforces it too). The requester then
  * spends and files the final bill as a reimbursement claim linked to the budget (POST /api/reimbursements/from-document
  * ?budget=<id>). That claim's eligible amount is min(actual bill, approved budget); the excess is never reimbursed.
- * Everyone sees their own requests; HR sees all and decides.
+ * Everyone sees their own requests. budgets.approve holders (the whole company or a team, given on the Access page) also see
+ * and decide the requests of the people they cover, never their own.
  */
 const REMIND_DAYS = Number(process.env.REIMB_REMINDER_DAYS || 3);
-const isHr = (req) => req.user && req.user.role === "hr";
 const me = (req) => req.user.email.toLowerCase();
 const num = (v) => (v === null || v === undefined ? null : Number(v));
 const inr = (n) => "₹" + Number(n).toLocaleString("en-IN", { minimumFractionDigits: Number(n) % 1 ? 2 : 0, maximumFractionDigits: 2 });
@@ -62,13 +62,18 @@ const toApi = (b) => {
     comparison: approved != null && actual != null ? { approvedBudget: approved, actual, covered: Math.min(approved, actual), excess: Math.max(0, Math.round((actual - approved) * 100) / 100) } : null,
   };
 };
-const canSee = (req, b) => b && (isHr(req) || b.work_email.toLowerCase() === me(req));
+/** Your own request, or one of someone you hold budgets.approve for. */
+const canSee = async (req, b) => !!b && (b.work_email.toLowerCase() === me(req) || await can(req, "budgets.approve", b.work_email));
+/** Why the caller may not decide this request, or null when they may. */
+const cannotDecide = async (req, b) => (b.work_email.toLowerCase() === me(req) ? "Someone else has to decide your own budget request."
+  : !(await mayDecide(req, "budgets.approve", b.work_email)) ? "You do not have access to this." : null);
 
 export const budgetsRouter = express.Router();
 
 budgetsRouter.get("/", wrap(async (req, res) => {
   const args = [], where = [];
-  if (!isHr(req)) { args.push(me(req)); where.push(`lower(b.work_email)=$${args.length}`); }
+  const scope = await scopeOf(req, "budgets.approve");   // null: everyone; else the people they cover, besides themselves
+  if (scope) { args.push(me(req), [...scope]); where.push(`(lower(b.work_email)=$${args.length - 1} OR lower(b.work_email) = ANY($${args.length}))`); }
   if (req.query.status) { args.push(String(req.query.status)); where.push(`b.status=$${args.length}`); }
   if (req.query.q) { args.push(`%${String(req.query.q).slice(0, 60)}%`); where.push(`(e.name ILIKE $${args.length} OR b.request_no ILIKE $${args.length} OR b.purpose ILIKE $${args.length})`); }
   const { rows } = await pool.query(`${SELECT} ${where.length ? "WHERE " + where.join(" AND ") : ""} ORDER BY b.submitted_at DESC, b.id DESC LIMIT 300`, args);
@@ -77,7 +82,7 @@ budgetsRouter.get("/", wrap(async (req, res) => {
 
 budgetsRouter.get("/:id", wrap(async (req, res) => {
   const { rows } = await pool.query(`${SELECT} WHERE b.id=$1`, [Number(req.params.id) || 0]);
-  if (!canSee(req, rows[0])) return res.status(404).json({ error: "Budget request not found." });
+  if (!(await canSee(req, rows[0]))) return res.status(404).json({ error: "Budget request not found." });
   const { rows: ev } = await pool.query(
     `SELECT v.*, e.name AS actor_name FROM budget_request_events v LEFT JOIN employees e ON lower(e.work_email)=lower(v.actor)
      WHERE budget_request_id=$1 ORDER BY v.id`, [rows[0].id]);
@@ -111,16 +116,18 @@ budgetsRouter.post("/", wrap(async (req, res) => {
   });
   const { rows: [who] } = await pool.query("SELECT name FROM employees WHERE lower(work_email)=$1", [me(req)]);
   const name = who ? who.name : req.user.email;
-  await notify("hr", { title: `${name} requested a budget of ${inr(amt)}: ${purpose}.`, body: out.r.request_no, link: `budget:${out.r.id}`,
+  await notify("perm:budgets.approve", { title: `${name} requested a budget of ${inr(amt)}: ${purpose}.`, body: out.r.request_no, link: `budget:${out.r.id}`,
     email: { subject: `Budget request: ${out.r.request_no}`, body: `${name} requested a budget of ${inr(amt)} for "${purpose}" on ${b.eventDate}.\n\n${description}` } });
   res.status(201).json(out.body);
 }));
 
 // HR opening it moves it to Under review.
-budgetsRouter.post("/:id/open", requireHr, wrap(async (req, res) => {
+budgetsRouter.post("/:id/open", need("budgets.approve"), wrap(async (req, res) => {
   const out = await tx(async (db) => {
     const { rows: [b] } = await db.query("SELECT * FROM budget_requests WHERE id=$1 FOR UPDATE", [Number(req.params.id) || 0]);
     if (!b) return { status: 404, body: { error: "Budget request not found." } };
+    const no = await cannotDecide(req, b);
+    if (no) return { status: 403, body: { error: no } };
     if (b.status !== "submitted") return { status: 200, body: { changed: false } };
     await db.query("UPDATE budget_requests SET status='under_review', updated_at=now() WHERE id=$1", [b.id]);
     await event(db, b, { actor: me(req), kind: "HR opened the request", status: "under_review" });
@@ -133,11 +140,13 @@ budgetsRouter.post("/:id/open", requireHr, wrap(async (req, res) => {
  * Approve the requested budget or a lower amount (Automation 6). approvedBudget <= requestedBudget is enforced here and
  * by a database check; the requested budget is kept as it was.
  */
-budgetsRouter.post("/:id/approve", requireHr, wrap(async (req, res) => {
+budgetsRouter.post("/:id/approve", need("budgets.approve"), wrap(async (req, res) => {
   const body = req.body || {}, reason = clip(body.reason, 500);
   const out = await tx(async (db) => {
     const { rows: [b] } = await db.query("SELECT * FROM budget_requests WHERE id=$1 FOR UPDATE", [Number(req.params.id) || 0]);
     if (!b) return { status: 404, body: { error: "Budget request not found." } };
+    const no = await cannotDecide(req, b);
+    if (no) return { status: 403, body: { error: no } };
     if (!OPEN.includes(b.status)) return { status: 409, body: { error: "This budget request has already been decided." } };
     const requested = Number(b.requested_budget);
     const amt = body.approvedBudget === undefined || body.approvedBudget === "" || body.approvedBudget === null ? requested : Number(body.approvedBudget);
@@ -164,12 +173,14 @@ budgetsRouter.post("/:id/approve", requireHr, wrap(async (req, res) => {
   res.status(out.status).json(out.body);
 }));
 
-budgetsRouter.post("/:id/reject", requireHr, wrap(async (req, res) => {
+budgetsRouter.post("/:id/reject", need("budgets.approve"), wrap(async (req, res) => {
   const reason = clip(req.body && req.body.reason, 500);
   if (!reason) return res.status(400).json({ errors: { reason: "Tell the requester why." } });
   const out = await tx(async (db) => {
     const { rows: [b] } = await db.query("SELECT * FROM budget_requests WHERE id=$1 FOR UPDATE", [Number(req.params.id) || 0]);
     if (!b) return { status: 404, body: { error: "Budget request not found." } };
+    const no = await cannotDecide(req, b);
+    if (no) return { status: 403, body: { error: no } };
     if (!OPEN.includes(b.status)) return { status: 409, body: { error: "This budget request has already been decided." } };
     await db.query("UPDATE budget_requests SET status='rejected', decision_reason=$2, decided_by=$3, decided_at=now(), updated_at=now() WHERE id=$1", [b.id, reason, me(req)]);
     await event(db, b, { actor: me(req), kind: "Budget request rejected", status: "rejected", note: reason });
@@ -192,7 +203,7 @@ export async function runBudgetReminders() {
     const days = Math.floor((Date.now() - new Date(b.submitted_at)) / 864e5);
     await pool.query("UPDATE budget_requests SET last_reminded_at=now() WHERE id=$1", [b.id]);
     await event(pool, b, { actor: "system", kind: "Review reminder sent to HR", note: `waiting ${days} days` });
-    await notify("hr", { title: `Budget request ${b.request_no} has been awaiting review for ${days} days.`, body: `${b.purpose} · ${inr(b.requested_budget)}`, link: `budget:${b.id}`,
+    await notify("perm:budgets.approve", { title: `Budget request ${b.request_no} has been awaiting review for ${days} days.`, body: `${b.purpose} · ${inr(b.requested_budget)}`, link: `budget:${b.id}`,
       email: { subject: `Reminder: ${b.request_no} awaiting review`, body: `Budget request ${b.request_no} has been awaiting review for ${days} days.` } });
   }
   return rows.length;

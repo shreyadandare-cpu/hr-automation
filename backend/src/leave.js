@@ -1,8 +1,9 @@
 import express from "express";
 import L from "../../frontend/leave-rules.cjs";
 import { pool } from "./db.js";
-import { requireAuth, requireHr } from "./auth.js";
-import { DIRECTORS, approverOf, approverMap, approves, hrLeaveApprovers } from "./teams.js";
+import { requireAuth } from "./auth.js";
+import { can, isSuper, mayDecide, need, needAll, scopeOf, treeOf } from "./access.js";
+import { approverOf, approverMap, coveredBy, hrLeaveApprovers, reportsOf } from "./teams.js";
 import { tellLeave } from "./leave-mail.js";
 
 const num = (v) => (v === null || v === undefined ? null : Number(v));
@@ -20,22 +21,22 @@ const toCompOff = (c) => ({ id: c.id, email: c.work_email, workedOn: c.worked_on
   createdAt: c.created_at, decidedAt: c.decided_at, createdBy: c.created_by || null, decidedBy: c.decided_by || null });
 const toEmp = (e) => ({ name: e.name, status: e.status, start: e.start_date, casualOpening: num(e.casual_opening) });
 
-// Employees see and act on their own leave only; HR sees everyone and makes the decisions.
-const isHr = (req) => req.user && req.user.role === "hr";
+// Employees see and act on their own leave only. "Approve leave" (leave.approve) sees and decides for the people in scope;
+// "Manage leave settings" (leave.manage, whole company) runs holidays, pay and salary cuts.
 const self = (req) => req.user.email.toLowerCase();
-// The reporting manager decides their team's requests, whether or not their own login is an HR one.
-// When someone has no reporting manager (or theirs has left), HR decides instead.
-// HR staff's own leave goes to the directors (either one decides). Nobody decides their own request.
-const mayDecide = (req, approver, owner) => {
-  if (String(owner).toLowerCase() === self(req)) return false;
-  if (approver === "hr") return isHr(req);
-  if (approver === DIRECTORS) return approves(approver, self(req));
-  return approver === self(req);
+// Who decides a leave request: anyone above the person in the reporting lines (their manager, that manager's manager, and so on
+// up to the top), a stand-in their direct manager named while it lasts (`covers`), or a super admin. Nobody decides their own
+// request, HR staff included. Someone with no manager: the super admins decide.
+const mayDecideLeave = async (req, approver, owner, covers = []) => {
+  const o = String(owner).toLowerCase();
+  if (o === self(req)) return false;
+  if (isSuper(req)) return true;
+  if (approver !== "hr" && covers.includes(approver)) return true;
+  return (await treeOf(self(req))).has(o);   // the caller is above this person in the reporting lines
 };
 const notYours = (approver) => ({ error: approver === "hr"
-  ? "This person has no reporting manager, so HR approves it, and not the person's own request."
-  : approver === DIRECTORS ? "HR staff's leave is approved by the directors, not by HR or the person themselves."
-  : "Only this person's reporting manager can approve or decline this request." });
+  ? "This person has no reporting manager, so a super admin decides this request. Nobody can decide their own request."
+  : "Only this person's reporting manager or a super admin can approve or decline this request. Nobody can decide their own." });
 
 const holidayDays = async (db) => (await db.query("SELECT day FROM holidays ORDER BY day")).rows.map((h) => h.day);
 
@@ -80,23 +81,25 @@ export function leaveRouter(wrap) {
 
   // Everything the Leave page needs; the page works out balances with the same leave-rules.js.
   r.get("/api/leave", wrap(async (req, res) => {
-    let scope = null;   // null = everyone (HR)
-    if (!isHr(req)) {
-      scope = [self(req)];
-      // plus the people they are reporting manager of (set by HR in the Employees list)
-      const { rows } = await pool.query(
-        `SELECT lower(e.work_email) AS e FROM employees e JOIN employees me ON lower(me.name) = lower(e.manager)
-         WHERE lower(me.work_email) = $1`, [self(req)]);
-      scope.push(...rows.map((x) => x.e));
-      // plus HR staff, for the directors who approve their leave
-      if (hrLeaveApprovers().includes(self(req))) {
-        const { rows: hr } = await pool.query("SELECT lower(email) AS e FROM users WHERE role = 'hr'");
-        scope.push(...hr.map((x) => x.e));
-      }
+    // null = everyone (leave.approve for the whole company); otherwise the people in its scope plus the built-in views below
+    const granted = await scopeOf(req, "leave.approve");
+    let scope = null;
+    if (granted) {
+      scope = [self(req), ...granted];
+      // plus everyone below them in the reporting lines (they decide those requests)
+      scope.push(...(await treeOf(self(req))));
     }
+    // plus the teams of managers this person is standing in for; their requests show as this person's to decide
+    const covers = !scope ? [] : await coveredBy(pool, self(req));
+    if (scope) for (const m of covers) scope.push(...(await reportsOf(pool, m)));
+    if (scope) scope = [...new Set(scope)];
     const where = scope ? "WHERE lower(work_email) = ANY($1)" : "";
     const args = scope ? [scope] : [];
     const approvers = await approverMap(pool, scope);
+    const payScope = await scopeOf(req, "payroll.view");   // salaries: payroll.view for the people in scope, or your own
+    // Requests this person may decide show as theirs: everyone below them, the teams they stand in for, and for a super admin everyone.
+    const below = await treeOf(self(req)), boss = isSuper(req);
+    for (const [who, a] of Object.entries(approvers)) if (who !== self(req) && (boss || below.has(who) || covers.includes(a))) approvers[who] = self(req);
     const [reqs, comps, hols, pay] = await Promise.all([
       pool.query(`SELECT * FROM leave_requests ${where} ORDER BY from_date DESC, id DESC`, args),
       pool.query(`SELECT * FROM comp_off_credits ${where} ORDER BY worked_on DESC`, args),
@@ -109,9 +112,8 @@ export function leaveRouter(wrap) {
       requests: reqs.rows.map(toRequest),
       compOffs: comps.rows.map(toCompOff),
       holidays: hols.rows,
-      // salaries only for HR, or your own
       pay: pay.rows.map((p) => ({ email: p.work_email, start: p.start_date,
-        monthlyGross: isHr(req) || p.work_email.toLowerCase() === self(req) ? num(p.monthly_gross) : null, casualOpening: num(p.casual_opening) })),
+        monthlyGross: !payScope || payScope.has(p.work_email.toLowerCase()) || p.work_email.toLowerCase() === self(req) ? num(p.monthly_gross) : null, casualOpening: num(p.casual_opening) })),
       approvers,
       hrLeaveApprovers: hrLeaveApprovers(),
     });
@@ -165,7 +167,9 @@ export function leaveRouter(wrap) {
 
   r.post("/api/leave/requests", wrap(async (req, res) => {
     const { type, from, reason } = req.body || {};
-    const email = isHr(req) ? req.body && req.body.email : self(req);   // employees always apply for themselves
+    // Employees apply for themselves; leave.approve may apply for a person in scope.
+    const asked = req.body && req.body.email ? String(req.body.email).toLowerCase() : self(req);
+    const email = asked === self(req) || (await can(req, "leave.approve", asked)) ? asked : self(req);
     const half = req.body && req.body.half ? req.body.half : null;
     const to = half ? from : req.body && req.body.to;   // a half day is always a single date
     await tx(res, async (client) => {
@@ -203,7 +207,7 @@ export function leaveRouter(wrap) {
       const found = await client.query("SELECT work_email FROM leave_requests WHERE id=$1", [Number(req.params.id) || 0]);
       if (!found.rows[0]) return [404, { error: "Leave request not found." }];
       const approver = await approverOf(client, found.rows[0].work_email);
-      if (!mayDecide(req, approver, found.rows[0].work_email)) return [403, notYours(approver)];
+      if (!(await mayDecideLeave(req, approver, found.rows[0].work_email, await coveredBy(client, self(req))))) return [403, notYours(approver)];
       const emp = await lockEmployee(client, found.rows[0].work_email);
       const { rows } = await client.query("SELECT * FROM leave_requests WHERE id=$1 FOR UPDATE", [Number(req.params.id)]);
       const lr = toRequest(rows[0]);
@@ -236,19 +240,26 @@ export function leaveRouter(wrap) {
       const { rows } = await client.query("SELECT * FROM leave_requests WHERE id=$1 FOR UPDATE", [Number(req.params.id) || 0]);
       if (!rows[0]) return [404, { error: "Leave request not found." }];
       const lr = toRequest(rows[0]);
-      if (!isHr(req) && lr.email.toLowerCase() !== self(req)) return [404, { error: "Leave request not found." }];
+      if (lr.email.toLowerCase() !== self(req) && !(await can(req, "leave.approve", lr.email))) return [404, { error: "Leave request not found." }];
       if (lr.status !== "pending") return [409, { error: `This request was already ${lr.status}, so it can't be cancelled.` }];
       const { rows: out } = await client.query("UPDATE leave_requests SET status='cancelled', decided_at=now(), decided_by=$2 WHERE id=$1 RETURNING *", [lr.id, self(req)]);
-      await audit(client, `${L.TYPES[lr.type].name} cancelled by the employee: ${when(lr)}`, lr.email);
+      const by = lr.email.toLowerCase() === self(req) ? "the employee" : req.user.email;
+      await audit(client, `${L.TYPES[lr.type].name} cancelled by ${by}: ${when(lr)}`, lr.email);
       const request = toRequest(out[0]);
       return [200, request, () => tellLeave("cancelled", { request, actor: self(req) })];
     });
   }));
 
-  // HR records a comp off directly (approved at once), or an employee asks for one (pending until HR decides).
+  // leave.approve records a comp off directly for a person in scope (approved at once, never your own), or an employee asks
+  // for one (pending until it is decided).
   const addCompOff = (status) => wrap(async (req, res) => {
     const { workedOn, reason } = req.body || {};
-    const email = isHr(req) ? req.body && req.body.email : self(req);
+    const asked = req.body && req.body.email ? String(req.body.email).toLowerCase() : self(req);
+    let email;
+    if (status === "approved") {
+      if (!(await mayDecide(req, "leave.approve", asked))) return res.status(403).json({ error: "You do not have access to record a comp off for this person. Nobody can approve their own." });
+      email = asked;
+    } else email = asked === self(req) || (await can(req, "leave.approve", asked)) ? asked : self(req);
     await tx(res, async (client) => {
       const emp = await lockEmployee(client, email);
       const { compOffs } = emp ? await historyOf(client, emp.work_email) : { compOffs: [] };
@@ -272,7 +283,7 @@ export function leaveRouter(wrap) {
       const { rows } = await client.query("SELECT * FROM comp_off_credits WHERE id=$1 FOR UPDATE", [Number(req.params.id) || 0]);
       if (!rows[0]) return [404, { error: "Comp off request not found." }];
       const approver = await approverOf(client, rows[0].work_email);
-      if (!mayDecide(req, approver, rows[0].work_email)) return [403, notYours(approver)];
+      if (!(await mayDecideLeave(req, approver, rows[0].work_email, await coveredBy(client, self(req))))) return [403, notYours(approver)];
       if (rows[0].status !== "pending") return [409, { error: `This comp off was already ${rows[0].status}.` }];
       const { rows: out } = await client.query("UPDATE comp_off_credits SET status=$2, decided_at=now(), decided_by=$3 WHERE id=$1 RETURNING *", [rows[0].id, decision, self(req)]);
       await audit(client, `Comp off credit ${decision} by ${req.user.email} for working on ${rows[0].worked_on}`, rows[0].work_email);
@@ -281,8 +292,8 @@ export function leaveRouter(wrap) {
     });
   }));
 
-  r.post("/api/leave/comp-offs", requireHr, addCompOff("approved"));
-  r.post("/api/leave/holidays", requireHr, wrap(async (req, res) => {
+  r.post("/api/leave/comp-offs", need("leave.approve"), addCompOff("approved"));
+  r.post("/api/leave/holidays", needAll("leave.manage"), wrap(async (req, res) => {
     const { day, name } = req.body || {};
     const type = String((req.body && req.body.type) || "").trim().slice(0, 40) || null;
     if (!L.validDate(day) || !String(name || "").trim()) return res.status(400).json({ error: "Enter a date and a name for the holiday." });
@@ -297,7 +308,7 @@ export function leaveRouter(wrap) {
   }));
 
   // Rename a holiday, change its type, or move it to another date. An imported holiday stays marked as imported.
-  r.put("/api/leave/holidays/:day", requireHr, wrap(async (req, res) => {
+  r.put("/api/leave/holidays/:day", needAll("leave.manage"), wrap(async (req, res) => {
     const { day, name } = req.body || {};
     const type = String((req.body && req.body.type) || "").trim().slice(0, 40) || null;
     if (!L.validDate(day) || !String(name || "").trim()) return res.status(400).json({ error: "Enter a date and a name for the holiday." });
@@ -318,7 +329,7 @@ export function leaveRouter(wrap) {
     });
   }));
 
-  r.delete("/api/leave/holidays/:day", requireHr, wrap(async (req, res) => {
+  r.delete("/api/leave/holidays/:day", needAll("leave.manage"), wrap(async (req, res) => {
     await tx(res, async (client) => {
       const { rows } = await client.query("DELETE FROM holidays WHERE day=$1 RETURNING name", [L.validDate(req.params.day) ? req.params.day : null]);
       if (!rows[0]) return [404, { error: "Holiday not found." }];
@@ -328,7 +339,7 @@ export function leaveRouter(wrap) {
   }));
 
   // Monthly gross (for the salary cut) and the casual balance someone had before this system started.
-  r.put("/api/employees/:email/pay", requireHr, wrap(async (req, res) => {
+  r.put("/api/employees/:email/pay", needAll("leave.manage"), wrap(async (req, res) => {
     const { monthlyGross, casualOpening } = req.body || {};
     const gross = monthlyGross === "" || monthlyGross === null || monthlyGross === undefined ? null : Number(monthlyGross);
     const opening = Number(casualOpening ?? 0);
@@ -350,7 +361,7 @@ export function leaveRouter(wrap) {
   }));
 
   // Salary cuts for one month: loss-of-pay days that fall in that month × monthly gross / 30.
-  r.get("/api/leave/salary-cuts", requireHr, wrap(async (req, res) => {
+  r.get("/api/leave/salary-cuts", needAll("leave.manage"), wrap(async (req, res) => {
     const month = String(req.query.month || "");
     if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(month)) return res.status(400).json({ error: "Month must look like 2026-10." });
     const [reqs, emps, holidays] = await Promise.all([

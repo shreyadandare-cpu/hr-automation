@@ -37,7 +37,7 @@ export default function BudgetNew() {
   return (
     <section className="section">
       <BackButton to="/app/budgets" />
-      <SectionHead eyebrow="Me" title="Budget" accent="request." sub="Ask HR to approve a budget before you spend. HR can approve the full amount or less. After the event, upload the final bill and up to the approved budget is reimbursed." />
+      <SectionHead eyebrow="Me" title="New budget request" sub="Ask HR to approve a budget before you spend. HR can approve the full amount or less. After the event, upload the final bill and up to the approved budget is reimbursed." />
       <form className="grid" style={{ gap: 22 }} noValidate onSubmit={submit}>
         <div className="card"><div className="card-h"><h3>What is the budget for?</h3></div><div className="card-b form">
           <div className="span" style={{ gridColumn: "1/-1" }}>

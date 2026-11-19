@@ -19,7 +19,7 @@ export function nextHoliday(holidays, today) {
 const when = (n) => (n === 0 ? "Today" : n === 1 ? "Tomorrow" : `In ${n} days`);
 
 /** The card itself. */
-export function HolidayCard({ next, isHr, onClose }) {
+export function HolidayCard({ next, toLeaveAdmin, onClose }) {
   const date = new Date(next.day + "T00:00:00");
   const weekend = [0, 6].includes(date.getDay());
   return (
@@ -29,7 +29,7 @@ export function HolidayCard({ next, isHr, onClose }) {
         <div className="hol-pop-eyebrow">Next holiday · {when(next.inDays)}</div>
         <b>{next.name}</b>
         <div className="hol-pop-date">{date.toLocaleDateString("en-IN", { weekday: "long", day: "numeric", month: "short", year: "numeric" })}{weekend && <span className="muted"> · falls on a weekend</span>}</div>
-        <Link className="hol-pop-link" to={isHr ? "/app/leave" : "/app/my-leave"} onClick={onClose}>See the holiday calendar</Link>
+        <Link className="hol-pop-link" to={toLeaveAdmin ? "/app/leave" : "/app/my-leave"} onClick={onClose}>See the holiday calendar</Link>
       </div>
       <button type="button" className="hol-pop-x" aria-label="Close" onClick={onClose}>×</button>
     </aside>
@@ -37,7 +37,7 @@ export function HolidayCard({ next, isHr, onClose }) {
 }
 
 export default function NextHolidayPopup() {
-  const { user, isHr } = useAuth();
+  const { user, canAny } = useAuth();
   const { pathname } = useLocation();
   const lv = useLeave();
   const next = useMemo(() => nextHoliday(lv.holidays, lv.today), [lv.holidays, lv.today]);
@@ -54,5 +54,5 @@ export default function NextHolidayPopup() {
   useEffect(() => { if (!open) return; const t = setTimeout(() => setOpen(false), SHOW_MS); return () => clearTimeout(t); }, [open]);
   if (!open || !next) return null;
 
-  return <HolidayCard next={next} isHr={isHr} onClose={() => setOpen(false)} />;
+  return <HolidayCard next={next} toLeaveAdmin={canAny("leave.approve", "leave.manage")} onClose={() => setOpen(false)} />;
 }

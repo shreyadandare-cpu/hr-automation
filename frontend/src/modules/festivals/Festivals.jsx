@@ -1,14 +1,15 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { api } from "../../api.js";
+import { api, apiMsg } from "../../api.js";
 import { useAuth } from "../../auth.jsx";
 import { useData } from "../../data.jsx";
-import BackButton from "../../components/BackButton.jsx";
-import { Field } from "../../components/Modal.jsx";
+import Modal, { Field } from "../../components/Modal.jsx";
 import PeoplePicker from "../../components/PeoplePicker.jsx";
-import { SectionHead } from "../../components/ui.jsx";
+import { Icon, SectionHead, CardSkeleton, Skeleton } from "../../components/ui.jsx";
 import { useToast } from "../../components/toast.jsx";
 import PhotoEditor from "../../components/PhotoEditor.jsx";
 import { FESTIVALS, THEMES, loadImage, renderGreeting, templateName, toBlob } from "./designs.js";
+import { BRAND } from "../../brand.js";
+import { festivalTheme } from "../../components/FestivalLook.jsx";
 
 const MAX_PHOTO = 5 * 1024 * 1024, MAX_TO = 10;
 const dateText = (iso) => { const [y, m, d] = String(iso).split("-").map(Number); return new Date(Date.UTC(y, m - 1, d)).toLocaleDateString("en-IN", { day: "numeric", month: "long", year: "numeric", timeZone: "UTC" }); };
@@ -16,7 +17,7 @@ const when = (f) => (f.next ? `${dateText(f.next)} · ${f.inDays === 0 ? "today"
 const fileName = (slug, theme) => `wohlig-${slug}-${theme}-greeting.png`;
 
 let logoCache = null;   // the Wohlig logos, loaded once
-const logos = async () => (logoCache ||= Promise.all(["/wohlig-logo-dark.svg", "/wohlig-logo.svg"].map((u) => loadImage(u).catch(() => null))).then(([dark, light]) => ({ dark, light })));
+const logos = async () => (logoCache ||= Promise.all([BRAND.logos.dark, BRAND.logos.light].map((u) => loadImage(u).catch(() => null))).then(([dark, light]) => ({ dark, light })));
 /** A greeting as a small picture (a data address), for cards and thumbnails. */
 async function thumb(slug, theme, extra = {}) {
   const c = await renderGreeting({ slug, theme, ...FESTIVALS[slug].say, logos: await logos(), scale: 0.4, ...extra });
@@ -37,16 +38,16 @@ export default function Festivals() {
   useEffect(() => { load(); }, [load]);
 
   if (failed) return <div className="fw"><div className="card"><div className="empty">Festival Wishes could not be loaded. <button type="button" className="btn link" onClick={load}>Try again</button></div></div></div>;
-  if (!list) return <div className="fw"><div className="card"><div className="empty">Loading…</div></div></div>;
+  if (!list) return <div className="fw"><CardSkeleton lines={4} /></div>;
   if (fest) return <Studio key={fest.slug} fest={fest} onBack={() => setFest(null)} />;
 
   const shown = list.filter((f) => `${f.name} ${f.description}`.toLowerCase().includes(q.trim().toLowerCase()));
   const soon = q.trim() ? [] : shown.filter((f) => f.next).slice(0, 2);
   return (
     <div className="fw">
-      <BackButton />
-      <SectionHead eyebrow="For everyone" title="Festival" accent="wishes" sub="Pick a festival, choose a Wohlig-branded template, add your message and share the greeting with anyone." big={false}
+      <SectionHead eyebrow="For everyone" title="Festival wishes" sub="Pick a festival, choose a Wohlig-branded template, add your message and share the greeting with anyone."
         actions={<input className="input" style={{ minWidth: 240 }} type="search" placeholder="Search festivals…" aria-label="Search festivals" value={q} onChange={(e) => setQ(e.target.value)} />} />
+      <LookSwitch list={list} reload={load} />
       {!!soon.length && <>
         <h3 className="fw-h">Coming up</h3>
         <div className="fw-grid fw-soon">{soon.map((f) => <FestivalCard key={f.slug} f={f} onOpen={() => setFest(f)} big />)}</div>
@@ -161,7 +162,7 @@ function Studio({ fest, onBack }) {
   return (
     <div className="fw">
       <button type="button" className="back" onClick={onBack}><span className="back-ar" aria-hidden="true">←</span>All festivals</button>
-      <SectionHead eyebrow={when(fest)} title={fest.name} accent="greeting" sub="Choose a look, write your message, then share it. The picture on the right is exactly what you will send." big={false} />
+      <SectionHead eyebrow={when(fest)} title={fest.name} accent="greeting" sub="Choose a look, write your message, then share it. The picture on the right is exactly what you will send." />
       {err && <div className="err" role="alert" style={{ background: "var(--bad-soft)", color: "var(--bad)", padding: "10px 14px", borderRadius: 12 }}>{err}</div>}
       <div className="fw-edit">
         <div style={{ display: "grid", gap: 22, minWidth: 0 }}>
@@ -170,7 +171,7 @@ function Studio({ fest, onBack }) {
             <div className="fw-looks" role="group" aria-label="Templates">
               {THEMES.map((t) => (
                 <button key={t.id} type="button" className={theme.id === t.id ? "on" : ""} aria-pressed={theme.id === t.id} onClick={() => setTheme(t)}>
-                  {looks[t.id] ? <img src={looks[t.id]} alt="" /> : <span className="fw-ph">…</span>}<b>{t.name}</b>
+                  {looks[t.id] ? <img src={looks[t.id]} alt="" /> : <Skeleton className="aspect-square w-full rounded-field" />}<b>{t.name}</b>
                 </button>))}
             </div>
             <span className="muted">{templateName(fest.slug, theme)}: {theme.note}</span>
@@ -195,7 +196,7 @@ function Studio({ fest, onBack }) {
         </div>
 
         <div className="fw-side">
-          <div className="fw-prev">{pic ? <img src={pic} alt="Live preview of your greeting" /> : <div className="fw-ph">Drawing the preview…</div>}</div>
+          <div className="fw-prev">{pic ? <img src={pic} alt="Live preview of your greeting" /> : <Skeleton className="aspect-square w-full rounded-card" />}</div>
           <div className="card fw-sharebox"><div className="card-b" style={{ paddingTop: 18, display: "grid", gap: 14 }}>
             <div className="field">
               <label htmlFor="fw-to">Share with a colleague</label>
@@ -224,5 +225,92 @@ function Studio({ fest, onBack }) {
       </div>
       {adjust && photo && <PhotoEditor src={photo.url} onApply={(url) => { changePhoto({ url, label: "Adjusted photo" }); setAdjust(false); }} onClose={() => setAdjust(false)} />}
     </div>
+  );
+}
+
+/* HR: the festival look on the sign-in page and dashboard banner (components/FestivalLook.jsx). It turns on by itself from a few
+   days before each festival date (brand.config.json festivalLook.daysBefore). HR can switch it off, and preview any festival. */
+const MOTION = { lanterns: "lanterns and sparks", colours: "bursts of colour", snow: "snow", crescents: "crescent moons", gulal: "gulal", dandiya: "dandiya sticks", sparks: "sparks", confetti: "confetti" };
+function LookSwitch({ list, reload }) {
+  const manages = useAuth().canAll("festivals.manage");   // the festival look and dates, company-wide
+  const toast = useToast();
+  const [state, setState] = useState(null);
+  const [dates, setDates] = useState(false);
+  useEffect(() => { if (manages) fetch("/api/festival-look").then((r) => r.json()).then(setState).catch(() => {}); }, [manages]);
+  if (!manages || !state) return null;
+  const days = Math.max(0, Number(BRAND.festivalLook && BRAND.festivalLook.daysBefore) || 0) || 1;
+  const undated = list.filter((f) => !f.next);
+  const flip = async () => {
+    const r = await api("PUT", "/api/festivals/look", { on: !state.on });
+    if (!r.ok) { toast(apiMsg(r)); return; }
+    setState(r.data); toast(r.data.on ? "The festival look is on for festival days." : "The festival look is off.");
+  };
+  return (
+    <div className="card flex flex-wrap items-center gap-x-6 gap-y-3 px-5 py-4">
+      <div className="min-w-0 flex-[1_1_320px]">
+        <b className="font-display text-[17px] font-medium text-heading">Festival look on the sign-in page and dashboard</b>
+        <p className="m-0 mt-1 text-[14px] text-ink-dim">{state.on ? (state.festival ? `On now: ${state.festival.name}.` : `On. It appears by itself from ${days === 1 ? "the day" : `${days} days`} before each festival date until the festival day ends: the festival's colours across the portal, its greeting, and a short celebration once a day.`) : "Off. The sign-in page and dashboard keep their usual look."}</p>
+        <p className="m-0 mt-2 text-[14px] text-ink-dim">Preview:{" "}
+          {list.map((f, i) => <span key={f.slug}>{i ? ", " : ""}<a className="font-bold text-accent underline underline-offset-2" href={`/app/dashboard?festival=${f.slug}`}>{f.name}</a>{MOTION[festivalTheme(f.slug).burst] ? ` (${MOTION[festivalTheme(f.slug).burst]})` : ""}</span>)}.
+          {" "}<a className="font-bold text-accent underline underline-offset-2" href="/app/festivals?festival=off">End the preview</a>.</p>
+        {undated.length > 0 && <p className="m-0 mt-2 text-[14px] text-warn">{undated.map((f) => f.name).join(", ")} {undated.length === 1 ? "has" : "have"} no date ahead, so {undated.length === 1 ? "its" : "their"} look will not appear. Please add the next date under Festival dates.</p>}
+      </div>
+      <div className="flex flex-wrap gap-2">
+        <button type="button" className="btn glass sm" onClick={() => setDates(true)}>Festival dates</button>
+        <button type="button" role="switch" aria-checked={state.on} onClick={flip} className={`btn ${state.on ? "glass" : "primary"} sm`}>{state.on ? "Turn off" : "Turn on"}</button>
+      </div>
+      {dates && <DatesDialog list={list} reload={reload} onClose={() => setDates(false)} />}
+    </div>
+  );
+}
+
+/* HR: the dates each festival falls on. A festival's look, banner and greeting appear only around these dates, and dates of
+   lunar festivals change every year, so HR adds next year's here (and corrects a moon-sighted Eid by a day). */
+const longDate = (d) => new Date(`${d}T00:00:00`).toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" });
+function DatesDialog({ list, reload, onClose }) {
+  const toast = useToast();
+  const [day, setDay] = useState({}), [err, setErr] = useState({}), [busy, setBusy] = useState("");
+  const add = async (f) => {
+    const d = day[f.slug] || "";
+    if (!d) { setErr({ ...err, [f.slug]: "Please choose a date." }); return; }
+    setBusy(f.slug); const r = await api("POST", `/api/festivals/${f.slug}/dates`, { day: d }); setBusy("");
+    if (!r.ok) { setErr({ ...err, [f.slug]: apiMsg(r) }); return; }
+    setErr({ ...err, [f.slug]: "" }); setDay({ ...day, [f.slug]: "" }); await reload(); toast(`${f.name} on ${longDate(d)} is added.`);
+  };
+  const remove = async (f, d) => {
+    setBusy(f.slug); const r = await api("DELETE", `/api/festivals/${f.slug}/dates/${d}`); setBusy("");
+    if (!r.ok) { toast(apiMsg(r)); return; }
+    await reload(); toast(`${f.name} on ${longDate(d)} is removed.`);
+  };
+  return (
+    <Modal wide onClose={onClose} label="Festival dates">
+      <div className="card-h"><h3>Festival dates</h3></div>
+      <div className="card-b">
+        <p className="m-0 mb-4 text-[14px] text-ink-dim">Each festival&rsquo;s look appears from {Math.max(0, Number(BRAND.festivalLook && BRAND.festivalLook.daysBefore) || 0)} days before its date. Dates of Diwali, Holi, Eid and the other lunar festivals change every year, so please add next year&rsquo;s when they are announced. Eid depends on the moon: if it moves by a day, remove the old date and add the new one.</p>
+        <ul className="m-0 flex list-none flex-col gap-0 p-0">
+          {list.map((f) => (
+            <li key={f.slug} className="flex flex-wrap items-start gap-x-4 gap-y-2 border-t border-line py-3.5 first:border-t-0">
+              <div className="min-w-0 flex-[1_1_220px]">
+                <b className="font-display text-[16px] font-medium text-heading">{f.name}</b>
+                <div className="mt-1.5 flex flex-wrap gap-1.5">
+                  {f.dates.length ? f.dates.map((d) => (
+                    <span key={d} className="inline-flex min-h-8 items-center gap-1 rounded-full border border-line bg-tint py-0.5 pr-1 pl-3 text-[14px] text-ink">
+                      {longDate(d)}
+                      <button type="button" className="inline-grid size-7 place-items-center rounded-full border-0 bg-transparent p-0 text-ink-dim hover:bg-surface hover:text-bad focus-visible:outline-2 focus-visible:outline-orange [&_svg]:size-3.5" aria-label={`Remove ${longDate(d)}`} disabled={busy === f.slug} onClick={() => remove(f, d)}><Icon name="close" /></button>
+                    </span>)) : <span className="text-[14px] text-warn">No date ahead</span>}
+                </div>
+              </div>
+              <div className="flex flex-[0_1_300px] flex-wrap items-start gap-2">
+                <div className="min-w-[170px] flex-1">
+                  <input type="date" className="input" aria-label={`New date for ${f.name}`} value={day[f.slug] || ""} onChange={(e) => setDay({ ...day, [f.slug]: e.target.value })} aria-invalid={!!err[f.slug]} />
+                  {err[f.slug] && <p role="alert" className="m-0 mt-1 text-[13.5px] text-bad">{err[f.slug]}</p>}
+                </div>
+                <button type="button" className="btn glass sm min-h-11" disabled={busy === f.slug} onClick={() => add(f)}>Add date</button>
+              </div>
+            </li>))}
+        </ul>
+      </div>
+      <div className="modal-f"><button type="button" className="btn primary" onClick={onClose}>Done</button></div>
+    </Modal>
   );
 }

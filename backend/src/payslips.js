@@ -4,27 +4,30 @@ import { fileURLToPath } from "node:url";
 import PDFDocument from "pdfkit";
 import { payPool as pool } from "./db.js";   // payroll may use its own database (PAYROLL_DATABASE_URL)
 import { requireAuth } from "./auth.js";
+import { can, canAll } from "./access.js";
+import { BRAND } from "./brand.js";
 
 /* Payslips: everyone can see and download their own for any month HR has processed payroll for.
-   HR can see anyone's with ?email=. Anyone else asking for another person's payslip gets 403.
+   Someone holding payroll.view for that person (the whole company or their team) can see theirs with ?email=; anyone else gets 403.
    A payslip is the one stored with the payroll run (payroll_items.slip), so it never changes after the month is processed.
-   Payslips made automatically are a draft until published (payslip-auto.js): only HR sees a draft.
+   Payslips made automatically are a draft until published (payslip-auto.js): only payroll.prepare holders see a draft.
    The amounts are worked out in payroll-calc.js; nothing here calculates or accepts an amount from the browser. */
 const PERIOD = /^\d{4}-(0[1-9]|1[0-2])$/;
 const EMAIL = /^[^@\s]+@[^@\s]+$/;
 const LOGO = path.join(path.dirname(fileURLToPath(import.meta.url)), "../../frontend/public/wohlig-logo.png");
 const num = (v) => (v === null || v === undefined ? null : Number(v));
 const monthName = (p) => new Date(p + "-01T00:00:00").toLocaleDateString("en-IN", { month: "long", year: "numeric" });
-const isHr = (req) => req.user && req.user.role === "hr";
+/** Payroll preparers (payroll.prepare, company-wide) also see payslips that are not published yet. */
+const seesDrafts = (req) => canAll(req, "payroll.prepare");
 const INCOMPLETE = "Payroll information is incomplete. Please contact HR.";
 
-/** Whose payslips: your own, or anyone's when you are HR. Never trusts an address from the request otherwise. */
-function targetOf(req, res) {
+/** Whose payslips: your own, or someone's you hold payroll.view for. Never trusts an address from the request otherwise. */
+async function targetOf(req, res) {
   const self = req.user.email.toLowerCase();
   if (!req.query.email) return self;
   const asked = String(req.query.email).toLowerCase();
   if (!EMAIL.test(asked)) { res.status(400).json({ error: "That isn't a valid email address." }); return null; }
-  if (asked !== self && !isHr(req)) { res.status(403).json({ error: "You are not authorised to access this payslip." }); return null; }
+  if (asked !== self && !(await can(req, "payroll.view", asked))) { res.status(403).json({ error: "You are not authorised to access this payslip." }); return null; }
   return asked;
 }
 
@@ -92,7 +95,7 @@ export function drawPdf(doc, p) {
   const L = 45, R = 550, W = R - L, ink = "#000000", grey = "#6b6b6b", rule = "#d5d5d5";
   const [y0, m0] = p.period.split("-");
   doc.font("Helvetica-Bold").fontSize(20).fillColor(ink).text("PAYSLIP ", L, 48, { continued: true }).font("Helvetica").text(`${MON[Number(m0) - 1].toUpperCase()} ${y0}`);
-  doc.fontSize(8.5).text("WOHLIG TRANSFORMATIONS PVT LTD", L, 88);
+  doc.fontSize(8.5).text(BRAND.company.legalNameShort.toUpperCase(), L, 88);
   doc.fontSize(7.5).text("HMP BUILDING, 2ND FLOOR, OFFICE NO. 201,\n111, INDUSTRIAL AREA, SION EAST\nMUMBAI MAHARASHTRA 400022", L, 108, { lineGap: 2 });
   try { doc.image(LOGO, R - 165, 40, { width: 165 }); } catch { /* the PDF still works without the logo */ }
 
@@ -158,13 +161,13 @@ export function payslipsRouter(wrap) {
 
   // Months with a payslip, newest first.
   r.get("/api/payslips", wrap(async (req, res) => {
-    const email = targetOf(req, res);
+    const email = await targetOf(req, res);
     if (!email) return;
     const { rows: [emp] } = await pool.query("SELECT name, emp_no, title, dept FROM employees WHERE lower(work_email)=$1", [email]);
     if (!emp && email !== req.user.email.toLowerCase()) return res.status(404).json({ error: "Employee not found." });
     const { rows } = await pool.query(
       `SELECT r.period, r.status, r.paid_at, r.published_at, r.publish_at, i.payable, i.base_salary, i.slip FROM payroll_items i JOIN payroll_runs r ON r.id=i.run_id
-       WHERE lower(i.work_email)=$1 AND NOT coalesce((i.inputs->>'hold')::boolean, false) ${isHr(req) ? "" : "AND r.published_at IS NOT NULL"} ORDER BY r.period DESC`, [email]);
+       WHERE lower(i.work_email)=$1 AND NOT coalesce((i.inputs->>'hold')::boolean, false) ${seesDrafts(req) ? "" : "AND r.published_at IS NOT NULL"} ORDER BY r.period DESC`, [email]);
     res.json({
       employee: emp ? { name: emp.name, empNo: emp.emp_no, title: emp.title, dept: emp.dept, email } : { name: req.user.email, email },
       payslips: rows.map((x) => {
@@ -177,9 +180,9 @@ export function payslipsRouter(wrap) {
   r.get("/api/payslips/:period", wrap(async (req, res) => {
     const { period } = req.params;
     if (!PERIOD.test(period)) return res.status(400).json({ error: "Choose a month like 2026-10." });
-    const email = targetOf(req, res);
+    const email = await targetOf(req, res);
     if (!email) return;
-    const p = await payslipOf(email, period, isHr(req));
+    const p = await payslipOf(email, period, seesDrafts(req));
     if (!p.slip) return res.status(p.status).json({ error: p.error });
     res.json(p.slip);
   }));
@@ -187,9 +190,9 @@ export function payslipsRouter(wrap) {
   r.get("/api/payslips/:period/pdf", wrap(async (req, res) => {
     const { period } = req.params;
     if (!PERIOD.test(period)) return res.status(400).json({ error: "Choose a month like 2026-10." });
-    const email = targetOf(req, res);
+    const email = await targetOf(req, res);
     if (!email) return;
-    const p = await payslipOf(email, period, isHr(req));
+    const p = await payslipOf(email, period, seesDrafts(req));
     if (!p.slip) return res.status(p.status).json({ error: p.error });
     const s = p.slip;
     res.setHeader("Content-Type", "application/pdf");

@@ -3,7 +3,7 @@ import { api, apiMsg } from "../api.js";
 import { useAuth } from "../auth.jsx";
 import { useData } from "../data.jsx";
 import { useToast } from "../components/toast.jsx";
-import { Callout, Pill, SectionHead, shortDate } from "../components/ui.jsx";
+import { Callout, Pill, SectionHead, shortDate, ViewTabs, pill, TableSkeletonRow } from "../components/ui.jsx";
 import Pager, { Paged } from "../components/Pager.jsx";
 import Modal, { Field } from "../components/Modal.jsx";
 import PeoplePicker from "../components/PeoplePicker.jsx";
@@ -33,7 +33,7 @@ function AllocationTable({ rows }) {
           <div className="tbl-wrap"><table className="alloc-table">
             <thead><tr><th>Project</th><th>Employee</th><th>Start</th><th>End</th><th>Project lead</th><th>Location</th><th>Status</th><th>Handed over to</th></tr></thead>
             <tbody>
-              {rows === null && <tr><td colSpan="8"><div className="empty">Loading…</div></td></tr>}
+              {rows === null && <TableSkeletonRow cols={8} />}
               {rows && !page.length && <tr><td colSpan="8"><div className="empty">No allocations match.</div></td></tr>}
               {page.map((a) => (
                 <tr key={a.id}>
@@ -63,7 +63,8 @@ const today = () => new Date().toISOString().slice(0, 10);
 
 /* Start a project. HR chooses the lead; a manager's project is led by them. */
 function AddProjectModal({ onClose, onDone }) {
-  const { isHr } = useAuth();
+  const { canAll } = useAuth();
+  const picksLead = canAll("people.edit");   // the server lets "Edit people" for the whole company choose the lead
   const { people } = useData();
   const toast = useToast();
   const [name, setName] = useState(""), [lead, setLead] = useState(""), [start, setStart] = useState(today()), [description, setDescription] = useState("");
@@ -84,7 +85,7 @@ function AddProjectModal({ onClose, onDone }) {
       <div className="card-h" style={{ paddingTop: 24 }}><h3>Add a project</h3></div>
       <div className="card-b">
         <Field id="pr-name" label="Project name"><input id="pr-name" className="input" autoFocus maxLength={120} value={name} onChange={(e) => setName(e.target.value)} /></Field>
-        {isHr
+        {picksLead
           ? <Field id="pr-lead" label="Project lead" hint="Can add and remove people on this project."><select id="pr-lead" className="input" value={lead} onChange={(e) => setLead(e.target.value)}>
               <option value="">No lead yet</option>{staff.map((p) => <option key={p.id} value={p.name}>{p.name}</option>)}</select></Field>
           : <p className="muted" style={{ margin: "12px 0 0" }}>You will be the project lead, so you can add and remove people on it.</p>}
@@ -249,7 +250,7 @@ function ProjectTable({ rows, list, canCreate, reload }) {
           <div className="tbl-wrap"><table className="alloc-table">
             <thead><tr><th>Project name</th><th>Employees</th><th>Project lead</th><th>Start date</th><th>End date</th><th>Status</th><th>Action</th></tr></thead>
             <tbody>
-              {rows === null && <tr><td colSpan="7"><div className="empty">Loading…</div></td></tr>}
+              {rows === null && <TableSkeletonRow cols={7} />}
               {rows && !page.length && <tr><td colSpan="7"><div className="empty">No projects match.</div></td></tr>}
               {page.map((p) => (
                 <tr key={p.id}>
@@ -257,8 +258,8 @@ function ProjectTable({ rows, list, canCreate, reload }) {
                   <td style={{ minWidth: 280, width: "34%" }}>
                     <div><b>{p.current.length}</b> <span className="muted">current</span></div>
                     <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 6 }}>
-                      {p.current.slice(0, 8).map((a) => <span key={a.id} className="pill p-mute" style={{ fontWeight: 500, padding: "5px 12px", fontSize: 13.5 }}>{a.employee}</span>)}
-                      {p.current.length > 8 && <span className="pill p-mute" style={{ fontWeight: 500 }}>+{p.current.length - 8} more</span>}
+                      {p.current.slice(0, 8).map((a) => <span key={a.id} className={pill("mute")} style={{ fontWeight: 500, padding: "5px 12px", fontSize: 13.5 }}>{a.employee}</span>)}
+                      {p.current.length > 8 && <span className={pill("mute")} style={{ fontWeight: 500 }}>+{p.current.length - 8} more</span>}
                     </div>
                   </td>
                   <td style={{ whiteSpace: "nowrap" }}>{p.lead || dash}</td>
@@ -294,12 +295,9 @@ export default function Allocations() {
   const rows = data ? data.rows : null;
   return (
     <section className="section">
-      <SectionHead eyebrow="Projects" title="Project" accent="allocation." sub={tab === "projects" ? "Each project with the people working on it now" : rows ? `${rows.length} allocations · one row per employee per project` : "Loading…"} />
+      <SectionHead eyebrow="Projects" title="Allocations" sub={tab === "projects" ? "Each project with the people working on it now" : rows ? `${rows.length} allocations · one row per employee per project` : ""} />
       {error && <Callout>{error}</Callout>}
-      <div className="subtabs" role="tablist">
-        <button type="button" role="tab" aria-selected={tab === "projects"} className={tab === "projects" ? "on" : ""} onClick={() => setTab("projects")}>Projects</button>
-        <button type="button" role="tab" aria-selected={tab === "people"} className={tab === "people" ? "on" : ""} onClick={() => setTab("people")}>Allocations</button>
-      </div>
+      <ViewTabs label="Allocations" views={[["projects", "Projects"], ["people", "Allocations"]]} view={tab} onView={setTab} />
       {tab === "projects" ? <ProjectTable rows={rows} list={data && data.projects} canCreate={!!(data && data.canCreate)} reload={refresh} /> : <AllocationTable rows={rows} />}
     </section>
   );

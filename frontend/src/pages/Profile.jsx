@@ -1,11 +1,10 @@
 import { useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
-import BackButton from "../components/BackButton.jsx";
 import { api, apiMsg } from "../api.js";
 import { useAuth } from "../auth.jsx";
 import { useData } from "../data.jsx";
 import { useToast } from "../components/toast.jsx";
-import { Avatar, Icon, Person, Pill, Smile, ToolIcon, initials, shortDate } from "../components/ui.jsx";
+import { Avatar, Icon, Person, Pill, SectionHead, ToolIcon, initials, shortDate, pill, PageSkeleton } from "../components/ui.jsx";
 import { STATUS, TOOLS, chainOf, leaving, docCount, mgrOf, toolIds } from "../lib/people.js";
 
 const OPTS = {
@@ -76,7 +75,7 @@ export default function Profile() {
   const me = useMemo(() => (people || []).find((p) => p.email.toLowerCase() === user.email.toLowerCase())
     || { id: -1, name: user.name, email: user.email, title: "—", dept: "—", status: "active", grants: {}, color: "#800d35", no: "", start: "" }, [people, user]);
   const record = (records || []).find((r) => String(r.email).toLowerCase() === user.email.toLowerCase());
-  if (!people || !profile) return <section className="section"><div className="empty">Loading…</div></section>;
+  if (!people || !profile) return <PageSkeleton />;
 
   const d = profileData(me, profile, record);
   const photo = profile.photoV ? `/api/profile/photo?v=${profile.photoV}` : "";
@@ -156,8 +155,7 @@ export default function Profile() {
 
   return (
     <section className="section" style={{ gap: 18 }}>
-      <BackButton />
-      <div className="sec-head"><div><div className="eyebrow">Me</div><h2>My <span className="grad">profile.</span></h2><Smile /></div></div>
+      <SectionHead title="My profile" />
       <div className="pf2">
         <aside className="pf2-rail">
           <div className="card pf2-id">
@@ -174,7 +172,7 @@ export default function Profile() {
             <h2>{me.name}</h2>
             <p className="pf2-role">{me.title && me.title !== "—" ? me.title : ""}{me.dept && me.dept !== "—" && !String(me.title || "").toLowerCase().includes(me.dept.toLowerCase()) ? ` · ${me.dept}` : ""}</p>
             <Pill tone={statusTone}>{statusLabel}</Pill>
-            <div><span className={`pill ${pct === 100 ? "p-ok" : "p-info"}`} style={{ marginTop: 8 }} title="Parts of your profile that are filled in">Profile {pct}% complete</span></div>
+            <div><span className={pill(pct === 100 ? "p-ok" : "p-info")} style={{ marginTop: 8 }} title="Parts of your profile that are filled in">Profile {pct}% complete</span></div>
             {photo && <div><button type="button" className="btn glass sm" style={{ marginTop: 12 }} onClick={removePhoto}>Remove photo</button></div>}
             <ul className="pf2-facts">
               <li><Icon name="mail" />{me.email}</li><li><Icon name="phone" />{phone || "Add a phone number"}</li>

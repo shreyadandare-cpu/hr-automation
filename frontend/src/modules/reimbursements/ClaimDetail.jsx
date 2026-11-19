@@ -1,4 +1,4 @@
-import { DownloadIcon } from "../../components/ui.jsx";
+import { DownloadIcon, pill } from "../../components/ui.jsx";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { api, apiMsg } from "../../api.js";
@@ -43,7 +43,7 @@ function DocViewer({ c, docId, zoom, setZoom, onDoc, onBig }) {
         {withDoc.map((x) => <button key={x.id} type="button" role="tab" aria-selected={x === it} className={x === it ? "on" : ""} onClick={() => onDoc(x.document.id)}>{x.position}. {c.catName(x.category)} · {money(x.amount)}</button>)}
         {nr.length > 0 && <span className="muted" style={{ alignSelf: "center", fontSize: 13 }}>+ {nr.length} without receipt</span>}</div>}
       <div className={`rb-viewer ${isPdf ? "pdf" : "img"}`}>{isPdf ? <iframe src={`${src}#view=FitH`} title={`Receipt for expense ${it.position}: ${d.name}`} />
-        : <div className="rb-imgwrap"><img src={src} alt={`Receipt for expense ${it.position}: ${d.name}`} style={{ width: `${Math.round(zoom * 100)}%` }} /></div>}</div>
+        : <div className="rb-imgwrap"><img src={src} alt={`Receipt for expense ${it.position}: ${d.name}`} loading="lazy" decoding="async" style={{ width: `${Math.round(zoom * 100)}%` }} /></div>}</div>
       <div className="rb-doctools">
         {isPdf ? <span className="muted">Zoom and page through the PDF with its own toolbar.</span>
           : <><button type="button" className="btn glass sm" aria-label="Zoom out" onClick={() => setZoom(Math.min(3, Math.max(0.5, zoom - 0.25)))}><Ico k="zout" /></button><span className="muted">{Math.round(zoom * 100)}%</span>
@@ -88,7 +88,7 @@ function Amounts({ c }) {
   const el = c.eligibility || {}, b = el.budget, req = rbReq(c), elig = rbElig(c);
   const row = (k, v, cls = "") => <div className={`am-row ${cls}`}><span>{k}</span><b>{v}</b></div>;
   return (
-    <div className="card"><div className="card-h"><h3>Amount breakdown</h3>{c.partial && <span className="pill p-warn">Partly approved</span>}</div><div className="card-b rb-amounts">
+    <div className="card"><div className="card-h"><h3>Amount breakdown</h3>{c.partial && <span className={pill("warn")}>Partly approved</span>}</div><div className="card-b rb-amounts">
       {row("Requested amount", money(req))}
       {b && <>{row(<>Approved budget <span className="muted mono">{b.requestNo}</span></>, money(b.approvedBudget))}{row("Actual expense", money(b.actual))}{row("Company covers", money(b.covered), "good")}{row("Employee excess", b.excess ? money(b.excess) : "—", b.excess ? "bad" : "")}</>}
       {row("Eligible amount", money(elig), !b && elig < req ? "good" : "")}
@@ -129,7 +129,9 @@ function Decision({ c, onApprove, onReject, onChanges }) {
 
 export default function ClaimDetail() {
   const { id } = useParams(), nav = useNavigate(), toast = useToast(), [sp] = useSearchParams();
-  const { isHr: hr } = useAuth();
+  const { user, can } = useAuth();
+  const hr = can("expenses.approve");   // decides claims of the people in scope; the server checks each claim
+  const isMine = (cl) => [cl.email, cl.createdBy].some((e) => e && String(e).toLowerCase() === String(user.email).toLowerCase());   // nobody decides a claim they own or filed
   const [meta] = useMeta();
   const [st, setSt] = useState({ state: "loading", claim: null, events: [] });
   const [zoom, setZoom] = useState(1), [docId, setDocId] = useState(null), [dlg, setDlg] = useState(null);
@@ -137,13 +139,13 @@ export default function ClaimDetail() {
 
   const load = useCallback(async (opening) => {
     let r = await api("GET", `/api/reimbursements/${id}`);
-    if (opening && r.ok && hr && ["submitted", "resubmitted"].includes(r.data.claim.status)) {   // HR opening it starts the review
+    if (opening && r.ok && hr && !isMine(r.data.claim) && ["submitted", "resubmitted"].includes(r.data.claim.status)) {   // an approver opening it starts the review
       const o = await api("POST", `/api/reimbursements/${id}/open`);
       if (o.ok && o.data.changed) r = await api("GET", `/api/reimbursements/${id}`);
     }
     if (!r.ok) return setSt({ state: r.status === 404 ? "missing" : "error", claim: null, events: [] });
     setSt({ state: "ready", claim: r.data.claim, events: r.data.events });
-  }, [id, hr]);
+  }, [id, hr]);   // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { setSt({ state: "loading", claim: null, events: [] }); setZoom(1); setDocId(null); window.scrollTo(0, 0); load(true); }, [load]);
   useEffect(() => { if (st.state === "ready" && wantDoc.current) { wantDoc.current = false; const el = document.getElementById("rb-doc"); if (el) el.scrollIntoView({ block: "start" }); } }, [st.state]);
 
@@ -154,7 +156,7 @@ export default function ClaimDetail() {
   if (st.state === "error") return <section className="section">{back}<div className="card"><div className="empty"><Ico k="warn" /><div>Unable to load reimbursement details. Please try again.</div><button type="button" className="btn glass sm" onClick={() => { setSt({ state: "loading", claim: null, events: [] }); load(true); }}>Try again</button></div></div></section>;
 
   const c = { ...st.claim, catName: (k) => catName(meta, k) }, events = st.events;
-  const canDecide = hr && ["submitted", "under_review", "resubmitted"].includes(c.status);
+  const canDecide = hr && !isMine(c) && ["submitted", "under_review", "resubmitted"].includes(c.status);
   const decide = async (path, body, okMsg) => {
     const r = await api("POST", `/api/reimbursements/${c.id}/${path}`, body);
     if (r.ok) { toast(okMsg); await load(false); }
@@ -166,7 +168,7 @@ export default function ClaimDetail() {
     if (v < req && v !== elig && !reason.trim()) { toast("Give a reason for approving less than requested."); if (reasonEl) reasonEl.focus(); return; }
     setDlg({ kind: "approve", v, reason });
   };
-  const ownBar = ["draft", "changes_requested"].includes(c.status) && (!hr || c.status === "draft");
+  const ownBar = c.status === "draft" || (c.status === "changes_requested" && (!hr || isMine(c)));
   const pay = ["payroll_pending", "in_payroll", "paid"].includes(c.status);
   const nExp = (c.items || []).length;
   const big = dlg && dlg.kind === "big" ? dlg.it : null;
@@ -178,7 +180,7 @@ export default function ClaimDetail() {
           <h2>{c.employee.name}</h2>
           <div className="muted">{c.employee.empNo || "No employee number"}{c.employee.title ? ` · ${c.employee.title}` : ""}{c.submittedAt ? ` · Submitted ${dtShort(c.submittedAt)}` : ""}</div></div>
         <div className="rb-head-r"><b className="rb-amt">{money(c.approvedAmount != null ? c.approvedAmount : rbReq(c))}</b>{c.approvedAmount != null && c.partial && <span className="muted">approved of {money(rbReq(c))}</span>}
-          <div className="row" style={{ gap: 6 }}><RbPill status={c.status} />{c.partial && <span className="pill p-warn">Partly approved</span>}</div></div>
+          <div className="row" style={{ gap: 6 }}><RbPill status={c.status} />{c.partial && <span className={pill("warn")}>Partly approved</span>}</div></div>
       </div>
       <div className="card rb-stepcard"><Stepper c={c} events={events} /></div>
       {c.status === "rejected" ? <div className="callout bad"><Ico k="x" /><div><b>Rejected: {c.rejectionReason}</b>{c.rejectionNote && <div>{c.rejectionNote}</div>}</div></div>

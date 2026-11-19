@@ -15,6 +15,8 @@ COPY backend/src ./src
 COPY backend/seed ./seed
 # Imported as ../../frontend/leave-rules.cjs from src/.
 COPY frontend/leave-rules.cjs /srv/frontend/leave-rules.cjs
+# The brand (names, logos, colours) shared with the interface; read as ../../frontend/brand.config.json from src/brand.js.
+COPY frontend/brand.config.json /srv/frontend/brand.config.json
 # The logo and favicon files the server sends from /, as ../../frontend/public from src/.
 COPY frontend/public /srv/frontend/public
 

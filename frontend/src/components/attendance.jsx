@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api, apiMsg } from "../api.js";
+import { ListSkeleton, TableSkeletonRow } from "./ui.jsx";
 import Modal from "./Modal.jsx";
 
 /* The employee's attendance page, laid out like a standard HR attendance screen: stats, today's shift and the punch button on top,
@@ -206,7 +207,7 @@ export function PolicyModal({ onClose }) {
   const p = POLICY[tab];
   return (
     <Modal onClose={onClose} wide>
-      <div className="card-h" style={{ paddingTop: 24 }}><h3>Attendance Policy</h3><button type="button" className="btn glass sm" onClick={onClose} aria-label="Close">Close</button></div>
+      <div className="card-h" style={{ paddingTop: 24 }}><h3>Attendance policy</h3></div>
       <div className="card-b">
         <div className="att-tabs" role="tablist" style={{ padding: 0 }}>
           {Object.entries(POLICY).map(([k, v]) => <button key={k} type="button" role="tab" aria-selected={tab === k} className={tab === k ? "on" : ""} onClick={() => setTab(k)}>{v.label}</button>)}
@@ -301,7 +302,7 @@ function Calendar({ byMonth, ensure, today, h24 }) {
             <span>{Number(d.date.slice(8))}</span>{d.minutes > 0 ? <small>{dur(d.minutes)}</small> : d.holiday ? <small>{d.holiday}</small> : d.status && kind(d, today) !== "none" ? <small>{kind(d, today) === "weekend" ? "W-OFF" : d.status}</small> : null}
           </div>))}
       </div>
-      {!data && <div className="empty">Loading…</div>}
+      {!data && <ListSkeleton />}
       <div className="att-legend"><span><i className="ok" />Present</span><span><i className="warn" />Half day / short</span><span><i className="lv" />Leave</span><span><i className="hol" />Holiday</span><span><i className="off" />Weekly off</span><span><i className="lv" />Off-site</span></div>
     </div>
   );
@@ -339,7 +340,7 @@ export function AttendanceLog({ months, today, canEdit = false, onRemove = () =>
             <div className="tbl-wrap att-table"><table>
               <thead><tr><th>Date</th><th>Time on site</th><th className="num-cell">Break</th><th className="num-cell">Hours</th><th>Log</th></tr></thead>
               <tbody>
-                {loading && <tr><td colSpan="5"><div className="empty">Loading…</div></td></tr>}
+                {loading && <TableSkeletonRow cols={5} />}
                 {days.filter((d) => kind(d, today) !== "none").map((d) => <Row key={d.date} d={d} today={today} nowMin={now.minutes} h24={h24} canEdit={canEdit} onRemove={onRemove} />)}
               </tbody>
             </table></div>

@@ -1,4 +1,4 @@
-import { DownloadIcon } from "../../components/ui.jsx";
+import { DownloadIcon, pill, PageSkeleton } from "../../components/ui.jsx";
 import { useEffect, useRef, useState } from "react";
 import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import BackButton from "../../components/BackButton.jsx";
@@ -6,6 +6,7 @@ import { api, apiMsg } from "../../api.js";
 import { useAuth } from "../../auth.jsx";
 import { useData } from "../../data.jsx";
 import { useToast } from "../../components/toast.jsx";
+import { scopeSet } from "../../lib/useLeave.js";
 import { Dlg, Fld, Head, Ico, InfoCallout, LinesTable, catName, fdate, lc, money, todayIso, useMeta } from "./util.jsx";
 
 const STEPS = ["Upload invoices", "Review details", "Submit"];
@@ -63,7 +64,7 @@ function Line({ it, i, w, meta, nrMax, onField, onRemove, onUpload, onCall }) {
   return (
     <div className="cw-rev" data-line={i}>
       <div className="cw-line">
-        <div className="cw-line-h"><b>Expense {i + 1}</b>{it.source === "document" ? <span className="pill p-info">Read from invoice</span> : it.source === "excel" ? <span className="pill p-info">From sheet</span> : null}<span className="grow" />
+        <div className="cw-line-h"><b>Expense {i + 1}</b>{it.source === "document" ? <span className={pill("info")}>Read from invoice</span> : it.source === "excel" ? <span className={pill("info")}>From sheet</span> : null}<span className="grow" />
           {w.items.length > 1 && <button type="button" className="btn link sm nolink" aria-label={`Remove expense ${i + 1}`} onClick={() => onRemove(i)}><Ico k="x" />Remove</button>}</div>
         {it.extracted ? <div className="span cw-x"><Ico k="check" /> Details extracted from the invoice. Check each one; anything you change is marked <b>Edited</b>.</div>
           : it.source === "document" ? <div className="span cw-x warn"><Ico k="warn" /> This invoice couldn't be read automatically. Fill in the details from it.</div> : null}
@@ -94,7 +95,7 @@ function ImportDlg({ data, name, meta, nrMax, onClose, onAdd }) {
         {rows.map((x) => { const e = Object.values(x.errors); return (
           <tr key={x.row} className={e.length ? "bad" : ""}><td className="muted">{x.row}</td><td className="num-cell">{x.errors.expenseDate ? x.expenseDate || "—" : fdate(x.expenseDate)}</td><td>{x.category ? catName(meta, x.category) : "—"}</td>
             <td>{x.description || "—"}</td><td className="hide-sm">{x.paymentMethod || "—"}</td><td className="num">{x.amount !== "" ? money(x.amount) : "—"}</td>
-            <td>{e.length ? <span className="flag"><Ico k="warn" />{e[0]}</span> : x.noReceipt ? <span className="pill p-mute">No receipt</span> : <span className="pill p-warn">Needs receipt</span>}</td></tr>); })}</tbody></table></div>
+            <td>{e.length ? <span className="flag"><Ico k="warn" />{e[0]}</span> : x.noReceipt ? <span className={pill("mute")}>No receipt</span> : <span className={pill("warn")}>Needs receipt</span>}</td></tr>); })}</tbody></table></div>
       <div className="card-b">{bad > 0 && <div className="callout bad"><Ico k="warn" /><div>{bad} row{bad === 1 ? " has a problem and" : "s have problems and"} will be skipped. Fix {bad === 1 ? "it" : "them"} in the sheet and upload again, or add {bad === 1 ? "it" : "them"} by hand.</div></div>}
         <div className="muted">Rows up to {money(nrMax)} come in as small expenses without a receipt. Larger ones need their receipt in the next step.</div></div>
       <div className="modal-f"><button type="button" className="btn glass" onClick={onClose}>Cancel</button><button type="button" className="btn primary" autoFocus disabled={!good.length} onClick={() => onAdd(good)}>Add {good.length} expense{good.length === 1 ? "" : "s"}</button></div></Dlg>
@@ -102,8 +103,10 @@ function ImportDlg({ data, name, meta, nrMax, onClose, onAdd }) {
 }
 
 export default function ClaimNew() {
-  const { isHr: hr } = useAuth();
+  const auth = useAuth(), { can, user } = auth;
+  const hr = can("expenses.approve");
   const { people } = useData();
+  const claimScope = scopeSet(auth, "expenses.approve", people);   // null = everyone; otherwise the teams they approve claims for
   const nav = useNavigate(), toast = useToast(), [sp] = useSearchParams(), loc = useLocation();
   const stateBudget = (loc.state && loc.state.budget) || null;
   const editId = Number(sp.get("edit")) || null, budgetId = Number(sp.get("budget")) || null;
@@ -247,7 +250,7 @@ export default function ClaimNew() {
   }
 
   const cancel = () => nav(w.id ? `/app/reimbursements/${w.id}` : "/app/reimbursements");
-  if (boot === "loading" || !meta || (hr && !people)) return <section className="section"><div className="empty">Loading…</div></section>;
+  if (boot === "loading" || !meta || (hr && !people)) return <PageSkeleton />;
 
   const er = w.errors, busyUp = w.uploads.some((u) => u.state === "busy");
   const budgetNote = w.budget && <InfoCallout><b>Final bill for {w.budget.requestNo}</b> · {w.budget.purpose || ""}<div>Approved budget <b>{money(w.budget.approvedBudget)}</b>. If the bill is higher, only the approved budget is reimbursed.</div></InfoCallout>;
@@ -260,9 +263,9 @@ export default function ClaimNew() {
 
   if (w.step === 1) body = <>
     {budgetNote}
-    {hr && !w.id && <div className="card"><div className="card-b"><Fld id="cw-email" label="Filing for" error={er.email} hint="HR can file a claim for someone. It is reviewed like any other claim.">
+    {hr && !w.id && <div className="card"><div className="card-b"><Fld id="cw-email" label="Filing for" error={er.email} hint="You can file a claim for someone you approve claims for, or for yourself. It is reviewed like any other claim, by someone other than you.">
       <select className="input" id="cw-email" value={w.email} onChange={(e) => set({ email: e.target.value })}><option value="">Choose the employee…</option>
-        {people.filter((e) => e.status !== "offboarded").sort((a, b) => (a.name < b.name ? -1 : 1)).map((e) => <option key={e.email} value={e.email}>{e.name}</option>)}</select></Fld></div></div>}
+        {people.filter((e) => e.status !== "offboarded" && (!claimScope || claimScope.has(lc(e.email)) || lc(e.email) === lc(user.email))).sort((a, b) => (a.name < b.name ? -1 : 1)).map((e) => <option key={e.email} value={e.email}>{e.name}</option>)}</select></Fld></div></div>}
     <div className="card"><div className="card-h"><div><h3>{w.budget ? "Upload the final bill" : "Upload your invoice or receipt"}</h3><span className="muted">PDF, JPG or PNG, up to 10 MB each. The details are read for you, and you check them next.</span></div>{w.claimNo && <span className="muted mono">{w.claimNo}</span>}</div>
       <div className="card-b" style={{ display: "flex", flexDirection: "column", gap: 14 }}>
         <label className={`rb-drop big ${busyUp ? "busy" : ""}`}><input type="file" id="cw-inv" multiple accept={ACCEPT} disabled={busyUp} onChange={(e) => { const fs = [...e.target.files]; e.target.value = ""; if (fs.length) uploadInvoices(fs); }} />
@@ -331,7 +334,7 @@ export default function ClaimNew() {
   return (
     <section className="section">
       <BackButton to="/app/reimbursements" />
-      <Head eyebrow={hr && !resub ? "Finance" : "Me"} title={resub ? "Update and " : w.budget ? "Final " : "New "} accent={resub ? "resubmit." : w.budget ? "bill." : "claim."}
+      <Head eyebrow={hr && !resub ? "Finance" : "Me"} title={resub ? "Update and resubmit" : w.budget ? "Final bill" : "New claim"}
         sub={resub ? "Make the changes HR asked for, check the details, then send it back." : "Upload the invoice, check the details read from it, then submit. HR reviews every claim."} />
       <div className="stepper" role="list">{STEPS.map((s, i) => <div key={s} className={`stp ${w.step === i + 1 ? "on" : w.step > i + 1 ? "done" : ""}`} role="listitem"><b>{w.step > i + 1 ? "✓" : i + 1}</b>{s}</div>)}</div>
       <form id="cwf" className="grid" style={{ gap: 22 }} noValidate onSubmit={(e) => { e.preventDefault(); if (last) submit(); else next(); }}>{body}

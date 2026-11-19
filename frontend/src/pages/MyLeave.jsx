@@ -1,13 +1,12 @@
 import { useState } from "react";
-import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { api, apiMsg } from "../api.js";
 import { useAuth } from "../auth.jsx";
 import { useData } from "../data.jsx";
-import { Pill, SectionHead, shortDate } from "../components/ui.jsx";
+import { Pill, SectionHead, shortDate, PageSkeleton } from "../components/ui.jsx";
 import { CompRequestModal, HolidayCalendar } from "../components/leaveParts.jsx";
-import { CompOffHistory, LeaveHistory, LeaveLeftPopup, LeaveStats, PolicyExplain, Ring, ViewTabs } from "../components/leaveSummary.jsx";
+import { CompOffHistory, LeaveHistory, LeaveStats, PolicyExplain, Ring, ViewTabs } from "../components/leaveSummary.jsx";
 import TodayCards from "../components/TodayCards.jsx";
-import LeaveSwitch from "../components/LeaveSwitch.jsx";
 import { useToast } from "../components/toast.jsx";
 import { R } from "../lib/leave.js";
 import { LTYPE, dd, rangeText, useLeave } from "../lib/useLeave.js";
@@ -19,16 +18,16 @@ const VIEWS = [["summary", "Summary"], ["history", "Leave history"], ["compoff",
 export default function MyLeave() {
   const { user } = useAuth();
   const { people, reloadLeave } = useData();
-  const lv = useLeave(), toast = useToast(), nav = useNavigate();
+  const lv = useLeave(), toast = useToast();
   const [modal, setModal] = useState(null);
   const [yearPick, setYearPick] = useState(null);
   const [params, setParams] = useSearchParams();
   const view = VIEWS.some(([k]) => k === params.get("view")) ? params.get("view") : "summary";
   const setView = (k) => { const n = new URLSearchParams(params); if (k === "summary") n.delete("view"); else n.set("view", k); setParams(n, { replace: true }); };
-  if (!people) return <section className="section"><div className="empty">Loading…</div></section>;
+  if (!people) return <PageSkeleton />;
 
   const me = lv.empBy(user.email), thisYear = Number(lv.today.slice(0, 4)), year = yearPick || thisYear;
-  const top = <SectionHead eyebrow="Me" title="My" accent="leave." sub="Your balances, requests and history. Request leave or a comp-off credit from the summary." />;
+  const top = <SectionHead title="My leave" sub="Your requests, balances and history." />;
   if (!me) return <section className="section">{top}<div className="card"><div className="empty">Your employee record wasn't found, so leave can't be shown. Ask HR to check your work email.</div></div></section>;
 
   const b = lv.bal(me, year), future = year > thisYear;
@@ -55,7 +54,6 @@ export default function MyLeave() {
 
   return (
     <section className="section">
-      <LeaveSwitch current="my" />
       {top}
       <div className="row" style={{ justifyContent: "space-between", flexWrap: "wrap", gap: 12 }}><ViewTabs views={VIEWS} view={view} onView={setView} />{view !== "holidays" && view !== "compoff" && yearPicker}</div>
 
@@ -71,32 +69,31 @@ export default function MyLeave() {
               {compPend.map((c) => (
                 <div key={`c${c.id}`} className="li"><div className="grow"><b style={{ fontWeight: 600 }}>Comp off credit</b> · worked on {shortDate(c.workedOn)}<div className="meta">“{c.reason}”</div></div>
                   <Pill tone="warn">{waitingFor}</Pill></div>))}
-            </> : <div className="lv-hurray"><span aria-hidden="true">🎉</span><div><b>Hurray! No pending leave requests</b><span>Request leave on the right.</span></div></div>}
+            </> : <div className="empty">You have no pending leave requests.</div>}
           </div>
-          <div className="card" style={{ alignSelf: "start" }}><div className="card-b" style={{ display: "flex", flexDirection: "column", gap: 12, alignItems: "flex-start", paddingTop: 22 }}>
+          <div className="card" style={{ alignSelf: "start" }}><div className="card-b lv-actions">
             <Link className="btn primary" to="/app/leave/apply?self=1">Request leave</Link>
-            <button type="button" className="btn link" onClick={() => setModal("comp")}>Request credit for comp off</button>
+            <button type="button" className="btn link" onClick={() => setModal("comp")}>Request credit for compensatory off</button>
+            <button type="button" className="btn link" onClick={() => setView("compoff")}>Compensatory off requests history</button>
             <button type="button" className="btn link" onClick={() => setModal("policy")}>Leave policy explanation</button>
-            <button type="button" className="btn link" onClick={() => setView("compoff")}>Compensatory off request history</button>
           </div></div>
         </div>
-        {year === thisYear && <TodayCards />}
-        <h3 className="lv-h">My leave stats</h3>
+        <h2 className="lv-h">My leave stats</h2>
         <LeaveStats email={me.email} year={year} />
-        <h3 className="lv-h">Leave balances {year}{future ? " (projected)" : ""}</h3>
+        <h2 className="lv-h">Leave balances {year}{future ? " (projected)" : ""}</h2>
         <div className="grid g4 lv-bals">
           {card(LTYPE.casual, cTot ? b.casual.left / cTot * 100 : 0, "var(--lv-casual)", dd(b.casual.left), [["Available", dd(b.casual.left)], ["Consumed", dd(b.consumed.casual)], ["Pending approval", dd(pendOf("casual"))], ["Annual quota", dd(b.casual.quota)], ["Carried over", dd(b.casual.carried)]])}
           {card(LTYPE.compoff, b.compoff.earned ? b.compoff.left / b.compoff.earned * 100 : 0, "var(--lv-comp)", b.compoff.earned ? dd(b.compoff.left) : "None", [["Available", dd(b.compoff.left)], ["Consumed", dd(b.consumed.compoff)], ["Pending approval", dd(pendOf("compoff"))], ["Earned", dd(b.compoff.earned)], ["Lapses", "31 Dec"]])}
           {card(LTYPE.sick, b.sick.quota ? b.sick.left / b.sick.quota * 100 : 0, "var(--lv-sick)", dd(b.sick.left), [["Available", dd(b.sick.left)], ["Consumed", dd(b.consumed.sick)], ["Pending approval", dd(pendOf("sick"))], ["Annual quota", dd(b.sick.quota)], ["Lapses", "31 Dec"]])}
           {card(LTYPE.unpaid, b.lopDays ? 100 : 0, "var(--lv-unpaid)", dd(b.lopDays), [["Loss-of-pay days", dd(b.lopDays)], ["Unpaid leave taken", dd(b.consumed.unpaid)], ["Pending approval", dd(pendOf("unpaid"))], ["Annual quota", "No limit"]], future ? `Loss of pay in ${year}` : "Loss of pay")}
         </div>
+        {year === thisYear && <TodayCards />}
       </>}
 
       {view === "history" && <LeaveHistory list={mine} onCancel={cancel} title={`Leave history ${year}`} />}
       {view === "compoff" && <CompOffHistory list={lv.compsOf(me.email)} onRequest={() => setModal("comp")} />}
       {view === "holidays" && <HolidayCalendar editable={false} />}
 
-      {view === "summary" && year === thisYear && <LeaveLeftPopup email={me.email} year={year} onRequest={() => nav("/app/leave/apply?self=1")} />}
       {modal === "comp" && <CompRequestModal email={me.email} onClose={() => setModal(null)} />}
       {modal === "policy" && <PolicyExplain email={me.email} year={year} onClose={() => setModal(null)} />}
     </section>

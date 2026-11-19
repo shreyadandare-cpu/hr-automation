@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { api } from "../../api.js";
+import { pill } from "../../components/ui.jsx";
 
 export const money = (n) => (n == null ? "—" : "₹" + Number(n).toLocaleString("en-IN", { minimumFractionDigits: Number(n) % 1 ? 2 : 0, maximumFractionDigits: 2 }));
 
@@ -16,7 +17,7 @@ export const BQ_STATUS = {
   submitted: ["Waiting for HR", "p-warn"], under_review: ["Under HR review", "p-info"], approved: ["Approved", "p-ok"],
   partially_approved: ["Partially approved", "p-ok"], rejected: ["Rejected", "p-bad"],
 };
-export const BqPill = ({ status }) => <span className={`pill ${(BQ_STATUS[status] || ["", ""])[1]}`}>{(BQ_STATUS[status] || [status])[0]}</span>;
+export const BqPill = ({ status }) => <span className={pill((BQ_STATUS[status] || ["", ""])[1])}>{(BQ_STATUS[status] || [status])[0]}</span>;
 
 /* Status pills for the final-bill claim (same as the reimbursements page). */
 const RB_STATUS = {
@@ -24,7 +25,7 @@ const RB_STATUS = {
   changes_requested: ["Changes requested", "p-warn"], resubmitted: ["Resubmitted", "p-info"], approved: ["Approved", "p-ok"],
   rejected: ["Rejected", "p-bad"], payroll_pending: ["Payroll pending", "p-info"], in_payroll: ["In payroll", "p-info"], paid: ["Paid", "p-ok"],
 };
-export const ClaimPill = ({ status }) => <span className={`pill ${(RB_STATUS[status] || ["", ""])[1]}`}>{(RB_STATUS[status] || [status])[0]}</span>;
+export const ClaimPill = ({ status }) => <span className={pill((RB_STATUS[status] || ["", ""])[1])}>{(RB_STATUS[status] || [status])[0]}</span>;
 
 const ICONS = {
   doc: <><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z" /><path d="M14 3v6h6M8 13h8M8 17h5" /></>,

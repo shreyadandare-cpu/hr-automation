@@ -1,3 +1,4 @@
+import { COMPANY_LEGAL, MAROON, PRODUCT, SIGN_OFF } from "./brand.js";
 /* Outgoing email through the SendGrid Web API (HTTPS, no SMTP). Settings are read when needed, so the .env file is already loaded.
    Needs SENDGRID_API_KEY (Mail Send permission) and a MAIL_FROM address verified in SendGrid (Sender Authentication). */
 const SENDGRID_URL = () => `https://api.${process.env.SENDGRID_EU === "true" ? "eu." : ""}sendgrid.com/v3/mail/send`;
@@ -51,11 +52,11 @@ export async function sendTestEmail(to, by) {
   const when = new Date().toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" });
   await sendMail({
     to,
-    subject: "Test email from Wohlig One",
-    text: `This is a test email from Wohlig One.\n\nIf you can read it, email sending works. Nothing else is needed.\n\nSent by ${by} on ${when}.\n`,
+    subject: `Test email from ${PRODUCT}`,
+    text: `This is a test email from ${PRODUCT}.\n\nIf you can read it, email sending works. Nothing else is needed.\n\nSent by ${by} on ${when}.\n`,
     html: `<div style="font:15px/1.6 Arial,Helvetica,sans-serif;color:#2a1016;max-width:520px;border:1px solid #e9d9c3;padding:28px 32px">`
-      + `<p style="margin:0 0 6px;font-weight:700;font-size:18px">Test email</p><div style="width:48px;height:3px;background:#800d35;margin:0 0 18px"></div>`
-      + `<p style="margin:0 0 14px">This is a test email from <b>Wohlig One</b>.</p>`
+      + `<p style="margin:0 0 6px;font-weight:700;font-size:18px">Test email</p><div style="width:48px;height:3px;background:${MAROON};margin:0 0 18px"></div>`
+      + `<p style="margin:0 0 14px">This is a test email from <b>${PRODUCT}</b>.</p>`
       + `<p style="margin:0 0 14px">If you can read it, email sending works. Nothing else is needed.</p>`
       + `<p style="margin:0;color:#6b5654;font-size:13px">Sent by ${String(by).replace(/[<>&]/g, "")} on ${when}.</p></div>`,
   });
@@ -68,24 +69,24 @@ const clean = (v) => String(v).replace(/[<>&"]/g, "");
 export async function sendWorkAccountEmail({ to, name, workEmail, password, link, minutes }) {
   const url = link || publicUrl();
   const hub = link
-    ? `Activate your Wohlig One account (you choose its password and are signed in): ${url}\nThis link works once, for ${minutes} minutes. If it expires, ask HR for a new one.`
-    : `Wohlig One is at ${url}.`;
+    ? `Activate your ${PRODUCT} account (you choose its password and are signed in): ${url}\nThis link works once, for ${minutes} minutes. If it expires, ask HR for a new one.`
+    : `${PRODUCT} is at ${url}.`;
   await sendMail({
     to,
     subject: "Your Wohlig work email account",
-    text: `Hello ${name},\n\nYour Wohlig work email has been created.\n\nEmail: ${workEmail}\nPassword: ${password}\n\nThis password is only for you. Google will ask you to choose a new one when you first sign in at https://mail.google.com. Please do not share it.\n\n${hub}\n\nRegards,\nWOHLIG TRANSFORMATIONS PRIVATE LIMITED\n`,
+    text: `Hello ${name},\n\nYour Wohlig work email has been created.\n\nEmail: ${workEmail}\nPassword: ${password}\n\nThis password is only for you. Google will ask you to choose a new one when you first sign in at https://mail.google.com. Please do not share it.\n\n${hub}\n\nRegards,\n${COMPANY_LEGAL.toUpperCase()}\n`,
     html: `<div style="font:15px/1.6 Arial,Helvetica,sans-serif;color:#2a1016;max-width:520px;border:1px solid #e9d9c3;padding:28px 32px">`
-      + `<p style="margin:0 0 6px;font-weight:700;font-size:18px">Your work email account</p><div style="width:48px;height:3px;background:#800d35;margin:0 0 18px"></div>`
+      + `<p style="margin:0 0 6px;font-weight:700;font-size:18px">Your work email account</p><div style="width:48px;height:3px;background:${MAROON};margin:0 0 18px"></div>`
       + `<p style="margin:0 0 14px">Hello ${clean(name)},</p><p style="margin:0 0 14px">Your Wohlig work email has been created.</p>`
       + `<table role="presentation" style="border-collapse:collapse;margin:0 0 14px"><tr><td style="padding:4px 14px 4px 0;color:#6b5654">Email</td><td><b>${clean(workEmail)}</b></td></tr>`
       + `<tr><td style="padding:4px 14px 4px 0;color:#6b5654">Password</td><td><b style="font-family:Menlo,Consolas,monospace">${clean(password)}</b></td></tr></table>`
       + `<p style="margin:0 0 14px">This password is only for you. Google will ask you to choose a new one when you first sign in. Please do not share it.</p>`
       + (link
-        ? `<p style="margin:0 0 8px"><b>Activate your Wohlig One account.</b> You choose its password and are signed in.</p>`
-          + `<p style="margin:0 0 8px"><a href="${clean(url)}" style="display:inline-block;padding:11px 24px;background:#800d35;color:#fff;text-decoration:none;font-weight:bold">Activate account</a></p>`
+        ? `<p style="margin:0 0 8px"><b>Activate your ${PRODUCT} account.</b> You choose its password and are signed in.</p>`
+          + `<p style="margin:0 0 8px"><a href="${clean(url)}" style="display:inline-block;padding:11px 24px;background:${MAROON};color:#fff;text-decoration:none;font-weight:bold">Activate account</a></p>`
           + `<p style="margin:0 0 14px;color:#6b5654;font-size:13px">This link works once, for ${minutes} minutes. If it expires, ask HR for a new one.</p>`
-        : `<p style="margin:0 0 14px">Wohlig One is at <a href="${clean(url)}" style="color:#800d35">${clean(url)}</a>.</p>`)
-      + `<p style="margin:0">Regards,<br>WOHLIG TRANSFORMATIONS PRIVATE LIMITED</p></div>`,
+        : `<p style="margin:0 0 14px">${PRODUCT} is at <a href="${clean(url)}" style="color:${MAROON}">${clean(url)}</a>.</p>`)
+      + `<p style="margin:0">Regards,<br>${COMPANY_LEGAL.toUpperCase()}</p></div>`,
   });
 }
 

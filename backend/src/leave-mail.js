@@ -2,7 +2,8 @@ import L from "../../frontend/leave-rules.cjs";
 import { pool } from "./db.js";
 import { hrEmails, notify } from "./notify.js";
 import { emailLink, linkMinutes } from "./email-links.js";
-import { DIRECTORS, approverOf, hrLeaveApprovers } from "./teams.js";
+import { approverOf, standInsOf } from "./teams.js";
+import { COMPANY_LEGAL, MAROON, PRODUCT, SIGN_OFF } from "./brand.js";
 
 /*
  * Leave emails. Every leave and comp-off action tells the people involved: an in-app notification and an email.
@@ -28,7 +29,7 @@ const MON = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct
 const day = (iso) => { const [y, m, d] = String(iso).slice(0, 10).split("-").map(Number); return `${d} ${MON[m - 1]} ${y}`; };
 const daysText = (n) => `${n} day${Number(n) === 1 ? "" : "s"}`;
 
-const sign = "\n\nRegards,\nWohlig One\nWOHLIG TRANSFORMATIONS PRIVATE LIMITED";
+const sign = `\n\nRegards,\n${SIGN_OFF}`;
 // "" is a blank line between paragraphs; null leaves a line out.
 const lines = (...l) => l.filter((x) => x !== null && x !== undefined && x !== false).join("\n");
 
@@ -105,18 +106,21 @@ async function nameOf(db, email) {
   return rows[0] ? rows[0].name : email;
 }
 
-/** HR copies: LEAVE_HR_EMAILS when set, otherwise every HR login. */
+/** HR copies: LEAVE_HR_EMAILS when set, otherwise everyone who approves leave for the whole company (else every HR login). */
 export const hrList = async () => {
   const set = (process.env.LEAVE_HR_EMAILS || "").split(",").map((s) => s.trim().toLowerCase()).filter(Boolean);
-  return set.length ? set : (await hrEmails()).map((e) => e.toLowerCase());
+  return set.length ? set : (await hrEmails("leave.approve")).map((e) => e.toLowerCase());
 };
 
-/** Who decides this person's leave, as email addresses. */
+/** Who is told about a new leave request: the direct manager and any stand-in they named; with no manager, the super admins.
+    (Anyone higher up the reporting lines, and any super admin, may also decide it; leave.js mayDecideLeave.) */
 async function approverEmails(email) {
   const a = await approverOf(pool, email);
-  if (a === "hr") return { emails: await hrList(), name: "HR" };
-  if (a === DIRECTORS) return { emails: hrLeaveApprovers(), name: "the directors" };
-  return { emails: [a], name: await nameOf(pool, a) };
+  if (a === "hr") {
+    const { rows } = await pool.query("SELECT lower(email) AS e FROM users WHERE is_super_admin AND NOT login_blocked AND lower(email) <> lower($1)", [email]);
+    return { emails: rows.map((r) => r.e), name: "a super admin" };
+  }
+  return { emails: [a, ...(await standInsOf(pool, a))].filter((e) => e !== String(email).toLowerCase()), name: await nameOf(pool, a) };   // a stand-in hears too
 }
 
 /** The fields every template can use. */
@@ -138,9 +142,9 @@ const esc = (v) => String(v ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "
 
 /** The HTML version of a template: the same text, the link clickable, and a button for it when the template names one. */
 export function leaveHtml(t, url) {
-  const text = esc(t.body).split(esc(url)).join(`<a href="${esc(url)}" style="color:#800d35">${esc(url)}</a>`)
+  const text = esc(t.body).split(esc(url)).join(`<a href="${esc(url)}" style="color:${MAROON}">${esc(url)}</a>`)
     .split("\n\n").map((p) => `<p style="margin:0 0 14px">${p.replace(/\n/g, "<br>")}</p>`).join("");
-  const button = t.button === null ? "" : `<p style="margin:6px 0 20px"><a href="${esc(url)}" style="display:inline-block;padding:12px 26px;background:#800d35;color:#fff;text-decoration:none;font-weight:bold;border-radius:6px">${esc(t.button || "Open Wohlig One")}</a></p>`;
+  const button = t.button === null ? "" : `<p style="margin:6px 0 20px"><a href="${esc(url)}" style="display:inline-block;padding:12px 26px;background:${MAROON};color:#fff;text-decoration:none;font-weight:bold;border-radius:6px">${esc(t.button || `Open ${PRODUCT}`)}</a></p>`;
   return `<!doctype html><html><body style="margin:0;background:#fff7e9"><div style="max-width:560px;margin:0 auto;padding:28px 28px 20px;background:#fff;font:15px/1.6 Arial,Helvetica,sans-serif;color:#2a1016">${button}${text}</div></body></html>`;
 }
 

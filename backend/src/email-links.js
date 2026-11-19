@@ -2,6 +2,7 @@ import crypto from "node:crypto";
 import express from "express";
 import { pool } from "./db.js";
 import { publicUrl } from "./mail.js";
+import { COMPANY_LEGAL, MAROON, PRODUCT, SIGN_OFF } from "./brand.js";
 
 /*
  * Links in automatic emails (leave, payslips, the onboarding work-account email) work for a short time only:
@@ -26,9 +27,9 @@ const page = (title, text) => `<!doctype html><html lang="en"><head><meta charse
 <title>${title}</title><meta name="robots" content="noindex"></head>
 <body style="margin:0;font:16px/1.6 Arial,Helvetica,sans-serif;color:#2a1016;background:#fff7e9">
 <div style="max-width:460px;margin:12vh auto 0;padding:32px 32px 28px;background:#fff;border:1px solid #e9d9c3">
-<p style="margin:0 0 6px;font-weight:700;font-size:20px">${title}</p><div style="width:48px;height:3px;background:#800d35;margin:0 0 18px"></div>
+<p style="margin:0 0 6px;font-weight:700;font-size:20px">${title}</p><div style="width:48px;height:3px;background:${MAROON};margin:0 0 18px"></div>
 <p style="margin:0 0 22px">${text}</p>
-<a href="/login" style="display:inline-block;padding:12px 26px;background:#800d35;color:#fff;text-decoration:none;font-weight:bold">Sign in</a>
+<a href="/login" style="display:inline-block;padding:12px 26px;background:${MAROON};color:#fff;text-decoration:none;font-weight:bold">Sign in</a>
 </div></body></html>`;
 
 export const emailLinkRouter = express.Router();
@@ -40,6 +41,6 @@ emailLinkRouter.get("/:token", async (req, res, next) => {
       ? await pool.query("SELECT path, expires_at < now() AS expired FROM email_links WHERE token_hash=$1", [sha(t)]) : { rows: [] };
     if (l && !l.expired) return res.redirect(l.path);
     res.status(410).type("html").send(page("This link has expired",
-      "Links in our emails work for a limited time. Sign in to Wohlig One to see the latest details."));
+      `Links in our emails work for a limited time. Sign in to ${PRODUCT} to see the latest details.`));
   } catch (e) { next(e); }
 });

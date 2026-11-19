@@ -4,10 +4,10 @@ import { api, apiMsg } from "../../api.js";
 import { useAuth } from "../../auth.jsx";
 import { useData } from "../../data.jsx";
 import Modal from "../../components/Modal.jsx";
-import { Pill, Person, SectionHead } from "../../components/ui.jsx";
+import { Pill, Person, SectionHead, PageSkeleton } from "../../components/ui.jsx";
 import { useToast } from "../../components/toast.jsx";
 import { lc } from "../../lib/useLeave.js";
-import { OffTabs, StatusPill } from "./shared.jsx";
+import { StatusPill } from "./shared.jsx";
 
 const CLAUDE = {
   active: ["Has Claude access", "bad"],
@@ -19,17 +19,19 @@ const live = (p) => ["active", "invited", "failed"].includes((p.grants || {}).cl
 
 /* Everyone leaving or gone, and whether they still have Claude. HR removes it here, one person or all at once. */
 export default function Leavers() {
-  const { isHr } = useAuth();
+  const { canAll } = useAuth();
+  const mayRun = canAll("offboarding.manage");   // "Run offboarding", company-wide
+  const mayTools = canAll("tools.manage");        // removing Claude access is "Tool access"
   const { people, reload } = useData();
   const toast = useToast();
   const [offs, setOffs] = useState(null);
   const [refreshing, setRefreshing] = useState(false);
   const [ask, setAsk] = useState(null);       // the people HR is asked to confirm removing
   const [busy, setBusy] = useState(null);     // { done, total } while removing
-  useEffect(() => { if (isHr) api("GET", "/api/offboarding").then((r) => setOffs(r.ok && Array.isArray(r.data) ? r.data : [])); }, [isHr]);
+  useEffect(() => { if (mayRun) api("GET", "/api/offboarding").then((r) => setOffs(r.ok && Array.isArray(r.data) ? r.data : [])); }, [mayRun]);
 
-  if (!isHr) return <section className="section"><SectionHead eyebrow="Offboarding" title="Leaving and" accent="left." /><div className="empty">Only HR can see this.</div></section>;
-  if (!people || !offs) return <section className="section"><div className="empty">Loading…</div></section>;
+  if (!mayRun) return <section className="section"><SectionHead eyebrow="Offboarding" title="Offboarding" /><div className="empty">Only the people who run offboarding can see this.</div></section>;
+  if (!people || !offs) return <PageSkeleton />;
   const isLeaving = (p) => ["offboarding", "offboarded"].includes(p.status) || p.lastDay || offs.some((o) => lc(o.email) === lc(p.email));
   // Still on Claude first, then by name.
   const list = people.filter(isLeaving).sort((a, b) => live(b) - live(a) || a.name.localeCompare(b.name));
@@ -62,11 +64,11 @@ export default function Leavers() {
 
   return (
     <section className="section">
-      <OffTabs cur="leavers" />
-      <SectionHead eyebrow="Offboarding" title="Leaving and" accent="left." sub="Everyone leaving or gone, and whether they still have Claude. Remove it here, or offboard them fully from the first tab."
-        actions={<div className="row" style={{ gap: 8 }}>
-          <button type="button" className="btn glass sm" disabled={refreshing} onClick={refresh}>{refreshing ? "Checking…" : "Refresh Claude status"}</button>
-          {onClaude.length > 1 && <button type="button" className="btn danger sm" disabled={!!busy} onClick={() => setAsk(onClaude)}>Remove Claude for all ({onClaude.length})</button>}</div>} />
+      <SectionHead title="Offboarding" sub="Everyone leaving or gone, and whether they still have Claude. Remove Claude here, or offboard someone to remove all their access."
+        actions={<>
+          <button type="button" className="btn glass" disabled={refreshing} onClick={refresh}>{refreshing ? "Checking…" : "Refresh Claude status"}</button>
+          {mayTools && onClaude.length > 1 && <button type="button" className="btn danger" disabled={!!busy} onClick={() => setAsk(onClaude)}>Remove Claude for all ({onClaude.length})</button>}
+          <Link className="btn primary" to="/app/offboarding">Offboard someone</Link></>} />
       <div className="card"><div className="tbl-wrap"><table>
         <thead><tr><th>Employee</th><th>Status</th><th>Claude access</th><th aria-label="Actions" /></tr></thead>
         <tbody>
@@ -78,7 +80,7 @@ export default function Leavers() {
                 <td><StatusPill person={p} /></td>
                 <td><Pill tone={tone}>{label}</Pill></td>
                 <td style={{ textAlign: "right", whiteSpace: "nowrap" }}>
-                  {live(p) && <button type="button" className="btn danger sm" disabled={!!busy} onClick={() => setAsk([p])} style={{ marginRight: 8 }}>Remove access</button>}
+                  {mayTools && live(p) && <button type="button" className="btn danger sm" disabled={!!busy} onClick={() => setAsk([p])} style={{ marginRight: 8 }}>Remove access</button>}
                   <Link className="btn glass sm" to={`/app/employees/${encodeURIComponent(p.email)}`}>Open profile</Link></td>
               </tr>);
           }) : <tr><td colSpan="4"><div className="empty">No one is leaving right now.</div></td></tr>}

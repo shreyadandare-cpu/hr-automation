@@ -1,7 +1,7 @@
 import express from "express";
 import L from "../../frontend/leave-rules.cjs";
 import { pool } from "./db.js";
-import { requireHr } from "./auth.js";
+import { can, mayDecide, need, needAll } from "./access.js";
 import { payWindow } from "./payroll-calc.js";
 
 /*
@@ -165,7 +165,15 @@ const audit = (db, action, email) => db.query("INSERT INTO audit_log (action, wo
 
 export function clearanceRouter(wrap) {
   const r = express.Router();
-  r.use(["/api/offboarding/clearance", "/api/offboarding/:id/clearance", "/api/advances"], requireHr);
+  // Clearance: offboarding.manage for the whole company. Advances: advances.approve (the whole company or a team); each handler
+  // checks the person, and nobody records, recovers or removes an advance of their own.
+  r.use(["/api/offboarding/clearance", "/api/offboarding/:id/clearance"], needAll("offboarding.manage"));
+  r.use("/api/advances", need("advances.approve"));
+  const NO_ACCESS = { error: "You do not have access to this." };
+  const OWN = { error: "Someone else has to record advances of your own." };
+  /** null when the caller may change this person's advances, else the error to send. */
+  const cannotChange = async (req, email) => (String(email).toLowerCase() === req.user.email.toLowerCase() ? OWN
+    : (await mayDecide(req, "advances.approve", email)) ? null : NO_ACCESS);
 
   const offboarding = async (req) => (await pool.query("SELECT * FROM offboardings WHERE id=$1", [Number(req.params.id) || 0])).rows[0];
   const employee = async (email) => (await pool.query("SELECT work_email, name FROM employees WHERE lower(work_email)=$1", [String(email || "").toLowerCase()])).rows[0];
@@ -198,10 +206,11 @@ export function clearanceRouter(wrap) {
     res.json(rows.map(toRecord));
   }));
 
-  /* Advances: HR records money given ahead of time and what has been recovered. */
+  /* Advances: advances.approve holders record money given ahead of time and what has been recovered. */
   r.get("/api/advances", wrap(async (req, res) => {
     const emp = await employee(req.query.email);
     if (!emp) return res.status(404).json({ error: "Employee not found." });
+    if (!(await can(req, "advances.approve", emp.work_email))) return res.status(403).json(NO_ACCESS);
     res.json(await advancesOf(pool, emp.work_email));
   }));
   r.post("/api/advances", wrap(async (req, res) => {
@@ -218,6 +227,8 @@ export function clearanceRouter(wrap) {
     if (!Number.isFinite(amount) || amount <= 0) errors.amount = "Enter an amount above zero.";
     else if (amount > 10000000 || money(amount) !== amount) errors.amount = "Enter a valid amount in rupees (up to 2 decimals).";
     if (Object.keys(errors).length) return res.status(400).json({ errors });
+    const no = await cannotChange(req, emp.work_email);
+    if (no) return res.status(403).json(no);
     await pool.query("INSERT INTO employee_advances (work_email, advance_date, reason, amount, created_by) VALUES ($1,$2,$3,$4,$5)",
       [emp.work_email, day, reason, amount, req.user.email]);
     await audit(pool, `Advance recorded: ${inr(amount)} on ${day} (${reason}) by ${req.user.email}`, emp.work_email);
@@ -230,6 +241,8 @@ export function clearanceRouter(wrap) {
       await client.query("BEGIN");
       const { rows } = await client.query("SELECT * FROM employee_advances WHERE id=$1 FOR UPDATE", [Number(req.params.id) || 0]);
       if (!rows[0]) { await client.query("ROLLBACK"); return res.status(404).json({ error: "Advance not found." }); }
+      const no = await cannotChange(req, rows[0].work_email);
+      if (no) { await client.query("ROLLBACK"); return res.status(403).json(no); }
       const a = (await advancesOf(client, rows[0].work_email)).find((x) => x.id === rows[0].id);
       const amount = Number(b.amount), day = isoDate(b.date);
       if (!Number.isFinite(amount) || amount <= 0 || money(amount) !== amount) errors.amount = "Enter an amount above zero (up to 2 decimals).";
@@ -248,6 +261,8 @@ export function clearanceRouter(wrap) {
   r.delete("/api/advances/:id", wrap(async (req, res) => {
     const { rows } = await pool.query("SELECT * FROM employee_advances WHERE id=$1", [Number(req.params.id) || 0]);
     if (!rows[0]) return res.status(404).json({ error: "Advance not found." });
+    const no = await cannotChange(req, rows[0].work_email);
+    if (no) return res.status(403).json(no);
     const { rowCount } = await pool.query("SELECT 1 FROM advance_recoveries WHERE advance_id=$1", [rows[0].id]);
     if (rowCount) return res.status(409).json({ error: "Part of this advance has been recovered, so it can't be removed." });
     await pool.query("DELETE FROM employee_advances WHERE id=$1", [rows[0].id]);

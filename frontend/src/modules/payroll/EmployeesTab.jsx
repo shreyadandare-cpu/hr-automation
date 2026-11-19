@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { api, apiMsg } from "../../api.js";
+import { useAuth } from "../../auth.jsx";
 import Modal, { Field } from "../../components/Modal.jsx";
-import { Callout, Person, Pill } from "../../components/ui.jsx";
+import { Callout, Person, Pill, CardSkeleton } from "../../components/ui.jsx";
 import { useToast } from "../../components/toast.jsx";
 import SalaryModal from "./SalaryModal.jsx";
 import ImportModal from "./ImportModal.jsx";
@@ -105,6 +106,8 @@ function TaxModal({ email, name, onClose }) {
 
 /* Everyone on this month's payroll and whether their salary, bank account and tax details are ready. */
 export default function EmployeesTab() {
+  const { canAll } = useAuth();
+  const bankAccess = canAll("payroll.bank");   // salary bank accounts are their own permission
   const [data, setData] = useState(null);
   const [q, setQ] = useState(""), [only, setOnly] = useState("");
   const [dlg, setDlg] = useState(null);
@@ -140,7 +143,7 @@ export default function EmployeesTab() {
             <td>{e.regime === "old" ? "Old regime" : "New regime"}<div className="muted">{e.salary && e.salary.tdsMode === "manual" ? "Fixed TDS" : e.declared ? "Declared" : "No declaration"}</div></td>
             <td className="num"><div className="row" style={{ gap: 6, justifyContent: "flex-end", flexWrap: "nowrap" }}>
               <button type="button" className="btn glass sm" onClick={() => setDlg({ kind: "salary", email: e.email })}>Salary</button>
-              <button type="button" className="btn glass sm" onClick={() => setDlg({ kind: "bank", email: e.email })}>Bank</button>
+              {bankAccess && <button type="button" className="btn glass sm" onClick={() => setDlg({ kind: "bank", email: e.email })}>Bank</button>}
               <button type="button" className="btn glass sm" onClick={() => setDlg({ kind: "tax", email: e.email, name: e.name })}>Tax</button></div></td>
           </tr>)) : <tr><td colSpan={7}><div className="empty">Nobody matches.</div></td></tr>}
       </tbody></table></div>
@@ -148,6 +151,35 @@ export default function EmployeesTab() {
       {dlg && dlg.kind === "bank" && <BankModal email={dlg.email} onClose={close} />}
       {dlg && dlg.kind === "tax" && <TaxModal email={dlg.email} name={dlg.name} onClose={close} />}
       {dlg && dlg.kind === "import" && <ImportModal onClose={close} />}
+    </div>
+  );
+}
+
+/* "Bank details" without preparing payroll: everyone's salary bank account, with no salary figures. */
+export function BankPeopleTab() {
+  const [data, setData] = useState(null), [err, setErr] = useState(""), [q, setQ] = useState(""), [dlg, setDlg] = useState(null);
+  const load = useCallback(async () => {
+    const r = await api("GET", "/api/payroll/bank-people");
+    if (r.ok) { setData(r.data); setErr(""); } else setErr(apiMsg(r));
+  }, []);
+  useEffect(() => { load(); }, [load]);
+  if (err) return <div className="card"><div className="card-b"><Callout>{err}</Callout></div></div>;
+  if (!data) return <CardSkeleton lines={4} />;
+  const s = q.trim().toLowerCase(), list = data.employees.filter((e) => !s || `${e.name} ${e.no} ${e.title} ${e.email}`.toLowerCase().includes(s));
+  const missing = data.employees.filter((e) => !e.bank).length;
+  return (
+    <div className="card">
+      <div className="card-h"><h3>Bank accounts</h3><input className="input" style={{ maxWidth: 280 }} type="search" placeholder="Search people…" aria-label="Search people" value={q} onChange={(e) => setQ(e.target.value)} /></div>
+      {missing > 0 && <div className="card-b" style={{ paddingTop: 0 }}><Callout>{missing} without a salary bank account (they can&rsquo;t be in the bank file).</Callout></div>}
+      <div className="tbl-wrap"><table className="pr-table"><thead><tr><th>Employee</th><th>Bank account</th><th /></tr></thead><tbody>
+        {list.map((e) => (
+          <tr key={e.email}>
+            <td><Person name={e.name} sub={[e.no, e.title].filter(Boolean).join(" · ")} /></td>
+            <td>{e.bank ? <span>{e.bank.bankName || "Bank"} ····{e.bank.last4}</span> : <Pill tone="warn">Missing</Pill>}</td>
+            <td><button type="button" className="btn glass sm" onClick={() => setDlg(e.email)}>Bank</button></td>
+          </tr>))}
+      </tbody></table></div>
+      {dlg && <BankModal email={dlg} onClose={(saved) => { setDlg(null); if (saved) load(); }} />}
     </div>
   );
 }

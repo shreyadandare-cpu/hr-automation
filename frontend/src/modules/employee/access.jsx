@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { api, apiMsg } from "../../api.js";
+import { useAuth } from "../../auth.jsx";
+import { LineSkeleton } from "../../components/ui.jsx";
 import { useToast } from "../../components/toast.jsx";
 
 /* What each app role can do. HR is "all rights": everything in the app. */
@@ -9,7 +11,7 @@ export const ACCESS_HELP = {
   manager: "Like an employee, and also approves leave for the people who report to them.",
   hr: "Full rights: can see and change everything, including onboarding, offboarding, leave, the audit log and everyone's logins.",
 };
-export const accessOptions = () => ["employee", "hr"].map((r) => <option key={r} value={r}>{ACCESS_LABEL[r]}</option>);
+export const accessOptions = (roles = ["employee", "hr"]) => roles.map((r) => <option key={r} value={r}>{ACCESS_LABEL[r]}</option>);
 /* Handing out HR rights is a big step, so it always asks first. */
 export const hrConfirm = (name) => confirm(`Give ${name} full HR rights?\n\nHR can see and change everything in the app: onboarding, offboarding, leave, the audit log and everyone's logins. Only do this for someone who works in HR.`);
 export const maskMail = (v) => { const [a, b] = String(v || "").split("@"); return b ? a.slice(0, 2) + "•••@" + b : ""; };
@@ -37,13 +39,16 @@ export function InviteBox({ note, copyId }) {
   );
 }
 
-/* On a person's page, HR can give them a login and email them a one-time link that opens the app. */
+/* On a person's page, whoever manages logins (users.manage) can give them a login and email them a one-time link that opens
+   the app. Only a super admin gives or takes away the HR role, so only they see the access level as a choice. */
 export function AppLoginCard({ person, personalEmail }) {
   const toast = useToast();
+  const { superAdmin } = useAuth();
+  const roles = superAdmin ? ["employee", "hr"] : ["employee"];
   const [d, setD] = useState(null);   // the users list; { failed: true } when it can't be read
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState(null);
-  const [newRole, setNewRole] = useState((person.dept || "") === "HR" ? "hr" : "employee");
+  const [newRole, setNewRole] = useState((person.dept || "") === "HR" && superAdmin ? "hr" : "employee");
   const [draftRole, setDraftRole] = useState(null);   // an access level picked but not saved yet
   const [savingRole, setSavingRole] = useState(false);
   const lc = (s) => String(s || "").toLowerCase();
@@ -56,7 +61,7 @@ export function AppLoginCard({ person, personalEmail }) {
     <div className="card"><div className="card-h"><h3>App login</h3><span className="muted">Who can sign in to this app</span></div>
       <div className="card-b" style={{ display: "flex", flexDirection: "column", gap: 14 }}>{body}</div></div>
   );
-  if (!d) return wrap(<span className="muted">Loading…</span>);
+  if (!d) return wrap(<LineSkeleton />);
   if (d.failed) return null;   // no server, so no logins to manage
 
   const u = d.users.find((x) => lc(x.email) === lc(person.email));
@@ -101,8 +106,8 @@ export function AppLoginCard({ person, personalEmail }) {
       <div><dt>Signs in with</dt><dd><span className="mono">{u.email}</span></dd></div>
       <div><dt>Last signed in</dt><dd>{u.lastLogin ? new Date(u.lastLogin).toLocaleString() : "Never"}</dd></div>
       <div style={{ gridColumn: "1/-1" }}><dt>App access</dt><dd>
-        <select className="input" value={draftRole ?? u.role} onChange={(ev) => setDraftRole(ev.target.value)} disabled={savingRole} style={{ maxWidth: 260 }} aria-label={`App access for ${person.name}`}>{accessOptions()}</select>
-        <div className="muted" style={{ marginTop: 6, fontSize: 12.5 }}>{ACCESS_HELP[draftRole ?? u.role] || ""}</div>
+        <select className="input" value={draftRole ?? u.role} onChange={(ev) => setDraftRole(ev.target.value)} disabled={savingRole || !superAdmin} style={{ maxWidth: 260 }} aria-label={`App access for ${person.name}`}>{accessOptions()}</select>
+        <div className="muted" style={{ marginTop: 6, fontSize: 12.5 }}>{ACCESS_HELP[draftRole ?? u.role] || ""}{superAdmin ? "" : " Only a super admin can change this."}</div>
         {draftRole && draftRole !== u.role && (
           <div className="row" style={{ marginTop: 12 }}>
             <button type="button" className="btn primary sm" disabled={savingRole} onClick={saveRole}>{savingRole ? "Saving…" : "Save"}</button>
@@ -116,7 +121,7 @@ export function AppLoginCard({ person, personalEmail }) {
   </> : <>
     <p style={{ margin: 0, color: "var(--ink-dim)" }}>{person.name} has no login yet. {where}</p>
     <div className="field"><label htmlFor="app-role-new">App access level</label>
-      <select className="input" id="app-role-new" style={{ maxWidth: 320 }} value={newRole} onChange={(ev) => setNewRole(ev.target.value)}>{accessOptions()}</select>
+      <select className="input" id="app-role-new" style={{ maxWidth: 320 }} value={newRole} onChange={(ev) => setNewRole(ev.target.value)}>{accessOptions(roles)}</select>
       <span className="hint">{ACCESS_HELP[newRole]}{dept === "hr" && newRole === "hr" ? " This person is in HR, so HR rights are preselected." : ""}</span></div>
     <div className="row"><button type="button" className="btn primary sm" disabled={busy} onClick={() => invite(true, true)}>{busy ? "Working…" : "Create login and send invite"}</button>
       <button type="button" className="btn glass sm" disabled={busy} onClick={() => invite(true, false)}>Create login only</button></div>{hint}{noteEl}

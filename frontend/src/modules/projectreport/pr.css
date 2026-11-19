@@ -1,0 +1,17 @@
+.pr-bar { gap: 12px; align-items: center; flex-wrap: wrap; margin: 16px 0; }
+.pr-week { display: flex; align-items: center; gap: 12px; }
+.pr-acts { margin-left: auto; display: flex; gap: 8px; }
+.pr-doc { display: grid; gap: 14px; }
+.pr-top { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; padding: 14px 18px; }
+.pr-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 14px; }
+.pr-sec { padding: 16px 18px; }
+.pr-sec h3 { margin: 0 0 8px; font-size: 13px; letter-spacing: .06em; text-transform: uppercase; opacity: .75; }
+.pr-sec ul { margin: 0; padding-left: 18px; display: grid; gap: 6px; }
+.pr-by { font-size: 12px; opacity: .6; }
+.pr-person { margin-top: 10px; }
+.pr-person p { margin: 4px 0 0; }
+@media print {
+  .pr-bar, header, nav, footer, .back, .logo, .scrim { display: none !important; }
+  body, .app, main { background: #fff !important; }
+  .pr-doc .card { box-shadow: none !important; border: 1px solid #ccc !important; background: #fff !important; color: #000 !important; break-inside: avoid; }
+}

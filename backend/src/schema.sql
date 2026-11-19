@@ -777,3 +777,58 @@ INSERT INTO festival_dates (slug, day) VALUES
   ('navratri', '2026-10-20'), ('navratri', '2027-10-09'),
   ('christmas', '2026-12-25'), ('christmas', '2027-12-25')
 ON CONFLICT DO NOTHING;
+
+-- Gmail Intelligence Engine: project emails read from authorised work mailboxes, sorted and summarised by AI.
+-- Only what the AI extracted is kept (no full email bodies). Off until GMAIL_INTEL_ENABLED=true and a service account is set.
+CREATE TABLE IF NOT EXISTS gmail_mailboxes (
+  id SERIAL PRIMARY KEY,
+  work_email TEXT NOT NULL UNIQUE,
+  enabled BOOLEAN NOT NULL DEFAULT TRUE,
+  history_id TEXT,              -- Gmail's cursor: where the last sync stopped
+  watch_expires_at TIMESTAMPTZ, -- Gmail change notifications must be renewed before this
+  last_synced_at TIMESTAMPTZ,
+  last_error TEXT
+);
+CREATE TABLE IF NOT EXISTS gmail_messages (
+  gmail_message_id TEXT PRIMARY KEY,   -- one row per message however many mailboxes hold a copy
+  thread_id TEXT NOT NULL,
+  mailbox TEXT NOT NULL,
+  sent_at TIMESTAMPTZ,
+  stage TEXT NOT NULL,                 -- filtered | classified | extracted | review | failed
+  relevance TEXT,                      -- relevant | partial | irrelevant
+  reason TEXT,
+  processed_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS gmail_messages_thread ON gmail_messages (thread_id);
+CREATE TABLE IF NOT EXISTS gmail_extractions (
+  id SERIAL PRIMARY KEY,
+  gmail_message_id TEXT NOT NULL REFERENCES gmail_messages(gmail_message_id) ON DELETE CASCADE,
+  thread_id TEXT NOT NULL,
+  project_id INTEGER REFERENCES projects(id) ON DELETE SET NULL,
+  project_name TEXT,
+  employee_name TEXT,
+  subject TEXT,
+  email_date TIMESTAMPTZ,
+  summary TEXT,
+  completed JSONB NOT NULL DEFAULT '[]',
+  pending JSONB NOT NULL DEFAULT '[]',
+  blockers JSONB NOT NULL DEFAULT '[]',
+  decisions JSONB NOT NULL DEFAULT '[]',
+  deadlines JSONB NOT NULL DEFAULT '[]',
+  next_steps JSONB NOT NULL DEFAULT '[]',
+  relevance TEXT NOT NULL,
+  confidence NUMERIC(3,2) NOT NULL,
+  needs_review BOOLEAN NOT NULL DEFAULT FALSE,
+  reviewed_by TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS gmail_extractions_project ON gmail_extractions (project_id, email_date);
+CREATE TABLE IF NOT EXISTS gmail_ai_usage (
+  id SERIAL PRIMARY KEY,
+  day DATE NOT NULL DEFAULT current_date,
+  model TEXT NOT NULL,
+  purpose TEXT NOT NULL,               -- classify | extract
+  input_tokens INTEGER NOT NULL DEFAULT 0,
+  output_tokens INTEGER NOT NULL DEFAULT 0,
+  cost_usd NUMERIC(10,5) NOT NULL DEFAULT 0
+);

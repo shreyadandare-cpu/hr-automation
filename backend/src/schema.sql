@@ -71,25 +71,13 @@ CREATE TABLE IF NOT EXISTS settings (
   value TEXT NOT NULL
 );
 
-CREATE TABLE IF NOT EXISTS users (
-  email         TEXT PRIMARY KEY,
-  password_hash TEXT NOT NULL,
-  role          TEXT NOT NULL CHECK (role IN ('hr','employee')),
-  created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
-  last_login    TIMESTAMPTZ
+-- Attempt counters for sign-in lockout and rate limits (limits.js). In the database, not in memory, so they survive a
+-- restart and every server instance shares them. Old rows are removed as they expire.
+CREATE TABLE IF NOT EXISTS rate_limits (
+  key        TEXT NOT NULL,
+  hit_at     TIMESTAMPTZ NOT NULL DEFAULT now()
 );
-
-CREATE TABLE IF NOT EXISTS sessions (
-  token_hash TEXT PRIMARY KEY,
-  email      TEXT NOT NULL,
-  expires_at TIMESTAMPTZ NOT NULL
-);
-CREATE INDEX IF NOT EXISTS sessions_email_idx ON sessions (email);
-
-CREATE TABLE IF NOT EXISTS settings (
-  key   TEXT PRIMARY KEY,
-  value TEXT NOT NULL
-);
+CREATE INDEX IF NOT EXISTS rate_limits_key_idx ON rate_limits (key, hit_at);
 
 -- Leave management. Rules (quotas, carry-over, salary cut) live in frontend/leave-rules.cjs.
 ALTER TABLE employees ADD COLUMN IF NOT EXISTS monthly_gross  NUMERIC(12,2);

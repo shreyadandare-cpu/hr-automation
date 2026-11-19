@@ -1,4 +1,4 @@
-// Reads the office attendance device and sends new punches to the HR Access Hub. It only READS the device: it never clears or changes it.
+// Reads the office attendance device and sends new punches to Wohlig One. It only READS the device: it never clears or changes it.
 //   npm start                      keep running, read every INTERVAL_SECONDS
 //   npm run once                   read once and stop
 //   npm run test-device            connect to the device and show what it holds; sends nothing

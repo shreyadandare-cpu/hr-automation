@@ -1,7 +1,7 @@
 # Attendance connector
 
 A small program that runs **inside the office network**. It reads the eSSL / ZKTeco attendance device and sends new
-punches to the HR Access Hub. It only reads the device; it never clears or changes it. The device's address is private
+punches to Wohlig One. It only reads the device; it never clears or changes it. The device's address is private
 (`192.168.1.12`), so the website itself can't reach it, and that is why this program is needed.
 
 ## Set up (on an office computer that stays on, on the same network as the device)
@@ -23,7 +23,7 @@ The computer that runs Keka's *Biometric Device Manager* is already on the offic
 3. Double-click **`run.bat`** with `--test` first: open a Command Prompt in the folder and run `run.bat --test`. It should say how many punches the device holds.
 4. Double-click **`run.bat`** to start the connector. Double-click **`start-with-windows.bat`** once, so it starts by itself after a restart.
 5. **Keka and this program both talk to the same device.** These devices usually accept one connection at a time. This program connects for a few seconds every 5 minutes and then lets go, so it normally shares the device fine. If Keka's manager shows "Not Connected" or this program says it cannot connect, pause Keka's sync while you run the first import, then start both.
-6. Do not stop Keka's sync: it keeps feeding Keka, and this program feeds the HR Access Hub.
+6. Do not stop Keka's sync: it keeps feeding Keka, and this program feeds Wohlig One.
 
 ## In the app (HR)
 Open **Attendance** and find the **Office device** card. Each person has a user ID on the device; link each ID to a person

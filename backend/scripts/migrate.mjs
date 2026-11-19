@@ -1,4 +1,4 @@
-// Creates every table of the HR Access Hub in the database named by DATABASE_URL, inside the schema named by DB_SCHEMA.
+// Creates every table of Wohlig One in the database named by DATABASE_URL, inside the schema named by DB_SCHEMA.
 //   npm run migrate              create what is missing (safe to run again: existing tables and data are left alone)
 //   npm run migrate -- --dry-run run it all, show what would be created, then undo it
 //   npm run migrate:sql          write migrations/hrhub-schema.sql, the same migration as plain SQL for any SQL console
@@ -14,7 +14,7 @@ const wanted = [...new Set([...sqlText.matchAll(/CREATE TABLE IF NOT EXISTS (\w+
 if (args.has("--write-sql")) {
   const schema = SCHEMA || "public";
   const out = new URL("../migrations/hrhub-schema.sql", import.meta.url);
-  fs.writeFileSync(out, `-- HR Access Hub: all tables, safe to run more than once (it only creates what is missing).
+  fs.writeFileSync(out, `-- Wohlig One: all tables, safe to run more than once (it only creates what is missing).
 -- Generated from src/schema.sql by \`npm run migrate:sql\`. Run it as a user that may create tables, for example:
 --   psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f migrations/hrhub-schema.sql
 -- The tables go into the schema "${schema}", so they never mix with another app's tables in the same database.

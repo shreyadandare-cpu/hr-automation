@@ -9,7 +9,6 @@ import { SectionHead } from "../../components/ui.jsx";
 import { useToast } from "../../components/toast.jsx";
 import PhotoEditor from "../../components/PhotoEditor.jsx";
 import { FESTIVALS, THEMES, loadImage, renderGreeting, templateName, toBlob } from "./designs.js";
-import "./festivals.css";
 
 const MAX_PHOTO = 5 * 1024 * 1024, MAX_TO = 10;
 const dateText = (iso) => { const [y, m, d] = String(iso).split("-").map(Number); return new Date(Date.UTC(y, m - 1, d)).toLocaleDateString("en-IN", { day: "numeric", month: "long", year: "numeric", timeZone: "UTC" }); };

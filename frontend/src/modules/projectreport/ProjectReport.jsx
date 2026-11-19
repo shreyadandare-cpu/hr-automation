@@ -4,7 +4,6 @@ import { Callout, SectionHead } from "../../components/ui.jsx";
 import Modal, { Field } from "../../components/Modal.jsx";
 import { useAuth } from "../../auth.jsx";
 import { useToast } from "../../components/toast.jsx";
-import "./pr.css";
 
 /* The weekly report for one project, Monday to Sunday, built on the server from the project emails. HR sees every project;
    everyone else sees the projects they are on. */

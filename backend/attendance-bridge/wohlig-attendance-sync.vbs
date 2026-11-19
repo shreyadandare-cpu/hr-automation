@@ -1,5 +1,5 @@
 ' Wohlig Attendance Sync: starts everything the admin computer needs and opens it as its own window.
-'   1. the connector (reads the office device, sends punches to the HR Access Hub), hidden, if it is not already running
+'   1. the connector (reads the office device, sends punches to Wohlig One), hidden, if it is not already running
 '   2. the log viewer (Devices, Punches, Resync logs, Event viewer), hidden, if it is not already running
 '   3. the viewer in an app window (no address bar or tabs)
 ' Double-click it, or use the desktop icon made by install-desktop-icon.bat. Nothing here opens a black window.

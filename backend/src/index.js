@@ -1,87 +1,49 @@
 import "dotenv/config";
-import fs from "node:fs";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
 import express from "express";
 import { pool, payPool, PAY_SCHEMA, initDb } from "./db.js";
-import { digitalKitRouter, ensureKit, initDigitalKits, removeDuplicateStarters, seedDigitalKit, seedOfficialFiles, repairOfficialFiles, seedDesignationTexts, seedOfficialTexts, updateOfficialLabels } from "./digital-kit.js";
+import { digitalKitRouter, initDigitalKits, removeDuplicateStarters, seedDigitalKit, seedOfficialFiles, repairOfficialFiles, seedDesignationTexts, seedOfficialTexts, updateOfficialLabels } from "./digital-kit.js";
 import { documentsRouter } from "./documents.js";
-import { bootstrapAuth, loadSession, requireAuth, requireHr, createGoogleUser as createLogin } from "./auth.js";
+import { bootstrapAuth, loadSession, requireAuth, requireHr } from "./auth.js";
 import { sessionRouter, accountRouter, usersRouter } from "./users.js";
 import { profileRouter } from "./profile.js";
-import { googleRouter } from "./google-signin.js";
-import { inviteRouter, expireInvites, createInvite, INVITE_MINUTES } from "./invites.js";
 import { leaveRouter } from "./leave.js";
 import { postsRouter } from "./posts.js";
-import { celebrationsRouter, posterPictureRouter, runCelebrationAlerts } from "./celebrations.js";
+import { celebrationsRouter } from "./celebrations.js";
 import { festivalsRouter } from "./festivals.js";
-import { leaveDigestRouter, runLeaveDigest } from "./leave-digest.js";
+import { leaveDigestRouter } from "./leave-digest.js";
 import { attendanceRouter } from "./attendance.js";
 import { assetsRouter } from "./assets.js";
-import { deviceRouter, linkDeviceUserByEmployeeNo } from "./device.js";
-import { startPortalAttendanceSync } from "./portal-attendance.js";
-import { gmailIntelRouter, projectReportRouter, startGmailIntel } from "./gmail-intel-routes.js";
+import { deviceRouter } from "./device.js";
+import { gmailIntelRouter, projectReportRouter } from "./gmail-intel-routes.js";
 import { payslipsRouter } from "./payslips.js";
-import { claudeMode, grantClaude, removeClaude, recordAccess, syncClaude, syncClaudeSoon } from "./anthropic.js";
-import { claudeRequestsRouter, confirmOwnClaude, requestClaude, runClaudeReminders } from "./claude-requests.js";
-import { offboardingRouter, runDue } from "./offboarding.js";
+import { claudeRequestsRouter } from "./claude-requests.js";
+import { offboardingRouter } from "./offboarding.js";
 import { clearanceRouter } from "./clearance.js";
-import { onboardingErrors, detailsErrors, maskAadhaar, maskPan, maskAcct } from "./validate.js";
-import { createGoogleUser, generatePassword, googleMode, assignLicense } from "./google.js";
-import { mailPlanOf } from "./mail-plan.js";
-import { employeeNoOwner, nextEmployeeNoFrom } from "./employee-no.js";
-import { mailConfigured, sendWorkAccountEmail } from "./mail.js";
-import { reimbursementsRouter, runReimbursementReminders } from "./reimbursements.js";
-import { budgetsRouter, runBudgetReminders } from "./budgets.js";
+import { reimbursementsRouter } from "./reimbursements.js";
+import { budgetsRouter } from "./budgets.js";
 import { payrollRouter } from "./payroll.js";
-import { payslipAutoRouter, runPayslips } from "./payslip-auto.js";
+import { payslipAutoRouter } from "./payslip-auto.js";
 import { payrollWorkflowRouter, initPayroll } from "./payroll/routes.js";
 import { requirePayrollAccess, hrOnly } from "./payroll/access.js";
-import { emailLinkRouter } from "./email-links.js";
 import { notificationsRouter, emailMode } from "./notify.js";
+import { securityHeaders, sameOriginWrites } from "./security.js";
+import { onboardingRouter } from "./onboarding-routes.js";
+import { peopleRouter } from "./people.js";
+import { projectsRouter } from "./projects.js";
+import { toolAccessRouter } from "./tool-access.js";
+import { pagesRouter } from "./pages.js";
+import { startBackgroundJobs } from "./jobs.js";
 
-const DOMAIN = "wohlig.com";
-const here = path.dirname(fileURLToPath(import.meta.url));
-const frontendDir = path.resolve(here, "../../frontend");
-
-const clean = (s) =>
-  String(s || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/[^a-z0-9]/g, "");
-
-async function nextWorkEmail(client, first, last) {
-  const a = clean(first), b = clean(last);
-  if (!a || !b) return "";
-  const base = `${a}.${b}`;
-  for (let n = 1; ; n++) {
-    const email = `${base}${n > 1 ? n : ""}@${DOMAIN}`;
-    const { rowCount } = await client.query("SELECT 1 FROM employees WHERE lower(work_email)=$1", [email]);
-    if (!rowCount) return email;
-  }
-}
-
-/** Returns the name of someone else who already uses this personal email, or null. exceptWorkEmail is the person being saved. */
-async function personalEmailOwner(db, personalEmail, exceptWorkEmail) {
-  const { rows } = await db.query(
-    "SELECT name FROM employees WHERE lower(personal_email)=$1 AND lower(work_email)<>$2 LIMIT 1",
-    [String(personalEmail).trim().toLowerCase(), String(exceptWorkEmail || "").toLowerCase()]);
-  return rows[0]?.name || null;
-}
-const dupEmailError = (email, owner) => ({ pemail: `${email} already belongs to ${owner}. Use a different personal email.` });
-
-const toApi = (r) => ({
-  email: r.work_email, name: r.name, personalEmail: r.personal_email, phone: r.phone, address: r.address,
-  dept: r.dept, title: r.title, manager: r.manager,
-  start: r.start_date, status: r.status,
-  ids: { dob: r.dob || "", aadhaar: r.aadhaar_masked || "", pan: r.pan_masked || "",
-         acct: r.acct_masked || "", ifsc: r.ifsc || "" },
-  apps: r.apps,
-  googleStatus: r.google_status, googleError: r.google_error, hasLogin: !!r.has_login,
-});
-
-const RECORD_SQL = `SELECT e.*, EXISTS (SELECT 1 FROM users u WHERE lower(u.email)=lower(e.work_email)) AS has_login FROM employees e`;
-const loadRecord = async (email) =>
-  (await pool.query(`${RECORD_SQL} WHERE lower(e.work_email)=$1`, [email.toLowerCase()])).rows[0];
-
+// This file only wires the server together: middleware, every router in order, start-up and the background jobs.
+// The routes live in their own files (see ARCHITECTURE.md, section 6). Order matters: accountRouter makes every later /api
+// route require sign-in, and the JSON parser comes after the two routers that read raw uploads.
 const app = express();
+// Behind nginx (Docker) or Cloud Run, req.ip is the caller's address, not the proxy's, so per-address limits work.
+// TRUST_PROXY sets how many proxies to trust (default 1: the one in front of this server). Use 0 when nothing is in front.
+app.set("trust proxy", Number(process.env.TRUST_PROXY ?? 1));
+app.disable("x-powered-by");
+app.use(securityHeaders);
+app.use(sameOriginWrites);   // a form on another website cannot change anything here
 app.use(loadSession);
 app.use("/api/documents", requireAuth, documentsRouter); // raw file bodies, so it goes before the JSON parser
 app.use("/api/digital-kit", requireAuth, digitalKitRouter); // employees: only their own kit; HR: the /admin part (it reads raw uploads itself, so it also goes before the JSON parser)
@@ -93,512 +55,20 @@ app.use("/api", accountRouter);
 app.use("/api/users", usersRouter);
 app.use("/api/profile", profileRouter);
 app.use(projectReportRouter());   // weekly project reports built from the collected emails: HR sees all projects, others only their own
-// Onboarding is HR work; employees only reach their own account and documents.
-app.use(["/api/onboarding", "/api/work-email"], requireHr);
-const draftId = (req) => req.user.email.toLowerCase(); // each HR user has their own draft
 const wrap = (fn) => (req, res) => fn(req, res).catch((err) => {
   console.error(err);
   res.status(500).json({ error: "Server error" });
 });
-
-// People onboarded through this API, including ones whose work email exists but who are not submitted yet.
-// The page merges them into its employee list so HR can pick up where they left off.
-app.get("/api/onboarding", wrap(async (_req, res) => {
-  const { rows } = await pool.query(
-    `${RECORD_SQL} WHERE e.onboarded_at IS NOT NULL OR e.google_status IS NOT NULL ORDER BY e.created_at`);
-  res.json(rows.map(toApi));
-}));
-
-// Everyone signed in can see who is at the company. Only non-personal fields are sent, so this is safe for employees.
-app.get("/api/directory", wrap(async (_req, res) => {
-  const { rows } = await pool.query(
-    `SELECT work_email, name, dept, title, manager, start_date, status, apps FROM employees
-     WHERE onboarded_at IS NOT NULL OR google_status IS NOT NULL ORDER BY created_at`);
-  res.json(rows.map((r) => ({ email: r.work_email, name: r.name, dept: r.dept, title: r.title, manager: r.manager,
-    start: r.start_date, status: r.status, apps: r.apps })));
-}));
-
-// The company roster, for everyone signed in. Only non-personal fields are sent, so this is safe for employees too.
-app.get("/api/roster", wrap(async (_req, res) => {
-  const { rows } = await pool.query(
-    `SELECT e.id, e.emp_no, e.name, e.work_email, e.title, e.sub_title, e.work_location, e.manager, e.start_date, e.last_day, e.status, e.onboarding_closed_at, e.employment_type,
-       (SELECT COALESCE(json_agg(json_build_object('project', p.name, 'lead', a.project_lead, 'location', a.location,
-                                                   'status', a.status, 'start', a.start_date, 'end', a.end_date)
-                                 ORDER BY (a.status = 'Active') DESC, p.name), '[]'::json)
-        FROM employee_project_allocations a JOIN projects p ON p.id = a.project_id WHERE a.employee_id = e.id) AS projects,
-       (SELECT extract(epoch FROM ph.updated_at)::bigint FROM profile_photos ph WHERE lower(ph.email) = lower(e.work_email)) AS photo_v
-     FROM employees e ORDER BY e.id`);
-  res.json(rows.map((r) => ({ id: r.id, no: r.emp_no, name: r.name, email: r.work_email, title: r.title, subTitle: r.sub_title,
-    location: r.work_location, manager: r.manager, start: r.start_date, lastDay: r.last_day, status: r.status, onboarded: !!r.onboarding_closed_at, employmentType: r.employment_type, mailPlan: mailPlanOf(r.title), projects: r.projects, photoV: r.photo_v })));
-}));
-
-// Who the signed-in person is for project work: HR, a manager (has a team) or a project lead may start projects; HR or a project's lead manages its members.
-async function projectActor(req) {
-  const me = (await pool.query("SELECT name, status FROM employees WHERE lower(work_email)=$1", [req.user.email.toLowerCase()])).rows[0];
-  const isHr = req.user.role === "hr", name = me?.name || "";
-  const lead = name ? (await pool.query("SELECT 1 FROM projects WHERE lower(project_lead)=lower($1) LIMIT 1", [name])).rowCount > 0 : false;
-  const hasTeam = name ? (await pool.query("SELECT 1 FROM employees WHERE lower(manager)=lower($1) AND status <> 'offboarded' LIMIT 1", [name])).rowCount > 0 : false;
-  return { isHr, name, canCreate: isHr || hasTeam || lead };
-}
-// A project is closed once it is marked Completed or its end date has passed. Closed projects cannot be changed by anyone.
-const isClosed = (p) => p.status === "Completed" || (!!p.end_date && String(p.end_date instanceof Date ? p.end_date.toISOString() : p.end_date).slice(0, 10) < new Date().toISOString().slice(0, 10));
-const CLOSED_MSG = "This project is closed, so it can no longer be changed.";
-// HR and the project's lead can take people off a project or hand their work over.
-const canManageProject = (actor, project) => actor.isHr || (!!actor.name && String(project.project_lead || "").toLowerCase() === actor.name.toLowerCase());
-
-// Every project (even ones nobody is on yet) and every allocation, for everyone signed in. `canManage` says whether this person may add people to a project.
-app.get("/api/allocations", wrap(async (req, res) => {
-  const actor = await projectActor(req);
-  const { rows } = await pool.query(
-    `SELECT a.id, p.id AS project_id, p.name AS project, e.name AS employee, e.work_email AS email, e.emp_no,
-            a.start_date, a.end_date, coalesce(a.project_lead, p.project_lead) AS lead, a.location, a.status,
-            a.handover_to AS handed_over_to, a.transferred_to AS moved_to, a.end_reason
-     FROM employee_project_allocations a
-     JOIN projects p ON p.id = a.project_id JOIN employees e ON e.id = a.employee_id
-     ORDER BY p.name, e.name`);
-  const projects = (await pool.query("SELECT id, name, project_lead, start_date, end_date, status, description, location FROM projects ORDER BY name")).rows;
-  res.json({
-    canCreate: actor.canCreate,
-    projects: projects.map((p) => ({ id: p.id, name: p.name, lead: p.project_lead, start: p.start_date, end: p.end_date, status: p.status,
-      description: p.description, location: p.location, closed: isClosed(p), canManage: !isClosed(p) && canManageProject(actor, p), canHandover: !isClosed(p) && canManageProject(actor, p) })),
-    rows: rows.map((r) => ({ id: r.id, projectId: r.project_id, project: r.project, employee: r.employee, email: r.email, no: r.emp_no,
-      start: r.start_date, end: r.end_date, lead: r.lead, location: r.location, status: r.status, handedOverTo: r.handed_over_to, movedTo: r.moved_to, endReason: r.end_reason })),
-  });
-}));
-
-// Start a project. HR picks the lead; a manager's own projects are led by them.
-app.post("/api/projects", requireAuth, wrap(async (req, res) => {
-  const actor = await projectActor(req);
-  if (!actor.canCreate) return res.status(403).json({ error: "Only HR and managers can add projects." });
-  const name = String(req.body?.name || "").trim();
-  if (!name || name.length > 120) return res.status(400).json({ error: "Give the project a name (up to 120 characters)." });
-  if ((await pool.query("SELECT 1 FROM projects WHERE lower(name)=lower($1)", [name])).rowCount) return res.status(409).json({ error: "A project with this name already exists." });
-  let lead = actor.name;
-  if (actor.isHr) {
-    lead = String(req.body?.lead || "").trim();
-    if (lead && !(await pool.query("SELECT 1 FROM employees WHERE lower(name)=lower($1) AND status <> 'offboarded'", [lead])).rowCount) return res.status(400).json({ error: "The project lead must be a current employee." });
-  }
-  const start = /^\d{4}-\d{2}-\d{2}$/.test(req.body?.start || "") ? req.body.start : null;
-  const description = String(req.body?.description || "").trim().slice(0, 500) || null;
-  const location = String(req.body?.location || "").trim().slice(0, 80) || null;
-  const emails = [...new Set((Array.isArray(req.body?.members) ? req.body.members : []).map((x) => String(x || "").trim().toLowerCase()).filter(Boolean))].slice(0, 200);
-  const client = await pool.connect();
-  let id, added = 0; const skipped = [];
-  try {
-    await client.query("BEGIN");
-    id = (await client.query("INSERT INTO projects (name, project_lead, start_date, description, location) VALUES ($1,$2,$3,$4,$5) RETURNING id", [name, lead || null, start, description, location])).rows[0].id;
-    // People chosen in the form are put on the project straight away, at the project's location unless they work elsewhere on record.
-    for (const email of emails) {
-      const emp = (await client.query("SELECT id, name, status, work_location FROM employees WHERE lower(work_email)=$1", [email])).rows[0];
-      if (!emp || emp.status === "offboarded") { skipped.push(emp ? emp.name : email); continue; }
-      await client.query("INSERT INTO employee_project_allocations (employee_id, project_id, start_date, project_lead, location, status) VALUES ($1,$2,$3,$4,$5,'Active')",
-        [emp.id, id, start || new Date().toISOString().slice(0, 10), lead || null, location || emp.work_location || null]);
-      added++;
-    }
-    await client.query("INSERT INTO audit_log (action, work_email) VALUES ($1,$2)", [`Project "${name}" added${lead ? `, led by ${lead}` : ""}${location ? `, at ${location}` : ""}${added ? `, ${added} ${added === 1 ? "person" : "people"} added` : ""}`, req.user.email]);
-    await client.query("COMMIT");
-  } catch (err) { await client.query("ROLLBACK"); throw err; } finally { client.release(); }
-  res.json({ id, added, skipped });
-}));
-
-// Change a project's end date (empty clears it). HR, or the project's lead. A date that has passed marks the project Completed.
-app.patch("/api/projects/:id", requireAuth, wrap(async (req, res) => {
-  const actor = await projectActor(req);
-  const project = (await pool.query("SELECT id, name, project_lead, status, end_date, to_char(start_date,'YYYY-MM-DD') AS start FROM projects WHERE id=$1", [Number(req.params.id) || 0])).rows[0];
-  if (!project) return res.status(404).json({ error: "Project not found." });
-  if (!canManageProject(actor, project)) return res.status(403).json({ error: "Only HR or the project lead can change the end date." });
-  if (isClosed(project)) return res.status(400).json({ error: CLOSED_MSG });
-  const raw = String(req.body?.end || "").trim();
-  if (raw && !/^\d{4}-\d{2}-\d{2}$/.test(raw)) return res.status(400).json({ error: "Give the end date as a valid date." });
-  if (raw && project.start && raw < project.start) return res.status(400).json({ error: "The end date cannot be before the start date." });
-  const today = new Date().toISOString().slice(0, 10);
-  const done = !!raw && raw <= today;
-  await pool.query("UPDATE projects SET end_date=$2, status=$3 WHERE id=$1", [project.id, raw || null, done ? "Completed" : "Active"]);
-  // Closing a project ends everyone's current allocation on it, so it drops off their Employees entry too.
-  if (done) await pool.query("UPDATE employee_project_allocations SET status='Ended', end_date=coalesce(end_date, $2) WHERE project_id=$1 AND status='Active'", [project.id, raw]);
-  await pool.query("INSERT INTO audit_log (action, work_email) VALUES ($1,$2)", [raw ? `Project "${project.name}" end date set to ${raw}` : `Project "${project.name}" end date cleared`, req.user.email]);
-  res.json({ ok: true });
-}));
-
-// Put someone on a project. HR, or the project's lead.
-app.post("/api/projects/:id/members", requireAuth, wrap(async (req, res) => {
-  const actor = await projectActor(req);
-  const project = (await pool.query("SELECT id, name, project_lead, status, end_date, location FROM projects WHERE id=$1", [Number(req.params.id) || 0])).rows[0];
-  if (!project) return res.status(404).json({ error: "Project not found." });
-  if (!canManageProject(actor, project)) return res.status(403).json({ error: "Only HR or the project lead can add people to this project." });
-  if (isClosed(project)) return res.status(400).json({ error: CLOSED_MSG });
-  const emp = (await pool.query("SELECT id, name, status, work_location FROM employees WHERE lower(work_email)=$1", [String(req.body?.email || "").trim().toLowerCase()])).rows[0];
-  if (!emp) return res.status(404).json({ error: "Employee not found." });
-  if (emp.status === "offboarded") return res.status(400).json({ error: `${emp.name} has left, so cannot join a project.` });
-  if ((await pool.query("SELECT 1 FROM employee_project_allocations WHERE project_id=$1 AND employee_id=$2 AND status='Active'", [project.id, emp.id])).rowCount)
-    return res.status(409).json({ error: `${emp.name} is already on ${project.name}.` });
-  const start = /^\d{4}-\d{2}-\d{2}$/.test(req.body?.start || "") ? req.body.start : new Date().toISOString().slice(0, 10);
-  const location = String(req.body?.location || "").trim().slice(0, 80) || project.location || emp.work_location || null;
-  await pool.query(`INSERT INTO employee_project_allocations (employee_id, project_id, start_date, project_lead, location, status) VALUES ($1,$2,$3,$4,$5,'Active')`,
-    [emp.id, project.id, start, project.project_lead, location]);
-  await pool.query("INSERT INTO audit_log (action, work_email) VALUES ($1,$2)", [`${emp.name} added to project "${project.name}"`, req.user.email]);
-  res.json({ ok: true });
-}));
-
-// Take someone off a project: the allocation ends today and stays in the history. They can be handed over to a colleague
-// (with notes) and/or moved to another project. Moving adds them there too when the caller manages that project.
-app.post("/api/allocations/:id/end", requireAuth, wrap(async (req, res) => {
-  const actor = await projectActor(req);
-  const a = (await pool.query(`SELECT a.id, a.status, a.employee_id, a.location, e.name AS employee, p.name AS project, p.project_lead, p.status AS pstatus, p.end_date
-    FROM employee_project_allocations a JOIN projects p ON p.id=a.project_id JOIN employees e ON e.id=a.employee_id WHERE a.id=$1`, [Number(req.params.id) || 0])).rows[0];
-  if (!a) return res.status(404).json({ error: "Allocation not found." });
-  if (!canManageProject(actor, a)) return res.status(403).json({ error: "Only HR or the project lead can take people off this project or hand their work over." });
-  if (isClosed({ status: a.pstatus, end_date: a.end_date })) return res.status(400).json({ error: CLOSED_MSG });
-  if (a.status !== "Active") return res.status(400).json({ error: "This allocation has already ended." });
-  const reason = ["Moved to another project", "Leaving the company", "Other"].includes(req.body?.reason) ? req.body.reason : null;
-  const notes = String(req.body?.notes || "").trim().slice(0, 1000) || null;
-  let handoverTo = null;
-  if (req.body?.handoverTo) {
-    const h = (await pool.query(`SELECT e.name FROM employees e JOIN employee_project_allocations x ON x.employee_id=e.id AND x.project_id=(SELECT project_id FROM employee_project_allocations WHERE id=$2) AND x.status='Active'
-      WHERE lower(e.work_email)=$1 AND e.status <> 'offboarded'`, [String(req.body.handoverTo).trim().toLowerCase(), a.id])).rows[0];
-    if (!h) return res.status(400).json({ error: "Only someone currently working on this project can take over." });
-    if (h.name.toLowerCase() === a.employee.toLowerCase()) return res.status(400).json({ error: "Choose someone other than the person leaving the project." });
-    handoverTo = h.name;
-  }
-  let target = null;
-  if (req.body?.moveToProjectId) {
-    target = (await pool.query("SELECT id, name, project_lead, status, end_date FROM projects WHERE id=$1", [Number(req.body.moveToProjectId) || 0])).rows[0];
-    if (!target) return res.status(400).json({ error: "The project to move to was not found." });
-    if (isClosed(target)) return res.status(400).json({ error: `${target.name} is closed.` });
-  }
-  const added = !!target && canManageProject(actor, target)
-    && !(await pool.query("SELECT 1 FROM employee_project_allocations WHERE project_id=$1 AND employee_id=$2 AND status='Active'", [target.id, a.employee_id])).rowCount;
-  await pool.query(`UPDATE employee_project_allocations SET status='Ended', end_date=CURRENT_DATE, end_reason=$2, handover_to=$3, handover_notes=$4, transferred_to=$5 WHERE id=$1`,
-    [a.id, reason, handoverTo, notes, target ? target.name : null]);
-  if (added) await pool.query(`INSERT INTO employee_project_allocations (employee_id, project_id, start_date, project_lead, location, status) VALUES ($1,$2,CURRENT_DATE,$3,$4,'Active')`,
-    [a.employee_id, target.id, target.project_lead, a.location]);
-  await pool.query("INSERT INTO audit_log (action, work_email) VALUES ($1,$2)",
-    [`${a.employee} taken off project "${a.project}"${handoverTo ? `, handed over to ${handoverTo}` : ""}${target ? `, moving to "${target.name}"` : ""}`, req.user.email]);
-  res.json({ ok: true, moved: added, movedTo: target ? target.name : null });
-}));
-
-// Who reports to whom, for everyone. Only the manager's name is sent, so this is safe for employees too.
-app.get("/api/managers", wrap(async (_req, res) => {
-  const { rows } = await pool.query("SELECT work_email, manager FROM employees WHERE manager IS NOT NULL AND manager <> ''");
-  res.json(rows.map((r) => ({ email: r.work_email, manager: r.manager })));
-}));
-
-// HR changes someone's reporting manager (or clears it with an empty name).
-/** Checks and saves one reporting-manager change (an empty manager clears it). Returns { ok: true } or { status, error }. */
-async function applyManager(email, manager, actor) {
-  const emp = (await pool.query("SELECT name, title FROM employees WHERE lower(work_email)=$1", [email])).rows[0];
-  if (!emp) return { status: 404, error: "Employee not found." };
-  // Directors and the Vice President are at the top of the company, so nobody is above them.
-  if (manager && /\b(director|vice president)\b/i.test(emp.title || "")) {
-    return { status: 400, error: `${emp.name} is at the top of the company and has no reporting manager.` };
-  }
-  if (manager) {
-    const boss = (await pool.query("SELECT name, status FROM employees WHERE lower(name)=lower($1) LIMIT 1", [manager])).rows[0];
-    if (!boss) return { status: 400, error: `${manager} is not in the employee list.` };
-    if (boss.status === "offboarded") return { status: 400, error: `${boss.name} has left, so cannot be a manager.` };
-    // Walk up from the new manager: reaching this person again would make a loop.
-    let cur = boss.name;
-    for (let i = 0; cur && i < 50; i++) {
-      if (cur.toLowerCase() === emp.name.toLowerCase()) {
-        return { status: 400, error: cur === boss.name && boss.name.toLowerCase() === emp.name.toLowerCase()
-          ? "Nobody can be their own reporting manager."
-          : `${boss.name} already reports up to ${emp.name}, so that would make a loop.` };
-      }
-      cur = (await pool.query("SELECT manager FROM employees WHERE lower(name)=lower($1) LIMIT 1", [cur])).rows[0]?.manager || "";
-    }
-  }
-  await pool.query("UPDATE employees SET manager=$1 WHERE lower(work_email)=$2", [manager || null, email]);
-  await pool.query("INSERT INTO audit_log (action, work_email) VALUES ($1,$2)",
-    [manager ? `Reporting manager set to ${manager} (by ${actor})` : `Reporting manager cleared (by ${actor})`, email]);
-  return { ok: true };
-}
-
-// HR changes anyone's reporting manager (or clears it with an empty name).
-app.put("/api/employees/manager", requireHr, wrap(async (req, res) => {
-  const email = String(req.body?.email || "").toLowerCase();
-  const manager = String(req.body?.manager || "").trim();
-  const r = await applyManager(email, manager, req.user.email);
-  if (!r.ok) return res.status(r.status).json({ error: r.error });
-  res.json({ email, manager });
-}));
-
-// HR corrects someone's employee ID (for example WT/17). It must be unique, and the change is recorded in the audit log.
-app.put("/api/employees/number", requireHr, wrap(async (req, res) => {
-  const email = String(req.body?.email || "").trim().toLowerCase();
-  const no = String(req.body?.number || "").trim();
-  if (!/^[A-Za-z0-9][A-Za-z0-9/._-]{0,19}$/.test(no)) return res.status(400).json({ error: "Use letters, numbers and / . _ - only, up to 20 characters, for example WT/17." });
-  const emp = (await pool.query("SELECT id, name, emp_no FROM employees WHERE lower(work_email)=$1", [email])).rows[0];
-  if (!emp) return res.status(404).json({ error: "Employee not found." });
-  if (emp.emp_no === no) return res.json({ email, number: no });
-  const dup = (await pool.query("SELECT name FROM employees WHERE lower(emp_no)=lower($1) AND id<>$2", [no, emp.id])).rows[0];
-  if (dup) return res.status(409).json({ error: `${no} already belongs to ${dup.name}. Employee IDs must be different.` });
-  await pool.query("UPDATE employees SET emp_no=$2 WHERE id=$1", [emp.id, no]);
-  await pool.query("INSERT INTO audit_log (action, work_email) VALUES ($1,$2)", [`Employee ID of ${emp.name} changed from ${emp.emp_no || "none"} to ${no} by ${req.user.email}`, email]);
-  res.json({ email, number: no });
-}));
-
-// HR marks someone who is still onboarding as active. It is saved on the server, so everyone sees it and it survives a page reload.
-app.put("/api/employees/status", requireHr, wrap(async (req, res) => {
-  const email = String(req.body?.email || "").trim().toLowerCase();
-  const emp = (await pool.query("SELECT id, name, status FROM employees WHERE lower(work_email)=$1", [email])).rows[0];
-  if (!emp) return res.status(404).json({ error: "Employee not found." });
-  if (String(req.body?.status) !== "active") return res.status(400).json({ error: "Only the change from Onboarding to Active is allowed here." });
-  if (emp.status === "offboarded") return res.status(400).json({ error: `${emp.name} has left, so the status cannot be changed here.` });
-  await pool.query("UPDATE employees SET status='active', onboarding_closed_at=coalesce(onboarding_closed_at, now()) WHERE id=$1", [emp.id]);
-  await pool.query("INSERT INTO audit_log (action, work_email) VALUES ($1,$2)", [`Onboarding of ${emp.name} marked finished: status Active, by ${req.user.email}`, email]);
-  res.json({ email, status: "active" });
-}));
-
-// A manager adds someone to their OWN team. Allowed for anyone who already has people reporting to them (and for HR). The person
-// must have no manager yet: taking someone out of another manager's team is HR's call. The same checks apply (no loops, no top of the company).
-app.post("/api/team/members", requireAuth, wrap(async (req, res) => {
-  const email = String(req.body?.email || "").trim().toLowerCase();
-  const me = (await pool.query("SELECT name, status FROM employees WHERE lower(work_email)=$1", [req.user.email.toLowerCase()])).rows[0];
-  if (!me || me.status === "offboarded") return res.status(403).json({ error: "Your employee record was not found." });
-  const isHr = req.user.role === "hr";
-  const hasTeam = (await pool.query("SELECT 1 FROM employees WHERE lower(manager)=lower($1) AND status <> 'offboarded' LIMIT 1", [me.name])).rowCount > 0;
-  if (!isHr && !hasTeam) return res.status(403).json({ error: "Only managers and HR can add team members." });
-  const emp = (await pool.query("SELECT name, manager, status FROM employees WHERE lower(work_email)=$1", [email])).rows[0];
-  if (!emp) return res.status(404).json({ error: "Employee not found." });
-  if (emp.status === "offboarded") return res.status(400).json({ error: `${emp.name} has left, so cannot join a team.` });
-  if (!isHr && emp.manager) return res.status(403).json({ error: `${emp.name} already reports to ${emp.manager}. Ask HR to move them.` });
-  const r = await applyManager(email, me.name, req.user.email);
-  if (!r.ok) return res.status(r.status).json({ error: r.error });
-  res.json({ email, manager: me.name });
-}));
-
-// Preview of the work email that would be issued, with the uniqueness check done against the database.
-app.get("/api/work-email", wrap(async (req, res) => {
-  res.json({ email: await nextWorkEmail(pool, req.query.first, req.query.last) });
-}));
-
-app.get("/api/onboarding/draft", wrap(async (req, res) => {
-  const { rows } = await pool.query("SELECT data FROM onboarding_drafts WHERE id=$1", [draftId(req)]);
-  res.json(rows[0] ? rows[0].data : null);
-}));
-
-const kindOf = (d) => (d && d.kind === "Intern" ? "Intern" : "Employee");
-
-// Drafts hold name, contact and job details only. ID numbers are never saved.
-app.put("/api/onboarding/draft", wrap(async (req, res) => {
-  const d = req.body && typeof req.body === "object" ? req.body : {};
-  const keep = ["first", "last", "pemail", "phone", "address", "dept", "title", "mgr", "start", "kind"];
-  const data = Object.fromEntries(keep.map((k) => [k, String(d[k] ?? "")]));
-  await pool.query(
-    `INSERT INTO onboarding_drafts (id,data) VALUES ($1,$2)
-     ON CONFLICT (id) DO UPDATE SET data=$2, updated_at=now()`, [draftId(req), data]);
-  res.json({ ok: true });
-}));
-
-app.delete("/api/onboarding/draft", wrap(async (req, res) => {
-  await pool.query("DELETE FROM onboarding_drafts WHERE id=$1", [draftId(req)]);
-  res.json({ ok: true });
-}));
-
-// Step 1: save the personal and job details, issue the work email and activate it in Google straight away.
-// Send existingEmail to retry a failed Google call, or to use a person who is already in the employee list.
-// The employee ID the next joiner gets by default: one more than the latest in the series.
-app.get("/api/onboarding/next-employee-no", wrap(async (_req, res) => res.json({ empNo: await nextEmployeeNoFrom(pool) })));
-
-app.post("/api/onboarding/work-email", wrap(async (req, res) => {
-  const { d = {}, existingEmail } = req.body || {};
-  const errors = detailsErrors(d);
-  if (Object.keys(errors).length) return res.status(400).json({ errors });
-
-  const full = `${d.first} ${d.last}`.trim();
-  const fields = [full, d.dept || null, d.title.trim(), d.mgr || null, d.start, d.pemail.trim(), d.phone.trim(), d.address.trim()];
-  let email, status;
-  const client = await pool.connect();
-  try {
-    await client.query("BEGIN");
-    if (existingEmail) {
-      const r = await client.query("SELECT * FROM employees WHERE lower(work_email)=$1 FOR UPDATE", [String(existingEmail).toLowerCase()]);
-      if (!r.rows[0]) { await client.query("ROLLBACK"); return res.status(404).json({ error: "Employee not found" }); }
-      email = r.rows[0].work_email;
-      const owner = await personalEmailOwner(client, d.pemail, email);
-      if (owner) { await client.query("ROLLBACK"); return res.status(400).json({ errors: dupEmailError(d.pemail.trim(), owner) }); }
-      // Someone from the HR sheet already has a work email, so nothing is created for them in Google.
-      status = r.rows[0].google_status || "existing";
-      let no = String(d.empNo || "").trim() || r.rows[0].emp_no || null;
-      if (!no) { await client.query("LOCK TABLE employees IN SHARE ROW EXCLUSIVE MODE"); no = await nextEmployeeNoFrom(client); }
-      const taken = no && no !== r.rows[0].emp_no ? await employeeNoOwner(client, no, email) : null;
-      if (taken) { await client.query("ROLLBACK"); return res.status(400).json({ errors: { empNo: `${no} already belongs to ${taken}.` } }); }
-      await client.query(
-        `UPDATE employees SET name=$1, dept=$2, title=$3, manager=$4, start_date=$5, personal_email=$6, phone=$7,
-         address=$8, google_status=$9, emp_no=COALESCE($11, emp_no) WHERE lower(work_email)=$10`, [...fields, status, email.toLowerCase(), no]);
-    } else {
-      await client.query("LOCK TABLE employees IN SHARE ROW EXCLUSIVE MODE");
-      email = await nextWorkEmail(client, d.first, d.last);
-      if (!email) { await client.query("ROLLBACK"); return res.status(400).json({ error: "Add a first name and surname first." }); }
-      const owner = await personalEmailOwner(client, d.pemail, "");
-      if (owner) { await client.query("ROLLBACK"); return res.status(400).json({ errors: dupEmailError(d.pemail.trim(), owner) }); }
-      status = "pending";
-      const no = String(d.empNo || "").trim() || await nextEmployeeNoFrom(client);   // the table is locked above, so two joiners never get the same number
-      const taken = no ? await employeeNoOwner(client, no) : null;
-      if (taken) { await client.query("ROLLBACK"); return res.status(400).json({ errors: { empNo: `${no} already belongs to ${taken}.` } }); }
-      await client.query(
-        `INSERT INTO employees (name, dept, title, manager, start_date, personal_email, phone, address, work_email, status, google_status, emp_no)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'onboarding','pending',$10)`, [...fields, email, no]);
-      await client.query("INSERT INTO audit_log (action, work_email) VALUES ($1,$2)", ["Work email reserved", email]);
-    }
-    await client.query("UPDATE employees SET employment_type=$1 WHERE lower(work_email)=$2", [kindOf(d), email.toLowerCase()]);
-    await client.query("COMMIT");
-  } catch (err) {
-    await client.query("ROLLBACK");
-    throw err;
-  } finally {
-    client.release();
-  }
-
-  let workPassword = null, emailed = false;
-  if (status === "pending" || status === "failed") {
-    workPassword = generatePassword();   // different for every person
-    try {
-      status = (await createGoogleUser({
-        email, first: d.first.trim(), last: d.last.trim(), password: workPassword, personalEmail: d.pemail.trim(),
-      })).status;
-      await pool.query("UPDATE employees SET google_status=$1, google_error=NULL WHERE lower(work_email)=$2", [status, email.toLowerCase()]);
-      await pool.query("INSERT INTO audit_log (action, work_email) VALUES ($1,$2)",
-        [status === "simulated" ? "Google account created (simulated)" : "Google account created and active", email]);
-      // The mail plan follows the job title. If a licence cannot be assigned the account still works; the audit log says what to do.
-      const plan = mailPlanOf(d.title);
-      try {
-        const lic = await assignLicense(email, plan);
-        await pool.query("INSERT INTO audit_log (action, work_email) VALUES ($1,$2)", [lic === "assigned" ? `Mail plan ${plan}: licence assigned` : `Mail plan ${plan} (assign the licence in the Google Admin console)`, email]);
-      } catch (err) {
-        await pool.query("INSERT INTO audit_log (action, work_email) VALUES ($1,$2)", [`Mail plan ${plan}: licence could not be assigned (${err.message})`, email]);
-      }
-    } catch (err) {
-      await pool.query("UPDATE employees SET google_status='failed', google_error=$1 WHERE lower(work_email)=$2", [err.message, email.toLowerCase()]);
-      await pool.query("INSERT INTO audit_log (action, work_email) VALUES ($1,$2)", [`Google account failed: ${err.message}`, email]);
-      return res.status(502).json({ error: `Google could not create the account: ${err.message}`, email });
-    }
-  }
-  if (workPassword && mailConfigured()) {
-    try {
-      // Their HR Access Hub login, and a one-time 30-minute link (invites.js) where they choose its password.
-      await createLogin(pool, email, "employee");
-      const link = await createInvite(email, req.user.email);
-      await sendWorkAccountEmail({ to: d.pemail.trim(), name: full, workEmail: email, password: workPassword, link, minutes: INVITE_MINUTES });
-      emailed = true;
-    }
-    catch (err) { await pool.query("INSERT INTO audit_log (action, work_email) VALUES ($1,$2)", [`Could not email the work account details: ${err.message}`, email]); }
-  }
-  if (workPassword) await pool.query("INSERT INTO audit_log (action, work_email) VALUES ($1,$2)",
-    [emailed ? "Work account password emailed to the personal email" : "Work account password generated (not emailed)", email]);
-  res.status(201).json({ ...toApi(await loadRecord(email)), googleMode, mailPlan: mailPlanOf(d.title), workAccount: workPassword ? { emailed, password: emailed ? null : workPassword } : null });
-}));
-
-// Last step: save the tool access and mark the person as onboarded. The work email and the login must exist by now.
-app.post("/api/onboarding", wrap(async (req, res) => {
-  const { d = {}, ids = {}, apps, existingEmail } = req.body || {};
-  if (!existingEmail) return res.status(400).json({ error: "Create the work email first." });
-  const errors = onboardingErrors({ d, ids, apps });
-  if (Object.keys(errors).length) return res.status(400).json({ errors });
-
-  const full = `${d.first} ${d.last}`.trim();
-  const fields = [d.dept, d.title.trim(), d.mgr || null, d.start, d.pemail.trim(), d.phone.trim(), d.address.trim(),
-    ids.dob || null, maskAadhaar(ids.aadhaar), maskPan(ids.pan), maskAcct(ids.acct),
-    String(ids.ifsc || "").trim().toUpperCase() || null, JSON.stringify(apps)];
-
-  const client = await pool.connect();
-  try {
-    await client.query("BEGIN");
-    const r = await client.query(`${RECORD_SQL} WHERE lower(e.work_email)=$1 FOR UPDATE OF e`, [String(existingEmail).toLowerCase()]);
-    const row = r.rows[0];
-    if (!row) { await client.query("ROLLBACK"); return res.status(404).json({ error: "Employee not found" }); }
-    if (row.google_status === "pending" || row.google_status === "failed") {
-      await client.query("ROLLBACK");
-      return res.status(400).json({ error: "The work email is not active in Google yet." });
-    }
-    if (!row.has_login) { await client.query("ROLLBACK"); return res.status(400).json({ error: "Create the login first." }); }
-    const owner = await personalEmailOwner(client, d.pemail, row.work_email);
-    if (owner) { await client.query("ROLLBACK"); return res.status(400).json({ errors: dupEmailError(d.pemail.trim(), owner) }); }
-    await client.query(
-      `UPDATE employees SET name=$1, dept=$2, title=$3, manager=$4, start_date=$5, personal_email=$6, phone=$7,
-       address=$8, dob=$9, aadhaar_masked=$10, pan_masked=$11, acct_masked=$12, ifsc=$13, apps=$14, onboarded_at=now()
-       WHERE lower(work_email)=$15`, [full, ...fields, row.work_email.toLowerCase()]);
-    await client.query("UPDATE employees SET employment_type=$1 WHERE lower(work_email)=$2", [kindOf(d), row.work_email.toLowerCase()]);
-    await client.query("INSERT INTO audit_log (action, work_email) VALUES ($1,$2)", [`Onboarding completed${kindOf(d) === "Intern" ? " (intern)" : ""}`, row.work_email]);
-    // Attendance: the person's name is linked to the office device straight away, so their punches count from day one.
-    const idNow = (await client.query("SELECT id, name, work_email, emp_no FROM employees WHERE lower(work_email)=$1", [row.work_email.toLowerCase()])).rows[0];
-    const device = idNow ? await linkDeviceUserByEmployeeNo(client, { id: idNow.id, name: idNow.name, email: idNow.work_email, empNo: idNow.emp_no }, req.user.email) : null;
-    await client.query("DELETE FROM onboarding_drafts WHERE id=$1", [draftId(req)]);
-    if (idNow) await ensureKit(client, idNow.id, "onboarding");   // the Digital Kit is ready when they first sign in
-    await client.query("COMMIT");
-    res.status(201).json({ ...toApi(await loadRecord(row.work_email)), deviceLink: device });
-  } catch (err) {
-    await client.query("ROLLBACK");
-    throw err;
-  } finally {
-    client.release();
-  }
-}));
-
+app.use(onboardingRouter(wrap));   // HR: new joiners
+app.use(peopleRouter(wrap));       // directory, roster, reporting lines, employee IDs
+app.use(projectsRouter(wrap));     // projects and allocations
 app.use(leaveRouter(wrap));
 app.use(postsRouter(wrap));
 app.use(leaveDigestRouter(wrap));   // HR: preview or test the daily leave digest email
 app.use(attendanceRouter(wrap));
 app.use(assetsRouter(wrap));   // IT admins only
 app.use(payslipsRouter(wrap));
-
-// The audit log: every recorded action, newest first. HR only.
-app.get("/api/audit", requireHr, wrap(async (req, res) => {
-  const limit = Math.min(Number(req.query.limit) || 200, 1000);
-  const { rows } = await pool.query(
-    `SELECT a.id, a.ts, a.action, a.work_email, e.name FROM audit_log a LEFT JOIN employees e ON lower(e.work_email)=lower(a.work_email) ORDER BY a.ts DESC, a.id DESC LIMIT $1`, [limit]);
-  res.json(rows.map((r) => ({ id: r.id, ts: r.ts, action: r.action, email: r.work_email, name: r.name || null })));
-}));
-
-// Tool access HR gives from the Employees page. Claude is real when ANTHROPIC_ADMIN_KEY is set.
-app.get("/api/tool-access", requireAuth, wrap(async (req, res) => {
-  await syncClaudeSoon();   // pick up people added to Claude outside this app
-  const { rows } = await pool.query("SELECT work_email, tool, status, detail FROM tool_access");
-  const hr = req.user.role === "hr";   // everyone sees who has access; only HR sees the tool's own message
-  res.json({ claudeMode: claudeMode(), rows: rows.map((r) => ({ email: r.work_email, tool: r.tool, status: r.status, detail: hr ? r.detail : null })) });
-}));
-// HR: check the Claude organisation right now instead of waiting for the automatic check, and bring the app in line with it.
-app.post("/api/tool-access/claude/refresh", requireHr, wrap(async (req, res) => {
-  if (claudeMode() === "simulated") return res.json({ mode: "simulated", changed: 0 });
-  let changed;
-  try { changed = await syncClaude(); } catch (err) { return res.status(502).json({ error: `Claude could not be reached: ${err.message}` }); }
-  if (changed) await pool.query("INSERT INTO audit_log (action, work_email) VALUES ($1,$2)", [`Claude: status refreshed from the Claude organisation, ${changed} changed (by ${req.user.email})`, req.user.email]);
-  res.json({ mode: "live", changed });
-}));
-// The signed-in person confirms they accepted their Claude invite (only when Claude is not connected; otherwise Claude itself is checked).
-app.post("/api/tool-access/claude/confirm", wrap(async (req, res) => {
-  if (!req.user) return res.status(401).json({ error: "Please sign in." });
-  if (claudeMode() !== "simulated") return res.status(409).json({ error: "Claude access is checked with Claude automatically." });
-  const r = await confirmOwnClaude(req.user.email);
-  if (!r) return res.status(409).json({ error: "There is no Claude invite waiting for you." });
-  res.json(r);
-}));
-app.post("/api/tool-access/claude", requireHr, wrap(async (req, res) => {
-  const email = String((req.body && req.body.email) || "").toLowerCase();
-  const action = req.body && req.body.action;
-  if (!["grant", "remove"].includes(action)) return res.status(400).json({ error: "Action must be grant or remove." });
-  const emp = (await pool.query("SELECT name, status FROM employees WHERE lower(work_email)=$1", [email])).rows[0];
-  if (!emp) return res.status(404).json({ error: "Employee not found." });
-  try {
-    if (action === "grant") {
-      if (emp.status === "offboarded") return res.status(400).json({ error: `${emp.name} has left, so Claude access cannot be given.` });
-      // No Admin API key: ask the Claude admin to invite them (claude-requests.js) instead of pretending an invite went out.
-      if (claudeMode() === "simulated") return res.json({ ...(await requestClaude(email, req.user.email)), mode: "simulated" });
-      const r = await grantClaude(email);
-      await recordAccess(email, "claude", r.status, r.detail);
-      await pool.query("INSERT INTO audit_log (action, work_email) VALUES ($1,$2)", [`Claude: ${r.detail} (by ${req.user.email})`, email]);
-      return res.json({ ...r, mode: claudeMode() });
-    }
-    const detail = await removeClaude(email);
-    await recordAccess(email, "claude", "revoked", detail);
-    await pool.query("INSERT INTO audit_log (action, work_email) VALUES ($1,$2)", [`Claude: ${detail} (by ${req.user.email})`, email]);
-    res.json({ status: "revoked", detail, mode: claudeMode() });
-  } catch (err) {
-    await recordAccess(email, "claude", "failed", err.message);
-    await pool.query("INSERT INTO audit_log (action, work_email) VALUES ($1,$2)", [`Claude: ${action} failed. ${err.message}`, email]);
-    res.status(502).json({ error: `Claude could not do that: ${err.message}` });
-  }
-}));
+app.use(toolAccessRouter(wrap));   // the audit log and Claude access
 app.use("/api/claude-requests", claudeRequestsRouter);   // HR and IT admins: who is waiting to be invited to Claude
 app.use("/api/reimbursements", requireAuth, reimbursementsRouter);   // own claims for everyone; review actions are HR-only inside
 app.use("/api/budget-requests", requireAuth, budgetsRouter);   // own requests for everyone; decisions are HR-only inside
@@ -609,38 +79,7 @@ app.use("/api/celebrations", requireHr, celebrationsRouter);   // HR: birthday a
 app.use("/api/festivals", requireAuth, festivalsRouter);   // everyone: festivals and their dates for the Festival Wishes page
 app.use(clearanceRouter(wrap));   // offboarding financial clearance and employee advances (HR only)
 app.use(offboardingRouter(wrap));
-
-// The page itself, so one command serves everything on the same origin.
-app.use("/auth", googleRouter);       // "Continue with Google" (public: it is how people sign in)
-app.use("/invite", inviteRouter);     // the link in the invite email
-app.use("/p", posterPictureRouter);   // the poster picture inside celebration emails (public, long random address)
-app.use("/l", emailLinkRouter);       // short-lived links in automatic emails
-for (const f of ["wohlig-logo.svg", "wohlig-logo-dark.svg", "wohlig-logo.png", "wohlig-logo-dark.png", "wohlig-smile-mark.svg", "wohlig-smile-mark.png", "wohlig-premier-partner-badge.png", "wohlig-logos.zip", "favicon.svg", "favicon.ico", "apple-touch-icon.png"]) app.get("/" + f, (_req, res) => res.sendFile(path.join(frontendDir, "public", f), { maxAge: "1h" }));
-app.use("/sig", express.static(path.join(frontendDir, "public", "sig"), { maxAge: "1h" }));   // small icon pictures used by the email signature (public: mail programs fetch them)
-// The whole interface is React (frontend/src), built into frontend/dist with `npm run build:ui`.
-const distDir = path.join(frontendDir, "dist");
-const hasDist = () => fs.existsSync(path.join(distDir, "index.html"));
-const notBuilt = (res) => res.status(503).type("text").send("The interface has not been built yet. Run `npm run build:ui` in the backend folder, then reload.");
-app.use("/app/assets", express.static(path.join(distDir, "assets"), { immutable: true, maxAge: "1y" }));
-// A page opened while signed out (say, a leave request from an email) is remembered for 15 minutes and opened after sign-in.
-const AFTER = "hrhub_after";
-const pagePath = (p) => (/^\/app\/[A-Za-z0-9/_-]{1,200}$/.test(p) ? p : null);
-const toLogin = (req, res) => {
-  const p = pagePath(req.path);
-  if (p) res.append("Set-Cookie", `${AFTER}=${encodeURIComponent(p)}; Max-Age=900; Path=/; HttpOnly; SameSite=Lax`);
-  res.redirect("/login");
-};
-const home = (req, res) => {
-  const m = new RegExp(`(?:^|;\\s*)${AFTER}=([^;]+)`).exec(req.headers.cookie || "");
-  const p = m && pagePath(decodeURIComponent(m[1]));
-  if (m) res.append("Set-Cookie", `${AFTER}=; Max-Age=0; Path=/; HttpOnly; SameSite=Lax`);
-  res.redirect(p || "/app/dashboard");
-};
-app.get("/app/*", (req, res) => (!req.user ? toLogin(req, res) : hasDist() ? res.sendFile(path.join(distDir, "index.html")) : notBuilt(res)));
-app.get("/login", (req, res) => (req.user ? home(req, res) : hasDist() ? res.sendFile(path.join(distDir, "login.html")) : notBuilt(res)));
-app.get("/", (req, res) => (req.user ? home(req, res) : res.redirect("/login")));
-// Leave rules shared by the page and the server (no personal data in it).
-app.get("/leave-rules.js", (_req, res) => res.type("js").sendFile(path.join(frontendDir, "leave-rules.cjs")));
+app.use(pagesRouter());            // the pages, logos and the links in emails
 
 app.use((err, _req, res, _next) => {
   console.error(err);
@@ -669,45 +108,10 @@ try {
 // BACKGROUND_JOBS=off: serve pages only. For a local copy pointed at the shared database, so the deployed server alone
 // runs the scheduled work (a local copy would simulate offboarding steps and skip emails, using them up for real).
 if (process.env.BACKGROUND_JOBS === "off") console.log("Background jobs are off (BACKGROUND_JOBS=off)");
-else {
-  // Scheduled offboardings run at 6 pm India time on the last working day; check every minute.
-  const checkDue = () => runDue().catch((err) => console.error("Scheduled offboarding check failed:", err));
-  checkDue();
-  setInterval(checkDue, 60_000);
-  // Invites nobody accepted within 30 minutes are cancelled.
-  const sweepInvites = () => expireInvites().catch((err) => console.error("Invite cleanup failed:", err));
-  sweepInvites();
-  setInterval(sweepInvites, 60_000);
-
-  // Reimbursements waiting for review too long remind HR (automation 7); checked hourly.
-  const checkReminders = () => Promise.all([runReimbursementReminders(), runBudgetReminders()]).catch((err) => console.error("Reimbursement reminder check failed:", err));
-  checkReminders();
-  setInterval(checkReminders, 60 * 60_000);
-  // Last month's payroll: started as a draft from the 1st for HR to check and send for review (payslip-auto.js); checked hourly.
-  const checkPayslips = () => runPayslips().then((r) => { if (r.created) console.log("Payroll:", JSON.stringify(r)); })
-    .catch((err) => console.error("Automatic payslips failed:", err));
-  checkPayslips();
-  setInterval(checkPayslips, 60 * 60_000);
-  // One email to HR each working morning listing everyone on leave today (leave-digest.js); checked every 10 minutes, sent once a day.
-  const checkDigest = () => runLeaveDigest().then((r) => { if (r.sentTo !== undefined) console.log("Leave digest:", JSON.stringify(r)); })
-    .catch((err) => console.error("Leave digest failed:", err));
-  checkDigest();
-  setInterval(checkDigest, 10 * 60_000);
-  // Claude access requests nobody has dealt with for a couple of days remind the Claude admin; checked hourly.
-  const checkClaude = () => runClaudeReminders().catch((err) => console.error("Claude request reminder failed:", err));
-  checkClaude();
-  setInterval(checkClaude, 60 * 60_000);
-  // Birthdays today and new joiners without a poster: HR is told once through the bell (celebrations.js); checked hourly. Nothing is emailed.
-  const checkCelebrations = () => runCelebrationAlerts().then((r) => { if (r.told.length) console.log("Celebrations:", r.told.join(", ")); })
-    .catch((err) => console.error("Celebration check failed:", err));
-  checkCelebrations();
-  setInterval(checkCelebrations, 60 * 60_000);
-  startGmailIntel();   // reads project emails from the mailboxes HR switched on (only when GMAIL_INTEL_ENABLED=true)
-  startPortalAttendanceSync();   // copies the office device punches the Employee Portal received (only when PORTAL_ATTENDANCE_SYNC=true)
-}
+else startBackgroundJobs();
 console.log(`Email: ${emailMode() === "sendgrid" ? "sending through SendGrid" : "SendGrid not configured, emails are logged and skipped"}`);
 const port = process.env.PORT || 3000;
-const server = app.listen(port, () => console.log(`HR Access Hub on http://localhost:${port}`));
+const server = app.listen(port, () => console.log(`Wohlig One on http://localhost:${port}`));
 // Another program on the same port (a second copy of this app, another project's dev server) is the usual reason it won't start locally.
 server.on("error", (err) => {
   if (err.code !== "EADDRINUSE") throw err;

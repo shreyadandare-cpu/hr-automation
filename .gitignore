@@ -5,7 +5,6 @@ node_modules/
 logs/
 
 # Personal data and secrets: never shared through Git
-hr-automation/server/data/
 hr-automation/backups/
 *.dump
 *.bak
@@ -15,7 +14,8 @@ hr-automation/backups/
 
 # macOS
 .DS_Store
-.claude/
+.claude/*
+!.claude/settings.json
 
 # Python virtual environment (local tool folder)
 .venv/

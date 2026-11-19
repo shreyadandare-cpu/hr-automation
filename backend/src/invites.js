@@ -123,13 +123,7 @@ const MESSAGES = {
   revoked: "A newer invitation was sent to you, so this link no longer works. Use the latest email.",
 };
 
-/** A small in-memory limit per key: max attempts in a time window. */
-const hits = new Map();
-export function tooMany(key, max, windowMs) {
-  const now = Date.now(), h = (hits.get(key) || []).filter((t) => now - t < windowMs);
-  h.push(now); hits.set(key, h);
-  return h.length > max;
-}
+export { tooMany } from "./limits.js";   // kept here so older imports still work
 
 /**
  * Accepts an invitation: checks the token against its stored hash, its expiry (by the server clock) and that it is unused,

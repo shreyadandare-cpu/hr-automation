@@ -130,14 +130,14 @@ export async function runRemoval(id) {
   const o = rows[0];
   try {
     await pool.query("UPDATE employees SET status='offboarding' WHERE lower(work_email)=$1", [o.work_email.toLowerCase()]);
-    // Their HR Access Hub login goes too (signing them out), unless they are the last HR account.
+    // Their Wohlig One login goes too (signing them out), unless they are the last HR account.
     const lc = o.work_email.toLowerCase();
     const { rows: hrLeft } = await pool.query("SELECT count(*)::int AS n FROM users WHERE role='hr' AND lower(email)<>$1", [lc]);
     const { rowCount: gone } = await pool.query(
       "DELETE FROM users WHERE lower(email)=$1 AND (role<>'hr' OR $2::int > 0)", [lc, hrLeft[0].n]);
     if (gone) {
       await pool.query("DELETE FROM sessions WHERE lower(email)=$1", [lc]);
-      await audit(pool, "HR Access Hub login removed", o.work_email);
+      await audit(pool, "Wohlig One login removed", o.work_email);
     }
     if (before[0] && before[0].status === "scheduled") await audit(pool, "Scheduled offboarding started: removing tool access", o.work_email);
     const { rows: tools } = await pool.query(

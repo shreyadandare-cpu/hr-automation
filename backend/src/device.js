@@ -76,7 +76,7 @@ export function deviceRouter() {
   // ---- The office connector posts punches here. No sign-in: it carries the device key instead.
   r.post("/api/attendance/device/punches", wrap(async (req, res) => {
     if (!keySet()) return res.status(503).json({ error: "Device sync is not set up on the server (ATTENDANCE_DEVICE_KEY)." });
-    if (tooMany(`device:${req.ip}`, 120, 10 * 60 * 1000)) return res.status(429).json({ error: "Too many requests. Try again in a few minutes." });
+    if (await tooMany(`device:${req.ip}`, 120, 10 * 60 * 1000)) return res.status(429).json({ error: "Too many requests. Try again in a few minutes." });
     if (!keyOk(req)) return res.status(401).json({ error: "Wrong device key." });
     const device = String(req.body?.device || "device").replace(/[^\w .-]/g, "").slice(0, 40) || "device";
     const list = req.body?.punches;

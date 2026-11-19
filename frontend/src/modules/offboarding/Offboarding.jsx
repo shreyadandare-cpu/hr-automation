@@ -279,7 +279,7 @@ function Wizard({ people, offs, initial }) {
         {open.length > 0 && <Info>Still open after you submit: <b>{open.join(", ")}</b>. The offboarding closes once {open.length === 1 ? "it is" : "they are"} ticked on the employee's checklist.</Info>}
         <div className="callout bad">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M12 3 2 20h20z" /><path d="M12 10v4M12 17h.01" /></svg>
-          <div>{first} will lose access to <b>{tools.length} tool{tools.length === 1 ? "" : "s"}</b>{w.when === "later" ? ` on ${shortDate(w.lastDay)} at 6:00 pm` : " right away"}, and their HR Access Hub login is removed. Every step is written to the audit log.</div></div>
+          <div>{first} will lose access to <b>{tools.length} tool{tools.length === 1 ? "" : "s"}</b>{w.when === "later" ? ` on ${shortDate(w.lastDay)} at 6:00 pm` : " right away"}, and their Wohlig One login is removed. Every step is written to the audit log.</div></div>
         {needsCheck && <label className="check" style={{ border: 0, padding: 0 }}><input type="checkbox" id="ow-clearance-ok" checked={w.clearanceReviewed} onChange={(x) => set({ clearanceReviewed: x.target.checked })} />
           <div className="grow"><div className="lbl">I have checked the outstanding reimbursements and advances (financial clearance)</div>
             <div className="tag">{!fc ? "Working out the clearance…" : fc.totals.totalRecovery > 0 ? `${inr(fc.totals.totalRecovery)} will be recovered from the final salary` : "No outstanding employee recovery found"}</div></div></label>}

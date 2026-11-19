@@ -27,7 +27,7 @@ export function parsePayslip(text) {
   const lines = String(text || "").split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
   const head = lines.map((l) => /^PAYSLIP\s+([A-Za-z]{3})\s+(\d{4})$/i.exec(l)).find(Boolean);
   const iEarn = lines.findIndex((l) => /^EARNINGS$/i.test(l));
-  if (!head || iEarn < 0) return { ok: false, error: "This doesn't look like a Wohlig payslip. Upload the payslip PDF as downloaded from the HR Access Hub, or enter the salary by hand." };
+  if (!head || iEarn < 0) return { ok: false, error: "This doesn't look like a Wohlig payslip. Upload the payslip PDF as downloaded from Wohlig One, or enter the salary by hand." };
   const period = `${head[2]}-${String(MON[head[1].toLowerCase()] || 0).padStart(2, "0")}`;
 
   const out = { earnings: [], pfEmployee: 0, esicEmployee: 0, professionalTax: 0, tds: 0, otherDeductions: [], left: [] };

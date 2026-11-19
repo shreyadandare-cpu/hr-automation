@@ -256,8 +256,8 @@ export function renderReportEmail(rep, link) {
     <div style="padding:8px 32px 22px">${rep.sections.filter((x) => x.items.length).map(sec).join("")}
       <div style="margin-top:22px"><div style="font:700 12px/1.4 Arial,Helvetica,sans-serif;letter-spacing:.1em;color:#800d35">UPDATES BY PERSON</div>
       ${rep.people.map((p) => `<div style="margin-top:8px;font:14px/1.5 Arial,Helvetica,sans-serif;color:#2a1016"><b>${esc(p.name)}</b>${p.updates.map((u) => `<div>${esc(u.summary)}</div>`).join("")}</div>`).join("")}</div>
-      <div style="margin:24px 0 4px"><a href="${esc(link)}" style="display:inline-block;background:#800d35;color:#ffffff;text-decoration:none;font:600 14px/1 Arial,Helvetica,sans-serif;padding:12px 20px;border-radius:999px">Open in HR Access Hub</a></div></div>
-    <div style="padding:14px 32px 20px;border-top:1px solid #f1e4d0;font:12px/1.5 Arial,Helvetica,sans-serif;color:#8a7a78">HR Access Hub · WOHLIG TRANSFORMATIONS PRIVATE LIMITED</div>
+      <div style="margin:24px 0 4px"><a href="${esc(link)}" style="display:inline-block;background:#800d35;color:#ffffff;text-decoration:none;font:600 14px/1 Arial,Helvetica,sans-serif;padding:12px 20px;border-radius:999px">Open in Wohlig One</a></div></div>
+    <div style="padding:14px 32px 20px;border-top:1px solid #f1e4d0;font:12px/1.5 Arial,Helvetica,sans-serif;color:#8a7a78">Wohlig One · WOHLIG TRANSFORMATIONS PRIVATE LIMITED</div>
   </div></body></html>`;
   return { subject, text, html };
 }

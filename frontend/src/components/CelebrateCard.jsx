@@ -2,7 +2,6 @@ import { useEffect, useState } from "react";
 import { api } from "../api.js";
 import { useData } from "../data.jsx";
 import PersonAvatar from "./PersonAvatar.jsx";
-import "./birthday.css";
 
 /* One card for the good news at Wohlig, with three tabs: Birthdays, Work anniversaries and New joiners. Each tab shows today first, then what is coming up.
    Birthdays come from the server (day and month only, never the year). Anniversaries start at one year. New joiners are people who joined in the last 30 days. */

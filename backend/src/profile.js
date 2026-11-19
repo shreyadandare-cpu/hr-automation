@@ -136,7 +136,10 @@ profileRouter.get("/photo", wrap(async (req, res) => {
   const email = String(req.query.email || req.user.email).toLowerCase();
   const { rows } = await pool.query("SELECT stored_name, mime FROM profile_photos WHERE lower(email)=$1", [email]);
   if (!rows[0]) return res.status(404).json({ error: "No photo" });
-  res.set({ "Content-Type": rows[0].mime, "X-Content-Type-Options": "nosniff", "Cache-Control": "private, max-age=0, must-revalidate" });
+  // Pages ask for /photo?…&v=<version>; a new photo gets a new version, so a versioned address can be kept for a year and every
+  // avatar on a page full of people comes from the browser's cache. Without v, the browser checks each time.
+  const versioned = typeof req.query.v === "string" && /^\d{1,15}$/.test(req.query.v);
+  res.set({ "Content-Type": rows[0].mime, "X-Content-Type-Options": "nosniff", "Cache-Control": versioned ? "private, max-age=31536000, immutable" : "private, max-age=0, must-revalidate" });
   res.sendFile(path.join(UPLOAD_DIR, rows[0].stored_name));
 }));
 

@@ -1,14 +1,14 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { api } from "../../api.js";
-import { Smile } from "../../components/ui.jsx";
+import { pill } from "../../components/ui.jsx";
 
 export const RB_STATUS = {
   draft: ["Draft", "p-mute"], submitted: ["Pending review", "p-warn"], under_review: ["Under review", "p-info"],
   changes_requested: ["Changes requested", "p-warn"], resubmitted: ["Resubmitted", "p-info"], approved: ["Approved", "p-ok"],
   rejected: ["Rejected", "p-bad"], payroll_pending: ["Payroll pending", "p-info"], in_payroll: ["In payroll", "p-info"], paid: ["Paid", "p-ok"],
 };
-export const RbPill = ({ status }) => <span className={`pill ${(RB_STATUS[status] || ["", ""])[1]}`}>{(RB_STATUS[status] || [status])[0]}</span>;
+export const RbPill = ({ status }) => <span className={pill((RB_STATUS[status] || ["", ""])[1])}>{(RB_STATUS[status] || [status])[0]}</span>;
 
 export const money = (n) => (n == null ? "—" : "₹" + Number(n).toLocaleString("en-IN", { minimumFractionDigits: Number(n) % 1 ? 2 : 0, maximumFractionDigits: 2 }));
 const MON = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
@@ -35,20 +35,8 @@ export const Ico = ({ k }) => (
 );
 export const InfoCallout = ({ children, bad }) => <div className={`callout${bad ? " bad" : ""}`}><Ico k={bad ? "warn" : "info"} /><div>{children}</div></div>;
 
-/* The page heading the old pages use: the title may carry a highlighted tail ("Reimburse" + "ments."). */
-export function Head({ eyebrow, title, accent, sub, actions }) {
-  return (
-    <div className="sec-head">
-      <div>
-        <div className="eyebrow">{eyebrow}</div>
-        <h2 className="big">{title}{accent && <span className="grad">{accent}</span>}</h2>
-        <Smile />
-        {sub && <p>{sub}</p>}
-      </div>
-      {actions && <div className="row">{actions}</div>}
-    </div>
-  );
-}
+/* The page head, the same one every page uses. */
+export { SectionHead as Head } from "../../components/ui.jsx";
 
 export const Skel = ({ w, big }) => <span className={`skel${big ? " big" : ""}`} style={w ? { width: w } : undefined} />;
 export const SkelRows = ({ n, cols }) => Array.from({ length: n }, (_, r) => (
@@ -56,18 +44,8 @@ export const SkelRows = ({ n, cols }) => Array.from({ length: n }, (_, r) => (
 ));
 
 /* A dialog like the shared Modal, with an optional wide variant. */
-export function Dlg({ onClose, wide, children }) {
-  useEffect(() => {
-    const k = (e) => { if (e.key === "Escape") onClose(); };
-    document.addEventListener("keydown", k);
-    return () => document.removeEventListener("keydown", k);
-  }, [onClose]);
-  return (
-    <div className="scrim" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
-      <div className={`modal${wide ? " wide" : ""}`} role="dialog" aria-modal="true">{children}</div>
-    </div>
-  );
-}
+/* The app's one dialog (focus, Escape, scroll lock, close button, phone sheet): see components/Modal.jsx. */
+export { default as Dlg } from "../../components/Modal.jsx";
 
 export const Fld = ({ id, label, hint, error, children }) => (
   <div className="field"><label htmlFor={id}>{label}</label>{children}{hint && <span className="hint">{hint}</span>}{error && <span className="ferr" role="alert">{error}</span>}</div>
@@ -102,7 +80,7 @@ export function LinesTable({ c, meta, compact = false, onDoc }) {
   const rc = (it) => it.document ? <>
     {onDoc ? <button type="button" className="btn link sm nolink" onClick={() => onDoc(it.document.id)}><Ico k="doc" />View</button>
       : <a className="btn link sm nolink" href={`/api/reimbursements/${c.id}/documents/${it.document.id}`} target="_blank" rel="noopener noreferrer"><Ico k="doc" />View</a>} {tag(it)}</>
-    : it.noReceipt ? <span className="pill p-mute">No receipt</span> : <span className="pill p-warn">Missing</span>;
+    : it.noReceipt ? <span className={pill("mute")}>No receipt</span> : <span className={pill("warn")}>Missing</span>;
   const small = { fontSize: 12 };
   return (
     <div className="tbl-wrap"><table className="rb-lines"><thead><tr><th>#</th><th>Category</th>

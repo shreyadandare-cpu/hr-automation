@@ -77,10 +77,12 @@ export async function createGoogleUser(client, email, role = "employee") {
 export async function accountForSignIn(email) {
   const e = String(email || "").trim().toLowerCase();
   if (!isCompanyEmail(e)) return null;
-  const have = (await pool.query("SELECT email FROM users WHERE lower(email)=$1", [e])).rows[0];
-  if (have) return have;
   const emp = (await pool.query("SELECT name, status FROM employees WHERE lower(work_email)=$1", [e])).rows[0];
-  if (!emp || emp.status === "offboarded") return null;
+  // Someone who is leaving or has left cannot sign in, even if a login or their Google account is still there.
+  if (emp && (emp.status === "offboarding" || emp.status === "offboarded")) return null;
+  const have = (await pool.query("SELECT email, login_blocked FROM users WHERE lower(email)=$1", [e])).rows[0];
+  if (have) return have.login_blocked ? null : { email: have.email };
+  if (!emp) return null;
   await createGoogleUser(pool, e, "employee");
   await pool.query("INSERT INTO audit_log (action, work_email) VALUES ($1,$2)", ["Login created automatically at first Google sign-in (employee role)", e]);
   return (await pool.query("SELECT email FROM users WHERE lower(email)=$1", [e])).rows[0] || null;
@@ -93,7 +95,7 @@ export async function bootstrapAuth() {
     if (!pw || pw.length < 8) throw new Error("Set DEFAULT_PASSWORD (at least 8 characters) in backend/.env");
     await setDefaultPassword(pw);
   }
-  const { rows } = await pool.query("SELECT 1 FROM users WHERE role='hr' LIMIT 1");
+  const { rows } = await pool.query("SELECT 1 FROM users WHERE role='hr' OR is_super_admin LIMIT 1");
   if (rows.length) return;
   const admins = (process.env.HR_ADMIN_EMAIL || "").split(",").map((s) => s.trim()).filter(Boolean);
   if (!admins.length) throw new Error("Set HR_ADMIN_EMAIL in backend/.env so there is a first HR login");
@@ -124,28 +126,41 @@ export async function endSession(req, res) {
   res.append("Set-Cookie", `${COOKIE}=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0`);
 }
 
-/** Puts { email, role, it_admin } on req.user when the cookie holds a live session. */
+/**
+ * Puts { email, role, it_admin } on req.user and { email, superAdmin, grants } on req.access when the cookie holds a live
+ * session, in one query. A blocked login, or someone who is leaving or has left, gets no session.
+ * Super admins count as HR for the checks not yet moved to access.js (role "hr"), so they have every right from the start.
+ */
 export async function loadSession(req, _res, next) {
   try {
     const t = tokenOf(req);
     if (t) {
       const { rows } = await pool.query(
-        `SELECT u.email, u.role, u.it_admin FROM sessions s JOIN users u ON lower(u.email)=lower(s.email)
-         WHERE s.token_hash=$1 AND s.expires_at > now()`, [sha(t)]);
+        `SELECT u.email, u.role, u.it_admin, u.is_super_admin,
+                COALESCE((SELECT json_agg(json_build_object('permission', g.permission, 'scope', g.scope, 'scope_root_email', g.scope_root_email))
+                            FROM access_grants g WHERE lower(g.email)=lower(u.email) AND g.revoked_at IS NULL
+                             AND (g.expires_at IS NULL OR g.expires_at >= (now() AT TIME ZONE 'Asia/Kolkata')::date)), '[]') AS grants
+           FROM sessions s JOIN users u ON lower(u.email)=lower(s.email)
+          WHERE s.token_hash=$1 AND s.expires_at > now() AND NOT u.login_blocked
+            AND NOT EXISTS (SELECT 1 FROM employees e WHERE lower(e.work_email)=lower(u.email) AND e.status IN ('offboarding','offboarded'))`, [sha(t)]);
       // A session only counts for a company address, whatever else is in the table.
-      if (rows[0] && isCompanyEmail(rows[0].email)) req.user = rows[0];
+      const u = rows[0];
+      if (u && isCompanyEmail(u.email)) {
+        req.user = { email: u.email, role: u.is_super_admin ? "hr" : u.role, it_admin: u.it_admin || u.is_super_admin, stored_role: u.role };
+        req.access = { email: u.email.toLowerCase(), superAdmin: !!u.is_super_admin, grants: u.grants || [] };
+      }
     }
     next();
   } catch (e) { next(e); }
 }
 
+/** Signs a person out everywhere except this browser (after a password change). */
+export async function endOtherSessions(req, email) {
+  const t = tokenOf(req);
+  await pool.query("DELETE FROM sessions WHERE lower(email)=lower($1) AND token_hash <> $2", [email, t ? sha(t) : ""]);
+}
+
 export const requireAuth = (req, res, next) =>
   req.user ? next() : res.status(401).json({ error: "Please sign in." });
-
-export const requireHr = (req, res, next) =>
-  !req.user ? res.status(401).json({ error: "Please sign in." })
-  : req.user.role !== "hr" ? res.status(403).json({ error: "HR only." })
-  : next();
-
 /* ---------- brute-force guard: 5 wrong passwords lock an email for 15 minutes (limits.js keeps the count) ---------- */
 export { lockedFor, noteFailure, clearFailures } from "./limits.js";

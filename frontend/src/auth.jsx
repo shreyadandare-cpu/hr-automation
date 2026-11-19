@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useState } from "react";
-import { api } from "./api.js";
+import { api, apiShared } from "./api.js";
 
 const AuthContext = createContext(null);
 export const useAuth = () => useContext(AuthContext);
@@ -13,12 +13,19 @@ export function AuthProvider({ children }) {
   }, []);
   useEffect(() => {
     if (!user) return;
-    api("GET", "/api/leave").then((r) => {
+    apiShared("/api/leave").then((r) => {
       if (!r.ok) return;
       const me = user.email.toLowerCase(), approvers = Object.values(r.data.approvers || {});
-      setIsManager(approvers.includes(me) || (approvers.includes("directors") && (r.data.hrLeaveApprovers || []).includes(me)));
+      setIsManager(approvers.includes(me));   // decides someone's leave: above them in the reporting lines, or a super admin
     });
   }, [user]);
   if (!user) return null;
-  return <AuthContext.Provider value={{ user, isHr: user.role === "hr", itAdmin: !!user.itAdmin || user.role === "hr", isManager, payrollReviewer: !!user.payrollReviewer }}>{children}</AuthContext.Provider>;
+  // can("leave.approve") is true when the person holds that permission for the company or for some team (the server checks the person).
+  const access = user.access || {};
+  const can = (perm) => !!user.superAdmin || access[perm] != null;
+  // canAll("x"): holds it for the whole company (company-level screens and settings). canAny(...perms): any of them, in any scope.
+  const canAll = (perm) => !!user.superAdmin || access[perm] === "company";
+  const canAny = (...perms) => perms.some(can);
+  return <AuthContext.Provider value={{ user, isHr: user.role === "hr", itAdmin: !!user.itAdmin || user.role === "hr", isManager, payrollReviewer: !!user.payrollReviewer, financeViewer: !!user.financeViewer,
+    superAdmin: !!user.superAdmin, access, can, canAll, canAny }}>{children}</AuthContext.Provider>;
 }

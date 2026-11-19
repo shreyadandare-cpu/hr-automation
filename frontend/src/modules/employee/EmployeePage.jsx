@@ -6,7 +6,7 @@ import { useAuth } from "../../auth.jsx";
 import { useData } from "../../data.jsx";
 import ConfirmDialog from "../../components/ConfirmDialog.jsx";
 import Modal from "../../components/Modal.jsx";
-import { Avatar, Icon } from "../../components/ui.jsx";
+import { Avatar, Icon, pill, PageSkeleton, LineSkeleton } from "../../components/ui.jsx";
 import { useToast } from "../../components/toast.jsx";
 import { NEW_FROM, TOOLS, isTop, leaving, mgrOf, toolIds } from "../../lib/people.js";
 import { inr, lc, useLeave } from "../../lib/useLeave.js";
@@ -27,15 +27,17 @@ const GRANT = {
 const EMP = { onboarding: ["Onboarding", "p-info"], active: ["Active", "p-ok"], offboarding: ["Offboarding", "p-warn"], offboarded: ["Offboarded", "p-mute"] };
 
 function EmpPill({ e }) {
-  if (e.status === "active" && e.lastDay) { const [w, tone] = leaving(e); return <span className={`pill p-${tone}`}>{w} {fdate(e.lastDay)}</span>; }
-  return <span className={`pill ${EMP[e.status][1]}`}>{EMP[e.status][0]}</span>;
+  if (e.status === "active" && e.lastDay) { const [w, tone] = leaving(e); return <span className={pill(tone)}>{w} {fdate(e.lastDay)}</span>; }
+  return <span className={pill(EMP[e.status][1])}>{EMP[e.status][0]}</span>;
 }
 
-/* Edit details (HR only): the reporting manager is saved on the server, and only HR can change it (the server checks again).
+/* Edit details ("Edit people", people.edit): the reporting manager and employee ID are saved on the server, which checks the person again.
    Name, work email, job title, joining date and department have no server record yet, so they stay on this page (as in the old one). */
 function EditModal({ e, people, onClose, onPayroll }) {
   const toast = useToast();
-  const { isHr } = useAuth();
+  const { can, canAll } = useAuth();
+  const edits = can("people.edit");                                     // manager and employee ID
+  const salaryAccess = canAll("payroll.prepare"), bankAccess = canAll("payroll.bank");   // the payroll shortcuts below
   const { setRoster } = useData();
   const [saving, setSaving] = useState(false);
   const curMgr = mgrOf(e), top = isTop(e);
@@ -45,13 +47,14 @@ function EditModal({ e, people, onClose, onPayroll }) {
   const [empNo, setEmpNo] = useState(e.no && e.no !== "Not assigned" ? e.no : "");
   const [f, setF] = useState({ name: e.name || "", email: e.email || "", title: e.title === "—" ? "" : e.title || "", start: e.start || "", dept: e.dept });
   const [emailErr, setEmailErr] = useState("");
-  // HR: what payroll has for this person (salary and bank account), so they can add it here for someone already working in the company.
+  // Payroll: what payroll has for this person (salary and bank account), so it can be added here for someone already working in the company.
   const [pay, setPay] = useState(null);
   useEffect(() => {
-    if (!isHr) return;
-    Promise.all([api("GET", `/api/payroll/structures/${encodeURIComponent(e.baseEmail)}`), api("GET", `/api/payroll/bank/${encodeURIComponent(e.baseEmail)}`)])
+    if (!salaryAccess && !bankAccess) return;
+    const none = Promise.resolve({ ok: false });
+    Promise.all([salaryAccess ? api("GET", `/api/payroll/structures/${encodeURIComponent(e.baseEmail)}`) : none, bankAccess ? api("GET", `/api/payroll/bank/${encodeURIComponent(e.baseEmail)}`) : none])
       .then(([s, b]) => setPay({ salary: s.ok ? s.data.structures[0] || null : undefined, bank: b.ok ? b.data.bank : undefined }));
-  }, [isHr, e.baseEmail]);
+  }, [salaryAccess, bankAccess, e.baseEmail]);
   const taken = (email) => people.find((x) => x.id !== e.id && lc(x.email) === lc(email.trim()));
   const problem = (email) => {
     if (!email.trim()) return "Enter a work email.";
@@ -65,8 +68,8 @@ function EditModal({ e, people, onClose, onPayroll }) {
     if (!v.name) { document.getElementById("e-name").focus(); toast("Add the employee's full name."); return; }
     const bad = problem(v.email); if (bad) { setEmailErr(bad); document.getElementById("e-email").focus(); return; }
     const diff = Object.keys(v).filter((k) => (e[k] || "") !== v[k]);
-    const mgrChanged = isHr && !top && manager !== curMgr;
-    const noChanged = isHr && empNo.trim() !== (e.no && e.no !== "Not assigned" ? e.no : "");
+    const mgrChanged = edits && manager !== curMgr;
+    const noChanged = edits && empNo.trim() !== (e.no && e.no !== "Not assigned" ? e.no : "");
     if (!diff.length && !mgrChanged && !noChanged) { onClose(); toast("No changes to save."); return; }
     if (noChanged) {   // the employee ID is saved on the server first; if it is refused (empty, a duplicate) nothing else is saved
       if (!empNo.trim()) { document.getElementById("e-no").focus(); toast("Enter the employee ID, for example WT/17."); return; }
@@ -91,7 +94,7 @@ function EditModal({ e, people, onClose, onPayroll }) {
     <Modal onClose={onClose}><form onSubmit={submit} noValidate>
       <div className="card-h" style={{ paddingTop: 24 }}><h3>Edit {e.name}</h3></div>
       <div className="card-b">
-        {isHr && <div className="field"><label htmlFor="e-no">Employee ID</label>
+        {edits && <div className="field"><label htmlFor="e-no">Employee ID</label>
           <input className="input mono" id="e-no" value={empNo} maxLength={20} placeholder="e.g. WT/17" onChange={(ev) => setEmpNo(ev.target.value)} />
           <span className="hint">Saved for everyone. It must be different from every other employee's ID. Device IDs are matched to people by this number.</span></div>}
         {F.map(([k, l, ty]) => (
@@ -100,22 +103,22 @@ function EditModal({ e, people, onClose, onPayroll }) {
             {k === "email" && <span className="ferr" id="e-email-err" role="alert" hidden={!emailErr}>{emailErr}</span>}</div>
         ))}
         <div className="field"><label htmlFor="e-mgr">Reporting manager</label>
-          {top ? <span className="muted" id="e-mgr">{e.name} is at the top of the company, so has no reporting manager.</span> : (
-            <select className="input" id="e-mgr" value={manager} disabled={!isHr} onChange={(ev) => setManager(ev.target.value)}>
-              <option value="">No manager</option>{mgrNames.map((n) => <option key={n}>{n}</option>)}</select>)}
-          <span className="hint">{isHr ? "Only HR can change this. Their manager approves their leave; with no manager, HR does. Saved for everyone." : "Only HR can change the reporting manager."}</span></div>
+          {/* A director or VP reports only to another top person, such as the CEO. */}
+          <select className="input" id="e-mgr" value={manager} disabled={!edits} onChange={(ev) => setManager(ev.target.value)}>
+            <option value="">{top ? "No manager (top of the company)" : "No manager"}</option>{(top ? mgrNames.filter((n) => isTop((people || []).find((p) => p.name === n) || {})) : mgrNames).map((n) => <option key={n}>{n}</option>)}</select>
+          <span className="hint">{edits ? "Their manager approves their leave; with no manager, HR does. Saved for everyone." : "Only the people who edit staff details can change the reporting manager."}</span></div>
         <div className="field"><label htmlFor="e-dept">Department</label><select className="input" id="e-dept" value={f.dept} onChange={set("dept")}>{[...new Set([f.dept, ...DEPTS])].map((d) => <option key={d}>{d}</option>)}</select></div>
-        {isHr && (
+        {(salaryAccess || bankAccess) && (
           <div className="field"><span className="lab">Salary and bank account (payroll)</span>
             <div className="sal-sum" style={{ flexDirection: "column", alignItems: "stretch", gap: 10 }}>
-              <div className="row" style={{ justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
-                <span>{!pay ? "Loading…" : pay.salary === undefined ? "Salary can't be read." : pay.salary
+              {salaryAccess && <div className="row" style={{ justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+                <span>{!pay ? <LineSkeleton width="w-40" /> : pay.salary === undefined ? "Salary can't be read." : pay.salary
                   ? <>Salary <b>{inr(pay.salary.earnings.reduce((n, x) => n + Number(x.amount || 0), 0))}</b> a month, from {fdate(pay.salary.effectiveFrom + "-01")}</> : <span className="muted">No salary added yet. Payroll can't pay this person until it is.</span>}</span>
-                <button type="button" className="btn glass sm" onClick={() => { onClose(); onPayroll("salary"); }}>{pay && pay.salary ? "Edit salary" : "Add salary"}</button></div>
-              <div className="row" style={{ justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+                <button type="button" className="btn glass sm" onClick={() => { onClose(); onPayroll("salary"); }}>{pay && pay.salary ? "Edit salary" : "Add salary"}</button></div>}
+              {bankAccess && <div className="row" style={{ justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
                 <span>{!pay ? "" : pay.bank === undefined ? "Bank account can't be read." : pay.bank ? <>Bank {pay.bank.bankName} ••{pay.bank.last4}</> : <span className="muted">No salary bank account yet. It's needed for the bank transfer file.</span>}</span>
-                <button type="button" className="btn glass sm" onClick={() => { onClose(); onPayroll("bank"); }}>{pay && pay.bank ? "Change bank account" : "Add bank account"}</button></div></div>
-            <span className="hint">Only HR sees this. These buttons close this form, so save any other changes above first.</span></div>)}
+                <button type="button" className="btn glass sm" onClick={() => { onClose(); onPayroll("bank"); }}>{pay && pay.bank ? "Change bank account" : "Add bank account"}</button></div>}</div>
+            <span className="hint">Only the people who work on payroll see this. These buttons close this form, so save any other changes above first.</span></div>)}
         <div className="muted" style={{ fontSize: 13 }}>The reporting manager is saved for everyone. The other details have no server record yet, so they show on this page until it is reloaded.</div></div>
       <div className="modal-f"><button type="button" className="btn glass" onClick={onClose}>Cancel</button><button type="submit" className="btn primary" disabled={saving}>{saving ? "Saving…" : "Save changes"}</button></div>
     </form></Modal>
@@ -123,7 +126,10 @@ function EditModal({ e, people, onClose, onPayroll }) {
 }
 
 function EmployeeView({ p }) {
-  const { isHr, user } = useAuth();
+  const { user, can, canAll } = useAuth();
+  // What this viewer may do here. The server checks each action again, for this person.
+  const edits = can("people.edit"), runsOn = canAll("onboarding.manage"), runsOff = canAll("offboarding.manage");
+  const tools = canAll("tools.manage"), logins = canAll("users.manage"), setsPay = canAll("leave.manage");
   const { people, docs, records, reload, claudeMode } = useData();
   const lv = useLeave();
   const toast = useToast();
@@ -133,14 +139,14 @@ function EmployeeView({ p }) {
   const byRequest = claudeMode === "simulated";   // no Claude admin key: access is requested from the Claude admin, who invites them in Claude
   const [busy, setBusy] = useState(null);        // "provisioning" or "revoking" while a Claude call runs
   const [params, setParams] = useSearchParams();
-  const [modal, setModal] = useState(() => (params.get("edit") === "1" && isHr && p.status !== "offboarded" ? "edit" : null));   // "edit" | "laptop"; the directory's Edit sends people here with ?edit=1
+  const [modal, setModal] = useState(() => (params.get("edit") === "1" && edits && p.status !== "offboarded" ? "edit" : null));   // "edit" | "laptop"; the directory's Edit sends people here with ?edit=1
   useEffect(() => { if (params.get("edit")) { const n = new URLSearchParams(params); n.delete("edit"); setParams(n, { replace: true }); } }, []);   // clean the address so a refresh does not reopen it
 
   const loadRec = useCallback(async () => {
-    if (!isHr) return;
+    if (!runsOff) return;
     const r = await api("GET", "/api/offboarding");
     if (r.ok && Array.isArray(r.data)) setRec(r.data.filter((o) => lc(o.email) === lc(p.email)).pop() || null);
-  }, [isHr, p.email]);
+  }, [runsOff, p.email]);
   useEffect(() => { loadRec(); }, [loadRec]);
 
   const record = useMemo(() => records.find((x) => lc(x.email) === lc(p.email)), [records, p.email]);
@@ -179,7 +185,7 @@ function EmployeeView({ p }) {
   useEffect(() => {
     if (status === "onboarding" && total > 0 && done === total && !loc.status) {
       patchLocal(p.email, { status: "active" }); toast(`${e.name} is fully onboarded`);
-      if (isHr) api("PUT", "/api/employees/status", { email: p.email, status: "active" }).then(() => reload());
+      if (edits) api("PUT", "/api/employees/status", { email: p.email, status: "active" }).then(() => reload());
     }
   }, [status, total, done]);   // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -212,7 +218,7 @@ function EmployeeView({ p }) {
   };
 
   const tick = async (x, checked) => {
-    if (!isHr) { toast("Only HR can do this."); return; }
+    if (phase === "on" ? !runsOn : !runsOff) { toast(phase === "on" ? "Only the people who run onboarding can do this." : "Only the people who run offboarding can do this."); return; }
     if (phase === "on") {
       patchLocal(p.email, { onTasks: onTasks.map((t, i) => (i === x.i ? { ...t, done: checked } : t)) });
       return;
@@ -231,12 +237,12 @@ function EmployeeView({ p }) {
     <section className="section" style={{ gap: 22 }}>
       <BackButton to="/app/employees" />
       <div className="card">
-        <div className="profile"><Avatar person={e} /><div style={{ flex: 1, minWidth: 0 }}><div className="eyebrow">{e.dept}</div><h2 style={{ marginTop: 6 }}>{e.name}</h2><div style={{ color: "var(--ink-dim)", marginTop: 2 }}>{e.title}</div><div className="muted" style={{ marginTop: 6, fontSize: 13 }}>{e.email} · <span className={`pill ${e.mailPlan === "Business" ? "p-info" : "p-mute"}`}>{e.mailPlan} mail</span></div></div>
+        <div className="profile"><Avatar person={e} /><div style={{ flex: 1, minWidth: 0 }}><div className="eyebrow">{e.dept}</div><h2 style={{ marginTop: 6 }}>{e.name}</h2><div style={{ color: "var(--ink-dim)", marginTop: 2 }}>{e.title}</div><div className="muted" style={{ marginTop: 6, fontSize: 13 }}>{e.email} · <span className={pill(e.mailPlan === "Business" ? "p-info" : "p-mute")}>{e.mailPlan} mail</span></div></div>
           <div className="row"><EmpPill e={e} />
-            {isHr && p.status === "onboarding" && <button className="btn primary sm" disabled={activating} onClick={markActive}>{activating ? "Saving…" : "Mark as active"}</button>}
-            {isHr && status !== "offboarded" && <button className="btn glass sm" onClick={() => setModal("edit")}>Edit details</button>}
-            {isHr && pending.length > 0 && <button className="btn primary sm" disabled={!!busy} onClick={() => setAsking(true)}>{byRequest ? "Request Claude access" : "Give Claude access"}</button>}
-            {isHr && canOff && <Link className="btn glass sm" to={`/app/offboarding?email=${encodeURIComponent(p.email)}`}><Icon name="offboard" />Offboard</Link>}</div></div>
+            {edits && p.status === "onboarding" && <button className="btn primary sm" disabled={activating} onClick={markActive}>{activating ? "Saving…" : "Mark as active"}</button>}
+            {edits && status !== "offboarded" && <button className="btn glass sm" onClick={() => setModal("edit")}>Edit details</button>}
+            {tools && pending.length > 0 && <button className="btn primary sm" disabled={!!busy} onClick={() => setAsking(true)}>{byRequest ? "Request Claude access" : "Give Claude access"}</button>}
+            {runsOff && canOff && <Link className="btn glass sm" to={`/app/offboarding?email=${encodeURIComponent(p.email)}`}><Icon name="offboard" />Offboard</Link>}</div></div>
         <dl className="facts">
           <div><dt>Employee no.</dt><dd className="mono">{e.no || "Not assigned"}</dd></div>
           <div><dt>Work email</dt><dd className="mono">{e.email}</dd></div>
@@ -252,11 +258,11 @@ function EmployeeView({ p }) {
           {toolIds(e).map((id) => (
             <div className="access-row" key={id}><span className="app-ic" style={{ background: TOOLS[id].color }} title={TOOLS[id].name}>{TOOLS[id].mono}</span>
               <div className="grow"><b>{TOOLS[id].name}</b><span className={grants[id] === "failed" ? "err" : ""}>{grants[id] === "failed" ? errors[id] || "Request failed" : grants[id] === "created" ? `Suspended until ${fdate(e.start)}, then activates automatically` : TOOLS[id].sub}</span></div>
-              <span className={`pill ${GRANT[grants[id]][1]}`}>{GRANT[grants[id]][0]}</span>
-              {isHr && grants[id] === "failed" && <button className="btn glass sm" onClick={() => retry(id)}>Retry</button>}
-              {isHr && id === "claude" && status !== "offboarded" && ["none", "revoked"].includes(grants[id]) && <button className="btn primary sm" disabled={!!busy} onClick={() => setAsking(true)}>{byRequest ? "Request Claude access" : "Give Claude access"}</button>}
-              {isHr && id === "claude" && grants[id] === "requested" && <button className="btn glass sm" onClick={cancelRequest}>Cancel request</button>}
-              {isHr && id === "claude" && ["active", "invited"].includes(grants[id]) && <button className="btn glass sm" onClick={remove}>Remove access</button>}
+              <span className={pill(GRANT[grants[id]][1])}>{GRANT[grants[id]][0]}</span>
+              {(status === "offboarding" ? runsOff : tools) && grants[id] === "failed" && <button className="btn glass sm" onClick={() => retry(id)}>Retry</button>}
+              {tools && id === "claude" && status !== "offboarded" && ["none", "revoked"].includes(grants[id]) && <button className="btn primary sm" disabled={!!busy} onClick={() => setAsking(true)}>{byRequest ? "Request Claude access" : "Give Claude access"}</button>}
+              {tools && id === "claude" && grants[id] === "requested" && <button className="btn glass sm" onClick={cancelRequest}>Cancel request</button>}
+              {tools && id === "claude" && ["active", "invited"].includes(grants[id]) && <button className="btn glass sm" onClick={remove}>Remove access</button>}
             </div>
           ))}
         </div>
@@ -272,16 +278,16 @@ function EmployeeView({ p }) {
           ))}
         </div>
       </div>
-      {isHr && status !== "offboarded" && <AppLoginCard person={{ ...e, email: p.email }} personalEmail={record && record.personalEmail} />}
-      <RecordCard e={e} record={record} docs={docs} isMe={isMe} isHr={isHr} />
-      <OffCard e={e} rec={rec} scheduled={scheduled} isHr={isHr} onChanged={() => { loadRec(); reload(); }} />
-      {isHr && rec && rec.status !== "cancelled" && <ClearanceCard rec={rec} onDone={(r) => { setRec(r); reload(); }} />}
-      <TeamCard e={e} isHr={isHr} isMe={isMe} />
+      {logins && status !== "offboarded" && <AppLoginCard person={{ ...e, email: p.email }} personalEmail={record && record.personalEmail} />}
+      <RecordCard e={e} record={record} docs={docs} isMe={isMe} mayView={can("people.view") || can("documents.view")} />
+      <OffCard e={e} rec={rec} scheduled={scheduled} mayRun={runsOff} maySetPay={setsPay} onChanged={() => { loadRec(); reload(); }} />
+      {runsOff && rec && rec.status !== "cancelled" && <ClearanceCard rec={rec} onDone={(r) => { setRec(r); reload(); }} />}
+      <TeamCard e={e} isMe={isMe} />
       <ProjectsCard e={e} />
-      <LeaveCard e={e} isHr={isHr} />
-      {isHr && <ReimbCard e={e} />}
-      {isHr && <AdvancesCard email={p.email} name={e.name} />}
-      {isHr && <HistoryCard email={p.email} />}
+      <LeaveCard e={e} maySetPay={setsPay} />
+      {can("expenses.approve") && <ReimbCard e={e} />}
+      {can("advances.approve") && !isMe && <AdvancesCard email={p.email} name={e.name} />}
+      {canAll("audit.view") && <HistoryCard email={p.email} />}
       {asking && <ConfirmDialog title={byRequest ? `Request Claude access for ${e.name}?` : `Give Claude access to ${e.name}?`} confirmLabel={byRequest ? "Send request" : "Send invite"} onClose={() => setAsking(false)} onConfirm={async () => { await toolDo("grant"); setAsking(false); }}>
         {byRequest
           ? <>The Claude admin is asked to invite <b>{e.email}</b> from your Claude organisation. Nothing reaches {e.name} until they do, and it may use a paid seat.</>
@@ -300,7 +306,7 @@ function EmployeeView({ p }) {
 export default function EmployeePage() {
   const { email } = useParams();
   const { people } = useData();
-  if (!people) return <section className="section"><div className="empty">Loading…</div></section>;
+  if (!people) return <PageSkeleton />;
   const p = people.find((x) => lc(x.email) === lc(email));
   if (!p) return <Navigate to="/app/employees" replace />;
   return <EmployeeView key={p.email} p={p} />;

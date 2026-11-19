@@ -1,3 +1,7 @@
+import { Link } from "react-router-dom";
+import Posts from "../modules/posts/Posts.jsx";
+import TimeToday from "../components/TimeToday.jsx";
+import RemoteToday from "../components/RemoteToday.jsx";
 import FestivalTile from "../modules/festivals/FestivalTile.jsx";
 import { useAuth } from "../auth.jsx";
 import { useData } from "../data.jsx";
@@ -5,39 +9,32 @@ import { Donut, Ring } from "../components/charts.jsx";
 import TodayCards from "../components/TodayCards.jsx";
 import BirthdayPopup from "../components/BirthdayPopup.jsx";
 import CelebrateCard from "../components/CelebrateCard.jsx";
-import { Icon, ToolIcon, shortDate } from "../components/ui.jsx";
+import { Icon, ToolIcon, shortDate, PageSkeleton } from "../components/ui.jsx";
 import { AVATAR_COLORS, TOOLS, docCount, mgrOf } from "../lib/people.js";
 import { R } from "../lib/leave.js";
+import { FestivalArt, festivalFrom, festivalGreeting, festivalTheme, festivalWhen, useFestivalLook } from "../components/FestivalLook.jsx";
 
 const diff = (a, b) => Math.round((Date.parse(b + "T00:00:00Z") - Date.parse(a + "T00:00:00Z")) / 86400000);
 const first = (n) => String(n || "").trim().split(/\s+/)[0] || "there";
 const longDay = (iso) => new Date(iso + "T00:00:00").toLocaleDateString("en-IN", { weekday: "long", day: "numeric", month: "long" });
 
-/* The hero changes with the hour: only a faint tint, warmer in the morning, deeper at night. */
-function sky() {
-  const h = new Date().getHours();
-  const sun = <><circle cx="32" cy="32" r="12" /><path d="M32 6v8M32 50v8M6 32h8M50 32h8M13.6 13.6l5.6 5.6M44.8 44.8l5.6 5.6M13.6 50.4l5.6-5.6M44.8 19.2l5.6-5.6" /></>;
-  const moon = <path d="M50 38A20 20 0 1 1 26 14a16 16 0 0 0 24 24z" />;
-  const [word, a, b, icon] = h < 12 ? ["Good morning", "rgba(247,120,29,.14)", "rgba(234,217,194,.45)", sun]
-    : h < 18 ? ["Good afternoon", "rgba(247,120,29,.08)", "rgba(200,95,68,.10)", sun]
-    : ["Good evening", "rgba(128,13,53,.14)", "rgba(247,120,29,.08)", moon];
-  return { word, a, b, svg: <svg className="db-sky" viewBox="0 0 64 64" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" aria-hidden="true">{icon}</svg> };
-}
+const greeting = () => { const h = new Date().getHours(); return h < 12 ? "Good morning" : h < 18 ? "Good afternoon" : "Good evening"; };
 
-function Hero({ me, photo, today, sub, actions }) {
-  const s = sky();
+/* The head of the dashboard: a small photo, the greeting, the date and what needs you today. No buttons inside it: the actions sit in Quick access below. */
+function Head({ me, photo, today, sub }) {
+  const fest = useFestivalLook();
   return (
-    <section className="db-hero" style={{ "--db-a": s.a, "--db-b": s.b }}>
-      {s.svg}
-      <a className="db-avatar" href="/app/profile" style={{ background: photo ? "transparent" : me.color || "#800d35" }} aria-label="My profile">
+    <section className={`db-head ${fest ? "overflow-hidden bg-none! [&>*:not(canvas,.fest-veil)]:relative [&>*:not(canvas,.fest-veil)]:z-1" : ""}`}>
+      {fest && <><FestivalArt slug={fest.slug} className="object-[70%_45%] animate-fest-art" /><span aria-hidden="true" className="fest-veil pointer-events-none absolute inset-0 bg-[linear-gradient(90deg,rgba(20,6,10,.82)_0%,rgba(20,6,10,.55)_45%,rgba(20,6,10,.1)_100%)]" /></>}
+      <Link className="db-avatar" to="/app/profile" style={{ background: photo ? "transparent" : me.color || "var(--brand-maroon)" }} aria-label="My profile">
         {photo ? <img src={photo} alt="" /> : me.name.split(/\s+/).map((p) => p[0]).slice(0, 2).join("").toUpperCase()}
-      </a>
-      <div style={{ minWidth: 0, flex: 1 }}>
-        <div className="eyebrow">{longDay(today)}</div>
-        <h1>{s.word}, <em>{first(me.name)}.</em></h1>
-        <p>{sub}</p>
-        <div className="row">{actions}</div>
+      </Link>
+      <div className="db-head-text">
+        <h1 className={fest ? "animate-fest-rise" : ""}>{fest && !fest.inDays ? festivalGreeting(fest) : greeting()}, {first(me.name)}</h1>
+        <p>{longDay(today)}. {sub}</p>
+        {fest && <p className="mt-2! animate-fest-rise font-display text-[17px] italic text-orange!">{fest.inDays ? `${festivalWhen(fest)}. ${festivalFrom(fest)}.` : `${festivalFrom(fest)}. Have a wonderful day.`}</p>}
       </div>
+      {fest && <span aria-hidden="true" className="fest-veil pointer-events-none absolute inset-x-0 bottom-0 z-1 h-1" style={{ background: `linear-gradient(90deg, ${festivalTheme(fest.slug).colors.join(", ")})` }} />}
     </section>
   );
 }
@@ -73,19 +70,27 @@ function HrDashboard() {
 
   return (
     <div className="db">
-      <Hero me={me} photo={photo} today={today}
-        sub={`${summary} ${active} active ${active === 1 ? "person" : "people"}${soon.length ? `, ${soon.length} joining soon` : ""}${leaving.length ? `, ${leaving.length} leaving` : ""}.`}
-        actions={<><a className="btn primary" href="/app/documents">+ New onboarding</a><a className="btn glass" href="/app/offboarding"><Icon name="offboard" />Offboard someone</a></>} />
+      <Head me={me} photo={photo} today={today} sub={summary} />
       <div className="rb-stats four db-strip">
-        <a className="rb-stat" href="/app/employees"><span className="lbl">Active people</span><b>{active}</b><span className="sub">{here.length} on the staff list</span></a>
-        <a className="rb-stat" href="/app/attendance"><span className="lbl">Away today</span><b>{awayToday}</b><span className="sub">on approved leave</span></a>
-        <a className={`rb-stat ${nPend ? "warn" : ""}`} href="/app/leave"><span className="lbl">Leave to approve</span><b>{nPend}</b><span className="sub">{nPend ? "waiting for you" : "nothing waiting"}</span></a>
-        <a className="rb-stat" href="/app/onboarding"><span className="lbl">New joiners</span><b>{soon.length + settling.length}</b><span className="sub">{leaving.length ? `${leaving.length} leaving` : "no one leaving"}</span></a>
+        <Link className="rb-stat" to="/app/employees"><span className="lbl">Active people</span><b>{active}</b><span className="sub">{here.length} on the staff list</span></Link>
+        <Link className="rb-stat" to="/app/attendance"><span className="lbl">Away today</span><b>{awayToday}</b><span className="sub">on approved leave</span></Link>
+        <Link className={`rb-stat ${nPend ? "warn" : ""}`} to="/app/leave"><span className="lbl">Leave to approve</span><b>{nPend}</b><span className="sub">{nPend ? "waiting for you" : "nothing waiting"}</span></Link>
+        <Link className="rb-stat" to="/app/onboarding/progress"><span className="lbl">New joiners</span><b>{soon.length + settling.length}</b><span className="sub">{leaving.length ? `${leaving.length} leaving` : "no one leaving"}</span></Link>
       </div>
-      {/* Rows of two, each pair the same height; Festival wishes is a slim card across the bottom. */}
-      <div className="db-grid">
-        <TodayCards only="leave" />
-        <CelebrateCard />
+      {/* A narrow quick-access column beside the wider main column, like a home screen: what is happening today on the left, the company on the right. */}
+      <div className="db-main">
+        <div className="db-col">
+          <h2 className="db-h">Quick access</h2>
+          <div className="row"><Link className="btn glass sm" to="/app/onboarding"><Icon name="onboard" />Add a new joiner</Link><Link className="btn glass sm" to="/app/offboarding"><Icon name="offboard" />Offboard someone</Link></div>
+          <Link className="card db-inbox" to="/app/inbox">
+            <span className={`q-ic ${nPend ? "q-warn" : "q-ok"}`}><Icon name={nPend ? "mail" : "check"} /></span>
+            <span className="grow"><b>To do</b><span>{nPend ? `${nPend} leave request${nPend === 1 ? "" : "s"} waiting for you` : "You have no pending actions."}</span></span>
+            <span className="btn link">Open</span>
+          </Link>
+          <TimeToday />
+          <TodayCards only="leave" />
+          <RemoteToday />
+          <FestivalTile />
         <div className="card"><div className="card-h"><h3>Seats in use</h3></div><div className="card-b" style={{ display: "flex", flexDirection: "column", gap: 14 }}>
           {seats.map((x) => (
             <div key={x.t.id} style={{ display: "grid", gridTemplateColumns: "28px minmax(0,1fr) 28px", gap: 12, alignItems: "center" }}>
@@ -94,10 +99,16 @@ function HrDashboard() {
               <span className="num-cell" style={{ textAlign: "right", font: "600 18px/1 var(--display)" }}>{x.n}</span>
             </div>))}
         </div></div>
-        <div className="card"><div className="card-h"><h3>People by department</h3><a className="btn link" href="/app/employees">Everyone</a></div>
+        <div className="card"><div className="card-h"><h3>People by department</h3><Link className="btn link" to="/app/employees">Everyone</Link></div>
           <div className="db-donut"><Donut parts={depts} label="people" /><div className="db-legend">{depts.map((d) => <div key={d.label}><i style={{ background: d.color }} />{d.label}<span>{d.value}</span></div>)}</div></div>
         </div>
-        <div className="db-wide"><FestivalTile /></div>
+        </div>
+        <div className="db-col">
+          <h2 className="db-h">Organisation</h2>
+          <CelebrateCard />
+          <div className="row"><Link className="btn glass sm" to="/app/polls">Polls</Link><Link className="btn glass sm" to="/app/praise">Praise a colleague</Link><Link className="btn glass sm" to="/app/articles">Articles</Link></div>
+          <Posts embedded />
+        </div>
       </div>
     </div>
   );
@@ -135,21 +146,23 @@ function EmployeeDashboard() {
 
   return (
     <div className="db">
-      <Hero me={me} photo={photo} today={today}
-        sub={<>{me.title && me.title !== "—" ? me.title : "Welcome"}{me.dept && me.dept !== "—" && !String(me.title || "").toLowerCase().includes(me.dept.toLowerCase()) ? ` · ${me.dept}` : ""}{mgr ? ` · Reports to ${mgr}` : ""}</>}
-        actions={<><a className="btn primary" href="/app/my-leave">Request leave</a><a className="btn glass" href="/app/profile">My profile</a><a className="btn glass" href="/app/documents">Upload documents</a></>} />
+      <Head me={me} photo={photo} today={today}
+        sub={<>{me.title && me.title !== "—" ? me.title : "Welcome"}{me.dept && me.dept !== "—" && !String(me.title || "").toLowerCase().includes(me.dept.toLowerCase()) ? ` · ${me.dept}` : ""}{mgr ? ` · Reports to ${mgr}` : ""}</>} />
       <div className="db-cols">
         <div className="db-col">
-        <div className="card"><div className="card-h"><h3>My leave</h3><a className="btn link" href="/app/my-leave">Details</a></div>
+        <div className="row"><Link className="btn glass sm" to="/app/leave/apply?self=1">Request leave</Link><Link className="btn glass sm" to="/app/documents">Upload documents</Link></div>
+        <div className="card"><div className="card-h"><h3>My leave</h3><Link className="btn link" to="/app/my-leave">Details</Link></div>
           {bal || <div className="card-b muted">Your leave balances show here once the leave data has loaded.</div>}
         </div>
+        <TimeToday />
         <TodayCards only="leave" />
+        <RemoteToday />
         </div>
         <div className="db-col">
         <div className="card"><div className="card-h"><h3>{pct === 100 ? "Your profile is complete" : "Finish setting up"}</h3><span className="muted">{done} of {steps.length}</span></div>
           <div className="db-donut" style={{ paddingBottom: 10 }}><Ring pct={pct} color="var(--purple)" label={`${pct}%`} sub="complete" size={112} />
             <div className="db-legend"><span style={{ margin: 0, textAlign: "left", color: "var(--ink-dim)" }}>{pct === 100 ? "Everything is in. Nice work." : "A fuller profile helps your team and HR."}</span></div></div>
-          {steps.map(([t, ok, href]) => <a key={t} className={`step ${ok ? "done" : ""}`} href={href}><span className="tick"><Icon name="check" /></span><span>{t}</span>{!ok && <em>Do it</em>}</a>)}
+          {steps.map(([t, ok, href]) => <Link key={t} className={`step ${ok ? "done" : ""}`} to={href}><span className="tick"><Icon name="check" /></span><span>{t}</span>{!ok && <em>Do it</em>}</Link>)}
         </div>
         <CelebrateCard />
         <FestivalTile />
@@ -160,8 +173,10 @@ function EmployeeDashboard() {
 }
 
 export default function Dashboard() {
-  const { isHr } = useAuth();
+  const { canAll, superAdmin } = useAuth();
+  // The company dashboard is for the people who run the company's people records; everyone else gets their own.
+  const runsCompany = canAll("people.edit") || superAdmin;
   const { people } = useData();
-  if (!people) return <section className="section"><div className="empty">Loading…</div></section>;
-  return <>{isHr ? <HrDashboard /> : <EmployeeDashboard />}<BirthdayPopup /></>;
+  if (!people) return <PageSkeleton />;
+  return <>{runsCompany ? <HrDashboard /> : <EmployeeDashboard />}<BirthdayPopup /></>;
 }

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { api, apiMsg } from "../../api.js";
 import { useAuth } from "../../auth.jsx";
 import { useData } from "../../data.jsx";
-import { Pill, Person, SectionHead, shortDate } from "../../components/ui.jsx";
+import { Pill, Person, SectionHead, shortDate, PageSkeleton } from "../../components/ui.jsx";
 import { useToast } from "../../components/toast.jsx";
 import { ObTabs } from "./shared.jsx";
 
@@ -11,7 +11,8 @@ const waited = (n) => (n === 0 ? "Today" : n === 1 ? "1 day" : `${n} days`);
 
 /* Who is waiting to be invited to Claude. HR asks for access; the Claude admin invites the person in Claude and clicks Done here. */
 export default function ClaudeRequests() {
-  const { isHr, itAdmin } = useAuth();
+  const { canAll } = useAuth();
+  const mayManage = canAll("tools.manage"), runsOnboarding = canAll("onboarding.manage");
   const { reload, claudeMode } = useData();
   const toast = useToast();
   const [list, setList] = useState(null);
@@ -21,11 +22,11 @@ export default function ClaudeRequests() {
     const r = await api("GET", "/api/claude-requests");
     if (r.ok) setList(r.data); else setList({ error: apiMsg(r) });
   }, []);
-  useEffect(() => { if (itAdmin) load(); }, [itAdmin, load]);
+  useEffect(() => { if (mayManage) load(); }, [mayManage, load]);
 
-  const tabs = isHr ? <ObTabs cur="claude" /> : null;
-  if (!itAdmin) return <section className="section"><SectionHead eyebrow="Claude" title="Claude access" accent="requests." /><div className="empty">Only HR and IT admins can see Claude requests.</div></section>;
-  if (!list) return <section className="section">{tabs}<div className="empty">Loading…</div></section>;
+  const tabs = runsOnboarding ? <ObTabs cur="claude" /> : null;
+  if (!mayManage) return <section className="section"><SectionHead eyebrow="Claude" title="Claude access requests" /><div className="empty">Only the people who manage tool access can see Claude requests.</div></section>;
+  if (!list) return <section className="section">{tabs}<PageSkeleton stats={0} /></section>;
   if (list.error) return <section className="section">{tabs}<div className="empty">{list.error}</div></section>;
 
   const act = async (what, p, okText) => {
@@ -43,8 +44,7 @@ export default function ClaudeRequests() {
 
   return (
     <section className="section">
-      {tabs}
-      <SectionHead eyebrow="Claude" title="Claude access" accent="requests."
+      <SectionHead title={runsOnboarding ? "Onboarding" : "Claude access requests"} tabs={tabs}
         sub="Invite each person below from Claude (Settings, Members, Invite), then click Done here. Once they accept the email from Claude, mark them as accepted." />
       {claudeMode !== "simulated" && <div className="empty" style={{ marginBottom: 16 }}>Claude is connected to this app, so invites are sent automatically. This list only shows requests made before that.</div>}
 

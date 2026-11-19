@@ -4,6 +4,7 @@ import { api, apiMsg } from "../../api.js";
 import { useAuth } from "../../auth.jsx";
 import { useToast } from "../../components/toast.jsx";
 import { BqPill, ClaimPill, Ico, Kv, Wf, catName, dtShort, fdate, money, todayIso, useCats } from "./util.jsx";
+import { pill } from "../../components/ui.jsx";
 
 /* The stepper follows the request and its final bill: decision, expense, bill, verification, payroll, paid. */
 function budgetSteps(b) {
@@ -29,7 +30,8 @@ const Row = ({ k, v, cls = "" }) => <div className={`am-row ${cls}`}><span>{k}</
 
 export default function BudgetDetail() {
   const { id } = useParams();
-  const { user, isHr: hr } = useAuth();
+  const { user, can } = useAuth();
+  const hr = can("budgets.approve");   // decides the requests of the people in scope; the server checks each one
   const navigate = useNavigate();
   const toast = useToast();
   const cats = useCats();
@@ -41,13 +43,13 @@ export default function BudgetDetail() {
 
   const load = useCallback(async () => {
     let r = await api("GET", "/api/budget-requests/" + id);
-    if (r.ok && hr && r.data.request.status === "submitted") {
+    if (r.ok && hr && r.data.request.email.toLowerCase() !== (user.email || "").toLowerCase() && r.data.request.status === "submitted") {   // never your own
       const o = await api("POST", `/api/budget-requests/${id}/open`);
       if (o.ok && o.data.changed) r = await api("GET", "/api/budget-requests/" + id);
     }
     if (!r.ok) { setSt(r.status === 404 ? "missing" : "error"); return; }
     setB(r.data.request); setEvents(r.data.events); setAmt(String(r.data.request.requestedBudget)); setReason(""); setSt("ready");
-  }, [id, hr]);
+  }, [id, hr, user.email]);
   useEffect(() => { setSt("loading"); setB(null); window.scrollTo(0, 0); load(); }, [load]);
 
   const back = <button className="back" onClick={() => navigate("/app/budgets")}><span className="back-ar" aria-hidden="true">←</span>{hr ? "All budget requests" : "My budget requests"}</button>;
@@ -79,7 +81,7 @@ export default function BudgetDetail() {
     { state: { budget: { id: b.id, requestNo: b.requestNo, purpose: b.purpose, approvedBudget: b.approvedBudget } } });
   const openClaim = (cid) => navigate(`/app/reimbursements/${cid}`);
 
-  const decideCard = hr && open && (
+  const decideCard = hr && open && !mine && (
     <div className="card rb-decide"><div className="card-h"><div><h3>HR decision</h3><span className="muted">Requested {money(b.requestedBudget)}</span></div></div>
       <div className="card-b form">
         <Wf id="bd-amt" label="Approved budget (₹)" hint={`Maximum ${money(b.requestedBudget)}. HR can't approve more than was requested.`}>
@@ -101,7 +103,7 @@ export default function BudgetDetail() {
       {mine && ["draft", "changes_requested"].includes(b.claim.status) && <div className="row" style={{ marginTop: 12 }}><button className="btn primary sm" onClick={() => openClaim(b.claim.id)}>Continue the bill</button></div>}
     </div></div>
   ) : (
-    <div className="card"><div className="card-h"><h3>Final bill</h3><span className="pill p-warn">Not filed yet</span></div><div className="card-b" style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+    <div className="card"><div className="card-h"><h3>Final bill</h3><span className={pill("warn")}>Not filed yet</span></div><div className="card-b" style={{ display: "flex", flexDirection: "column", gap: 12 }}>
       <div className="muted">After the event, upload the final bill. Up to <b>{money(b.approvedBudget)}</b> is reimbursed; anything above it is not.</div>
       {mine ? <div><button className="btn primary" onClick={fileBill}><Ico name="doc" />Upload the final bill</button></div> : <div className="muted">Waiting for {b.employee.name} to upload it.</div>}
     </div></div>

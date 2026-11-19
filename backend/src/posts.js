@@ -4,22 +4,24 @@ import path from "node:path";
 import express from "express";
 import { pool } from "./db.js";
 import { requireAuth } from "./auth.js";
+import { canAll } from "./access.js";
 import { UPLOAD_DIR } from "./documents.js";
 import { notify } from "./notify.js";
 
 /*
- * Posts: the company feed. HR writes, edits and removes posts (with an optional title and up to 4 photos); everyone
+ * Posts: the company feed. People with "Company posts and pages" write, edit and remove posts (with an optional title and up to 4 photos); everyone
  * signed in reads them, likes them (one like per person per post), comments and shares them inside the app (to colleagues
  * through the notification bell, or by copying the post's link). Roles are checked here, never only on the page.
  * Bodies are plain text; the page shows them as text, never as HTML.
  */
 const TITLE_MAX = 120, POST_MAX = 3000, COMMENT_MAX = 1000, PAGE = 10, MAX_IMAGES = 4, MAX_IMAGE_BYTES = 4 * 1024 * 1024;
 const PREVIEW_COMMENTS = 3, COMMENT_PAGE = 50, SHARE_MAX = 25;
-const isHr = (req) => req.user && req.user.role === "hr";
+// Writing, editing and removing posts, and removing anyone's comment: "Company posts and pages" (engage.manage) for the whole company.
+const mayManage = (req) => canAll(req, "engage.manage");
 const me = (req) => req.user.email.toLowerCase();
 const text = (v) => String(v == null ? "" : v).replace(/\r\n/g, "\n").trim();
 const idOf = (v) => { const n = Number(v); return Number.isInteger(n) && n > 0 ? n : 0; };
-const HR_ONLY = { error: "Only HR can create, edit or remove posts." };
+const NO_ACCESS = { error: "You do not have access to this. Please ask a super admin if you need it." };
 // What the file really is, from its first bytes (never from its name or the browser's word for it).
 const sniffImage = (b) =>
   b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff ? { mime: "image/jpeg", ext: "jpg" }
@@ -36,7 +38,7 @@ async function peopleBy(db, emails) {
   return (email) => { const p = who[email.toLowerCase()]; return { email, name: p ? p.name : email.split("@")[0], title: p ? p.title : "" }; };
 }
 const toComment = (c, person, req) => ({ id: c.id, author: person(c.author_email), body: c.body, createdAt: c.created_at,
-  canDelete: isHr(req) || c.author_email.toLowerCase() === me(req) });
+  canDelete: mayManage(req) || c.author_email.toLowerCase() === me(req) });
 
 /** Posts with their authors, likes, latest comments and shares, newest first. */
 async function load(db, req, { ids, before } = {}) {
@@ -69,7 +71,7 @@ async function load(db, req, { ids, before } = {}) {
       commentCount: (by(counts.rows, p.id) || {}).n || 0,
       comments: comments.rows.filter((c) => c.post_id === p.id).map((c) => toComment(c, person, req)),
       shares: (by(shares.rows, p.id) || {}).n || 0,
-      canManage: isHr(req),
+      canManage: mayManage(req),
     })),
   };
 }
@@ -108,7 +110,7 @@ export function postsRouter(wrap) {
 
   /* Photos: HR uploads one at a time (the raw picture as the body) and sends the ids with the post. */
   r.post("/api/posts/images", express.raw({ type: () => true, limit: MAX_IMAGE_BYTES }), wrap(async (req, res) => {
-    if (!isHr(req)) return res.status(403).json(HR_ONLY);
+    if (!mayManage(req)) return res.status(403).json(NO_ACCESS);
     const body = req.body;
     if (!Buffer.isBuffer(body) || !body.length) return res.status(400).json({ error: "The photo is empty." });
     const type = sniffImage(body);
@@ -127,7 +129,7 @@ export function postsRouter(wrap) {
     const { rows } = await pool.query("SELECT * FROM post_images WHERE id=$1", [idOf(req.params.id)]);
     const img = rows[0];
     if (!img || (!img.post_id && img.uploaded_by.toLowerCase() !== me(req))) return res.status(404).json({ error: "No photo" });
-    res.set({ "Content-Type": img.mime, "X-Content-Type-Options": "nosniff", "Cache-Control": "private, max-age=86400" });
+    res.set({ "Content-Type": img.mime, "X-Content-Type-Options": "nosniff", "Cache-Control": "private, max-age=31536000, immutable" });   // a photo never changes: a new one gets a new id
     res.sendFile(path.join(UPLOAD_DIR, img.stored_name), (err) => { if (err && !res.headersSent) res.status(404).json({ error: "No photo" }); });
   }));
 
@@ -138,7 +140,7 @@ export function postsRouter(wrap) {
   }));
 
   r.post("/api/posts", wrap(async (req, res) => {
-    if (!isHr(req)) return res.status(403).json(HR_ONLY);
+    if (!mayManage(req)) return res.status(403).json(NO_ACCESS);
     const { title, body, images, errors } = readPost(req.body || {});
     if (Object.keys(errors).length) return res.status(400).json({ errors });
     const client = await pool.connect();
@@ -154,7 +156,7 @@ export function postsRouter(wrap) {
 
   // Edit: title, text and photos (keep, remove or add). Removed photos are deleted from disk.
   r.patch("/api/posts/:id", wrap(async (req, res) => {
-    if (!isHr(req)) return res.status(403).json(HR_ONLY);
+    if (!mayManage(req)) return res.status(403).json(NO_ACCESS);
     const id = idOf(req.params.id);
     const { title, body, images, errors } = readPost(req.body || {});
     if (Object.keys(errors).length) return res.status(400).json({ errors });
@@ -173,7 +175,7 @@ export function postsRouter(wrap) {
   }));
 
   r.delete("/api/posts/:id", wrap(async (req, res) => {
-    if (!isHr(req)) return res.status(403).json(HR_ONLY);
+    if (!mayManage(req)) return res.status(403).json(NO_ACCESS);
     const id = idOf(req.params.id);
     const { rows: files } = await pool.query("SELECT stored_name FROM post_images WHERE post_id=$1", [id]);
     const { rowCount } = await pool.query("DELETE FROM posts WHERE id=$1", [id]);
@@ -218,7 +220,7 @@ export function postsRouter(wrap) {
     const id = idOf(req.params.id);
     const { rows } = await pool.query("SELECT author_email FROM post_comments WHERE id=$1 AND post_id=$2", [idOf(req.params.cid), id]);
     if (!rows[0]) return res.status(404).json({ error: "That comment was already removed." });
-    if (!isHr(req) && rows[0].author_email.toLowerCase() !== me(req)) return res.status(403).json({ error: "You can only remove your own comments." });
+    if (!mayManage(req) && rows[0].author_email.toLowerCase() !== me(req)) return res.status(403).json({ error: "You can only remove your own comments." });
     await pool.query("DELETE FROM post_comments WHERE id=$1", [idOf(req.params.cid)]);
     res.json(await one(req, id));
   }));

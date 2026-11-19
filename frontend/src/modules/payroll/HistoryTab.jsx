@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { api, apiMsg } from "../../api.js";
 import Modal, { Field } from "../../components/Modal.jsx";
-import { Callout } from "../../components/ui.jsx";
+import { Callout, TableSkeletonRow } from "../../components/ui.jsx";
 import { useToast } from "../../components/toast.jsx";
 import { StatusPill, fileUrl, money, monthLabel, when } from "./util.jsx";
 
@@ -35,7 +35,7 @@ function Adjustments() {
             <td>{a.kind === "earning" ? "Arrears" : "Recovery"}</td><td className="num">{money(a.amount)}</td><td>{a.reason}</td>
             <td>{a.cancelledAt ? "Cancelled" : a.appliedPeriod ? monthLabel(a.appliedPeriod) : "Next payroll"}</td>
             <td className="num">{!a.cancelledAt && <button type="button" className="btn glass sm" onClick={() => cancel(a)}>Cancel</button>}</td></tr>))
-          : <tr><td colSpan={7}><div className="empty">{list ? "No adjustments." : "Loading…"}</div></td></tr>}
+          : list ? <tr><td colSpan={7}><div className="empty">No adjustments.</div></td></tr> : <TableSkeletonRow cols={7} />}
       </tbody></table></div>
       {add && (
         <Modal onClose={() => setAdd(null)}><form onSubmit={save} noValidate>
@@ -62,7 +62,7 @@ export default function HistoryTab({ you }) {
     <>
       <div className="card">
         <div className="card-h"><h3>Payroll history</h3></div>
-        {!you.hr && <div className="card-b" style={{ paddingTop: 0 }}><Callout>Payrolls sent to you for review. Bank transfer files are only available to HR.</Callout></div>}
+        {!you.hr && <div className="card-b" style={{ paddingTop: 0 }}><Callout>{you.reviewer ? "Payrolls sent to you for review." : "The payrolls you can see."}{you.bank ? "" : " Bank transfer files are only available to the people who make them."}</Callout></div>}
         <div className="tbl-wrap"><table className="pr-table"><thead><tr><th>Month</th><th>Status</th><th className="num">Employees</th><th className="num">Gross</th><th className="num hide-sm">Deductions</th><th className="num hide-sm">TDS</th>
           <th className="num">Net payable</th><th>Approval</th><th>Files</th></tr></thead><tbody>
           {runs && runs.length ? runs.map((r) => {
@@ -80,7 +80,7 @@ export default function HistoryTab({ you }) {
                   {bank.map((f) => <a key={f.id} href={fileUrl(r.id, f.id)} download className={f.superseded ? "muted" : ""}>Bank file v{f.version}</a>)}
                   {!r.files.length && <span className="muted">—</span>}</div></td>
               </tr>);
-          }) : <tr><td colSpan={9}><div className="empty">{runs ? "No payroll yet." : "Loading…"}</div></td></tr>}
+          }) : runs ? <tr><td colSpan={9}><div className="empty">No payroll yet.</div></td></tr> : <TableSkeletonRow cols={9} />}
         </tbody></table></div>
       </div>
       {you.hr && <Adjustments />}

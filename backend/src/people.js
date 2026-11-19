@@ -1,36 +1,59 @@
 // People: the directory and roster everyone sees, reporting lines and teams, employee IDs and status. Mounted by index.js.
 import express from "express";
 import { pool } from "./db.js";
-import { requireAuth, requireHr } from "./auth.js";
+import { requireAuth } from "./auth.js";
 import { mailPlanOf } from "./mail-plan.js";
+import { can, canAll, invalidateTree, need, scopeOf } from "./access.js";
 
-/** Checks and saves one reporting-manager change (an empty manager clears it). Returns { ok: true } or { status, error }. */
-async function applyManager(email, manager, actor) {
-  const emp = (await pool.query("SELECT name, title FROM employees WHERE lower(work_email)=$1", [email])).rows[0];
+/**
+ * Checks and saves one reporting-manager change (an empty manager clears it). The manager is found by email when one is given,
+ * otherwise by name among current staff; a name two people share is refused, so nobody lands in the wrong team.
+ * Saves the name (for older pages) and the email (what the reporting tree and every access decision use).
+ * Returns { ok: true, manager } or { status, error }.
+ */
+async function applyManager(email, manager, actor, managerEmail = "") {
+  const checked = await checkManager(email, manager, managerEmail);
+  if (checked.error) return checked;
+  const { boss } = checked;
+  await pool.query("UPDATE employees SET manager=$1, manager_email=$2 WHERE lower(work_email)=$3", [boss ? boss.name : null, boss ? boss.email : null, email]);
+  // Open reviews follow the new manager, so the old one no longer reads colleague feedback or writes the manager review.
+  await pool.query("UPDATE reviews SET manager_email=$2 WHERE lower(email)=$1 AND status <> 'done'", [email, boss ? boss.email : null]);
+  invalidateTree();
+  await pool.query("INSERT INTO audit_log (action, work_email) VALUES ($1,$2)",
+    [boss ? `Reporting manager set to ${boss.name} (by ${actor})` : `Reporting manager cleared (by ${actor})`, email]);
+  return { ok: true, manager: boss ? boss.name : "", managerEmail: boss ? boss.email : "" };
+}
+
+/**
+ * The checks for a reporting-manager change, without saving it (onboarding uses them too): the manager exists, is here, is one
+ * person (a shared name is refused), is not the person, keeps the top of the company at the top, and makes no loop.
+ * Returns { boss } (null to clear) or { status, error }.
+ */
+export async function checkManager(email, manager, managerEmail = "") {
+  email = String(email).toLowerCase();
+  const emp = (await pool.query("SELECT name, title, work_email FROM employees WHERE lower(work_email)=$1", [email])).rows[0];
   if (!emp) return { status: 404, error: "Employee not found." };
-  // Directors and the Vice President are at the top of the company, so nobody is above them.
-  if (manager && /\b(director|vice president)\b/i.test(emp.title || "")) {
-    return { status: 400, error: `${emp.name} is at the top of the company and has no reporting manager.` };
-  }
-  if (manager) {
-    const boss = (await pool.query("SELECT name, status FROM employees WHERE lower(name)=lower($1) LIMIT 1", [manager])).rows[0];
-    if (!boss) return { status: 400, error: `${manager} is not in the employee list.` };
+  let boss = null;
+  if (managerEmail || manager) {
+    const found = managerEmail
+      ? (await pool.query("SELECT name, title, status, lower(work_email) AS email FROM employees WHERE lower(work_email)=$1", [String(managerEmail).toLowerCase()])).rows
+      : (await pool.query("SELECT name, title, status, lower(work_email) AS email FROM employees WHERE lower(name)=lower($1) AND status <> 'offboarded'", [manager])).rows;
+    if (!found.length) return { status: 400, error: `${manager || managerEmail} is not in the employee list.` };
+    if (found.length > 1) return { status: 400, error: `Two people are called ${found[0].name}. Please choose the manager from the list so the right person is picked.` };
+    boss = found[0];
     if (boss.status === "offboarded") return { status: 400, error: `${boss.name} has left, so cannot be a manager.` };
+    if (boss.email === email) return { status: 400, error: "Nobody can be their own reporting manager." };
+    // Directors and the Vice President report only to someone at the top too (for example the CEO, also a director).
+    const top = (t) => /\b(director|vice president|ceo|chief executive)\b/i.test(t || "");
+    if (top(emp.title) && !top(boss.title)) return { status: 400, error: `${emp.name} is at the top of the company, so they can only report to another director or the CEO.` };
     // Walk up from the new manager: reaching this person again would make a loop.
-    let cur = boss.name;
-    for (let i = 0; cur && i < 50; i++) {
-      if (cur.toLowerCase() === emp.name.toLowerCase()) {
-        return { status: 400, error: cur === boss.name && boss.name.toLowerCase() === emp.name.toLowerCase()
-          ? "Nobody can be their own reporting manager."
-          : `${boss.name} already reports up to ${emp.name}, so that would make a loop.` };
-      }
-      cur = (await pool.query("SELECT manager FROM employees WHERE lower(name)=lower($1) LIMIT 1", [cur])).rows[0]?.manager || "";
+    let cur = boss.email;
+    for (let i = 0; cur && i < 60; i++) {
+      if (cur === email) return { status: 400, error: `${boss.name} already reports up to ${emp.name}, so that would make a loop.` };
+      cur = (await pool.query("SELECT lower(manager_email) AS m FROM employees WHERE lower(work_email)=$1", [cur])).rows[0]?.m || "";
     }
   }
-  await pool.query("UPDATE employees SET manager=$1 WHERE lower(work_email)=$2", [manager || null, email]);
-  await pool.query("INSERT INTO audit_log (action, work_email) VALUES ($1,$2)",
-    [manager ? `Reporting manager set to ${manager} (by ${actor})` : `Reporting manager cleared (by ${actor})`, email]);
-  return { ok: true };
+  return { boss };
 }
 
 export function peopleRouter(wrap) {
@@ -45,9 +68,11 @@ export function peopleRouter(wrap) {
   }));
 
   // The company roster, for everyone signed in. Only non-personal fields are sent, so this is safe for employees too.
-  r.get("/api/roster", wrap(async (_req, res) => {
+  r.get("/api/roster", wrap(async (req, res) => {
+    const scope = (await scopeOf(req, "people.view")), offs = canAll(req, "offboarding.manage"), me = req.user.email.toLowerCase();
+    const sees = (email) => offs || !scope || scope.has(String(email).toLowerCase()) || String(email).toLowerCase() === me;
     const { rows } = await pool.query(
-      `SELECT e.id, e.emp_no, e.name, e.work_email, e.title, e.sub_title, e.work_location, e.manager, e.start_date, e.last_day, e.status, e.onboarding_closed_at, e.employment_type,
+      `SELECT e.id, e.emp_no, e.name, e.work_email, e.title, e.sub_title, e.work_location, e.manager, e.manager_email, e.start_date, e.last_day, e.status, e.onboarding_closed_at, e.employment_type,
          (SELECT COALESCE(json_agg(json_build_object('project', p.name, 'lead', a.project_lead, 'location', a.location,
                                                      'status', a.status, 'start', a.start_date, 'end', a.end_date)
                                    ORDER BY (a.status = 'Active') DESC, p.name), '[]'::json)
@@ -55,27 +80,41 @@ export function peopleRouter(wrap) {
          (SELECT extract(epoch FROM ph.updated_at)::bigint FROM profile_photos ph WHERE lower(ph.email) = lower(e.work_email)) AS photo_v
        FROM employees e ORDER BY e.id`);
     res.json(rows.map((r) => ({ id: r.id, no: r.emp_no, name: r.name, email: r.work_email, title: r.title, subTitle: r.sub_title,
-      location: r.work_location, manager: r.manager, start: r.start_date, lastDay: r.last_day, status: r.status, onboarded: !!r.onboarding_closed_at, employmentType: r.employment_type, mailPlan: mailPlanOf(r.title), projects: r.projects, photoV: r.photo_v })));
+      location: r.work_location, manager: r.manager, managerEmail: r.manager_email || "", start: r.start_date,
+      // Who is leaving, and when, is shown only to people who may see personal details for that person (and to the person).
+      lastDay: sees(r.work_email) ? r.last_day : null, status: r.status === "offboarding" && !sees(r.work_email) ? "active" : r.status, onboarded: !!r.onboarding_closed_at, employmentType: r.employment_type, mailPlan: mailPlanOf(r.title), projects: r.projects, photoV: r.photo_v })));
   }));
 
   // Who reports to whom, for everyone. Only the manager's name is sent, so this is safe for employees too.
   r.get("/api/managers", wrap(async (_req, res) => {
-    const { rows } = await pool.query("SELECT work_email, manager FROM employees WHERE manager IS NOT NULL AND manager <> ''");
-    res.json(rows.map((r) => ({ email: r.work_email, manager: r.manager })));
+    const { rows } = await pool.query("SELECT work_email, manager, manager_email FROM employees WHERE (manager IS NOT NULL AND manager <> '') OR manager_email IS NOT NULL");
+    res.json(rows.map((r) => ({ email: r.work_email, manager: r.manager, managerEmail: r.manager_email })));
   }));
 
-  // HR changes anyone's reporting manager (or clears it with an empty name).
-  r.put("/api/employees/manager", requireHr, wrap(async (req, res) => {
+  // Changing someone's reporting manager (or clearing it) takes "Edit people": for the whole company, or within a team, where the
+  // new manager must also be in that team (or the person holding it), so nobody moves people out of the part they look after.
+  r.put("/api/employees/manager", need("people.edit"), wrap(async (req, res) => {
     const email = String(req.body?.email || "").toLowerCase();
-    const manager = String(req.body?.manager || "").trim();
-    const r = await applyManager(email, manager, req.user.email);
+    const manager = String(req.body?.manager || "").trim(), managerEmail = String(req.body?.managerEmail || "").trim().toLowerCase();
+    if (!(await can(req, "people.edit", email))) return res.status(403).json({ error: "This person is not in a team you look after." });
+    if ((await scopeOf(req, "people.edit")) !== null && (manager || managerEmail)) {
+      // Within a team: the new manager must be the caller, the person at the top of that team, or someone in it.
+      const pick = managerEmail || (await pool.query("SELECT lower(work_email) AS e FROM employees WHERE lower(name)=lower($1) AND status <> 'offboarded'", [manager])).rows.map((x) => x.e);
+      const list = Array.isArray(pick) ? pick : [pick];
+      const roots = (req.access.grants || []).filter((g) => g.permission === "people.edit").map((g) => String(g.scope_root_email || req.access.email).toLowerCase());
+      const ok = list.length === 1 && (list[0] === req.user.email.toLowerCase() || roots.includes(list[0]) || (await can(req, "people.edit", list[0])));
+      if (!ok) return res.status(403).json({ error: "The new manager must be in a team you look after." });
+    }
+    const r = await applyManager(email, manager, req.user.email, managerEmail);
     if (!r.ok) return res.status(r.status).json({ error: r.error });
-    res.json({ email, manager });
+    res.json({ email, manager: r.manager, managerEmail: r.managerEmail });
   }));
 
-  // HR corrects someone's employee ID (for example WT/17). It must be unique, and the change is recorded in the audit log.
-  r.put("/api/employees/number", requireHr, wrap(async (req, res) => {
+  // Someone with "Edit people" for this person corrects their employee ID (for example WT/17). It must be unique across the
+  // company, and the change is recorded in the audit log.
+  r.put("/api/employees/number", need("people.edit"), wrap(async (req, res) => {
     const email = String(req.body?.email || "").trim().toLowerCase();
+    if (!(await can(req, "people.edit", email))) return res.status(403).json({ error: "This person is not in a team you look after." });
     const no = String(req.body?.number || "").trim();
     if (!/^[A-Za-z0-9][A-Za-z0-9/._-]{0,19}$/.test(no)) return res.status(400).json({ error: "Use letters, numbers and / . _ - only, up to 20 characters, for example WT/17." });
     const emp = (await pool.query("SELECT id, name, emp_no FROM employees WHERE lower(work_email)=$1", [email])).rows[0];
@@ -88,9 +127,11 @@ export function peopleRouter(wrap) {
     res.json({ email, number: no });
   }));
 
-  // HR marks someone who is still onboarding as active. It is saved on the server, so everyone sees it and it survives a page reload.
-  r.put("/api/employees/status", requireHr, wrap(async (req, res) => {
+  // Someone with "Edit people" for this person marks them, while still onboarding, as active. It is saved on the server, so
+  // everyone sees it and it survives a page reload.
+  r.put("/api/employees/status", need("people.edit"), wrap(async (req, res) => {
     const email = String(req.body?.email || "").trim().toLowerCase();
+    if (!(await can(req, "people.edit", email))) return res.status(403).json({ error: "This person is not in a team you look after." });
     const emp = (await pool.query("SELECT id, name, status FROM employees WHERE lower(work_email)=$1", [email])).rows[0];
     if (!emp) return res.status(404).json({ error: "Employee not found." });
     if (String(req.body?.status) !== "active") return res.status(400).json({ error: "Only the change from Onboarding to Active is allowed here." });
@@ -100,22 +141,30 @@ export function peopleRouter(wrap) {
     res.json({ email, status: "active" });
   }));
 
-  // A manager adds someone to their OWN team. Allowed for anyone who already has people reporting to them (and for HR). The person
-  // must have no manager yet: taking someone out of another manager's team is HR's call. The same checks apply (no loops, no top of the company).
+  // A reporting manager (or someone who may edit people) adds a person who has no manager yet to their own team. Taking someone
+  // out of another manager's team, or adding outside a team, needs "Edit people" for the whole company (the route above).
   r.post("/api/team/members", requireAuth, wrap(async (req, res) => {
     const email = String(req.body?.email || "").trim().toLowerCase();
     const me = (await pool.query("SELECT name, status FROM employees WHERE lower(work_email)=$1", [req.user.email.toLowerCase()])).rows[0];
     if (!me || me.status === "offboarded") return res.status(403).json({ error: "Your employee record was not found." });
-    const isHr = req.user.role === "hr";
-    const hasTeam = (await pool.query("SELECT 1 FROM employees WHERE lower(manager)=lower($1) AND status <> 'offboarded' LIMIT 1", [me.name])).rowCount > 0;
-    if (!isHr && !hasTeam) return res.status(403).json({ error: "Only managers and HR can add team members." });
-    const emp = (await pool.query("SELECT name, manager, status FROM employees WHERE lower(work_email)=$1", [email])).rows[0];
+    // Built in for reporting managers (anyone with people reporting to them), as before; otherwise "Edit people" in any scope.
+    const hasTeam = (await pool.query("SELECT 1 FROM employees WHERE lower(manager_email)=$1 AND status <> 'offboarded' LIMIT 1", [req.user.email.toLowerCase()])).rowCount > 0;
+    if (!hasTeam && !(await can(req, "people.edit"))) return res.status(403).json({ error: "Only managers and people given access can add team members." });
+    const emp = (await pool.query("SELECT name, manager, manager_email, status FROM employees WHERE lower(work_email)=$1", [email])).rows[0];
     if (!emp) return res.status(404).json({ error: "Employee not found." });
     if (emp.status === "offboarded") return res.status(400).json({ error: `${emp.name} has left, so cannot join a team.` });
-    if (!isHr && emp.manager) return res.status(403).json({ error: `${emp.name} already reports to ${emp.manager}. Ask HR to move them.` });
-    const r = await applyManager(email, me.name, req.user.email);
+    const company = (await scopeOf(req, "people.edit")) === null;
+    if (!company && (emp.manager || emp.manager_email)) return res.status(403).json({ error: `${emp.name} already reports to ${emp.manager}. Please ask HR to move them.` });
+    if (!company) {
+      // Within a team: nobody with access of their own (or a super admin) can be pulled into it, since that would put them under
+      // the caller's team permissions (salaries, documents, approvals).
+      const strong = await pool.query(
+        `SELECT 1 FROM users u WHERE lower(u.email)=$1 AND (u.is_super_admin OR EXISTS (SELECT 1 FROM access_grants g WHERE lower(g.email)=$1 AND g.revoked_at IS NULL))`, [email]);
+      if (strong.rowCount) return res.status(403).json({ error: `${emp.name} has access of their own, so please ask a super admin or HR to set their manager.` });
+    }
+    const r = await applyManager(email, "", req.user.email, req.user.email.toLowerCase());
     if (!r.ok) return res.status(r.status).json({ error: r.error });
-    res.json({ email, manager: me.name });
+    res.json({ email, manager: r.manager, managerEmail: r.managerEmail });
   }));
   return r;
 }

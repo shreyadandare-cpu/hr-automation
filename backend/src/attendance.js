@@ -1,18 +1,19 @@
 import express from "express";
 import L from "../../frontend/leave-rules.cjs";
 import { pool } from "./db.js";
-import { requireAuth, requireHr } from "./auth.js";
+import { requireAuth } from "./auth.js";
+import { can, canAll, need, needAll, scopeOf } from "./access.js";
 import { managerMap } from "./teams.js";
 
 /* A reporting manager sees their own team (the people HR set under them); there is no separate manager login role. */
 const teamEmails = async (email) => Object.entries(await managerMap(pool)).filter(([, rm]) => rm === email).map(([e]) => e);
 
-/* Attendance: people punch in and out on the web page; HR sees everyone and can add or remove a punch with a reason.
+/* Attendance: people punch in and out on the web page; "See attendance" (attendance.view) sees the people in scope and
+   "Correct attendance" (attendance.edit) adds or removes their punches with a reason.
    Days are counted in Indian time. A day is Present from 6 hours worked, a Half day from 3 hours. */
 const PRESENT_MIN = 360, HALF_MIN = 180;
 const SHIFT_END_MIN = 18 * 60 + 30;   // until the shift ends, today is still in progress, so it is "Working", never Half day or Short hours yet
 const IST = "Asia/Kolkata";
-const isHr = (req) => req.user && req.user.role === "hr";
 /** People who work from a place other than the office (a client site, another city) do not use the office machine, so no punches is not absent for them. */
 const offSite = (loc) => !!loc && !/office/i.test(String(loc));
 const hhmm = (t) => String(t).slice(0, 5);
@@ -102,6 +103,10 @@ async function monthOf(emp, month) {
   return { email: emp.work_email, name: emp.name, month, days, summary: summarize(days), today: now.day };
 }
 
+/** Web clock-in: with WEB_CLOCK_IN=true everyone can punch in and out from the app. Off by default: the office machine
+    records attendance, and only HR can punch from the app. Hours are counted the same way either way (each IN with the next OUT). */
+export const webClockOn = () => String(process.env.WEB_CLOCK_IN || "").toLowerCase() === "true";
+
 export function attendanceRouter(wrap) {
   const r = express.Router();
   r.use("/api/attendance", requireAuth);
@@ -115,12 +120,12 @@ export function attendanceRouter(wrap) {
     const ps = (await pool.query(`SELECT id, to_char(work_date,'YYYY-MM-DD') AS work_date, punch_time, direction, source, note FROM attendance_punches
       WHERE employee_id=$1 AND work_date=$2 ORDER BY punch_time, id`, [emp.id, now.day])).rows.map(toPunch);
     const w = worked(ps, mins(now.time));
-    res.json({ date: now.day, time: hhmm(now.time), punches: ps, state: ps.length && ps[ps.length - 1].direction === "IN" ? "in" : "out", minutes: w.minutes });
+    res.json({ date: now.day, time: hhmm(now.time), punches: ps, state: ps.length && ps[ps.length - 1].direction === "IN" ? "in" : "out", minutes: w.minutes, canPunch: webClockOn() });
   }));
 
   // One tap: punches IN when you are out, OUT when you are in. The server's clock is used, never the browser's.
   r.post("/api/attendance/punch", wrap(async (req, res) => {
-    if (!isHr(req)) return res.status(403).json({ error: "Attendance is recorded by the office machine. If a punch is missing, ask HR to add it." });
+    if (!webClockOn() && !canAll(req, "attendance.edit")) return res.status(403).json({ error: "Attendance is recorded by the office machine. If a punch is missing, please ask HR to add it." });
     const client = await pool.connect();
     try {
       await client.query("BEGIN");
@@ -139,22 +144,24 @@ export function attendanceRouter(wrap) {
     } catch (err) { await client.query("ROLLBACK"); throw err; } finally { client.release(); }
   }));
 
-  // A month of days. Everyone reads their own; HR can ask for anyone with ?email=.
+  // A month of days. Everyone reads their own; attendance.view the people in scope, and a manager their team, with ?email=.
   r.get("/api/attendance/month", wrap(async (req, res) => {
     const month = String(req.query.month || (await nowIst(pool)).day.slice(0, 7));
     if (!MONTH.test(month)) return res.status(400).json({ error: "Month must look like 2026-10." });
     const email = req.query.email ? String(req.query.email).toLowerCase() : me(req);
-    if (email !== me(req) && !isHr(req) && !(await teamEmails(me(req))).includes(email))
+    if (email !== me(req) && !(await can(req, "attendance.view", email)) && !(await teamEmails(me(req))).includes(email))
       return res.status(403).json({ error: "You can only see your own attendance and your team's." });
     const emp = await employeeByEmail(pool, email);
     if (!emp) return res.status(404).json({ error: "Employee not found." });
     res.json(await monthOf(emp, month));
   }));
 
-  // Everyone for one day: HR sees all, a reporting manager sees their team, anyone else is refused.
+  // Everyone for one day: attendance.view sees the people in scope (all of them for the whole company), a reporting manager
+  // sees their team as well, anyone else is refused.
   r.get("/api/attendance/day", wrap(async (req, res) => {
-    const team = isHr(req) ? null : await teamEmails(me(req));
-    if (team && !team.length) return res.status(403).json({ error: "Only HR and reporting managers can see this." });
+    const granted = await scopeOf(req, "attendance.view");
+    const team = granted ? [...new Set([...granted, ...(await teamEmails(me(req)))])] : null;
+    if (team && !team.length) return res.status(403).json({ error: "You do not have access to this. Only reporting managers and people given access can see it." });
     const now = await nowIst(pool);
     const date = String(req.query.date || now.day);
     if (!L.validDate(date)) return res.status(400).json({ error: "Date must look like 2026-10-21." });
@@ -185,8 +192,8 @@ export function attendanceRouter(wrap) {
     res.json({ date, today: now.day, off, holiday: hol.rows[0] ? hol.rows[0].name : null, people });
   }));
 
-  // HR: one month for everyone, one row per person. ?format=csv downloads it as a spreadsheet file.
-  r.get("/api/attendance/report", requireHr, wrap(async (req, res) => {
+  // One month for everyone, one row per person (attendance.edit for the whole company). ?format=csv downloads it as a spreadsheet file.
+  r.get("/api/attendance/report", needAll("attendance.edit"), wrap(async (req, res) => {
     const now = await nowIst(pool);
     const month = String(req.query.month || now.day.slice(0, 7));
     if (!MONTH.test(month)) return res.status(400).json({ error: "Month must look like 2026-10." });
@@ -216,8 +223,8 @@ export function attendanceRouter(wrap) {
     res.send("\ufeff" + [head.map(safe).join(","), ...lines].join("\r\n") + "\r\n");
   }));
 
-  // HR: add a missed punch. A reason is required and goes in the audit log.
-  r.post("/api/attendance/punches", requireHr, wrap(async (req, res) => {
+  // attendance.edit: add a missed punch for a person in scope. A reason is required and goes in the audit log.
+  r.post("/api/attendance/punches", need("attendance.edit"), wrap(async (req, res) => {
     const { email, date, time, direction, note } = req.body || {};
     const now = await nowIst(pool);
     if (!L.validDate(date)) return res.status(400).json({ error: "Choose a valid date." });
@@ -227,16 +234,23 @@ export function attendanceRouter(wrap) {
     if (!String(note || "").trim()) return res.status(400).json({ error: "Give a reason, for example forgot to punch." });
     const emp = await employeeByEmail(pool, email);
     if (!emp) return res.status(404).json({ error: "Employee not found." });
+    if (emp.work_email.toLowerCase() === me(req)) return res.status(403).json({ error: "Your own attendance is corrected by someone else. Please send an attendance request." });
+    if (!(await can(req, "attendance.edit", emp.work_email))) return res.status(403).json({ error: "You do not have access to change this person's attendance." });
     await pool.query("INSERT INTO attendance_punches (employee_id, work_date, punch_time, direction, source, note, created_by) VALUES ($1,$2,$3,$4,'hr',$5,$6)",
       [emp.id, date, time, direction, String(note).trim().slice(0, 300), me(req)]);
     await audit(pool, `Attendance: ${direction} at ${time} added for ${date} by ${me(req)} (${String(note).trim().slice(0, 100)})`, emp.work_email);
     res.status(201).json(await monthOf(emp, date.slice(0, 7)));
   }));
 
-  r.delete("/api/attendance/punches/:id", requireHr, wrap(async (req, res) => {
+  r.delete("/api/attendance/punches/:id", need("attendance.edit"), wrap(async (req, res) => {
+    const id = Number(req.params.id) || 0;
+    const { rows: [owner] } = await pool.query("SELECT e.work_email FROM attendance_punches p JOIN employees e ON e.id=p.employee_id WHERE p.id=$1", [id]);
+    if (!owner) return res.status(404).json({ error: "Punch not found." });
+    if (owner.work_email.toLowerCase() === me(req)) return res.status(403).json({ error: "Your own attendance is corrected by someone else. Please send an attendance request." });
+    if (!(await can(req, "attendance.edit", owner.work_email))) return res.status(403).json({ error: "You do not have access to change this person's attendance." });
     const { rows } = await pool.query(
       `DELETE FROM attendance_punches p USING employees e WHERE p.id=$1 AND e.id=p.employee_id
-       RETURNING e.work_email, to_char(p.work_date,'YYYY-MM-DD') AS d, p.punch_time, p.direction`, [Number(req.params.id) || 0]);
+       RETURNING e.work_email, to_char(p.work_date,'YYYY-MM-DD') AS d, p.punch_time, p.direction`, [id]);
     if (!rows[0]) return res.status(404).json({ error: "Punch not found." });
     await audit(pool, `Attendance: ${rows[0].direction} at ${hhmm(rows[0].punch_time)} on ${rows[0].d} removed by ${me(req)}`, rows[0].work_email);
     res.json({ ok: true });

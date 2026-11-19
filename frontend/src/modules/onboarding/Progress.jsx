@@ -3,7 +3,7 @@ import { Link } from "react-router-dom";
 import { api, apiMsg } from "../../api.js";
 import { useAuth } from "../../auth.jsx";
 import { useData } from "../../data.jsx";
-import { Pill, Person, SectionHead } from "../../components/ui.jsx";
+import { Pill, Person, SectionHead, PageSkeleton } from "../../components/ui.jsx";
 import { useToast } from "../../components/toast.jsx";
 import { ObTabs } from "./shared.jsx";
 
@@ -16,12 +16,12 @@ const CLAUDE = {
 
 /* Everyone whose onboarding is not finished, and whether they have Claude. Access itself is given from the person's profile. */
 export default function Progress() {
-  const { isHr } = useAuth();
+  const { canAll } = useAuth();
   const { people, reload, claudeMode } = useData();
   const toast = useToast();
   const [refreshing, setRefreshing] = useState(false);
-  if (!isHr) return <section className="section"><SectionHead eyebrow="Onboarding" title="In" accent="onboarding." /><div className="empty">Only HR can see who is being onboarded.</div></section>;
-  if (!people) return <section className="section"><div className="empty">Loading…</div></section>;
+  if (!canAll("onboarding.manage")) return <section className="section"><SectionHead eyebrow="Onboarding" title="Onboarding" /><div className="empty">Only the people who run onboarding can see who is being onboarded.</div></section>;
+  if (!people) return <PageSkeleton />;
   const waiting = people.filter((x) => x.status === "onboarding").sort((a, b) => a.name.localeCompare(b.name));
 
   const refresh = async () => {
@@ -37,9 +37,9 @@ export default function Progress() {
 
   return (
     <section className="section">
-      <ObTabs cur="progress" />
-      <SectionHead eyebrow="Onboarding" title="Who is" accent="joining." sub="People whose onboarding is not finished, and whether they have Claude. Open a profile to ask for Claude access."
-        actions={claudeMode !== "simulated" && <button type="button" className="btn glass sm" disabled={refreshing} onClick={refresh}>{refreshing ? "Checking…" : "Refresh Claude status"}</button>} />
+      <SectionHead title="Onboarding" sub="People whose onboarding is not finished, and whether they have Claude. Open a profile to ask for Claude access."
+        actions={<>{claudeMode !== "simulated" && <button type="button" className="btn glass" disabled={refreshing} onClick={refresh}>{refreshing ? "Checking…" : "Refresh Claude status"}</button>}<Link className="btn primary" to="/app/onboarding">Add a new joiner</Link></>}
+        tabs={<ObTabs cur="progress" />} />
       <div className="card"><div className="tbl-wrap"><table>
         <thead><tr><th>Employee</th><th>Claude access</th><th aria-label="Open" /></tr></thead>
         <tbody>

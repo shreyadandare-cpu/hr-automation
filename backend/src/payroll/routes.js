@@ -7,17 +7,20 @@ import { V } from "../validate.js";
 import { cleanInputs, INPUT_FIELDS } from "./engine.js";
 import { fyOf, rulesProblems, annualTax } from "./tax.js";
 import { STATUS, EDITABLE, FINAL, check, nextActions } from "./workflow.js";
-import { actorOf, hrOnly, reviewers, seal, open, sha256, encryptionReady } from "./access.js";
+import { actorOf, approvers, bankOnly, hrOnly, seal, open, sha256, encryptionReady } from "./access.js";
 import { buildLines, recalcRun, loadRun, totalsOfLines, staffFor, structuresFor, seedTaxRules, deptOf, monthName } from "./store.js";
 import { buildWorkbook } from "./excel.js";
 import { buildBankFile } from "./bank.js";
 import { readPayslipPdf } from "./payslip-read.js";
 import { previewFromFile, templateCsv, templateXlsx } from "./tax-import.js";
 import { DEFAULT_TAX_RULES } from "./tax-defaults.js";
+import { PRODUCT } from "../brand.js";
 
 /*
- * Payroll processing, review and disbursement. Mounted at /api/payroll behind requirePayrollAccess (HR or a payroll reviewer).
- * Routes that change anything are HR only, except the review decisions, which only a reviewer can make (workflow.js).
+ * Payroll processing, review and disbursement. Mounted at /api/payroll behind requirePayrollAccess (payroll.prepare, payroll.approve,
+ * payroll.bank or payroll.view; see access.js). Routes that change anything need payroll.prepare ("HR" below), except the review
+ * decisions (payroll.approve, workflow.js) and bank accounts and the bank file (payroll.bank). A payroll.view holder for a team sees
+ * only their team's lines and totals, and no reports.
  *
  *   GET  /overview?period=           dashboard figures for a month (the run's, or a preview when there is none: HR only)
  *   GET  /runs                       payroll history
@@ -26,9 +29,9 @@ import { DEFAULT_TAX_RULES } from "./tax-defaults.js";
  *   PUT  /runs/:id/lines/:lineId     HR's monthly inputs for one person; the run is recalculated
  *   POST /runs/:id/recalculate       re-read salaries, leave, claims and tax and recalculate every line
  *   POST /runs/:id/actions/:action   calculate | generate | submit | approve | reject | request_changes | bank_file | mark_paid
- *   GET  /runs/:id/files/:fileId     download a stored Excel report (HR, reviewer) or bank file (HR)
+ *   GET  /runs/:id/files/:fileId     download a stored Excel report (everyone who sees every line) or bank file (payroll.bank)
  *   GET  /employees                  who is on the payroll and whether their salary, bank and tax details are set (HR)
- *   GET/PUT /bank/:email             salary bank account (the number is write-only; only the last four digits come back) (HR)
+ *   GET/PUT /bank/:email             salary bank account (the number is write-only; only the last four digits come back) (payroll.bank)
  *   GET/PUT /declarations/:email     tax regime and declarations for a financial year (HR)
  *   GET/PUT /tax-rules[/:fy/:regime] slabs, rebate, surcharge, cess by financial year (HR)
  *   GET/POST/DELETE /adjustments     arrears and recoveries for finalized months (HR)
@@ -50,7 +53,7 @@ export const audit = (db, actor, action, { run_id = null, period = null, work_em
 
 /** Creates the payroll tables (on the payroll database) and the starting tax rules. */
 export async function initPayroll(db) {
-  await db.query(fs.readFileSync(new URL("schema.sql", import.meta.url), "utf8"));
+  await db.query(`SET statement_timeout = 0;\n${fs.readFileSync(new URL("schema.sql", import.meta.url), "utf8")}\nRESET statement_timeout;`);   // no limit at start-up
   await seedTaxRules(db);
 }
 
@@ -81,8 +84,28 @@ const runView = (r) => ({
 const fileView = (f) => ({ id: f.id, kind: f.kind, version: f.version, filename: f.filename, size: f.size, sha256: f.sha256, totals: f.totals,
   generatedBy: f.generated_by, generatedAt: f.generated_at, superseded: f.superseded });
 
-/** A reviewer sees a run once it has been sent for review (never runs from before the review workflow). HR sees every run. */
+/** Approvers, bank-file holders and viewers see a run once it has been sent for review (never runs from before the review workflow). HR sees every run. */
 const visible = (run, actor) => actor.hr || (run.workflow && !["draft", "calculated", "generated"].includes(run.status));
+/** Whether this person's line is shown: everyone's, unless the viewer holds payroll.view for a team only. */
+const inScope = (actor, email) => !actor.scope || actor.scope.has(lc(email));
+/** Which stored files are listed: the bank file for payroll.bank holders, the Excel report for everyone who sees every line. */
+const fileShown = (actor, f) => !actor.scope && (f.kind === "bank" ? actor.bank : true);
+/** Totals of the lines shown (the same sums loadRun makes). */
+const totalsShown = (lines) => totalsOfLines(lines.map((l) => ({ ...l, slip: { summary: l.summary } })));
+
+/** Audit entries that make someone a preparer of a run: they can't approve that run (maker-checker). */
+const MAKER_ACTIONS = ["Payroll started", "Payroll inputs changed", "TDS overridden", "TDS override removed", "Payroll recalculated",
+  "Payroll calculated", "Payroll report generated", "Payroll back to draft", "Adjustment cancelled"];
+async function madeBy(db, runId, email) {
+  const { rowCount } = await db.query("SELECT 1 FROM payroll_audit WHERE run_id=$1 AND lower(actor)=$2 AND action = ANY($3) LIMIT 1", [runId, lc(email), MAKER_ACTIONS]);
+  return rowCount > 0;
+}
+/** actorOf(), plus whether they prepared this run (only worked out for approvers, who are the only ones it can stop). */
+async function actorFor(req, db, run) {
+  const actor = await actorOf(req);
+  actor.maker = !!(run && actor.reviewer && run.workflow && await madeBy(db, run.id, actor.email));
+  return actor;
+}
 
 /** Moves a run to a new status (recorded in the audit trail). */
 async function moveTo(client, run, to, actor, action, detail = {}, extra = {}) {
@@ -103,42 +126,71 @@ const R = payrollWorkflowRouter;
 
 /* ---------- dashboard and history ---------- */
 
+/* The preview totals of a month with no payroll run yet: the whole company's payroll worked out from scratch, so it is kept for a
+   minute instead of being recalculated on every visit. It is only a preview; starting the run calculates everything afresh. */
+const previews = new Map(), refreshing = new Map();
+const refreshPreview = (period) => {
+  if (!refreshing.has(period)) refreshing.set(period, buildLines(pool, period).then((lines) => {
+    const totals = totalsOfLines(lines); previews.set(period, { at: Date.now(), totals }); return totals;
+  }).finally(() => refreshing.delete(period)));
+  return refreshing.get(period);
+};
+/** The month's preview totals: fresh for a minute; after that the last answer is shown at once while a new one is worked out. */
+/** Prepares this month's preview in the background at start-up, so the first visit to Payroll is quick too. */
+export const warmPayrollPreview = () => { previewTotals(istMonth()).catch(() => {}); };
+export async function previewTotals(period) {
+  const hit = previews.get(period);
+  if (hit && Date.now() - hit.at < 60_000) return hit.totals;
+  if (hit) { refreshPreview(period).catch(() => {}); return hit.totals; }
+  return refreshPreview(period);
+}
+
 R.get("/overview", wrap(async (req, res) => {
-  const actor = actorOf(req);
   const period = PERIOD.test(String(req.query.period || "")) ? String(req.query.period) : istMonth();
   const { rows: [run] } = await pool.query("SELECT * FROM payroll_runs WHERE period=$1", [period]);
-  const { rows: [{ n: headcount }] } = await pool.query("SELECT count(*)::int AS n FROM employees WHERE status <> 'offboarded'");
+  const actor = await actorFor(req, pool, run);
+  const { rows: [{ n: all }] } = await pool.query("SELECT count(*)::int AS n FROM employees WHERE status <> 'offboarded'");
+  const headcount = actor.scope ? actor.scope.size : all;
   let totals = null, source = "none";
   if (run && visible(run, actor)) {
-    totals = run.totals || (await loadRun(pool, run.id)).totals;
+    totals = actor.scope ? totalsShown((await loadRun(pool, run.id)).lines.filter((l) => inScope(actor, l.email)))
+      : run.totals || (await loadRun(pool, run.id)).totals;
     source = "run";
   } else if (!run && actor.hr) {
-    totals = totalsOfLines(await buildLines(pool, period));
+    totals = await previewTotals(period);
     source = "preview";
   }
   res.json({
     period, fy: fyOf(period), monthName: monthName(period), headcount, source, totals,
-    run: run && visible(run, actor) ? { ...runView(run), actions: nextActions(run, actor) } : null,
-    you: { hr: actor.hr, reviewer: actor.reviewer }, reviewers: actor.hr ? reviewers() : undefined, encryptionReady: encryptionReady(),
+    run: run && visible(run, actor) ? { ...runView(actor.scope ? { ...run, totals: null } : run), actions: nextActions(run, actor) } : null,
+    you: { hr: actor.hr, reviewer: actor.reviewer, bank: actor.bank, team: !!actor.scope }, reviewers: actor.hr ? await approvers() : undefined, encryptionReady: encryptionReady(),
   });
 }));
 
 R.get("/runs", wrap(async (req, res) => {
-  const actor = actorOf(req);
+  const actor = await actorOf(req), team = actor.scope ? [...actor.scope] : null;
+  // A team viewer's people and net are their team's only (the run's stored totals are the whole company's).
   const { rows } = await pool.query(
-    `SELECT r.*, count(i.id)::int AS people, coalesce(sum(i.payable),0) AS payable FROM payroll_runs r LEFT JOIN payroll_items i ON i.run_id=r.id
-     GROUP BY r.id ORDER BY r.period DESC`);
+    `SELECT r.*, count(i.id)::int AS people, coalesce(sum(i.payable),0) AS payable FROM payroll_runs r
+     LEFT JOIN payroll_items i ON i.run_id=r.id ${team ? "AND lower(i.work_email) = ANY($1)" : ""}
+     GROUP BY r.id ORDER BY r.period DESC`, team ? [team] : []);
   const { rows: files } = await pool.query("SELECT id, run_id, kind, version, filename, size, sha256, totals, generated_by, generated_at, superseded FROM payroll_files ORDER BY version DESC");
   res.json(rows.filter((r) => visible(r, actor)).map((r) => ({
-    ...runView(r), people: r.totals ? r.totals.people : r.people, netTotal: r.totals ? r.totals.net : Number(r.payable),
-    files: files.filter((f) => f.run_id === r.id && (actor.hr || f.kind === "workbook")).map(fileView),
+    ...(team ? { ...runView(r), totals: null } : runView(r)),
+    people: r.totals && !team ? r.totals.people : r.people, netTotal: r.totals && !team ? r.totals.net : Number(r.payable),
+    files: files.filter((f) => f.run_id === r.id && fileShown(actor, f)).map(fileView),
   })));
 }));
 
 R.get("/runs/:id", wrap(async (req, res) => {
-  const actor = actorOf(req);
   const data = await loadRun(pool, Number(req.params.id) || 0);
+  const actor = await actorFor(req, pool, data && data.run);
   if (!data || !visible(data.run, actor)) return res.status(404).json({ error: "Payroll run not found." });
+  if (actor.scope) {   // payroll.view for a team: only their lines, totals and history
+    data.lines = data.lines.filter((l) => inScope(actor, l.email));
+    data.totals = totalsShown(data.lines);
+    data.run = { ...data.run, totals: null };
+  }
   const [{ rows: files }, { rows: events }] = await Promise.all([
     pool.query("SELECT id, kind, version, filename, size, sha256, totals, generated_by, generated_at, superseded FROM payroll_files WHERE run_id=$1 ORDER BY generated_at DESC", [data.run.id]),
     pool.query("SELECT id, ts, actor, action, work_email, detail FROM payroll_audit WHERE run_id=$1 ORDER BY id DESC LIMIT 300", [data.run.id]),
@@ -146,8 +198,8 @@ R.get("/runs/:id", wrap(async (req, res) => {
   res.json({
     run: { ...runView(data.run), actions: nextActions(data.run, actor), editable: actor.hr && data.run.workflow && EDITABLE.has(data.run.status) },
     lines: data.lines, totals: data.totals,
-    files: files.filter((f) => actor.hr || f.kind === "workbook").map(fileView),
-    events: events.map((e) => ({ id: e.id, ts: e.ts, actor: e.actor, action: e.action, email: e.work_email, detail: e.detail })),
+    files: files.filter((f) => fileShown(actor, f)).map(fileView),
+    events: events.filter((e) => !actor.scope || (e.work_email && inScope(actor, e.work_email))).map((e) => ({ id: e.id, ts: e.ts, actor: e.actor, action: e.action, email: e.work_email, detail: e.detail })),
     inputFields: INPUT_FIELDS,
   });
 }));
@@ -225,10 +277,11 @@ R.post("/runs/:id/recalculate", hrOnly, wrap(async (req, res) => {
 /* ---------- workflow ---------- */
 
 R.post("/runs/:id/actions/:action", wrap(async (req, res) => {
-  const actor = actorOf(req), action = req.params.action, note = String((req.body && req.body.note) || "").trim().slice(0, 1000);
+  const action = req.params.action, note = String((req.body && req.body.note) || "").trim().slice(0, 1000);
   const after = { tell: [] };
   const out = await tx(async (client) => {
     const run = await lockRun(client, req.params.id);
+    const actor = await actorFor(req, client, run);
     if (!run || !visible(run, actor)) return fail(404, "Payroll run not found.");
     const c = check(run, action, actor, note);
     if (!c.ok) return fail(409, c.error);
@@ -268,7 +321,7 @@ R.post("/runs/:id/actions/:action", wrap(async (req, res) => {
       const { rows: [f] } = await client.query("SELECT id, version FROM payroll_files WHERE run_id=$1 AND kind='workbook' AND NOT superseded ORDER BY version DESC LIMIT 1", [run.id]);
       if (!f) return fail(409, "Generate the payroll report first.");
       await moveTo(client, run, c.to, req.user.email, "Payroll sent for review", { file: f.id, version: f.version, note }, { submitted_by: req.user.email, submitted_at: new Date(), review_note: null });
-      after.tell.push([reviewers(), { title: `Payroll for ${month} is waiting for your review.`, body: `${inr(run.totals && run.totals.net)} net for ${run.totals ? run.totals.people : "?"} people. Sent by ${req.user.email}.`, link: "/app/payroll" }]);
+      after.tell.push([await approvers(), { title: `Payroll for ${month} is waiting for your review.`, body: `${inr(run.totals && run.totals.net)} net for ${run.totals ? run.totals.people : "?"} people. Sent by ${req.user.email}.`, link: "/app/payroll" }]);
       return {};
     }
 
@@ -326,7 +379,7 @@ R.post("/runs/:id/actions/:action", wrap(async (req, res) => {
     return fail(400, "Unknown action.");
   });
   if (out.error) return send(res, out);
-  for (const [to, n] of after.tell) await notify(to, { ...n, email: { subject: n.title, body: `${n.title}\n\n${n.body}\n\nOpen Payroll in Wohlig One to see it.` } });
+  for (const [to, n] of after.tell) await notify(to, { ...n, email: { subject: n.title, body: `${n.title}\n\n${n.body}\n\nOpen Payroll in ${PRODUCT} to see it.` } });
   if (after.claims) { const { tellIncluded } = await import("../payroll.js"); await tellIncluded(after.claims, after.period); }
   if (after.ready) { const { tellReady } = await import("../payslip-auto.js"); await tellReady(after.ready, after.period); }
   if (after.paid) { const { tellPaid } = await import("../payroll.js"); await tellPaid(after.paid, after.period); }
@@ -334,11 +387,11 @@ R.post("/runs/:id/actions/:action", wrap(async (req, res) => {
 }));
 
 R.get("/runs/:id/files/:fileId", wrap(async (req, res) => {
-  const actor = actorOf(req);
+  const actor = await actorOf(req);
   const { rows: [f] } = await pool.query(
     "SELECT f.*, r.period, r.status, r.workflow FROM payroll_files f JOIN payroll_runs r ON r.id=f.run_id WHERE f.id=$1 AND f.run_id=$2", [Number(req.params.fileId) || 0, Number(req.params.id) || 0]);
   if (!f || !visible(f, actor)) return res.status(404).json({ error: "File not found." });
-  if (f.kind === "bank" && !actor.hr) return res.status(403).json({ error: "Only HR can download the bank transfer file." });
+  if (!fileShown(actor, f)) return res.status(403).json({ error: "You do not have access to this." });
   if (f.kind === "bank" && !FINAL.has(f.status)) return res.status(409).json({ error: "The payroll isn't approved." });
   const body = f.encrypted ? open(f.content.toString("utf8")) : f.content;
   if (sha256(body) !== f.sha256) return res.status(500).json({ error: "This stored file failed its integrity check. Generate it again." });
@@ -380,7 +433,17 @@ R.get("/employees", hrOnly, wrap(async (req, res) => {
   }) });
 }));
 
-R.get("/bank/:email", hrOnly, wrap(async (req, res) => {
+// "Bank details" holders who do not prepare payroll: everyone's bank-account status, without any salary figures.
+R.get("/bank-people", bankOnly, wrap(async (_req, res) => {
+  const { rows } = await pool.query(
+    `SELECT e.work_email, e.name, e.emp_no, e.title, b.holder_name, b.bank_name, b.ifsc, b.acct_last4, b.updated_at
+       FROM employees e LEFT JOIN payroll_bank_accounts b ON lower(b.work_email)=lower(e.work_email)
+      WHERE e.status NOT IN ('offboarded') ORDER BY e.name LIMIT 1000`);
+  res.json({ employees: rows.map((r) => ({ email: r.work_email, name: r.name, no: r.emp_no || "", title: r.title || "",
+    bank: r.acct_last4 ? { holder: r.holder_name, bankName: r.bank_name, ifsc: r.ifsc, last4: r.acct_last4, updatedAt: r.updated_at } : null })) });
+}));
+
+R.get("/bank/:email", bankOnly, wrap(async (req, res) => {
   const email = lc(req.params.email);
   const { rows: [emp] } = await pool.query("SELECT name, ifsc, acct_masked FROM employees WHERE lower(work_email)=$1", [email]);
   if (!emp) return res.status(404).json({ error: "Employee not found." });
@@ -389,7 +452,7 @@ R.get("/bank/:email", hrOnly, wrap(async (req, res) => {
     bank: b ? { holder: b.holder_name, bankName: b.bank_name, ifsc: b.ifsc, last4: b.acct_last4, updatedBy: b.updated_by, updatedAt: b.updated_at } : null });
 }));
 
-R.put("/bank/:email", hrOnly, wrap(async (req, res) => {
+R.put("/bank/:email", bankOnly, wrap(async (req, res) => {
   const email = lc(req.params.email), body = req.body || {};
   const errors = {};
   const holder = String(body.holder || "").trim().replace(/\s+/g, " ").slice(0, 80);

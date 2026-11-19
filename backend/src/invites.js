@@ -27,11 +27,17 @@ export async function createInvite(email, createdBy) {
   return `${frontendUrl()}/invite/${token}`;
 }
 
-/** Who to write to: the personal email on record (a new joiner may not use the work mailbox yet), else the work email. */
+/**
+ * Who to write to. A new joiner who has never signed in gets it at their personal email (they may not use the work mailbox yet).
+ * Anyone who has signed in before gets it at their work email only, so changing someone's personal email on file can never
+ * route a sign-in link for an existing login to someone else.
+ */
 async function recipientFor(email) {
-  const { rows } = await pool.query("SELECT name, personal_email FROM employees WHERE lower(work_email)=$1", [email.toLowerCase()]);
+  const { rows } = await pool.query(
+    `SELECT e.name, e.personal_email, u.last_login FROM employees e LEFT JOIN users u ON lower(u.email)=lower(e.work_email)
+      WHERE lower(e.work_email)=$1`, [email.toLowerCase()]);
   const r = rows[0];
-  return { to: (r && r.personal_email) || email, name: r?.name || "" };
+  return { to: (r && !r.last_login && r.personal_email) || email, name: r?.name || "" };
 }
 
 const COMPANY = "Wohlig Transformations Private Limited";
@@ -146,6 +152,7 @@ export async function acceptInvitation(token, password) {
     if (!email || !isCompanyEmail(email)) { await client.query("ROLLBACK"); const { state } = await inviteState(token); return { ok: false, status: 400, error: MESSAGES[state] || MESSAGES.invalid }; }
     const u = await client.query("UPDATE users SET password_hash=$1, last_login=now() WHERE lower(email)=$2 RETURNING email", [hash, email.toLowerCase()]);
     if (!u.rowCount) { await client.query("ROLLBACK"); return { ok: false, status: 400, error: MESSAGES.invalid }; }
+    await client.query("DELETE FROM sessions WHERE lower(email)=lower($1)", [email]);   // a new password: older sign-ins end
     await client.query("INSERT INTO audit_log (action, work_email) VALUES ($1,$2)", ["Invitation accepted: own password set", email]);
     await client.query("COMMIT");
     return { ok: true, email: u.rows[0].email };

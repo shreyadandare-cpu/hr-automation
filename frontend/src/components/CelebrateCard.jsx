@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
-import { api } from "../api.js";
+import { api, apiShared } from "../api.js";
 import { useData } from "../data.jsx";
+import { ListSkeleton } from "./ui.jsx";
 import PersonAvatar from "./PersonAvatar.jsx";
 
 /* One card for the good news at Wohlig, with three tabs: Birthdays, Work anniversaries and New joiners. Each tab shows today first, then what is coming up.
@@ -42,7 +43,7 @@ export default function CelebrateCard() {
   const { people, leave } = useData();
   const [d, setD] = useState(null);
   const [tab, setTab] = useState("birthdays"), [open, setOpen] = useState(true);
-  useEffect(() => { api("GET", "/api/leave/today").then((r) => setD(r.ok ? r.data : { failed: true })); }, []);
+  useEffect(() => { apiShared("/api/leave/today").then((r) => setD(r.ok ? r.data : { failed: true })); }, []);
   const today = (d && d.today) || (leave && leave.today) || new Date().toISOString().slice(0, 10);
 
   const bAll = (d && d.birthdays) || [], bToday = bAll.filter((b) => b.date === today), bSoon = bAll.filter((b) => b.date !== today);
@@ -63,7 +64,7 @@ export default function CelebrateCard() {
         <div className="cc-body" role="tabpanel">
           {tab === "birthdays" && <>
             <Block title="Birthdays today">{bToday.length ? <div className="cc-grid">{bToday.map((b) => <Person key={b.email} p={b} sub="Today 🎂" today />)}</div> : <Empty art={<Cake />} text="No birthdays today." />}</Block>
-            <Block title="Upcoming birthdays">{bSoon.length ? <div className="cc-grid">{bSoon.slice(0, 8).map((b) => <Person key={b.email} p={b} sub={dayLabel(b.date)} />)}</div> : <div className="cc-none">{d ? "None in the next 30 days." : "Loading…"}</div>}</Block>
+            <Block title="Upcoming birthdays">{bSoon.length ? <div className="cc-grid">{bSoon.slice(0, 8).map((b) => <Person key={b.email} p={b} sub={dayLabel(b.date)} />)}</div> : d ? <div className="cc-none">None in the next 30 days.</div> : <ListSkeleton rows={2} />}</Block>
           </>}
           {tab === "anniversaries" && <>
             <Block title="Work anniversaries today">{aToday.length ? <div className="cc-grid">{aToday.map((a) => <Person key={a.p.id || a.p.email} p={a.p} sub={`${years(a.n)} · Today 🎉`} today />)}</div> : <Empty art={<Party />} text="No work anniversaries today." />}</Block>

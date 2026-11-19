@@ -3,13 +3,21 @@ import express from "express";
 import { pool, payPool, PAY_SCHEMA, initDb } from "./db.js";
 import { digitalKitRouter, initDigitalKits, removeDuplicateStarters, seedDigitalKit, seedOfficialFiles, repairOfficialFiles, seedDesignationTexts, seedOfficialTexts, updateOfficialLabels } from "./digital-kit.js";
 import { documentsRouter } from "./documents.js";
-import { bootstrapAuth, loadSession, requireAuth, requireHr } from "./auth.js";
+import { bootstrapAuth, loadSession, requireAuth } from "./auth.js";
+import { bootstrapAccess } from "./access.js";
+import { accessRouter } from "./access-routes.js";
+import { timing } from "./timing.js";
+import { toolsRouter } from "./tools.js";
 import { sessionRouter, accountRouter, usersRouter } from "./users.js";
 import { profileRouter } from "./profile.js";
 import { leaveRouter } from "./leave.js";
 import { postsRouter } from "./posts.js";
+import { engageRouter } from "./engage.js";
+import { hrToolsRouter } from "./hr-tools.js";
+import { financeRouter } from "./finance-reports.js";
+import { workforceRouter } from "./workforce.js";
 import { celebrationsRouter } from "./celebrations.js";
-import { festivalsRouter } from "./festivals.js";
+import { festivalLookRouter, festivalsRouter } from "./festivals.js";
 import { leaveDigestRouter } from "./leave-digest.js";
 import { attendanceRouter } from "./attendance.js";
 import { assetsRouter } from "./assets.js";
@@ -22,7 +30,7 @@ import { reimbursementsRouter } from "./reimbursements.js";
 import { budgetsRouter } from "./budgets.js";
 import { payrollRouter } from "./payroll.js";
 import { payslipAutoRouter } from "./payslip-auto.js";
-import { payrollWorkflowRouter, initPayroll } from "./payroll/routes.js";
+import { payrollWorkflowRouter, initPayroll, warmPayrollPreview } from "./payroll/routes.js";
 import { requirePayrollAccess, hrOnly } from "./payroll/access.js";
 import { notificationsRouter, emailMode } from "./notify.js";
 import { securityHeaders, sameOriginWrites } from "./security.js";
@@ -32,6 +40,7 @@ import { projectsRouter } from "./projects.js";
 import { toolAccessRouter } from "./tool-access.js";
 import { pagesRouter } from "./pages.js";
 import { startBackgroundJobs } from "./jobs.js";
+import { PRODUCT } from "./brand.js";
 
 // This file only wires the server together: middleware, every router in order, start-up and the background jobs.
 // The routes live in their own files (see ARCHITECTURE.md, section 6). Order matters: accountRouter makes every later /api
@@ -41,13 +50,15 @@ const app = express();
 // TRUST_PROXY sets how many proxies to trust (default 1: the one in front of this server). Use 0 when nothing is in front.
 app.set("trust proxy", Number(process.env.TRUST_PROXY ?? 1));
 app.disable("x-powered-by");
+app.use(timing);   // Server-Timing on every response, and a log line for slow /api requests (timing.js)
 app.use(securityHeaders);
 app.use(sameOriginWrites);   // a form on another website cannot change anything here
 app.use(loadSession);
 app.use("/api/documents", requireAuth, documentsRouter); // raw file bodies, so it goes before the JSON parser
 app.use("/api/digital-kit", requireAuth, digitalKitRouter); // employees: only their own kit; HR: the /admin part (it reads raw uploads itself, so it also goes before the JSON parser)
 app.use(express.json({ limit: "100kb" }));
-app.use("/api", sessionRouter); // login and logout are the only public API routes
+app.use("/api", sessionRouter); // login and logout are public
+app.use("/api", festivalLookRouter);   // public: which festival is near, for the sign-in page's festival look
 app.use(deviceRouter()); // the office device posts punches with its own key (no session); the linking screens check for HR themselves
 app.use("/api", accountRouter);
 app.use("/api/users", usersRouter);
@@ -61,6 +72,12 @@ app.use(peopleRouter(wrap));       // directory, roster, reporting lines, employ
 app.use(projectsRouter(wrap));     // projects and allocations
 app.use(leaveRouter(wrap));
 app.use(postsRouter(wrap));
+app.use(engageRouter(wrap));
+app.use(hrToolsRouter(wrap));   // probation, helpdesk, exit interviews, hiring, performance reviews   // polls, praise, articles, app links, advance and attendance requests
+app.use(workforceRouter(wrap));   // timesheets, surveys, training, notice periods, approval stand-ins
+app.use(accessRouter(wrap));
+app.use(toolsRouter(wrap));   // every paid tool (AI and others): seats and monthly cost (Manage > Tools)   // super admins: who may do what, for the company or a team (Company > Access)
+app.use(financeRouter(wrap));   // statutory dues, payroll journal, cost, gratuity, annual tax statements (read only)
 app.use(leaveDigestRouter(wrap));   // HR: preview or test the daily leave digest email
 app.use(attendanceRouter(wrap));
 app.use(assetsRouter(wrap));   // IT admins only
@@ -69,10 +86,10 @@ app.use(toolAccessRouter(wrap));   // the audit log and Claude access
 app.use("/api/claude-requests", claudeRequestsRouter);   // HR and IT admins: who is waiting to be invited to Claude
 app.use("/api/reimbursements", requireAuth, reimbursementsRouter);   // own claims for everyone; review actions are HR-only inside
 app.use("/api/budget-requests", requireAuth, budgetsRouter);   // own requests for everyone; decisions are HR-only inside
-// Payroll: HR prepares it and a payroll reviewer (PAYROLL_REVIEWERS) approves it; everything after the workflow router is HR only.
+// Payroll: payroll.prepare holders prepare it and payroll.approve holders approve it; everything after the workflow router needs payroll.prepare.
 app.use("/api/payroll", requirePayrollAccess, payrollWorkflowRouter, hrOnly, payslipAutoRouter, payrollRouter);
 app.use("/api/notifications", requireAuth, notificationsRouter);
-app.use("/api/celebrations", requireHr, celebrationsRouter);   // HR: birthday and welcome posters, emailed to everyone
+app.use("/api/celebrations", requireAuth, celebrationsRouter);   // HR: birthday and welcome posters, emailed to everyone
 app.use("/api/festivals", requireAuth, festivalsRouter);   // everyone: festivals and their dates for the Festival Wishes page
 app.use(clearanceRouter(wrap));   // offboarding financial clearance and employee advances (HR only)
 app.use(offboardingRouter(wrap));
@@ -87,7 +104,9 @@ app.use((err, _req, res, _next) => {
 await initDb();
 if (payPool !== pool) { await initDb(payPool, PAY_SCHEMA); console.log("Payroll and payslips use their own database (PAYROLL_DATABASE_URL)"); }
 await initPayroll(payPool);   // payroll workflow tables and starting tax rules (payroll/schema.sql)
+warmPayrollPreview();   // the month's payroll preview, worked out in the background so the first visit is quick
 await bootstrapAuth();
+await bootstrapAccess();   // the first super admins, and grants that match each login's access from before (src/access.js)
 // Digital Kit: starter text once, and a kit for every employee who does not have one yet (safe to repeat; nobody is duplicated or changed).
 try {
   await seedDigitalKit();
@@ -108,7 +127,7 @@ if (process.env.BACKGROUND_JOBS === "off") console.log("Background jobs are off 
 else startBackgroundJobs();
 console.log(`Email: ${emailMode() === "sendgrid" ? "sending through SendGrid" : "SendGrid not configured, emails are logged and skipped"}`);
 const port = process.env.PORT || 3000;
-const server = app.listen(port, () => console.log(`Wohlig One on http://localhost:${port}`));
+const server = app.listen(port, () => console.log(`${PRODUCT} on http://localhost:${port}`));
 // Another program on the same port (a second copy of this app, another project's dev server) is the usual reason it won't start locally.
 server.on("error", (err) => {
   if (err.code !== "EADDRINUSE") throw err;

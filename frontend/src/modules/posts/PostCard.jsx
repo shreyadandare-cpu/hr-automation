@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { DropdownMenu } from "radix-ui";
 import { Link } from "react-router-dom";
 import { api } from "../../api.js";
 import { useAuth } from "../../auth.jsx";
@@ -39,7 +40,7 @@ function Lightbox({ ids, start, onClose }) {
   return (
     <Modal wide onClose={onClose}>
       <div className="pc-lightbox">
-        <img src={imgUrl(ids[i])} alt={`Photo ${i + 1} of ${ids.length}`} />
+        <img src={imgUrl(ids[i])} alt={`Photo ${i + 1} of ${ids.length}`} decoding="async" />
         <button type="button" className="pc-lb-x" onClick={onClose} aria-label="Close"><Svg name="close" size={18} /></button>
         {ids.length > 1 && <>
           <button type="button" className="pc-lb-nav prev" onClick={() => setI(i - 1)} disabled={i === 0} aria-label="Previous photo">‹</button>
@@ -71,7 +72,6 @@ export default function PostCard({ p, full = false, onChange, onRemoved, onEdit 
   const toast = useToast();
   const myName = ((people || []).find((x) => lc(x.email) === lc(user.email)) || {}).name;
   const [expanded, setExpanded] = useState(full);
-  const [menu, setMenu] = useState(false);
   const [photo, setPhoto] = useState(null);
   const [share, setShare] = useState(false);
   const [confirm, setConfirm] = useState(null);   // { kind: "post" } | { kind: "comment", c }
@@ -79,14 +79,8 @@ export default function PostCard({ p, full = false, onChange, onRemoved, onEdit 
   const [comment, setComment] = useState("");
   const [busy, setBusy] = useState(false);
   const [pop, setPop] = useState(false);
-  const inputRef = useRef(null), menuRef = useRef(null);
+  const inputRef = useRef(null);
 
-  useEffect(() => {
-    if (!menu) return;
-    const out = (e) => { if (menuRef.current && !menuRef.current.contains(e.target)) setMenu(false); };
-    document.addEventListener("mousedown", out);
-    return () => document.removeEventListener("mousedown", out);
-  }, [menu]);
   const loadComments = async () => {
     const r = await api("GET", `/api/posts/${p.id}/comments`);
     if (r.ok) setAllComments(r.data.comments); else toast(errOf(r));
@@ -143,13 +137,15 @@ export default function PostCard({ p, full = false, onChange, onRemoved, onEdit 
           <span><Link to={`/app/posts/${p.id}`} title={fullDate(p.createdAt)}><time dateTime={p.createdAt}>{ago(p.createdAt)}</time></Link>
             {p.updatedAt && <span title={`Edited ${fullDate(p.updatedAt)}`}> · Edited</span>}{p.author.title ? ` · ${p.author.title}` : ""}</span>
         </div>
-        {p.canManage && <div className="pc-menu" ref={menuRef}>
-          <button type="button" className="pc-icon" aria-label="Post options" aria-haspopup="menu" aria-expanded={menu} onClick={() => setMenu(!menu)}><Svg name="more" /></button>
-          {menu && <div className="pc-pop" role="menu">
-            <button type="button" role="menuitem" onClick={() => { setMenu(false); onEdit(p); }}><Svg name="edit" size={18} />Edit post</button>
-            <button type="button" role="menuitem" className="bad" onClick={() => { setMenu(false); setConfirm({ kind: "post" }); }}><Svg name="trash" size={18} />Delete post</button>
-          </div>}
-        </div>}
+        {p.canManage && <DropdownMenu.Root>
+          <DropdownMenu.Trigger className="pc-icon" aria-label="Post options"><Svg name="more" /></DropdownMenu.Trigger>
+          <DropdownMenu.Portal>
+            <DropdownMenu.Content className="row-menu" align="end" sideOffset={6} collisionPadding={8}>
+              <DropdownMenu.Item className="row-menu-i" onSelect={() => onEdit(p)}><Svg name="edit" size={18} />Edit post</DropdownMenu.Item>
+              <DropdownMenu.Item className="row-menu-i bad" onSelect={() => setConfirm({ kind: "post" })}><Svg name="trash" size={18} />Delete post</DropdownMenu.Item>
+            </DropdownMenu.Content>
+          </DropdownMenu.Portal>
+        </DropdownMenu.Root>}
       </header>
 
       {p.title && <h3 className="pc-title">{p.title}</h3>}

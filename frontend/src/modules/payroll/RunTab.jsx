@@ -167,10 +167,10 @@ export default function RunTab({ you }) {
             {!ov.encryptionReady && you.hr && <div className="card-b" style={{ paddingTop: 0 }}><Callout>Bank details can't be saved or used until the server has <code>PAYROLL_ENCRYPTION_KEY</code> set.</Callout></div>}
             <div className="card-b row pr-actions">
               {!run && you.hr && <button type="button" className="btn primary" onClick={() => setDlg({ start: true })}>Start payroll for {monthLabel(period)}</button>}
-              {!run && !you.hr && <span className="muted">No payroll has been sent for review for this month.</span>}
+              {!run && !you.hr && <span className="muted">{you.reviewer ? "No payroll has been sent for review for this month." : "There is no payroll for this month yet."}</span>}
               {run && run.editable && <button type="button" className="btn glass" disabled={busy} onClick={recalc}>Recalculate</button>}
               {workbook && <a className="btn glass" href={fileUrl(run.id, workbook.id)} download aria-label={`Download Excel (v${workbook.version})`} title="Download Excel"><DownloadIcon />Excel (v{workbook.version})</a>}
-              {bank && you.hr && <a className="btn glass" href={fileUrl(run.id, bank.id)} download aria-label="Download bank file" title="Download bank file"><DownloadIcon />Bank file</a>}
+              {bank && you.bank && <a className="btn glass" href={fileUrl(run.id, bank.id)} download aria-label="Download bank file" title="Download bank file"><DownloadIcon />Bank file</a>}
               {run && run.actions.map((a) => <button key={a} type="button" className={`btn ${ACT[a].tone}`} onClick={() => { setNote(""); setRef(""); setDlg({ action: a }); }}>{ACT[a].label}</button>)}
             </div>
           </>}

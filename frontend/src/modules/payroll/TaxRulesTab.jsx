@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { api, apiMsg } from "../../api.js";
 import Modal, { Field } from "../../components/Modal.jsx";
-import { Callout } from "../../components/ui.jsx";
+import { Callout, TableSkeletonRow } from "../../components/ui.jsx";
 import { useToast } from "../../components/toast.jsx";
 import { money, when } from "./util.jsx";
 
@@ -153,7 +153,7 @@ export default function TaxRulesTab() {
             <td>{r.source}<div className="muted">{r.updatedBy} · {when(r.updatedAt)}</div></td>
             <td className="num"><div className="row" style={{ gap: 6, justifyContent: "flex-end" }}><button type="button" className="btn glass sm" onClick={() => setEdit(r)}>Edit</button>
               {!rows.some((x) => x.fy === nextFy(r.fy) && x.regime === r.regime) && <button type="button" className="btn glass sm" onClick={() => setEdit({ ...r, fy: nextFy(r.fy), copy: true })}>Copy to FY {nextFy(r.fy)}</button>}</div></td></tr>))
-          : <tr><td colSpan={7}><div className="empty">{rows ? "No tax rules." : "Loading…"}</div></td></tr>}
+          : rows ? <tr><td colSpan={7}><div className="empty">No tax rules.</div></td></tr> : <TableSkeletonRow cols={7} />}
       </tbody></table></div>
       {upload && <UploadModal onClose={(saved) => { setUpload(false); if (saved) load(); }} />}
       {edit && <RulesModal row={edit} onClose={(saved) => { setEdit(null); if (saved) load(); }} />}

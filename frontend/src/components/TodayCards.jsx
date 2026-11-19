@@ -1,8 +1,9 @@
 import { useEffect, useState } from "react";
-import { api } from "../api.js";
+import { api, apiShared } from "../api.js";
 import { useAuth } from "../auth.jsx";
 import PersonAvatar from "./PersonAvatar.jsx";
 import { lc } from "../lib/useLeave.js";
+import { Icon, CardSkeleton } from "./ui.jsx";
 
 const MON = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 const nextDay = (d) => new Date(Date.parse(d) + 86400000).toISOString().slice(0, 10);
@@ -40,9 +41,9 @@ const Pair = ({ children }) => <div className="grid g2">{children}</div>;
 export default function TodayCards({ bare = false, only = null }) {
   const { user } = useAuth();
   const [d, setD] = useState(null);
-  useEffect(() => { api("GET", "/api/leave/today").then((r) => setD(r.ok ? r.data : { failed: true })); }, []);
+  useEffect(() => { apiShared("/api/leave/today").then((r) => setD(r.ok ? r.data : { failed: true })); }, []);
   const Wrap = bare ? Bare : Pair;
-  const loading = <div className="card"><div className="empty">Loading…</div></div>;
+  const loading = <CardSkeleton lines={4} />;
   if (!d) return only ? loading : <Wrap>{loading}{loading}</Wrap>;
   if (d.failed) return null;
 
@@ -57,7 +58,7 @@ export default function TodayCards({ bare = false, only = null }) {
         <div className="td-main">
           {d.onLeave.length
             ? <div className="td-faces">{d.onLeave.map((p) => <Face key={p.email} p={p} sub={p.half ? "Half day" : "On leave"} />)}</div>
-            : <Empty icon="✅" title="Everyone is working today!" sub="No one is on leave today." />}
+            : <Empty icon={<Icon name="check" />} title="No one is on leave today" sub="Everyone is working." />}
         </div>
         <details className="td-more">
           <summary>Upcoming leave <span className="muted">· next {d.upcomingDays || 14} days{soon.length ? ` · ${soon.length}` : ""}</span></summary>
@@ -75,9 +76,9 @@ export default function TodayCards({ bare = false, only = null }) {
   const birthdayCard = (
       <div className="card"><div className="card-h"><h3>Birthdays</h3><span className="muted">{bToday.length ? `${bToday.length} today` : ""}</span></div>
         <div className="td-sub">Birthdays today</div>
-        {mine && <Empty icon="🎉" title={`Happy birthday, ${firstName(mine.name)}!`} sub="Wishing you a wonderful year ahead." />}
+        {mine && <Empty icon={<Icon name="gift" />} title={`Happy birthday, ${firstName(mine.name)}.`} sub="Wishing you a wonderful year ahead." />}
         {others.length > 0 && <div className="td-faces">{others.map((p) => <Face key={p.email} p={p} sub="🎂 Today" />)}</div>}
-        {!bToday.length && <Empty icon="🎂" title="No birthdays today." sub={upcoming.length ? "Upcoming ones are below." : "None in the next 30 days either."} />}
+        {!bToday.length && <Empty icon={<Icon name="gift" />} title="No birthdays today." sub={upcoming.length ? "Upcoming ones are below." : "None in the next 30 days either."} />}
         {upcoming.length > 0 && <>
           <div className="td-sub">Upcoming birthdays</div>
           <div className="td-faces">{upcoming.map((p) => <Face key={p.email} p={p} sub={p.date === nextDay(d.today) ? "Tomorrow" : dayMonth(p.date)} />)}</div>

@@ -1,23 +1,56 @@
 import crypto from "node:crypto";
 
-/*
- * Who may see payroll, and the encryption used for bank account numbers and bank files.
- *
- *   HR (users.role = 'hr')        prepares payroll: salaries, bank details, inputs, Excel, bank file.
- *   Payroll reviewer              PAYROLL_REVIEWERS (comma separated emails; default chirag@wohlig.com). Sees the run and the
- *                                 Excel report, approves, rejects or asks for changes. Never sees bank account numbers.
- *   Everyone else                 403. Their own payslip stays under /api/payslips.
- */
-export const reviewers = () => (process.env.PAYROLL_REVIEWERS ?? "chirag@wohlig.com").split(",").map((s) => s.trim().toLowerCase()).filter(Boolean);
-export const isReviewer = (email) => !!email && reviewers().includes(String(email).toLowerCase());
-export const actorOf = (req) => ({ email: req.user.email, hr: req.user.role === "hr", reviewer: isReviewer(req.user.email) });
+import { LIVE_GRANTS_SQL, canAll, holds, scopeOf } from "../access.js";
+import { pool as mainPool } from "../db.js";
 
+/*
+ * Who may see payroll (permissions ticked on the Access page, access-rules.js), and the encryption used for bank account numbers
+ * and bank files.
+ *
+ *   payroll.prepare  (company)        prepares payroll: salaries, inputs, recalculation, Excel, adjustments, tax rules, declarations, publishing.
+ *   payroll.approve  (company)        sees a run once it is sent for review, approves, rejects or asks for changes. Never sees bank
+ *                                     account numbers. Nobody approves a run they sent, generated or edited (maker-checker).
+ *   payroll.bank     (company)        salary bank accounts and the bank transfer file.
+ *   payroll.view     (company or team) sees runs once they are sent for review; a team holder sees only their team's lines.
+ *   Everyone else                     403. Their own payslip stays under /api/payslips.
+ *
+ * PAYROLL_REVIEWERS is read only once, by the first start-up step that turned the old payroll reviewers into payroll.approve
+ * grants (access.js bootstrapAccess); nothing else reads it.
+ */
+
+
+/**
+ * The signed-in person's payroll powers: { email, hr, reviewer, bank, viewer, scope }.
+ * hr = payroll.prepare, reviewer = payroll.approve, bank = payroll.bank (all company-wide). scope is null when they may see every
+ * line of a visible run, or a Set of the emails whose lines they may see (payroll.view for a team only).
+ */
+export async function actorOf(req) {
+  const hr = canAll(req, "payroll.prepare"), reviewer = canAll(req, "payroll.approve"), bank = canAll(req, "payroll.bank");
+  const viewer = holds(req, "payroll.view");
+  const scope = hr || reviewer || bank ? null : viewer ? await scopeOf(req, "payroll.view") : new Set();
+  return { email: req.user.email, hr, reviewer, bank, viewer, scope };
+}
+
+/** Who is told that a payroll is waiting for review: live company-wide payroll.approve grants, else the super admins. */
+export async function approvers() {
+  const { rows } = await mainPool.query(
+    `SELECT DISTINCT lower(email) AS email FROM access_grants WHERE permission='payroll.approve' AND scope='company' AND ${LIVE_GRANTS_SQL}`);
+  if (rows.length) return rows.map((r) => r.email);
+  return (await mainPool.query("SELECT lower(email) AS email FROM users WHERE is_super_admin AND NOT login_blocked")).rows.map((r) => r.email);
+}
+
+const denied = (res) => res.status(403).json({ error: "You do not have access to this. Please ask a super admin if you need it." });
+
+/** The /api/payroll gate: payroll.prepare, payroll.approve, payroll.bank or payroll.view (any scope). */
 export const requirePayrollAccess = (req, res, next) =>
   !req.user ? res.status(401).json({ error: "Please sign in." })
-  : req.user.role !== "hr" && !isReviewer(req.user.email) ? res.status(403).json({ error: "You are not authorised to access payroll." })
+  : !["payroll.prepare", "payroll.approve", "payroll.bank", "payroll.view"].some((p) => holds(req, p)) ? denied(res)
   : (res.setHeader("Cache-Control", "private, no-store"), next());
 
-export const hrOnly = (req, res, next) => (req.user.role === "hr" ? next() : res.status(403).json({ error: "Only HR can do this." }));
+/** Preparing payroll: payroll.prepare for the whole company. (The name is kept: index.js mounts it.) */
+export const hrOnly = (req, res, next) => (canAll(req, "payroll.prepare") ? next() : denied(res));
+/** Salary bank accounts and the bank file: payroll.bank for the whole company. */
+export const bankOnly = (req, res, next) => (canAll(req, "payroll.bank") ? next() : denied(res));
 
 /* ---------- AES-256-GCM with PAYROLL_ENCRYPTION_KEY (32 bytes, as 64 hex characters or base64) ---------- */
 function key() {

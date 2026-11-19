@@ -4,12 +4,12 @@ import BackButton from "../components/BackButton.jsx";
 import { api, apiMsg } from "../api.js";
 import { useAuth } from "../auth.jsx";
 import { useData } from "../data.jsx";
-import { Avatar, SectionHead, shortDate } from "../components/ui.jsx";
+import { Avatar, SectionHead, shortDate, PageSkeleton } from "../components/ui.jsx";
 import { Field } from "../components/Modal.jsx";
 import DatePicker from "../components/DatePicker.jsx";
 import { useToast } from "../components/toast.jsx";
 import { R } from "../lib/leave.js";
-import { LTYPE, dd, lc, rangeText, useLeave } from "../lib/useLeave.js";
+import { LTYPE, dd, lc, rangeText, scopeSet, useLeave } from "../lib/useLeave.js";
 
 /* The first day from `s` on that counts as a working day (not a Saturday, Sunday or company holiday). */
 const firstWorking = (s, holidays) => { const d = new Date(s + "T00:00:00Z"); while (R.isWeekend(d.toISOString().slice(0, 10)) || holidays.includes(d.toISOString().slice(0, 10))) d.setUTCDate(d.getUTCDate() + 1); return d.toISOString().slice(0, 10); };
@@ -53,17 +53,18 @@ function NotifyPicker({ chosen, exclude, people, onAdd, onRemove }) {
 
 /* Leave request: dates, type, note, review. Employees apply for themselves; HR can add leave for someone. */
 export default function LeaveApply() {
-  const { user, isHr } = useAuth();
+  const auth = useAuth(), { user, can } = auth;
   const { people, reloadLeave } = useData();
   const lv = useLeave(), toast = useToast(), nav = useNavigate();
   const [params] = useSearchParams();
-  const self = !isHr || params.get("self") === "1";
+  const self = !can("leave.approve") || params.get("self") === "1";   // leave.approve may add leave for the people in scope
   const [w, setW] = useState(() => ({ step: 1, email: self ? user.email : params.get("email") || "", dur: "full", from: firstWorking(lv.today, lv.holDays), to: firstWorking(lv.today, lv.holDays), half: "first", type: "", reason: "", notify: [], reviewed: false, fromReview: false, errors: {} }));
   const top = useRef(null);
   const set = (patch) => setW((x) => ({ ...x, ...patch }));
-  if (!people) return <section className="section"><div className="empty">Loading…</div></section>;
+  if (!people) return <PageSkeleton />;
 
   const back = self ? "/app/my-leave" : "/app/leave";
+  const applyScope = scopeSet(auth, "leave.approve", people);   // null: anyone; otherwise the people below the team roots it was given for
   const e = lv.empBy(w.email);
   const val = { email: w.email, type: w.type, from: w.from, to: w.dur === "half" ? w.from : w.to, half: w.dur === "half" ? w.half : null, reason: w.reason, notify: w.notify.slice() };
   const days = R.validDate(val.from) && R.validDate(val.to) && val.to >= val.from ? R.requestDays(val.from, val.to, val.half, lv.holDays) : 0;
@@ -111,7 +112,7 @@ export default function LeaveApply() {
     }
     const sent = !val.split ? "" : parts.length === 1 ? " as unpaid leave (no sick leave left)"
       : ` as ${dd(parts[0].days)} of ${LTYPE[parts[0].type].toLowerCase()} and ${dd(parts[1].days)} of unpaid leave`;
-    toast(self ? `Leave requested${sent}. ${lv.approverOf(val.email) === "hr" || lv.approverOf(val.email) === "directors" ? lv.approverName(val.email) : "Your manager"} will review it.` : `Leave request for ${e.name}${sent} sent for approval.`);
+    toast(self ? `Leave requested${sent}. ${lv.approverOf(val.email) === "hr" ? "A super admin" : "Your manager"} will review it.` : `Leave request for ${e.name}${sent} sent for approval.`);
     reloadLeave(); nav(back);
   };
 
@@ -133,7 +134,7 @@ export default function LeaveApply() {
   if (w.step === 1) body = (
     <div className="card"><div className="card-h"><h3>When are you away?</h3></div><div className="card-b" style={{ display: "flex", flexDirection: "column", gap: 18 }}>
       {!self && <Field id="lw-email" label="Employee" error={er.email}><select className="input" id="lw-email" value={w.email} onChange={(x) => set({ email: x.target.value, type: "" })}><option value="">Choose…</option>
-        {people.filter((p) => p.status !== "offboarded").sort((a, b) => a.name.localeCompare(b.name)).map((p) => <option key={p.id} value={p.email}>{p.name}</option>)}</select></Field>}
+        {people.filter((p) => p.status !== "offboarded" && (!applyScope || applyScope.has(lc(p.email)))).sort((a, b) => a.name.localeCompare(b.name)).map((p) => <option key={p.id} value={p.email}>{p.name}</option>)}</select></Field>}
       <div className="field"><span className="lab">Duration</span><div className="seg">
         <label><input type="radio" name="lw-dur" checked={w.dur === "full"} onChange={() => set({ dur: "full" })} />Full day(s)</label>
         <label><input type="radio" name="lw-dur" checked={w.dur === "half"} onChange={() => set({ dur: "half" })} />Half day</label></div></div>
@@ -183,8 +184,8 @@ export default function LeaveApply() {
   return (
     <section className="section" ref={top}>
       <BackButton to={self ? "/app/my-leave" : "/app/leave"} />
-      <SectionHead eyebrow={self ? "Me" : "Time off"} title={self ? "Request" : "Add leave for"} accent={self ? "leave." : "someone."}
-        sub={self ? `Pick your dates and the type of leave, add a note, then review. ${lv.approverOf(w.email) === "hr" ? "You have no reporting manager, so HR approves it." : lv.approverOf(w.email) === "directors" ? `HR's own leave is approved by ${lv.approverName(w.email)}.` : "Your reporting manager approves it."}` : "For when HR enters leave on an employee's behalf. It still goes to the approval list."} />
+      <SectionHead eyebrow={self ? "Me" : "Time off"} title={self ? "Request leave" : "Add leave for someone"}
+        sub={self ? `Pick your dates and the type of leave, add a note, then review. ${lv.approverOf(w.email) === "hr" ? "You have no reporting manager, so a super admin approves it." : "Your reporting manager, or anyone above them, approves it."}` : "For when HR enters leave on an employee's behalf. It still goes to the approval list."} />
       <Stepper cur={w.step} />
       <form className="grid" style={{ gap: 22 }} noValidate onSubmit={submit}>
         {body}

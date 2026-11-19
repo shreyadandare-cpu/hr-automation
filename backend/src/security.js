@@ -1,3 +1,4 @@
+import { COMPANY_LEGAL, MAROON, PRODUCT, SIGN_OFF } from "./brand.js";
 // Security headers and a same-origin check on every change. Mounted first in index.js.
 //
 // Sign-in uses a SameSite=Lax cookie, which already stops most cross-site requests. sameOriginWrites adds a second
@@ -33,7 +34,7 @@ export function sameOriginWrites(req, res, next) {
   return ok ? next() : refuse(res);
 }
 
-const refuse = (res) => res.status(403).json({ error: "This request did not come from Wohlig One. Please reload the page and try again." });
+const refuse = (res) => res.status(403).json({ error: `This request did not come from ${PRODUCT}. Please reload the page and try again.` });
 
 /** Headers every answer carries. The page loads fonts from Google, so the policy names those hosts. */
 export function securityHeaders(_req, res, next) {

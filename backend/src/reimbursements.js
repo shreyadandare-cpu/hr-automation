@@ -3,7 +3,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import express from "express";
 import { pool } from "./db.js";
-import { requireHr } from "./auth.js";
+import { can, canAll, mayDecide, need, needAll, scopeOf } from "./access.js";
 import { UPLOAD_DIR } from "./documents.js";
 import { MAX_BYTES, checkFile, readInvoice } from "./extract.js";
 import { notify } from "./notify.js";
@@ -58,7 +58,8 @@ const guessCurrency = (text) => (/\$|\busd\b/i.test(text || "") && !/₹|\binr\b
 const MAX_ITEMS = 50;
 const REMIND_DAYS = Number(process.env.REIMB_REMINDER_DAYS || 3);
 
-const isHr = (req) => req.user && req.user.role === "hr";
+/** Company-wide expense approvers (expenses.approve for the whole company) set categories and read the monthly totals. */
+const approvesAll = (req) => canAll(req, "expenses.approve");
 const me = (req) => req.user.email.toLowerCase();
 const num = (v) => (v === null || v === undefined ? null : Number(v));
 const inr = (n) => "₹" + Number(n).toLocaleString("en-IN", { minimumFractionDigits: Number(n) % 1 ? 2 : 0, maximumFractionDigits: 2 });
@@ -213,7 +214,7 @@ const SELECT = `SELECT r.*, e.name AS emp_name, e.emp_no, e.dept, e.title, p.per
   LEFT JOIN budget_requests b ON b.id = r.budget_request_id`;
 
 const toApi = (r) => ({
-  id: r.id, claimNo: r.claim_no, email: r.work_email, employee: { name: r.emp_name || r.work_email, empNo: r.emp_no, dept: r.dept, title: r.title },
+  id: r.id, claimNo: r.claim_no, email: r.work_email, createdBy: r.created_by ? String(r.created_by).toLowerCase() : null, employee: { name: r.emp_name || r.work_email, empNo: r.emp_no, dept: r.dept, title: r.title },
   category: r.category, amount: num(r.amount), currency: r.currency, expenseDate: r.expense_date, description: r.description,
   paymentMethod: r.payment_method,
   expenses: (r.items_brief || []).map((i) => ({ category: i.category, amount: num(i.amount), noReceipt: i.noReceipt })), documentCount: r.doc_count,
@@ -240,7 +241,18 @@ const itemApi = (it, docs) => ({ id: it.id, position: it.position, category: it.
   description: it.description, paymentMethod: it.payment_method, noReceipt: it.no_receipt, source: it.source,
   vendor: it.vendor, invoiceNo: it.invoice_no, currency: it.currency, extracted: it.extracted, travelClass: it.travel_class, policyFare: num(it.policy_fare),
   document: docApi(docs.find((d) => d.item_id === it.id)) });
-const canSee = (req, c) => c && (isHr(req) || c.work_email.toLowerCase() === me(req));
+/**
+ * Your own claim (or one you filed for someone), or a claim of someone you hold expenses.approve for. Other people's drafts stay
+ * hidden until they are sent, as in the list.
+ */
+const canSee = async (req, c) => !!c && (c.work_email.toLowerCase() === me(req) || c.created_by === me(req)
+  || (c.status !== "draft" && await can(req, "expenses.approve", c.work_email)));
+/** Why the caller may not decide this claim, or null when they may: never your own claim, nor one you filed for someone. */
+async function cannotDecide(req, c) {
+  if (c.work_email.toLowerCase() === me(req)) return "Someone else has to decide your own claim.";
+  if (c.created_by === me(req)) return "You filed this claim, so someone else has to decide it.";
+  return (await mayDecide(req, "expenses.approve", c.work_email)) ? null : "You do not have access to this.";
+}
 
 /* ---------- input checks (the browser's values are re-validated here) ---------- */
 
@@ -382,7 +394,7 @@ export async function runReimbursementReminders() {
     const days = Math.floor((Date.now() - new Date(c.submitted_at || c.created_at)) / 864e5);
     await pool.query("UPDATE reimbursements SET last_reminded_at=now() WHERE id=$1", [c.id]);
     await event(pool, c, { actor: "system", kind: "Review reminder sent to HR", note: `waiting ${days} days` });
-    await notify("hr", {
+    await notify("perm:expenses.approve", {
       title: `Reimbursement ${c.claim_no} has been awaiting review for ${days} days.`,
       body: `${await employeeName(pool, c.work_email)} · ${inr(c.amount)}`, link: `claim:${c.id}`,
       email: { subject: `Reminder: ${c.claim_no} awaiting review`, body: `Reimbursement ${c.claim_no} has been awaiting review for ${days} days.` },
@@ -396,13 +408,13 @@ export async function runReimbursementReminders() {
 export const reimbursementsRouter = express.Router();
 
 reimbursementsRouter.get("/categories", wrap(async (req, res) => {
-  const { rows } = await pool.query(`SELECT * FROM reimbursement_categories ${isHr(req) ? "" : "WHERE active"} ORDER BY sort, name`);
+  const { rows } = await pool.query(`SELECT * FROM reimbursement_categories ${approvesAll(req) ? "" : "WHERE active"} ORDER BY sort, name`);
   res.json({ categories: rows.map((r) => ({ key: r.key, name: r.name, maxAmount: num(r.max_amount), active: r.active, allowedClass: r.allowed_class })),
     rejectReasons: REJECT_REASONS, paymentMethods: PAYMENT_METHODS, noReceiptMax: NO_RECEIPT_MAX, maxItems: MAX_ITEMS, travelClasses: TRAVEL_CLASSES });
 }));
 
 // HR sets an optional limit (or none) per category, or turns a category off.
-reimbursementsRouter.put("/categories/:key", requireHr, wrap(async (req, res) => {
+reimbursementsRouter.put("/categories/:key", needAll("expenses.approve"), wrap(async (req, res) => {
   const { maxAmount, active, allowedClass } = req.body || {};
   const limit = maxAmount === "" || maxAmount === null || maxAmount === undefined ? null : Number(maxAmount);
   if (limit !== null && !(limit > 0 && limit < 1e7)) return res.status(400).json({ error: "Enter a limit in rupees, or leave it empty for no limit." });
@@ -416,13 +428,19 @@ reimbursementsRouter.put("/categories/:key", requireHr, wrap(async (req, res) =>
   res.json({ ok: true });
 }));
 
-// The list. HR sees every claim (with summary cards); everyone else sees their own.
+// The list. expenses.approve holders see the claims of the people they cover (with summary cards); everyone sees their own.
 reimbursementsRouter.get("/", wrap(async (req, res) => {
   const q = req.query, where = [], args = [];
   const add = (sql, v) => { args.push(v); where.push(sql.replace("?", `$${args.length}`)); };
-  if (!isHr(req)) add("lower(r.work_email)=?", me(req));
-  if (isHr(req)) add("(r.status <> 'draft' OR lower(r.created_by)=?)", me(req));   // HR doesn't see other people's unsent drafts
-  if (isHr(req) && q.email) add("lower(r.work_email)=?", String(q.email).toLowerCase());
+  const scope = await scopeOf(req, "expenses.approve");   // null: everyone; a Set: the people of their teams (empty: nobody)
+  const team = scope ? [...scope] : null, reviews = !team || team.length > 0;
+  if (!reviews) add("lower(r.work_email)=?", me(req));
+  else {
+    // Approvers don't see other people's unsent drafts.
+    args.push(me(req)); where.push(`(r.status <> 'draft' OR lower(r.created_by)=$${args.length} OR lower(r.work_email)=$${args.length})`);
+    if (team) { args.push(me(req), team); where.push(`(lower(r.work_email)=$${args.length - 1} OR lower(r.created_by)=$${args.length - 1} OR lower(r.work_email) = ANY($${args.length}))`); }
+    if (q.email) add("lower(r.work_email)=?", String(q.email).toLowerCase());
+  }
   if (q.status) add("r.status=?", String(q.status));
   if (q.category) add("EXISTS (SELECT 1 FROM reimbursement_items i WHERE i.reimbursement_id=r.id AND i.category=?)", String(q.category));
   if (q.from && /^\d{4}-\d{2}-\d{2}$/.test(q.from)) add("r.expense_date >= ?", q.from);
@@ -434,7 +452,7 @@ reimbursementsRouter.get("/", wrap(async (req, res) => {
   const { rows } = await pool.query(`${SELECT} ${where.length ? "WHERE " + where.map((w) => `(${w})`).join(" AND ") : ""}
     ORDER BY coalesce(r.submitted_at, r.created_at) DESC, r.id DESC LIMIT 500`, args);
   let summary = null;
-  if (isHr(req)) {
+  if (reviews) {
     const month = istMonth();
     const { rows: s } = await pool.query(
       `SELECT
@@ -445,7 +463,7 @@ reimbursementsRouter.get("/", wrap(async (req, res) => {
          count(*) FILTER (WHERE status IN ('approved','payroll_pending','in_payroll'))::int AS pending_payroll,
          coalesce(sum(paid_amount) FILTER (WHERE status='paid' AND to_char(paid_at + interval '330 minutes','YYYY-MM')=$1),0) AS paid_this_month,
          coalesce(sum(paid_amount) FILTER (WHERE status='paid'),0) AS total_reimbursed
-       FROM reimbursements WHERE status <> 'draft'`, [month]);
+       FROM reimbursements WHERE status <> 'draft' ${team ? "AND lower(work_email) = ANY($2)" : ""}`, team ? [month, team] : [month]);
     const x = s[0];
     summary = { pendingReview: x.pending_review, needsChanges: x.needs_changes, approved: x.approved,
       pendingPayroll: x.pending_payroll, pendingPayrollAmount: num(x.pending_payroll_amount),
@@ -456,7 +474,7 @@ reimbursementsRouter.get("/", wrap(async (req, res) => {
 
 // Monthly totals per employee, for HR: every approved claim for that payroll month added up (the amount to add to
 // that month's salary), plus claims for expenses in that month still waiting for a decision.
-reimbursementsRouter.get("/monthly", requireHr, wrap(async (req, res) => {
+reimbursementsRouter.get("/monthly", needAll("expenses.approve"), wrap(async (req, res) => {
   const period = String(req.query.period || "");
   if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(period)) return res.status(400).json({ error: "Pick a month." });
   const args = [period];
@@ -559,7 +577,7 @@ async function notifyBudgetExcess(c, el) {
   const msg = `Approved budget ${inr(el.budget.approvedBudget)}, actual bill ${inr(el.budget.actual)}. The company covers ${inr(el.budget.covered)}; ${inr(el.budget.excess)} is not reimbursed.`;
   await notify(c.work_email, { title: `Your bill for ${el.budget.requestNo} is above the approved budget.`, body: msg, link: `claim:${c.id}`,
     email: { subject: `Bill above approved budget: ${el.budget.requestNo}`, body: msg } });
-  await notify("hr", { title: `${c.claim_no}: bill above the approved budget (${el.budget.requestNo}).`, body: msg, link: `claim:${c.id}`,
+  await notify("perm:expenses.approve", { title: `${c.claim_no}: bill above the approved budget (${el.budget.requestNo}).`, body: msg, link: `claim:${c.id}`,
     email: { subject: `Bill above approved budget: ${c.claim_no}`, body: msg } });
 }
 
@@ -601,10 +619,11 @@ reimbursementsRouter.post("/from-document", express.raw({ type: () => true, limi
       let c;
       if (req.query.claim) {
         c = await loadClaim(db, req.query.claim, true);
-        if (!canSee(req, c) || !owns(req, c)) return { status: 404, body: { error: "Claim not found." } };
+        if (!(await canSee(req, c)) || !owns(req, c)) return { status: 404, body: { error: "Claim not found." } };
         if (!TRANSITIONS.edit.includes(c.status)) return { status: 409, body: { error: "This claim can't be changed now." } };
       } else {
-        const email = isHr(req) && req.query.email ? String(req.query.email).toLowerCase() : me(req);
+        const email = req.query.email ? String(req.query.email).toLowerCase() : me(req);
+        if (email !== me(req) && !(await can(req, "expenses.approve", email))) return { status: 403, body: { error: "You do not have access to this." } };
         const d = await newDraft(db, req, { email, budgetId: Number(req.query.budget) || null });
         if (d.err) return d.err;
         c = d.existing ? await loadClaim(db, d.existing, true) : d.claim;
@@ -648,7 +667,7 @@ reimbursementsRouter.post("/from-document", express.raw({ type: () => true, limi
 
 reimbursementsRouter.get("/:id", wrap(async (req, res) => {
   const { rows } = await pool.query(`${SELECT} WHERE r.id=$1`, [Number(req.params.id) || 0]);
-  if (!canSee(req, rows[0])) return res.status(404).json({ error: "Claim not found." });
+  if (!(await canSee(req, rows[0]))) return res.status(404).json({ error: "Claim not found." });
   const { rows: ev } = await pool.query(
     `SELECT v.*, e.name AS actor_name FROM reimbursement_events v LEFT JOIN employees e ON lower(e.work_email)=lower(v.actor)
      WHERE reimbursement_id=$1 ORDER BY v.id`, [rows[0].id]);
@@ -657,10 +676,11 @@ reimbursementsRouter.get("/:id", wrap(async (req, res) => {
     events: ev.map((e) => ({ at: e.at, actor: e.actor === "system" ? "System" : e.actor_name || e.actor, kind: e.kind, status: e.status, note: e.note })) });
 }));
 
-// Create a draft with its expenses. Employees always for themselves; HR may file for someone.
+// Create a draft with its expenses. Employees always for themselves; an expenses.approve holder may file for someone they cover.
 reimbursementsRouter.post("/", wrap(async (req, res) => {
   const b = req.body || {};
-  const email = isHr(req) && b.email ? String(b.email).toLowerCase() : me(req);
+  const email = b.email ? String(b.email).toLowerCase() : me(req);
+  if (email !== me(req) && !(await can(req, "expenses.approve", email))) return res.status(403).json({ error: "You do not have access to this." });
   const out = await tx(async (db) => {
     const { errors, items } = await readItems(db, b);
     if (errors) return { status: 400, body: { errors } };
@@ -685,7 +705,7 @@ reimbursementsRouter.put("/:id", wrap(async (req, res) => {
   let files = [];
   const out = await tx(async (db) => {
     const c = await loadClaim(db, req.params.id, true);
-    if (!canSee(req, c)) return { status: 404, body: { error: "Claim not found." } };
+    if (!(await canSee(req, c))) return { status: 404, body: { error: "Claim not found." } };
     if (!owns(req, c)) return { status: 403, body: { error: "Only the employee can change this claim." } };
     if (!TRANSITIONS.edit.includes(c.status)) return { status: 409, body: { error: "This claim can't be changed now." } };
     const { errors, items } = await readItems(db, b);
@@ -711,7 +731,7 @@ reimbursementsRouter.delete("/:id", wrap(async (req, res) => {
   let files = [];
   const out = await tx(async (db) => {
     const c = await loadClaim(db, req.params.id, true);
-    if (!canSee(req, c) || !owns(req, c)) return { status: 404, body: { error: "Claim not found." } };
+    if (!(await canSee(req, c)) || !owns(req, c)) return { status: 404, body: { error: "Claim not found." } };
     if (c.status !== "draft") return { status: 409, body: { error: "Only a draft can be deleted." } };
     files = [...(await docsOf(db, c.id)).map((d) => d.stored), c.doc_stored];
     await db.query("DELETE FROM reimbursement_events WHERE reimbursement_id=$1", [c.id]);
@@ -726,7 +746,7 @@ reimbursementsRouter.delete("/:id", wrap(async (req, res) => {
 /** Loads a claim and one of its expenses for a change by the employee; returns an error response when not allowed. */
 async function editableItem(db, req, lock) {
   const c = await loadClaim(db, req.params.id, lock);
-  if (!canSee(req, c)) return { err: { status: 404, body: { error: "Claim not found." } } };
+  if (!(await canSee(req, c))) return { err: { status: 404, body: { error: "Claim not found." } } };
   if (!owns(req, c)) return { err: { status: 403, body: { error: "Only the employee can change this claim." } } };
   if (!TRANSITIONS.edit.includes(c.status)) return { err: { status: 409, body: { error: "This claim can't be changed now." } } };
   const { rows } = await db.query("SELECT * FROM reimbursement_items WHERE id=$1 AND reimbursement_id=$2", [Number(req.params.itemId) || 0, c.id]);
@@ -815,7 +835,7 @@ reimbursementsRouter.patch("/:id/items/:itemId", wrap(async (req, res) => {
 reimbursementsRouter.get("/:id/documents/:docId", wrap(async (req, res) => {
   const c = await loadClaim(pool, req.params.id);
   const { rows } = c ? await pool.query("SELECT * FROM reimbursement_documents WHERE id=$1 AND reimbursement_id=$2", [Number(req.params.docId) || 0, c.id]) : { rows: [] };
-  if (!canSee(req, c) || !rows[0]) return res.status(404).json({ error: "Receipt not found." });
+  if (!(await canSee(req, c)) || !rows[0]) return res.status(404).json({ error: "Receipt not found." });
   const d = rows[0], file = path.join(UPLOAD_DIR, path.basename(d.stored));
   try { await fs.access(file); } catch { return res.status(410).json({ error: "The receipt file is missing from storage." }); }
   res.set({
@@ -854,7 +874,7 @@ async function readyToSend(db, c, body, actor) {
 reimbursementsRouter.post("/:id/submit", wrap(async (req, res) => {
   const out = await tx(async (db) => {
     const c = await loadClaim(db, req.params.id, true);
-    if (!canSee(req, c) || !(c.work_email.toLowerCase() === me(req) || c.created_by === me(req))) return { status: 404, body: { error: "Claim not found." } };
+    if (!(await canSee(req, c)) || !(c.work_email.toLowerCase() === me(req) || c.created_by === me(req))) return { status: 404, body: { error: "Claim not found." } };
     if (!TRANSITIONS.submit.includes(c.status)) return { status: 409, body: { error: "This claim was already submitted." } };
     const bad = await readyToSend(db, c, req.body, me(req));
     if (bad) return bad;
@@ -864,7 +884,7 @@ reimbursementsRouter.post("/:id/submit", wrap(async (req, res) => {
   });
   if (out.status === 200) {
     const c = out.claim, name = await employeeName(pool, c.work_email);
-    await notify("hr", { title: `New reimbursement claim from ${name} for ${inr(c.amount)} requires review.`, body: c.claim_no, link: `claim:${c.id}`,
+    await notify("perm:expenses.approve", { title: `New reimbursement claim from ${name} for ${inr(c.amount)} requires review.`, body: c.claim_no, link: `claim:${c.id}`,
       email: { subject: `New reimbursement claim: ${c.claim_no}`, body: `New reimbursement claim from ${name} for ${inr(c.amount)} requires review (${c.claim_no}).` } });
     await notifyBudgetExcess(c, out.eligibility);
   }
@@ -872,10 +892,12 @@ reimbursementsRouter.post("/:id/submit", wrap(async (req, res) => {
 }));
 
 // HR opens the claim: it moves to Under review and the opening is recorded.
-reimbursementsRouter.post("/:id/open", requireHr, wrap(async (req, res) => {
+reimbursementsRouter.post("/:id/open", need("expenses.approve"), wrap(async (req, res) => {
   const out = await tx(async (db) => {
     const c = await loadClaim(db, req.params.id, true);
     if (!c) return { status: 404, body: { error: "Claim not found." } };
+    const no = await cannotDecide(req, c);
+    if (no) return { status: 403, body: { error: no } };
     if (!TRANSITIONS.open.includes(c.status)) return { status: 200, body: { ok: true, changed: false } };
     await db.query("UPDATE reimbursements SET status='under_review', updated_at=now() WHERE id=$1", [c.id]);
     await event(db, c, { actor: me(req), kind: "HR opened the claim", status: "under_review" });
@@ -890,12 +912,14 @@ reimbursementsRouter.post("/:id/open", requireHr, wrap(async (req, res) => {
  * (after travel policy and budget) is approved. The server enforces 0 < approved <= requested, keeps the requested
  * amount untouched, stores the unapproved difference, and only the approved amount goes to payroll.
  */
-reimbursementsRouter.post("/:id/approve", requireHr, wrap(async (req, res) => {
+reimbursementsRouter.post("/:id/approve", need("expenses.approve"), wrap(async (req, res) => {
   const b = req.body || {};
   const reason = clip(b.reason ?? b.note, 500);
   const out = await tx(async (db) => {
     const c = await loadClaim(db, req.params.id, true);
     if (!c) return { status: 404, body: { error: "Claim not found." } };
+    const no = await cannotDecide(req, c);
+    if (no) return { status: 403, body: { error: no } };
     if (!TRANSITIONS.decide.includes(c.status)) return { status: 409, body: { error: `This claim is ${c.status.replace(/_/g, " ")} and can't be approved.` } };
     if ((await receiptGaps(db, c.id)).length) return { status: 400, body: { error: "An expense has no receipt to approve against." } };
     const ev = await evaluate(db, c);
@@ -930,13 +954,15 @@ reimbursementsRouter.post("/:id/approve", requireHr, wrap(async (req, res) => {
   send(res, { status: out.status, body: out.body });
 }));
 
-reimbursementsRouter.post("/:id/reject", requireHr, wrap(async (req, res) => {
+reimbursementsRouter.post("/:id/reject", need("expenses.approve"), wrap(async (req, res) => {
   const reason = req.body && req.body.reason, note = clip(req.body && req.body.note, 500);
   if (!REJECT_REASONS.includes(reason)) return res.status(400).json({ errors: { reason: "Pick a reason." } });
   if (reason === "Other" && !note) return res.status(400).json({ errors: { note: "Explain the reason." } });
   const out = await tx(async (db) => {
     const c = await loadClaim(db, req.params.id, true);
     if (!c) return { status: 404, body: { error: "Claim not found." } };
+    const no = await cannotDecide(req, c);
+    if (no) return { status: 403, body: { error: no } };
     if (!TRANSITIONS.decide.includes(c.status)) return { status: 409, body: { error: `This claim is ${c.status.replace(/_/g, " ")} and can't be rejected.` } };
     await db.query("UPDATE reimbursements SET status='rejected', rejection_reason=$2, rejection_note=$3, updated_at=now() WHERE id=$1", [c.id, reason, note]);
     await event(db, c, { actor: me(req), kind: "Rejected by HR", status: "rejected", note: [reason, note].filter(Boolean).join(": ") });
@@ -950,12 +976,14 @@ reimbursementsRouter.post("/:id/reject", requireHr, wrap(async (req, res) => {
   send(res, { status: out.status, body: out.body });
 }));
 
-reimbursementsRouter.post("/:id/request-changes", requireHr, wrap(async (req, res) => {
+reimbursementsRouter.post("/:id/request-changes", need("expenses.approve"), wrap(async (req, res) => {
   const comment = clip(req.body && req.body.comment, 1000);
   if (!comment) return res.status(400).json({ errors: { comment: "Tell the employee what to change." } });
   const out = await tx(async (db) => {
     const c = await loadClaim(db, req.params.id, true);
     if (!c) return { status: 404, body: { error: "Claim not found." } };
+    const no = await cannotDecide(req, c);
+    if (no) return { status: 403, body: { error: no } };
     if (!TRANSITIONS.decide.includes(c.status)) return { status: 409, body: { error: `This claim is ${c.status.replace(/_/g, " ")}; changes can't be requested now.` } };
     await db.query("UPDATE reimbursements SET status='changes_requested', change_comment=$2, updated_at=now() WHERE id=$1", [c.id, comment]);
     await event(db, c, { actor: me(req), kind: "Changes requested", status: "changes_requested", note: comment });
@@ -973,7 +1001,7 @@ reimbursementsRouter.post("/:id/request-changes", requireHr, wrap(async (req, re
 reimbursementsRouter.post("/:id/resubmit", wrap(async (req, res) => {
   const out = await tx(async (db) => {
     const c = await loadClaim(db, req.params.id, true);
-    if (!canSee(req, c) || !(c.work_email.toLowerCase() === me(req) || c.created_by === me(req))) return { status: 404, body: { error: "Claim not found." } };
+    if (!(await canSee(req, c)) || !(c.work_email.toLowerCase() === me(req) || c.created_by === me(req))) return { status: 404, body: { error: "Claim not found." } };
     if (!TRANSITIONS.resubmit.includes(c.status)) return { status: 409, body: { error: "Only a claim with changes requested can be resubmitted." } };
     const bad = await readyToSend(db, c, req.body, me(req));
     if (bad) return bad;
@@ -983,7 +1011,7 @@ reimbursementsRouter.post("/:id/resubmit", wrap(async (req, res) => {
   });
   if (out.status === 200) {
     const c = out.claim, name = await employeeName(pool, c.work_email);
-    await notify("hr", { title: `${name} resubmitted reimbursement ${c.claim_no} (${inr(c.amount)}) for review.`, link: `claim:${c.id}`,
+    await notify("perm:expenses.approve", { title: `${name} resubmitted reimbursement ${c.claim_no} (${inr(c.amount)}) for review.`, link: `claim:${c.id}`,
       email: { subject: `Reimbursement resubmitted: ${c.claim_no}`, body: `${name} resubmitted reimbursement ${c.claim_no} (${inr(c.amount)}) after the requested changes.` } });
     await notifyBudgetExcess(c, out.eligibility);
   }

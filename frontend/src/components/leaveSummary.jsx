@@ -16,7 +16,7 @@ const yearOf = (s) => Number(String(s).slice(0, 4));
 const when = (ts) => (ts ? shortDate(String(ts).slice(0, 10)) : "—");
 
 export const Ring = ({ pct, color, label, sub = "Available", big = false }) => (
-  <div className={`ring${big ? " big" : ""}`} style={{ background: `conic-gradient(${color} ${Math.max(0, Math.min(100, pct))}%,var(--lv-track) 0)` }}><div><b>{label}</b><span>{sub}</span></div></div>
+  <div className={`lv-ring${big ? " big" : ""}`} style={{ background: `conic-gradient(${color} ${Math.max(0, Math.min(100, pct))}%,var(--lv-track) 0)` }}><div><b>{label}</b><span>{sub}</span></div></div>
 );
 
 /* Bars for a count per slot (weekday or month), scaled to the biggest. */
@@ -53,7 +53,7 @@ export function LeaveStats({ email, year }) {
       <Bars title="Weekly pattern" info="Approved leave days on each weekday this year" labels={DAYS} values={week} />
       <div className="card lv-stat"><div className="card-h"><h3>Consumed leave types</h3><span className="lv-i" title="Approved leave days by type this year">i</span></div>
         <div className="lv-donut-row">
-          <div className="ring" style={{ background: total ? `conic-gradient(${stops.join(",")})` : "var(--lv-track)" }}><div><b>{total ? dd(total) : "None"}</b><span>{total ? "taken" : "taken yet"}</span></div></div>
+          <div className="lv-ring" style={{ background: total ? `conic-gradient(${stops.join(",")})` : "var(--lv-track)" }}><div><b>{total ? dd(total) : "None"}</b><span>{total ? "taken" : "taken yet"}</span></div></div>
           <ul className="lv-legend">{TYPES.map((t) => <li key={t}><i style={{ background: COLOR[t] }} />{LTYPE[t]}<b>{byType[t]}</b></li>)}</ul>
         </div></div>
       <Bars title="Monthly stats" info="Approved leave days in each month this year" labels={MONTHS} values={month} />
@@ -191,9 +191,9 @@ export function PolicyExplain({ email, year, onClose }) {
   const taken = -rows.filter((r) => r.change < 0).reduce((n, r) => n + r.change, 0);
   return (
     <Modal onClose={onClose}><div className="lv-policy">
-      <div className="card-h" style={{ paddingTop: 22 }}><h3>Leave policy explanation</h3><button type="button" className="btn glass sm" onClick={onClose} aria-label="Close">✕</button></div>
+      <div className="card-h" style={{ paddingTop: 22 }}><h3>How leave works</h3></div>
       <div className="card-b">
-        <div className="subtabs" role="tablist" style={{ marginBottom: 0 }}>{TYPES.map((t) => <button key={t} type="button" role="tab" aria-selected={tab === t} className={tab === t ? "on" : ""} onClick={() => setTab(t)}>{LTYPE[t]}</button>)}</div>
+        <ViewTabs label="Leave type" views={TYPES.map((t) => [t, LTYPE[t]])} view={tab} onView={setTab} />
         <div className="lv-pol-head">
           <div><h2>{LTYPE[tab]}</h2><p>{info.about}</p></div>
           {info.left === null ? <Ring pct={taken ? 100 : 0} color={COLOR.unpaid} label={dd(taken)} sub={`Taken in ${year}`} />
@@ -291,6 +291,5 @@ export function LeaveLeftPopup({ email, year, onRequest }) {
 }
 
 /* Page tabs kept in the address (?view=), so a refresh or the back button stays on the same tab. */
-export function ViewTabs({ views, view, onView }) {
-  return <div className="subtabs" role="tablist">{views.map(([k, label]) => <button key={k} type="button" role="tab" aria-selected={view === k} className={view === k ? "on" : ""} onClick={() => onView(k)}>{label}</button>)}</div>;
-}
+import { ViewTabs } from "./ui.jsx";
+export { ViewTabs };

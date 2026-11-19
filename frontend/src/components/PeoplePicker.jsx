@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { pill } from "./ui.jsx";
 
 /* Type a name to find people, click one to add them. With `multi` the chosen people stay as chips with a remove button; without it
    one person is chosen at a time. `people` are { email, name, no, title }; `value` is the chosen email (or a list of emails). */
@@ -32,7 +33,7 @@ export default function PeoplePicker({ id, people, value, onChange, multi = fals
       {chosen.length > 0 && (
         <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: showInput ? 8 : 0 }}>
           {chosen.map((email) => { const p = byEmail.get(email); return (
-            <span key={email} className="pill p-info" style={{ fontWeight: 500, padding: "5px 6px 5px 12px", display: "inline-flex", alignItems: "center", gap: 6 }}>
+            <span key={email} className={pill("info")} style={{ fontWeight: 500, padding: "5px 6px 5px 12px", display: "inline-flex", alignItems: "center", gap: 6 }}>
               {p ? p.name : email}
               <button type="button" aria-label={`Remove ${p ? p.name : email}`} onClick={() => remove(email)}
                 style={{ border: 0, background: "transparent", cursor: "pointer", color: "inherit", fontSize: 16, lineHeight: 1, padding: "0 4px" }}>×</button>

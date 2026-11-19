@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { GEMINI_URL, geminiConfigured, headlinePrompt, parseHeadlines, suggestHeadlines } from "../src/gemini.js";
+import { GEMINI_URL, geminiConfigured, HASHTAG_TOPICS, hashtagPrompt, headlinePrompt, parseHashtags, parseHeadlines, suggestHashtags, suggestHeadlines } from "../src/gemini.js";
 
 const reply = (text) => ({ ok: true, status: 200, json: async () => ({ candidates: [{ content: { parts: [{ text }] } }] }) });
 const withKey = async (fn) => { process.env.GEMINI_API_KEY = "test-key"; try { await fn(); } finally { delete process.env.GEMINI_API_KEY; } };
@@ -71,3 +71,38 @@ test("shuffling: what is already on screen is passed along so it is not repeated
   await suggestHeadlines({ title: "E", avoid: ["Engineer at Wohlig | AI agents", "Wohlig | Engineer"] }, async (_u, o) => { prompt = JSON.parse(o.body).contents[0].parts[0].text; return reply(JSON.stringify(["Something new for the engineer at Wohlig"])); });
   assert.match(prompt, /do not repeat or closely reword/i); assert.match(prompt, /- Engineer at Wohlig \| AI agents/); assert.match(prompt, /exactly 3 strings/);
 }));
+
+test("hashtags are cleaned to #Word form: spaces joined, symbols and emojis dropped, duplicates and junk removed, 8 at most", () => {
+  const out = parseHashtags(JSON.stringify(["#AI Agents", "agentic workflows", "#GoogleCloud", "googlecloud", "🚀 #Wohlig!", "x", "###", "123abc", 7, "#Data-Engineering", "A", "#Gemini", "#Cloud", "#Python", "#MLOps", "#Learning"]));
+  assert.deepEqual(out.slice(0, 6), ["#AIAgents", "#AgenticWorkflows", "#GoogleCloud", "#Wohlig", "#DataEngineering", "#Gemini"]);
+  assert.ok(out.length <= 8);
+  assert.ok(out.every((h) => /^#[A-Za-z][A-Za-z0-9]{1,29}$/.test(h)), "only letters and numbers after the #");
+  assert.deepEqual(parseHashtags("nothing useful"), []);
+  assert.deepEqual(parseHashtags('```json\n["#One1", "#Two2"]\n```'), ["#One1", "#Two2"]);
+});
+
+test("the hashtag request sends only role, department and the company line, and passes along what is already shown", async () => withKey(async () => {
+  let body;
+  const out = await suggestHashtags({ title: "GenAI Engineer", dept: "Engineering", avoid: ["#Wohlig", "#GoogleCloud"] }, async (_u, o) => { body = JSON.parse(o.body); return reply(JSON.stringify(["#GenAI", "#Agents", "#Cloud"])); });
+  const prompt = body.contents[0].parts[0].text;
+  assert.match(prompt, /Role: GenAI Engineer/); assert.match(prompt, /Department: Engineering/); assert.match(prompt, /#Wohlig #GoogleCloud/);
+  assert.match(prompt, /Do not invent clients/);
+  assert.deepEqual(out, ["#GenAI", "#Agents", "#Cloud"]);
+  assert.ok(!/@|\d{10}/.test(hashtagPrompt({ title: "Engineer", dept: "Tech" })), "no email or phone in the prompt");
+}));
+
+test("hashtags: no key, empty reply and an upstream error all give safe messages", async () => {
+  delete process.env.GEMINI_API_KEY;
+  await assert.rejects(() => suggestHashtags({ title: "Engineer" }, async () => { throw new Error("never"); }), (e) => e.code === "NOT_SET_UP");
+  await withKey(async () => {
+    await assert.rejects(() => suggestHashtags({ title: "Engineer" }, async () => reply("[]")), (e) => e.code === "EMPTY");
+    await assert.rejects(() => suggestHashtags({ title: "Engineer" }, async () => ({ ok: false, status: 400 })), (e) => e.code === "UPSTREAM" && !/test-key/.test(e.message));
+  });
+});
+
+test("hashtags: the post type changes the prompt, and an unknown type falls back to the About section", () => {
+  assert.match(hashtagPrompt({ title: "Engineer", topic: "certified" }), /new professional certification/);
+  assert.match(hashtagPrompt({ title: "Engineer", topic: "anniversary" }), /work anniversary/);
+  assert.match(hashtagPrompt({ title: "Engineer", topic: "something typed by a person" }), /About section/);
+  assert.deepEqual(Object.keys(HASHTAG_TOPICS).sort(), ["about", "anniversary", "certified", "role", "welcome"]);
+});

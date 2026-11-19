@@ -4,7 +4,7 @@ import { api, apiMsg } from "../../api.js";
 import { Field } from "../../components/Modal.jsx";
 import { Callout, DownloadIcon } from "../../components/ui.jsx";
 import { useToast } from "../../components/toast.jsx";
-import { BANNER_PRESETS, BANNER_THEMES, ICON_PROD, SIG_DEFAULT_OPTS, SIG_STYLES, aboutText, copyHtml, copyText, drawBackground, drawBanner, drawCard, fileSafe, hashtags, headlines, jpegOf,
+import { BANNER_PRESETS, BANNER_THEMES, CELEBRATIONS, ICON_PROD, SIG_DEFAULT_OPTS, SIG_STYLES, aboutText, copyHtml, copyText, captionFor, drawBackground, drawBanner, drawCard, drawCelebrate, fileSafe, hashtags, headlines, jpegOf,
   pdfFromJpegs, saveBlob, saveText, signatureHtml, signaturePlain, toBlob, webLink } from "./kit.js";
 
 /* A picture drawn on a canvas, shown as an image. It is drawn again when the inputs change. */
@@ -20,6 +20,10 @@ function Drawn({ draw, deps, alt, className = "" }) {
   if (bad) return <div className="empty">Could not draw this. Reload the page and try again.</div>;
   return url ? <img className={`dk-img ${className}`} src={url} alt={alt} /> : <div className="dk-img dk-loading" aria-label="Drawing" />;
 }
+/** A row of tabs to switch between the parts of one screen, so each part fits on screen. The other parts stay mounted (hidden), so nothing typed is lost. */
+const SubTabs = ({ value, onChange, items }) => (
+  <div className="subtabs dk-subtabs" role="tablist">{items.map(([k, l]) => <button key={k} type="button" role="tab" className={value === k ? "on" : ""} aria-selected={value === k} onClick={() => onChange(k)}>{l}</button>)}</div>
+);
 const Btn = ({ children, ...p }) => <button type="button" className="btn glass sm" {...p}>{children}</button>;
 
 /** Tells the person what is missing, and who can add it. Nothing is made up to fill a gap. */
@@ -91,7 +95,6 @@ export function Signature({ p }) {
             <button type="button" className="btn primary" onClick={async () => done(await copyHtml(html, plain), "Signature")}>Copy signature</button>
             <button type="button" className="btn glass" onClick={async () => done(await copyText(plain), "Plain text")}>Copy plain text</button>
           </div>
-          <p className="muted dk-hint">Paste with <kbd className="dk-kbd">⌘V</kbd> / <kbd className="dk-kbd">Ctrl V</kbd>, not "paste as plain text", so the logo, icons and colours come with it.</p>
           {o.style === "executive" && !iconsLive && <p className="muted dk-hint">The icon pictures reach the live site with the next update. Until then a copied Executive signature uses the letters E, M, W and A instead of icons; the preview already shows the icons.</p>}
           <div className="dk-acc">{Object.entries(SIG_APPS).map(([k, [l, steps]]) => (
             <details key={k} open={openApp === k}><summary onClick={(e) => { e.preventDefault(); setOpenApp(openApp === k ? null : k); }}>{l}<span className="caret" aria-hidden="true" /></summary><ol className="dk-ol">{steps.map((t) => <li key={t}>{t}</li>)}</ol></details>))}</div>
@@ -133,6 +136,61 @@ export function Card({ p }) {
   );
 }
 
+/* Welcome & celebrations: a square LinkedIn card and a ready caption. The photo stays on the device: it is only drawn into the download. */
+export function Celebrate({ p }) {
+  const toast = useToast();
+  const [sub, setSub] = useState("card");
+  const [occ, setOcc] = useState("welcome"), [theme, setTheme] = useState("maroon"), [hl, setHl] = useState(""), [em, setEm] = useState("");
+  const [photo, setPhoto] = useState(""), [caption, setCaption] = useState(captionFor("welcome", p));
+  const O = CELEBRATIONS[occ];
+  useEffect(() => () => { if (photo) URL.revokeObjectURL(photo); }, [photo]);
+  const pick = (k) => { setOcc(k); setHl(""); setEm(""); setCaption(captionFor(k, p)); };
+  const opts = { occasion: occ, theme, headline: hl.trim(), emphasis: em.trim(), name: p.name, title: p.title, photoUrl: photo };
+  const addPhoto = (e) => {
+    const f = e.target.files && e.target.files[0]; e.target.value = "";
+    if (!f) return;
+    if (!/^image\/(png|jpe?g|webp)$/i.test(f.type)) { toast("Choose a PNG, JPG or WebP picture."); return; }
+    if (f.size > 10 * 1048576) { toast("That picture is over 10 MB. Choose a smaller one."); return; }
+    setPhoto(URL.createObjectURL(f));
+  };
+  const download = async () => { try { saveBlob(await toBlob(await drawCelebrate(opts)), `${fileSafe(p.name)}-${occ}-card.png`); } catch { toast("Could not make the file."); } };
+  const copy = async () => toast((await copyText(caption)) ? "Caption copied." : "Could not copy. Select it and copy by hand.");
+  return (
+    <div className="dk-stack">
+      <SubTabs value={sub} onChange={setSub} items={[["card", "Card"], ["caption", "Caption & hashtags"]]} />
+      <div className="card" style={sub === "card" ? undefined : { display: "none" }}><div className="card-h"><h3>Welcome &amp; celebrations</h3><span className="muted">1080 × 1080, for LinkedIn</span></div>
+        <div className="card-b dk-celebrate">
+          <div className="dk-cel-form">
+            <div className="dk-bn-row" role="group" aria-label="Occasion">
+              {Object.entries(CELEBRATIONS).map(([k, v]) => <button key={k} type="button" className={`dk-toggle${occ === k ? " on" : ""}`} aria-pressed={occ === k} onClick={() => pick(k)}>{v.label}</button>)}
+            </div>
+            <div className="dk-bn-fields">
+              <Field id="ce-h" label="Headline"><input className="input" id="ce-h" value={hl} maxLength={40} placeholder={O.h} onChange={(e) => setHl(e.target.value)} /></Field>
+              <Field id="ce-e" label="Emphasis, in italic"><input className="input" id="ce-e" value={em} maxLength={30} placeholder={O.e} onChange={(e) => setEm(e.target.value)} /></Field>
+            </div>
+            <div className="seg" role="radiogroup" aria-label="Theme">{[["maroon", "Maroon"], ["light", "Warm light"]].map(([k, l]) => <label key={k}><input type="radio" name="cet" checked={theme === k} onChange={() => setTheme(k)} /><span>{l}</span></label>)}</div>
+            <div className="row dk-actions">
+              <label className="btn glass sm" style={{ cursor: "pointer" }}>{photo ? "Change photo" : "Add your photo"}<input type="file" accept="image/png,image/jpeg,image/webp" onChange={addPhoto} style={{ display: "none" }} /></label>
+              {photo && <Btn onClick={() => setPhoto("")}>Remove photo</Btn>}
+            </div>
+            <p className="muted dk-hint" style={{ margin: 0 }}>Name and designation come from your profile. Your photo stays on your device: it is only drawn into the download.</p>
+          </div>
+          <div className="dk-cel-view">
+            <Drawn draw={() => drawCelebrate(opts)} deps={[occ, theme, hl, em, photo, p.name, p.title]} alt="Celebration card preview" />
+            <div><button type="button" className="btn primary" onClick={download}><DownloadIcon />Download card</button></div>
+          </div>
+        </div>
+      </div>
+      <div className="card" style={sub === "caption" ? undefined : { display: "none" }}><div className="card-h"><h3>Caption</h3><span className="muted">edit before you post</span></div>
+        <div className="card-b"><textarea className="input" rows={6} value={caption} onChange={(e) => setCaption(e.target.value)} aria-label="Caption" />
+          <div className="row dk-actions"><button type="button" className="btn primary sm" onClick={copy}>Copy caption</button><Btn onClick={() => setCaption(captionFor(occ, p))}>Reset caption</Btn></div>
+          <p className="muted dk-hint">Fill in the [brackets] with your own words.</p>
+          <h4 className="dk-subh">Hashtags</h4>
+          <Hashtags p={p} base={O.tags} topic={occ} text={caption} setText={setCaption} where="your caption" /></div></div>
+    </div>
+  );
+}
+
 const PLATFORMS = {
   meet: ["Google Meet", ["Download the picture below.", "Join or start a meeting, then click the three dots, Apply visual effects.", "Click Add (the + tile), choose the downloaded picture, and close the panel."]],
   zoom: ["Zoom", ["Download the picture below.", "In Zoom, open Settings, Backgrounds & Effects. During a call, click the arrow next to Stop Video, then Choose Virtual Background.", "Click the + and Add Image, then pick the downloaded picture."]],
@@ -167,8 +225,59 @@ export function Background({ p }) {
   );
 }
 
+/* Hashtag chips: the standard ones plus ideas from Gemini AI. Clicking one copies it and adds it to the text box it belongs to
+   (the About text or the caption), on a hashtag line at the end. Gemini sees only the designation and department, never the name or contact details. */
+function Hashtags({ p, base, topic, text, setText, where }) {
+  const toast = useToast();
+  const [ai, setAi] = useState([]), [busy, setBusy] = useState(false), [err, setErr] = useState("");
+  const key = `dk-aitags:${p.email}:${topic}`;
+  const ask = async (quiet, have) => {
+    setBusy(true); setErr("");
+    const r = await api("POST", "/api/digital-kit/hashtag-ai", { avoid: [...base, ...have.filter((t) => !base.includes(t))], topic });   // the standard ones count as already shown
+    setBusy(false);
+    if (!r.ok) { if (!quiet) setErr(apiMsg(r)); return; }
+    const all = [...have, ...r.data.hashtags.filter((t) => !have.some((x) => x.toLowerCase() === t.toLowerCase()))];
+    setAi(all);
+    try { sessionStorage.setItem(key, JSON.stringify(all)); } catch { /* storage blocked: it just asks again next time */ }
+  };
+  useEffect(() => {   // ideas appear by themselves, kept for the visit; a quiet first try shows nothing if Gemini is off or busy
+    setAi([]); setErr("");
+    try { const c = JSON.parse(sessionStorage.getItem(key) || "null"); if (Array.isArray(c) && c.length) { setAi(c); return; } } catch { /* ask instead */ }
+    ask(true, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [key]);
+  const isAi = (t) => !base.some((x) => x.toLowerCase() === t.toLowerCase()) && ai.some((x) => x.toLowerCase() === t.toLowerCase());
+  const tags = [...base, ...ai.filter((t) => !base.some((x) => x.toLowerCase() === t.toLowerCase()))];
+  const has = (t) => new RegExp(`(^|\\s)${t}(?=\\s|$)`, "i").test(text);
+  const use = async (t) => {
+    const copied = await copyText(t);
+    setText((a) => {   // add it to the hashtag line at the end, or start one
+      if (new RegExp(`(^|\\s)${t}(?=\\s|$)`, "i").test(a)) return a;
+      const body = a.replace(/\s+$/, ""), rows = body.split("\n"), last = rows[rows.length - 1].trim();
+      if (last && /^(#\w+\s*)+$/.test(last)) { rows[rows.length - 1] = `${last} ${t}`; return rows.join("\n"); }
+      return `${body}\n\n${t}`;
+    });
+    toast(copied ? `${t} copied and added to ${where}.` : `${t} added to ${where}. Could not copy it, select it and copy by hand.`);
+  };
+  return (
+    <div className="dk-hashbox">
+      <div className="chips" role="group" aria-label="Hashtags">
+        {tags.map((t) => <button type="button" key={t} className={`dk-hash${has(t) ? " on" : ""}${isAi(t) ? " ai" : ""}`} aria-pressed={has(t)} title={`Click to copy and add to ${where}`} onClick={() => use(t)}>{t}</button>)}
+      </div>
+      {busy && <p className="muted dk-hint">Gemini is thinking of hashtags…</p>}
+      {err && <p className="ferr" role="alert" style={{ margin: "8px 0 0" }}>{err}</p>}
+      <div className="row dk-actions">
+        <button type="button" className="btn glass sm" disabled={busy} onClick={() => ask(false, ai)}>{ai.length ? "More from Gemini AI" : "Suggest with Gemini AI"}</button>
+        <Btn onClick={async () => toast((await copyText(tags.join(" "))) ? "Hashtags copied." : "Could not copy. Select them and copy by hand.")}>Copy all</Btn>
+      </div>
+      <p className="muted dk-hint">Click a hashtag to copy it and add it to {where}. The ones with a star come from Gemini AI, which sees only your designation and department.</p>
+    </div>
+  );
+}
+
 export function LinkedIn({ p }) {
   const toast = useToast();
+  const [sub, setSub] = useState("headline");
   const [ai, setAi] = useState([]), [aiBusy, setAiBusy] = useState(false), [aiErr, setAiErr] = useState("");   // headlines Gemini wrote for me
   // Exactly three ideas are shown: Gemini's three once they arrive, the three standard ones until then (or if Gemini is off).
   // A headline HR has set takes the first of the three.
@@ -191,14 +300,15 @@ export function LinkedIn({ p }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   const [theme, setTheme] = useState("light"), [preset, setPreset] = useState(0), [bh, setBh] = useState(""), [be, setBe] = useState("");
-  const tags = hashtags(p), copy = async (t, what) => toast((await copyText(t)) ? `${what} copied.` : "Could not copy. Select it and copy by hand.");
+  const copy = async (t, what) => toast((await copyText(t)) ? `${what} copied.` : "Could not copy. Select it and copy by hand.");
   // Your own words win; with nothing typed, the chosen tagline is used.
   const own = bh.trim() || be.trim(), pr = BANNER_PRESETS[preset];
   const bopts = (guide) => ({ theme, headline: own ? bh.trim() : pr.h, emphasis: own ? be.trim() : pr.e, name: p.name, guide });
   const banner = async () => { try { saveBlob(await toBlob(await drawBanner(bopts(false))), `${fileSafe(p.name)}-linkedin-banner.png`); } catch { toast("Could not make the file."); } };
   return (
     <div className="dk-stack">
-      <div className="card"><div className="card-h"><h3>Headline</h3><button type="button" className="btn glass sm" disabled={aiBusy} onClick={() => suggest(false)}>Suggest with Gemini AI</button></div>
+      <SubTabs value={sub} onChange={setSub} items={[["headline", "Headline"], ["banner", "Profile banner"], ["about", "Hashtags & About"]]} />
+      <div className="card" style={sub === "headline" ? undefined : { display: "none" }}><div className="card-h"><h3>Headline</h3><button type="button" className="btn glass sm" disabled={aiBusy} onClick={() => suggest(false)}>Suggest with Gemini AI</button></div>
         <div className="card-b dk-list">
           {hs.map((h, i) => (
             <div className={`dk-opt${pick === i ? " on" : ""}`} key={h.text}>
@@ -212,7 +322,7 @@ export function LinkedIn({ p }) {
           {!p.linkedin && <p className="muted dk-hint">Add your LinkedIn link in <Link to="/app/profile">My profile</Link> and this opens your own page.</p>}
         </div>
       </div>
-      <div className="card"><div className="card-b dk-bn">
+      <div className="card" style={sub === "banner" ? undefined : { display: "none" }}><div className="card-b dk-bn">
         <div><h3 className="dk-bn-h">Your profile banner</h3><p className="muted dk-bn-sub">1584×396 for your personal LinkedIn cover. The left side stays clear because your profile photo sits there.</p></div>
         <div className="dk-bn-row">
           <div className="seg" role="radiogroup" aria-label="Theme">{BANNER_THEMES.map(([k, l]) => <label key={k}><input type="radio" name="bnt" checked={theme === k} onChange={() => setTheme(k)} /><span>{l}</span></label>)}</div>
@@ -226,12 +336,11 @@ export function LinkedIn({ p }) {
         <p className="muted dk-hint" style={{ margin: 0 }}>The dashed circle shows where LinkedIn puts your profile photo. It is only a guide and isn't in the download.</p>
         <div><button type="button" className="btn primary" onClick={banner}><DownloadIcon />Download banner</button></div>
       </div></div>
-      <div className="dk-pair2">
+      <div className="dk-pair2" style={sub === "about" ? undefined : { display: "none" }}>
         <div className="card"><div className="card-h"><h3>Hashtags</h3></div>
-          <div className="card-b"><div className="chips">{tags.map((t) => <span className="chip" key={t}>{t}</span>)}</div>
-            <div className="row dk-actions"><Btn onClick={() => copy(tags.join(" "), "Hashtags")}>Copy all</Btn></div></div></div>
+          <div className="card-b"><Hashtags p={p} base={hashtags(p)} topic="about" text={about} setText={setAbout} where="your About text" /></div></div>
         <div className="card"><div className="card-h"><h3>About section</h3><span className="muted">edit before you use it</span></div>
-          <div className="card-b"><textarea className="input" rows={9} value={about} onChange={(e) => setAbout(e.target.value)} aria-label="About section" />
+          <div className="card-b"><textarea className="input" rows={7} value={about} onChange={(e) => setAbout(e.target.value)} aria-label="About section" />
             <div className="row dk-actions"><Btn onClick={() => copy(about, "About text")}>Copy</Btn><Btn onClick={() => saveText(about, `${fileSafe(p.name)}-linkedin-about.txt`)}><DownloadIcon />Text file</Btn></div>
             <p className="muted dk-hint">Fill in the [brackets] with your own words.</p></div></div>
       </div>

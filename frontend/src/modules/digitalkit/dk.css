@@ -113,11 +113,11 @@ button.dk-dlbtn{border:0;cursor:pointer}
 .dk-sigmail tr{background:none;box-shadow:none}
 
 /* ----- own layout: a menu on the left, the section on the right ----- */
-.dk-shell{display:grid;grid-template-columns:230px minmax(0,1fr);gap:26px;align-items:start}
-.dk-side{position:sticky;top:110px;display:flex;flex-direction:column;gap:20px;padding:18px 14px;border-radius:var(--radius);background:var(--surface);box-shadow:inset 0 0 0 1px var(--line-2)}
-.dk-side-group{display:flex;flex-direction:column;gap:4px}
+.dk-shell{display:grid;grid-template-columns:252px minmax(0,1fr);gap:22px;align-items:start}
+.dk-side{position:sticky;top:110px;display:flex;flex-direction:column;gap:12px;padding:14px 12px;border-radius:var(--radius);background:var(--surface);box-shadow:inset 0 0 0 1px var(--line-2)}
+.dk-side-group{display:flex;flex-direction:column;gap:2px}
 .dk-side-group h4{margin:0 8px 6px;font:800 11.5px/1 var(--body);letter-spacing:.14em;text-transform:uppercase;color:var(--terracotta)}
-.dk-side button{display:flex;align-items:center;gap:11px;width:100%;border:0;background:none;cursor:pointer;text-align:left;padding:11px 12px;border-radius:14px;color:var(--ink-dim);font:600 14.5px/1.2 var(--body)}
+.dk-side button{display:flex;align-items:center;gap:11px;width:100%;border:0;background:none;cursor:pointer;text-align:left;padding:8px 12px;border-radius:12px;color:var(--ink-dim);font:600 14.5px/1.2 var(--body)}
 .dk-side button svg{width:19px;height:19px;flex:none}
 .dk-side button span{flex:1}
 .dk-side button em{font-style:normal;font-size:12px;font-weight:700;padding:2px 8px;border-radius:999px;background:var(--tint)}
@@ -128,16 +128,32 @@ button.dk-dlbtn{border:0;cursor:pointer}
 @media (max-width:900px){.dk-shell{grid-template-columns:1fr}.dk-side{position:static;flex-direction:row;overflow-x:auto;padding:10px}.dk-side-group{flex-direction:row;align-items:center}.dk-side-group h4{display:none}.dk-side button{white-space:nowrap;width:auto}}
 
 /* ----- ready-to-use text: list and editor ----- */
-.dk-rt2{display:grid;grid-template-columns:minmax(0,300px) minmax(0,1fr);gap:22px;align-items:start}
-.dk-rt2-search{padding:0 18px 12px}
-.dk-rt2-list{list-style:none;margin:0;padding:0 10px 12px;display:flex;flex-direction:column;gap:4px}
-.dk-rt2-list button{display:flex;flex-direction:column;gap:3px;width:100%;border:0;background:none;cursor:pointer;text-align:left;padding:12px 14px;border-radius:14px}
-.dk-rt2-list button b{font:700 15px/1.25 var(--body);color:var(--ink)}
-.dk-rt2-list button span{font-size:13px;color:var(--ink-dim);line-height:1.35}
-.dk-rt2-list button:hover{background:var(--tint-2)}
-.dk-rt2-list button.on{background:var(--tint);box-shadow:inset 3px 0 0 var(--purple)}
+.dk-rt2{display:flex;flex-direction:column;gap:20px}
+.dk-rt2-h{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.dk-rt2-h h3{margin:0}
+.dk-count{min-width:28px;height:28px;padding:0 9px;border-radius:999px;display:inline-grid;place-items:center;font:700 13px/1 var(--body);color:var(--purple);background:var(--tint)}
+.dk-rt2-search{position:relative;margin-left:auto;width:min(320px,100%)}
+.dk-rt2-search svg{position:absolute;left:14px;top:50%;transform:translateY(-50%);width:18px;height:18px;color:var(--ink-faint);pointer-events:none}
+.dk-rt2-search .input{padding-left:42px}
+.dk-rt2-list{list-style:none;margin:0;padding:8px 20px 20px;scroll-padding:0 20px;display:flex;flex-direction:row;gap:12px;overflow-x:auto;scroll-snap-type:x proximity;scrollbar-width:thin}
+.dk-rt2-list li{flex:0 0 clamp(210px,24%,260px);scroll-snap-align:start;display:flex}
+.dk-rt2-list button{display:flex;flex-direction:column;gap:5px;width:100%;border:0;cursor:pointer;text-align:left;padding:16px 18px;border-radius:16px;background:var(--surface);color:var(--ink);box-shadow:inset 0 0 0 1px var(--line);transition:transform .15s,box-shadow .15s,background .15s}
+.dk-rt2-list button b{font:700 15px/1.25 var(--body)}
+.dk-rt2-list button span{font-size:13px;line-height:1.4;color:var(--ink-dim);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.dk-rt2-list button:hover{transform:translateY(-1px);box-shadow:inset 0 0 0 1.5px var(--line-2),0 8px 20px rgba(92,9,38,.08)}
+.dk-rt2-list button.on{background:var(--grad-btn);color:var(--btn-fg);box-shadow:inset 0 1px 0 rgba(255,255,255,.2),0 10px 24px var(--btn-glow)}
+.dk-rt2-list button.on span,.dk-rt2-list button.on .dk-for{color:var(--btn-fg);opacity:.88}
 .dk-rt2-none{padding:10px 14px}
-@media (max-width:900px){.dk-rt2{grid-template-columns:1fr}}
+.dk-rt2-top{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;flex-wrap:wrap;padding:22px 24px 6px}
+.dk-rt2-top h3{margin:0}
+.dk-rt2-top p{margin:6px 0 0;font-size:14px}
+.dk-rt2-acts{display:flex;gap:10px}
+.dk-rt2-edit .card-b{padding-top:14px}
+.dk-rt2-edit .dk-rt-box{min-height:200px;padding:18px 20px;border-radius:16px;line-height:1.75;resize:none;overflow-y:auto}
+.dk-rt2-foot{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-top:14px}
+.dk-pill2{font:600 12.5px/1 var(--body);padding:7px 12px;border-radius:999px;color:var(--ink-dim);background:var(--tint-2);box-shadow:inset 0 0 0 1px var(--line)}
+.dk-rt2-words{margin-left:auto;font-size:13px}
+
 
 /* ----- file rows ----- */
 .dk-grp .card-h{padding-bottom:6px}
@@ -207,3 +223,69 @@ button.dk-thumb2{cursor:pointer}
 
 .dk-ai{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-top:6px}
 .dk-ai .input{flex:1 1 260px;min-width:0}
+
+/* Welcome & celebrations: the form on the left, the square card on the right */
+.dk-celebrate{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:28px;align-items:start}
+.dk-cel-form{display:flex;flex-direction:column;gap:16px}
+.dk-cel-view{display:flex;flex-direction:column;gap:14px;align-items:flex-start}
+.dk-cel-view .dk-img{width:100%;max-width:520px;border-radius:18px}
+@media(max-width:900px){.dk-celebrate{grid-template-columns:1fr}}
+
+/* LinkedIn hashtags: each one is a button that copies it and adds it to the About text */
+.dk-hash{display:inline-flex;align-items:center;gap:6px;border:0;border-radius:999px;padding:7px 14px;font:500 14px/1.2 var(--body);cursor:pointer;color:var(--ink);background:var(--surface);box-shadow:inset 0 0 0 1px var(--line,rgba(128,13,53,.14));transition:background .15s,transform .15s}
+.dk-hash:hover{background:var(--paper-2);transform:translateY(-1px)}
+.dk-hash:focus-visible{outline:2px solid var(--orange);outline-offset:2px}
+.dk-hash.ai::before{content:"\2726";color:var(--orange);font-size:12px}
+.dk-hash.on{box-shadow:inset 0 0 0 1.5px var(--orange)}
+.dk-hash.on::after{content:"\2713";color:var(--orange);font-weight:700}
+.dk-hashbox{display:flex;flex-direction:column;gap:2px}
+.dk-subh{margin:22px 0 10px;font:700 15px/1.2 var(--display, inherit)}
+.dk-row2.dk-logorow{grid-template-columns:64px minmax(0,1fr) auto}
+@media (max-width:700px){.dk-row2.dk-logorow{grid-template-columns:56px minmax(0,1fr)}.dk-row2.dk-logorow .dk-icons{grid-column:1 / -1}}
+/* Downloads and Templates: every row ends in the same kind of buttons (an eye to view, a pill to download), all 40px tall, flat, no heavy glow */
+.dk-row2 .btn.sm{height:40px;padding:0 18px;display:inline-flex;align-items:center;gap:8px;font-size:13.5px;box-shadow:none;white-space:nowrap}
+.dk-row2 .btn.primary.sm:hover{box-shadow:0 8px 18px var(--btn-glow);transform:translateY(-1px)}
+.dk-row2 .btn svg{width:17px;height:17px}
+.dk-row2 .dk-icons{gap:10px}
+.dk-row2{padding:14px 8px}
+@media (max-width:700px){.dk-row2 .dk-icons{grid-column:1 / -1;justify-content:flex-start}}
+/* Downloads: compact, so the whole page shows at a glance */
+.dk-compact{gap:14px}
+.dk-compact .card-h{padding:16px 22px 4px}
+.dk-compact .card-h h3{font-size:19px}
+.dk-compact .dk-rows{padding:4px 14px 10px}
+.dk-compact .dk-row2{padding:8px 6px;gap:14px;grid-template-columns:52px minmax(0,1fr) auto auto}
+.dk-compact .dk-row2.dk-logorow{grid-template-columns:52px minmax(0,1fr) auto}
+.dk-compact .dk-thumb2{width:52px;height:52px;border-radius:12px;padding:5px}
+.dk-compact .dk-row2-text b{font-size:15px}
+.dk-compact .dk-row2-text span{font-size:13px;line-height:1.35}
+.dk-compact .dk-row2 .btn.sm{height:36px;padding:0 16px}
+.dk-compact .dk-dlbtn{width:36px;height:36px}
+@media (max-width:700px){.dk-compact .dk-row2{grid-template-columns:48px minmax(0,1fr)}.dk-compact .dk-thumb2{width:48px;height:48px}}
+/* HR > Shared resources: a table that fits the card (no sideways scrolling, no tall wrapped rows) */
+.dk-res-wrap{overflow:visible}
+.dk-res{width:100%;border-collapse:collapse;table-layout:auto}
+.dk-res th,.dk-res td{padding:10px 14px;vertical-align:middle;text-align:left}
+.dk-res th:last-child,.dk-res td:last-child{text-align:right}
+.dk-res .dk-nw{white-space:nowrap}
+.dk-res-t b{font:700 15px/1.3 var(--body)}
+.dk-res-sub{font-size:12.5px;display:flex;flex-wrap:wrap;gap:4px 8px;align-items:center;margin-top:2px}
+.dk-res-for{display:inline-flex;gap:4px}
+.dk-res-for i{padding:3px 8px;font-size:10.5px}
+.dk-res-act{white-space:nowrap}
+.dk-res-act .btn.sm{height:34px;padding:0 14px;box-shadow:none;margin-left:6px;display:inline-flex;align-items:center}
+.dk-menu{display:inline-block;position:relative;vertical-align:middle;margin-left:6px}
+.dk-menu summary{list-style:none;cursor:pointer;margin-left:0!important}
+.dk-menu summary::-webkit-details-marker{display:none}
+.dk-menu summary::after{content:"";width:7px;height:7px;margin-left:8px;border-right:2px solid currentColor;border-bottom:2px solid currentColor;transform:rotate(45deg) translateY(-2px)}
+.dk-menu-box{position:absolute;right:0;top:calc(100% + 6px);z-index:20;min-width:170px;padding:6px;border-radius:14px;background:var(--surface);box-shadow:inset 0 0 0 1px var(--line-2),0 16px 34px rgba(60,10,25,.18);display:flex;flex-direction:column;text-align:left}
+.dk-menu-box button{border:0;background:none;text-align:left;padding:10px 12px;border-radius:10px;font:600 14px/1.2 var(--body);color:var(--ink);cursor:pointer}
+.dk-menu-box button:hover{background:var(--tint-2)}
+.dk-menu-box button.danger{color:#b3261e}
+@media (max-width:900px){.dk-res-wrap{overflow-x:auto}}
+/* a shorter page heading, and tabs inside long screens, so less scrolling is needed */
+.dk .sec-head h2.big{font-size:clamp(30px,3.6vw,44px);margin-top:6px}
+.dk .sec-head .smile{display:none}
+.dk .sec-head p{display:none}
+.dk-subtabs{margin-bottom:0;align-self:flex-start}
+.dk-side-note{margin:0;font-size:12.5px;line-height:1.4}

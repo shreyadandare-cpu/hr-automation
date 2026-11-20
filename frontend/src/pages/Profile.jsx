@@ -220,7 +220,7 @@ export default function Profile() {
               <a className="btn glass sm" href="/app/documents">{nDocs ? "Manage documents" : "Upload documents"}</a></div>
           </div></div>
           <div className="card" id="pf-sec-idcard"><div className="card-h"><h3>ID card</h3><a className="btn primary sm" href={`/api/id-card.pdf?email=${encodeURIComponent(me.email)}`} download>Download PDF</a></div>
-            <div className="card-b"><p className="muted" style={{ marginTop: 0 }}>Your Wohlig ID card in the standard card size (85.6 × 54 mm), front and back.</p><IdCardPreview p={me} /></div></div>
+            <div className="card-b"><p className="muted" style={{ marginTop: 0 }}>Your Wohlig ID card in the standard card size (85.6 × 54 mm), front and back.</p><IdCardPreview email={me.email} /></div></div>
         </div>
       </div>
     </section>

@@ -19,25 +19,35 @@ import { UPLOAD_DIR } from "./documents.js";
 const MM = 72 / 25.4, W = Math.round(54 * MM * 100) / 100, H = Math.round(85.6 * MM * 100) / 100;   // 153.07 x 242.65 pt
 const C = BRAND.colors;
 const LOGO_DARK = fileURLToPath(new URL("../../frontend/public/wohlig-logo-dark.png", import.meta.url));
+const LOGO_MARK = fileURLToPath(new URL("../../frontend/public/wohlig-smile-mark.png", import.meta.url));
 const LOGO = fileURLToPath(new URL("../../frontend/public/wohlig-logo.png", import.meta.url));
 const initials = (n) => String(n || "").split(/\s+/).filter(Boolean).map((x) => x[0]).slice(0, 2).join("").toUpperCase();
 const day = (d) => (d ? new Date(d).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric", timeZone: "Asia/Kolkata" }) : "");
 
 async function people(where, args) {
   const { rows } = await pool.query(
-    `SELECT e.name, e.emp_no, e.title, e.dept, e.work_email, e.start_date, p.stored_name
-       FROM employees e LEFT JOIN profile_photos p ON lower(p.email)=lower(e.work_email)
+    `SELECT e.name, e.emp_no, e.title, e.dept, e.work_email, e.start_date, e.work_location,
+            COALESCE(NULLIF(e.phone,''), pr.data->'contact'->>'phone') AS phone, pr.data->'primary'->>'blood' AS blood, p.stored_name
+       FROM employees e LEFT JOIN profile_photos p ON lower(p.email)=lower(e.work_email) LEFT JOIN profiles pr ON lower(pr.email)=lower(e.work_email)
       WHERE e.status NOT IN ('offboarding','offboarded') AND e.work_email IS NOT NULL ${where} ORDER BY e.emp_no, e.name LIMIT 500`, args);
   return rows;
 }
 
+const BLOOD = { "A+": "A Positive", "A-": "A Negative", "B+": "B Positive", "B-": "B Negative", "AB+": "AB Positive", "AB-": "AB Negative", "O+": "O Positive", "O-": "O Negative" };
+/** The lines under the photo, in the order of the card: label and value. */
+export const cardRows = (p) => [
+  ["Employee Number", p.emp_no], ["Department", p.dept && p.dept !== "—" ? p.dept : ""], ["Phone", p.phone],
+  ["Email", p.work_email], ["Location", p.work_location], ["Blood Group", p.blood ? `${p.blood}${BLOOD[p.blood] ? ` (${BLOOD[p.blood]})` : ""}` : ""],
+].map(([k, v]) => [k, v || "—"]);   // all six always show, so every card has the same layout; "—" means not filled in yet
+
+/* Front: a coloured panel with the photo, name and designation, then the details as label and value, and the smile mark. */
 function front(doc, p) {
   doc.addPage({ size: [W, H], margin: 0 });
-  doc.rect(0, 0, W, H).fill(C.ivory);
-  doc.rect(0, 0, W, 66).fill(C.maroon);
-  doc.image(LOGO_DARK, (W - 74) / 2, 18, { width: 74 });
-  const cx = W / 2, cy = 98, r = 34;
-  doc.save().circle(cx, cy, r + 2.5).fill(C.ivory).restore();
+  doc.rect(0, 0, W, H).fill("#ffffff");
+  const PANEL = 116;
+  doc.rect(0, 0, W, PANEL).fill(C.maroon);
+  const cx = W / 2, cy = 40, r = 28;
+  doc.circle(cx, cy, r + 2.5).fill("#ffffff");
   let drawn = false;
   if (p.stored_name) {
     try {
@@ -46,18 +56,21 @@ function front(doc, p) {
       doc.restore(); drawn = true;
     } catch { doc.restore(); }
   }
-  if (!drawn) { doc.circle(cx, cy, r).fill(C.beige); doc.font("Helvetica-Bold").fontSize(24).fillColor(C.maroon).text(initials(p.name), cx - r, cy - 9, { width: r * 2, align: "center" }); }
-  doc.circle(cx, cy, r + 1).lineWidth(1.5).stroke(C.maroon);
-  // Text flows down from the photo, so a long name or title never runs into what follows. Long names get a smaller size.
-  const size = p.name.length > 26 ? 9.5 : p.name.length > 18 ? 11 : 12.5, box = { width: W - 20, align: "center" };
-  doc.font("Helvetica-Bold").fontSize(size).fillColor(C.maroon).text(p.name, 10, 148, box);
-  if (p.title && p.title !== "—") doc.font("Helvetica").fontSize(8).fillColor(C.ink).text(p.title, 10, doc.y + 2, box);
-  if (p.dept && p.dept !== "—") doc.font("Helvetica").fontSize(7.5).fillColor(C.muted).text(p.dept, 10, doc.y + 1, box);
-  const y = Math.max(doc.y + 7, 188);
-  doc.moveTo(W / 2 - 14, y).lineTo(W / 2 + 14, y).lineWidth(1.5).stroke(C.orange);
-  doc.font("Helvetica").fontSize(6.5).fillColor(C.muted).text("EMPLOYEE ID", 10, y + 6, { ...box, characterSpacing: 0.8 });
-  doc.font("Helvetica-Bold").fontSize(11).fillColor(C.ink).text(p.emp_no || "—", 10, y + 15, box);
-  doc.rect(0, H - 8, W, 8).fill(C.maroon);
+  if (!drawn) { doc.circle(cx, cy, r).fill(C.beige); doc.font("Helvetica-Bold").fontSize(21).fillColor(C.maroon).text(initials(p.name), cx - r, cy - 8, { width: r * 2, align: "center" }); }
+  const box = { width: W - 16, align: "center" };
+  doc.font("Helvetica").fontSize(p.name.length > 24 ? 9 : p.name.length > 18 ? 10.5 : 12).fillColor("#ffffff").text(p.name, 8, 76, box);
+  if (p.title && p.title !== "—") doc.font("Helvetica").fontSize(7.5).fillColor(C.ivory).text(p.title, 8, doc.y + 2, box);
+  let y = PANEL + 11;
+  const LX = 10, VX = 68, VW = W - VX - 6;
+  for (const [k, v] of cardRows(p)) {
+    doc.font("Helvetica").fontSize(6).fillColor(C.muted).text(k, LX, y + 0.5, { width: VX - LX - 2, lineBreak: false });
+    let fs = 6.8; doc.font("Helvetica");
+    while (fs > 4.6 && doc.fontSize(fs).widthOfString(String(v)) > VW) fs -= 0.2;   // one line each: the text shrinks to fit
+    doc.fillColor(C.ink).text(String(v), VX, y, { width: VW, lineBreak: false });
+    y += 11.5;
+  }
+  doc.image(LOGO_MARK, (W - 16) / 2, H - 34, { width: 16 });
+  doc.font("Helvetica").fontSize(5.8).fillColor(C.muted).text(BRAND.company.website.replace(/^https?:\/\//, ""), 8, H - 13, box);
 }
 
 function back(doc, p) {
@@ -65,7 +78,7 @@ function back(doc, p) {
   doc.rect(0, 0, W, H).fill(C.ivory);
   doc.image(LOGO, (W - 70) / 2, 22, { width: 70 });
   doc.font("Helvetica-Bold").fontSize(7.5).fillColor(C.maroon).text(BRAND.company.legalName.toUpperCase(), 10, 62, { width: W - 20, align: "center" });
-  const rows = [["EMAIL", p.work_email], ["JOINED", day(p.start_date)], ["WEBSITE", BRAND.company.website.replace(/^https?:\/\//, "")]].filter((r) => r[1]);
+  const rows = [["EMAIL", p.work_email], ["JOINED", day(p.start_date)]].filter((r) => r[1]);
   let y = 92;
   for (const [k, v] of rows) {
     doc.font("Helvetica").fontSize(6).fillColor(C.muted).text(k, 14, y, { width: W - 28, characterSpacing: 0.8 });
@@ -86,7 +99,16 @@ function send(res, list, filename) {
 
 export function idCardRouter(wrap) {
   const r = express.Router();
-  r.use(["/api/id-card.pdf", "/api/id-cards.pdf"], requireAuth);
+  r.use(["/api/id-card.pdf", "/api/id-card.json", "/api/id-cards.pdf"], requireAuth);
+  // The card's details for the on-screen preview (same rules as the PDF).
+  r.get("/api/id-card.json", wrap(async (req, res) => {
+    const me = req.user.email.toLowerCase(), email = String(req.query.email || me).toLowerCase();
+    if (email !== me && !(await can(req, "people.view", email))) return res.status(403).json({ error: "You can see your own ID card. Please ask the HR team for anyone else's." });
+    const [p] = await people("AND lower(e.work_email)=$1", [email]);
+    if (!p) return res.status(404).json({ error: "No ID card is available for this person." });
+    const photo = p.stored_name ? (await pool.query("SELECT extract(epoch FROM updated_at)::bigint AS v FROM profile_photos WHERE lower(email)=$1", [email])).rows[0]?.v : 0;
+    res.json({ name: p.name, title: p.title, email: p.work_email, photoV: Number(photo) || 0, joined: day(p.start_date), rows: cardRows(p) });
+  }));
   r.get("/api/id-card.pdf", wrap(async (req, res) => {
     const me = req.user.email.toLowerCase(), email = String(req.query.email || me).toLowerCase();
     if (email !== me && !(await can(req, "people.view", email))) return res.status(403).json({ error: "You can download your own ID card. Please ask the HR team for anyone else's." });

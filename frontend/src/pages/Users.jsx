@@ -153,7 +153,7 @@ export default function Users() {
         return (
           <Modal onClose={() => setCardFor(null)}>
             <div className="card-h"><h3>ID card: {p.name}</h3></div>
-            <div className="card-b"><IdCardPreview p={p} /></div>
+            <div className="card-b"><IdCardPreview email={p.email} /></div>
             <div className="modal-f"><button type="button" className="btn glass" onClick={() => setCardFor(null)}>Close</button>
               <a className="btn primary" href={`/api/id-card.pdf?email=${encodeURIComponent(p.email)}`} download>Download PDF</a></div>
           </Modal>);

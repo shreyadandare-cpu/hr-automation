@@ -2,7 +2,9 @@
 // Mounted by index.js. The helpers at the top are shared with nothing else.
 import express from "express";
 import { pool } from "./db.js";
-import { requireHr, createGoogleUser as createLogin } from "./auth.js";
+import { createGoogleUser as createLogin } from "./auth.js";
+import { invalidateTree, mayActOnLogin, needAll } from "./access.js";
+import { checkManager } from "./people.js";
 import { createInvite, INVITE_MINUTES } from "./invites.js";
 import { linkDeviceUserByEmployeeNo } from "./device.js";
 import { ensureKit } from "./digital-kit.js";
@@ -52,10 +54,30 @@ const loadRecord = async (email) =>
 const draftId = (req) => req.user.email.toLowerCase(); // each HR user has their own draft
 const kindOf = (d) => (d && d.kind === "Intern" ? "Intern" : "Employee");
 
+
+/*
+ * Two guards for updating an existing person through onboarding:
+ * - a manager change goes through the same checks as the Employees page (people.js checkManager): one real person, no loop,
+ *   the top of the company stays at the top;
+ * - their personal email (where sign-in links go before a first sign-in) can only be changed by someone with at least their access.
+ * Returns an { errors } body for a 400/403, or null when all is well.
+ */
+async function guardExisting(req, row, d) {
+  const was = String(row.manager || "").trim().toLowerCase(), now = String(d.mgr || "").trim().toLowerCase();
+  if (was !== now) {
+    const c = await checkManager(row.work_email, d.mgr || "");
+    if (c.error) return { status: 400, body: { errors: { mgr: c.error } } };
+  }
+  if (String(row.personal_email || "").trim().toLowerCase() !== String(d.pemail || "").trim().toLowerCase() && !(await mayActOnLogin(req, row.work_email))) {
+    return { status: 403, body: { errors: { pemail: "This person has more access than you, so only a super admin can change their personal email." } } };
+  }
+  return null;
+}
+
 export function onboardingRouter(wrap) {
   const r = express.Router();
-  // Onboarding is HR work; employees only reach their own account and documents.
-  r.use(["/api/onboarding", "/api/work-email"], requireHr);
+  // Onboarding takes "Run onboarding" (company-wide); employees only reach their own account and documents.
+  r.use(["/api/onboarding", "/api/work-email"], needAll("onboarding.manage"));
 
   // People onboarded through this API, including ones whose work email exists but who are not submitted yet.
   // The page merges them into its employee list so HR can pick up where they left off.
@@ -114,6 +136,8 @@ export function onboardingRouter(wrap) {
         email = r.rows[0].work_email;
         const owner = await personalEmailOwner(client, d.pemail, email);
         if (owner) { await client.query("ROLLBACK"); return res.status(400).json({ errors: dupEmailError(d.pemail.trim(), owner) }); }
+        const stop = await guardExisting(req, r.rows[0], d);
+        if (stop) { await client.query("ROLLBACK"); return res.status(stop.status).json(stop.body); }
         // Someone from the HR sheet already has a work email, so nothing is created for them in Google.
         status = r.rows[0].google_status || "existing";
         let no = String(d.empNo || "").trim() || r.rows[0].emp_no || null;
@@ -140,6 +164,7 @@ export function onboardingRouter(wrap) {
       }
       await client.query("UPDATE employees SET employment_type=$1 WHERE lower(work_email)=$2", [kindOf(d), email.toLowerCase()]);
       await client.query("COMMIT");
+      invalidateTree();   // a manager or new joiner may have changed the reporting tree
     } catch (err) {
       await client.query("ROLLBACK");
       throw err;
@@ -211,6 +236,8 @@ export function onboardingRouter(wrap) {
       if (!row.has_login) { await client.query("ROLLBACK"); return res.status(400).json({ error: "Create the login first." }); }
       const owner = await personalEmailOwner(client, d.pemail, row.work_email);
       if (owner) { await client.query("ROLLBACK"); return res.status(400).json({ errors: dupEmailError(d.pemail.trim(), owner) }); }
+      const stop = await guardExisting(req, { ...row, personal_email: row.personal_email ?? row.personalEmail }, d);
+      if (stop) { await client.query("ROLLBACK"); return res.status(stop.status).json(stop.body); }
       await client.query(
         `UPDATE employees SET name=$1, dept=$2, title=$3, manager=$4, start_date=$5, personal_email=$6, phone=$7,
          address=$8, dob=$9, aadhaar_masked=$10, pan_masked=$11, acct_masked=$12, ifsc=$13, apps=$14, onboarded_at=now()
@@ -223,6 +250,7 @@ export function onboardingRouter(wrap) {
       await client.query("DELETE FROM onboarding_drafts WHERE id=$1", [draftId(req)]);
       if (idNow) await ensureKit(client, idNow.id, "onboarding");   // the Digital Kit is ready when they first sign in
       await client.query("COMMIT");
+      invalidateTree();   // a manager or new joiner may have changed the reporting tree
       res.status(201).json({ ...toApi(await loadRecord(row.work_email)), deviceLink: device });
     } catch (err) {
       await client.query("ROLLBACK");

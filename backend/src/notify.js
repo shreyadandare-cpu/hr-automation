@@ -32,18 +32,30 @@ export async function sendEmail(to, subject, body, html = null) {   // html: opt
   }
 }
 
-export async function hrEmails() {
-  const { rows } = await pool.query("SELECT email FROM users WHERE role='hr' ORDER BY email");
+/**
+ * Who handles something: everyone holding `perm` for the whole company (access_grants; super admins only when ticked, so the
+ * directors are not sent every notice), and still-active logins only. Without a permission, or when nobody holds it, the super admins.
+ */
+export async function hrEmails(perm = null) {
+  if (perm) {
+    const { rows } = await pool.query(
+      `SELECT DISTINCT lower(g.email) AS email FROM access_grants g JOIN users u ON lower(u.email)=lower(g.email)
+        WHERE g.permission=$1 AND g.scope='company' AND g.revoked_at IS NULL AND NOT u.login_blocked
+          AND (g.expires_at IS NULL OR g.expires_at >= (now() AT TIME ZONE 'Asia/Kolkata')::date) ORDER BY 1`, [perm]);
+    if (rows.length) return rows.map((r) => r.email);
+  }
+  const { rows } = await pool.query("SELECT email FROM users WHERE is_super_admin AND NOT login_blocked ORDER BY email");
   return rows.map((r) => r.email);
 }
 
 /**
  * Tells people about something: an in-app notification for each recipient and, when email is given, an email.
- * to: one address, a list, or "hr" for every HR login. Never throws, so a notification problem can't undo the action.
+ * to: one address, a list, "perm:<permission>" for everyone who holds that permission company-wide (for example
+ * "perm:expenses.approve"), or "hr" for the super admins. Never throws, so a notification problem can't undo the action.
  */
 export async function notify(to, { title, body = "", link = null, email = null }) {
   try {
-    const list = to === "hr" ? await hrEmails() : [].concat(to).filter(Boolean);
+    const list = to === "hr" ? await hrEmails() : typeof to === "string" && to.startsWith("perm:") ? await hrEmails(to.slice(5)) : [].concat(to).filter(Boolean);
     for (const r of list) {
       await pool.query("INSERT INTO notifications (recipient, title, body, link) VALUES ($1,$2,$3,$4)", [r, title, body, link]);
       if (email) await sendEmail(r, email.subject || title, email.body || body, email.html || null);

@@ -1,7 +1,7 @@
 import crypto from "node:crypto";
 import express from "express";
 import { pool } from "./db.js";
-import { requireHr } from "./auth.js";
+import { needAll } from "./access.js";
 import { tooMany } from "./invites.js";
 
 /* The office biometric device (eSSL / ZKTeco). A small program inside the office network reads the device and posts new
@@ -118,8 +118,8 @@ export function deviceRouter() {
     res.json(out);
   }));
 
-  // ---- HR: link device user IDs to people.
-  r.get("/api/attendance/device/users", requireHr, wrap(async (_req, res) => {
+  // ---- "Correct attendance" for the whole company: link device user IDs to people.
+  r.get("/api/attendance/device/users", needAll("attendance.edit"), wrap(async (_req, res) => {
     const mapped = (await pool.query(
       `SELECT d.device_user_id, e.name, e.work_email, e.emp_no FROM device_users d JOIN employees e ON e.id = d.employee_id WHERE e.status <> 'offboarded' ORDER BY nullif(regexp_replace(d.device_user_id, '\\D', '', 'g'), '')::numeric NULLS LAST, d.device_user_id`)).rows;
     const unmatched = (await pool.query(
@@ -140,7 +140,7 @@ export function deviceRouter() {
   }));
 
   // Link one or many device user IDs: { matches: [ { deviceUserId, email } ] }. Punches kept aside for them are applied at once.
-  r.put("/api/attendance/device/users", requireHr, wrap(async (req, res) => {
+  r.put("/api/attendance/device/users", needAll("attendance.edit"), wrap(async (req, res) => {
     const matches = Array.isArray(req.body?.matches) ? req.body.matches : [];
     if (!matches.length || matches.length > 500) return res.status(400).json({ error: "Send { matches: [ { deviceUserId, email } ] }." });
     const client = await pool.connect();
@@ -166,7 +166,7 @@ export function deviceRouter() {
   }));
 
   // Remove a link. Punches already recorded stay.
-  r.delete("/api/attendance/device/users/:id", requireHr, wrap(async (req, res) => {
+  r.delete("/api/attendance/device/users/:id", needAll("attendance.edit"), wrap(async (req, res) => {
     const row = (await pool.query("DELETE FROM device_users WHERE device_user_id = $1 RETURNING (SELECT work_email FROM employees WHERE id = employee_id) AS email", [req.params.id])).rows[0];
     if (!row) return res.status(404).json({ error: "That device ID is not linked." });
     await audit(pool, `Device user ${req.params.id} unlinked by ${req.user.email}`, row.email);

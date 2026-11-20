@@ -70,7 +70,7 @@ export function CompRequestModal({ email, onClose }) {
     const r = await api("POST", "/api/leave/comp-off-requests", { email, ...f });
     if (!r.ok) { setEr(errorsOf(r)); if (!Object.keys(errorsOf(r)).length) toast(apiMsg(r)); return; }
     const a = lv.approverOf(email);
-    toast(`Comp off credit requested. ${a === "hr" || a === "directors" ? lv.approverName(email) : "Your reporting manager"} will review it.`); reloadLeave(); onClose();
+    toast(`Comp off credit requested. ${a === "hr" ? "A super admin" : "Your reporting manager"} will review it.`); reloadLeave(); onClose();
   };
   return (
     <Modal onClose={onClose}><form onSubmit={submit} noValidate>

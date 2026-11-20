@@ -49,8 +49,8 @@ Before a task, check the skills list and use the one that fits. If none fits, sa
 Every screen follows the brand guidelines and the look of wohlig.com. The sign-in page
 ([frontend/src/login/](frontend/src/login/), section 7 of [frontend/src/styles.css](frontend/src/styles.css)) is the reference build.
 
-- Colours and fonts come from the brand tokens at the top of [frontend/src/styles.css](frontend/src/styles.css). Never type a brand hex
-  value or a font name into a component.
+- Colours and fonts come from the brand tokens in [frontend/src/styles.css](frontend/src/styles.css), used through the Tailwind theme
+  names (`bg-maroon`, `text-ink`, `font-display`). Never type a brand hex value or a font name into a component.
 - Deep Maroon `#800D35` for identity and the primary action, Warm Ivory `#FFF7E9` as the page base, Sunset Orange
   `#F7781D` for one focal point per screen. Beige, terracotta and olive are supporting colours.
 - Never put white or ivory text on orange (2.7:1, fails). Orange buttons take dark ink text.
@@ -66,17 +66,97 @@ Every screen follows the brand guidelines and the look of wohlig.com. The sign-i
 - Both themes: every screen works in light and dark ([frontend/src/theme.js](frontend/src/theme.js)).
 - Use the `frontend-design:frontend-design` skill for new or reshaped screens.
 
-## One stylesheet (always)
+## Brand in one place (always)
 
-All CSS for the interface lives in one file: [frontend/src/styles.css](frontend/src/styles.css). Both entry pages
-load it.
+Names, logos, brand colours, fonts and the sign-in copy live in one file, [frontend/brand.config.json](frontend/brand.config.json).
+The interface reads it through [frontend/src/brand.js](frontend/src/brand.js) (`BRAND`, `PRODUCT`; `applyBrand()` sets the `--brand-*`
+variables the theme is built on), and the server through [backend/src/brand.js](backend/src/brand.js) (emails, PDFs, Excel files).
+Never type the product name, company name or a brand hex into a component or a server file: import it. To re-brand, edit that
+file and the logo files in `frontend/public`.
 
-- Never add another `.css` file, a `<style>` block or a CSS-in-JS library. Add to the right numbered section of
-  `styles.css` (the list is at the top of the file), or start a new numbered section there.
-- Prefix a feature's classes (`.dk-*`, `.fw-*`, `.auth-*`) so sections cannot collide. The app's element rules
-  (`body`, `h1`, `button`, `input`) reach every page, so scope new page styles under one wrapper class.
+**Festival look:** from `festivalLook.daysBefore` days before a festival through the day, the sign-in page and the dashboard
+banner show that festival's scene (`components/FestivalLook.jsx`, `GET /api/festival-look`). HR switches it off on Festival
+wishes. Preview any festival with `?festival=<slug>` (for example `/login?festival=diwali`); it stays on in that browser tab until `?festival=off`. During that window the whole portal
+takes the festival's colours (`festivalLook.festivals` in the brand file: a top ribbon, a chip in the top bar, the greeting) and plays
+one short celebration a day, its own for each festival (Diwali lanterns and sparks, Holi colour bursts, Christmas snow, Eid
+crescent moons, Ganesh Chaturthi gulal, Navratri dandiya sticks; set by `burst` in the brand file; about four seconds, then it
+stops; off under reduced motion). A festival needs a date ahead, or its look never appears: HR adds dates on Festival wishes > Festival dates, and the
+page warns when one is missing. A brand-new festival needs a developer: a row in `festivals` (schema.sql), its greeting
+templates in `modules/festivals/designs.js` and `scenes.js`, and its colours and celebration in the brand file. Keep it to that: no looping effects, no buttons in the dashboard banner, and the scene itself is drawn once.
+
+## Access: one engine (always)
+
+Who may do what is decided by [backend/src/access.js](backend/src/access.js) with the permissions in
+[backend/src/access-rules.js](backend/src/access-rules.js) (design: [docs/ACCESS_DESIGN.md](docs/ACCESS_DESIGN.md)). Super admins
+give access per person on Company > Access, for the whole company or a reporting team.
+
+- A new endpoint checks the caller with `need`/`needAll`, `can(req, perm, email)`, `scopeOf` for lists and `mayDecide` for
+  decisions (never your own request). Never write `req.user.role === "hr"` or a new local `isHr` for a caller check.
+- A new kind of admin action gets a permission in `access-rules.js` (with `team: true` only if it makes sense for a team).
+- `users.role` is only a label now (kept in step with the HR access set). Never use it, or PAYROLL_REVIEWERS / FINANCE_VIEWERS, to decide anything.
+- After a change to access, run `test/access-flow.mjs` against the local server (see its header).
+
+## Styling: Tailwind CSS (always)
+
+The interface is styled with [Tailwind CSS](https://tailwindcss.com) v4 (`tailwindcss` and `@tailwindcss/vite` in
+`frontend/package.json`). The setup and the Wohlig theme are in [frontend/src/styles.css](frontend/src/styles.css), the one
+CSS file; both entry pages load it. The move from hand-written rules is being done in stages (decided 2026-11-19).
+
+- **New and changed screens use Tailwind classes** in the component's `className`. Use the Wohlig names from the theme
+  (part B of `styles.css`): colours `maroon`, `orange`, `ivory`, `beige`, `terracotta`, `olive`; theme-following colours
+  `paper`, `surface`, `tint`, `ink`, `ink-dim`, `ink-faint`, `accent`, `line`, `edge`, `ok`, `warn`, `bad`; fonts
+  `font-display`, `font-body`, `font-mono`; radii `rounded-field` (12px), `rounded-card` (20px, as on wohlig.com). Tailwind's own palette is
+  switched off, so `bg-red-500` produces nothing.
+- **The semantic colours change with the theme by themselves**; reach for `dark:` only when a screen needs a different
+  layout or a value the theme does not carry.
+- **Breakpoints match the older rules**: `max-xs:` 460px and narrower, `max-sm:` 620px, `max-md:` 720px, `max-lg:` 900px,
+  `max-xl:` 1080px, `max-2xl:` 1300px. Two named ones: `rail:` is 1024px and wider (the sections are in the top bar;
+  below it, `max-rail:`, they are in a drawer) and `max-sheet:` is 560px and narrower (a dialog opens as a sheet).
+- **Never add a rule to the `legacy` layer** (part C of `styles.css`), another `.css` file, a `<style>` block or a
+  CSS-in-JS library. A new token goes in the theme; a pattern used in many places becomes a React component
+  ([frontend/src/components/ui.jsx](frontend/src/components/ui.jsx)), not a new class.
+- **Converting a screen**: move every element of the screen to Tailwind classes, then delete its rules from the `legacy`
+  layer in the same change, and check the screen in a browser against how it looked before. A Tailwind class always
+  beats an older rule (layer order), so a half-converted element is a bug, not a state to leave.
+- **Class names that Tailwind owns must not be used for anything else** (`block`, `hidden`, `ring`, `border`, `shadow`,
+  `flex`, `grid`, `table`, `fixed`, `container`, and the rest of its fixed utility names): Tailwind generates its
+  utility for any such word it finds in the source, and that would override an older rule of the same name.
+- Tailwind's reset (preflight) is not loaded yet, because the older rules rely on the browser's defaults. It is added
+  when the `legacy` layer is empty. Until then a converted element sets what it needs itself (`m-0`, `border-0`, `p-0`).
+- Converted so far: the page head (`SectionHead`), the underlined tabs (`PageTabs`, `ViewTabs`), the stat tile (`Stat`),
+  the app shell in [Shell.jsx](frontend/src/components/Shell.jsx) (top bar with the section menus, phone and tablet
+  drawer, account menu, tooltips, the bell button), dialogs in [Modal.jsx](frontend/src/components/Modal.jsx) (dimmed page, box, close
+  button, phone sheet, and the title row, body and footer bar a dialog holds) and quick search
+  ([QuickSearch.jsx](frontend/src/components/QuickSearch.jsx)) and status pills (`<Pill tone>`, or `pill("warn")` from
+  `ui.jsx` for an element that is not a `<Pill>`; the class `pill p-warn` no longer exists). Keep this line current.
+- **Inside a dialog, use the plain names `card-h`, `card-b` and `modal-f`** for the title row, body and footer: `Modal`
+  styles them itself. The same footer bar on a page, outside a dialog, is `ACTION_BAR` from `ui.jsx`.
+- Not converted yet, on purpose: the button (`.btn`) stays a class in the `legacy` layer while older rules still adjust
+  buttons in places. Cards (`card`, `card-h`, `card-b`), form fields (`input`, `field`), tables, `row`, `muted` and `empty`
+  are each used in 50 to 75 files and are adjusted by rules that belong to single screens (`.lv-bal .card-h`,
+  `.rb-filters .input`). A Tailwind class beats those adjustments, so these move screen by screen, one module at a time,
+  together with the rules that adjust them, not as one sweep.
+- **Printing**: the shell and the page head hide themselves with `print:hidden!`. A new part of the frame needs the same.
+- **`grid` and `grow` still have older rules** (`.grid` adds a 16px gap). Until they are removed, a Tailwind `grid`
+  needs its own `gap-*` (use `gap-0` for none), and Tailwind's `grow` is switched off in `styles.css`: use `flex-1`.
+- A class name built at run time (`` `lv-ring${big ? " big" : ""}` ``) is not found by searching for `"lv-ring"`. Search
+  for the bare word before renaming or deleting a class.
 - Inline `style={{…}}` is only for values computed at run time (a width from data, an animation delay).
-- A section's phone and tablet rules go at the end of that section.
+
+## Component library: Radix UI, unstyled (always)
+
+Behaviour that is hard to get right by hand (dialogs, dropdown menus, tooltips, popovers, tabs, selects) comes from
+[Radix UI](https://www.radix-ui.com) (`radix-ui` in `frontend/package.json`). It ships no styles, so the Wohlig look stays ours.
+
+- Import the part you need from `radix-ui` and style it with Tailwind classes (older parts still use classes in `styles.css`). In use today: `Dialog`
+  ([frontend/src/components/Modal.jsx](frontend/src/components/Modal.jsx)), `DropdownMenu` (the account menu, table row menus, the post
+  menu), `Popover` (notifications), `Tabs` (`ViewTabs` in [frontend/src/components/ui.jsx](frontend/src/components/ui.jsx)) and `Tooltip`.
+- Kept as they are on purpose: select boxes stay native (they open the phone's own picker), and the date picker and people
+  picker stay ours (Radix has no date picker or searchable combobox).
+- Every dialog goes through `Modal`. Do not hand-roll a new overlay, menu or tooltip when Radix has the part.
+- Do not add a styled kit (Material UI, Ant Design, Chakra, Mantine, shadcn/ui) or a CSS-in-JS or StyleX library: they
+  bring their own look or a second styling system. Radix parts are styled with Tailwind classes. Checked on 2026-11-19:
+  Meta's Astryx is in beta and needs React 19 and StyleX.
 
 ## Buttons: always the wohlig.com button
 
@@ -88,7 +168,7 @@ tokens in `styles.css`.
 | Main action (one per view) | `btn primary` |
 | Second action | `btn glass` |
 | Page-level size, 50px tall as on wohlig.com | add `lg` |
-| Full width (forms, phones) | add `block` |
+| Full width (forms, phones) | add `flex w-full` (Tailwind; `block` is a Tailwind word and is no longer used) |
 | Dense rows and tables | add `sm` |
 
 - Primary: maroon gradient `#C85F44 → #800D35 → #6A0A2B`, ivory text, Fraunces 600 16px, pill shape, soft maroon
@@ -111,6 +191,75 @@ Text that staff read (screens, emails, PDFs, error messages) is professional and
   email, PDF, Excel file and script message, without "the" ("Sign in to Wohlig One"). Never write "HR Access Hub" or
   "HR Hub" again. The old name survives only in technical names that would lose data or break deploys if renamed: the
   `hrhub` database schema and volumes, the `hrhub_after` cookie, the Docker image tags and the npm package names.
+
+## Fast by default: pages, data, images and files (always)
+
+Every change keeps Wohlig One quick to open and quick to use, without being asked. Check each point when you add or change a
+page, an endpoint, or anything that shows a picture or a file, wherever it is stored (the database, the uploads folder, or a
+storage bucket such as Google Cloud Storage or S3 if one is added).
+
+- **Pages load on demand.** A new page is added with `lazy(() => import("./Page.jsx"))`, never a plain import, so it stays out
+  of the first script. Heavy libraries (charts, PDF, Excel, canvas drawing) are imported inside the page or the click that needs them.
+- **One request per piece of data.** Cards that need the same read at the same time use `apiShared(url)` from `api.js`. No
+  fetching in a loop, no refetch on every render; independent requests go out together (`Promise.all`).
+- **Lists are paged.** An endpoint that returns rows takes a limit (100 at most) and reads only the columns it shows.
+- **Pictures are made small before they are stored.** Shrink in the browser before upload (as `uploadPhoto` and `PhotoEditor`
+  do): about 1600px on the long side for photos, 400px for faces, JPEG or WebP. Never store or send a picture as base64 inside JSON.
+- **Pictures are served to be cached.** A picture's address changes when the picture changes (a new id, or `?v=<version>` as
+  for profile photos), and the server answers with `Cache-Control: private, max-age=31536000, immutable` for it. An address that
+  does not change uses `private, max-age=0, must-revalidate`. Always set `Content-Type` and `X-Content-Type-Options: nosniff`.
+- **Pictures in a list or below the fold** get `loading="lazy" decoding="async"`; give them a fixed box (width and height, or a
+  CSS size) so the page does not jump as they arrive. The logo and the first picture on screen load normally.
+- **Files are streamed, not read whole.** Send stored files with `res.sendFile` or a stream; never load a large file into
+  memory to send it. With a bucket, send the browser a short-lived signed address (or stream it through the server) with the
+  same cache rules, and keep a small thumbnail beside a large picture for lists.
+- **Scripts and styles go compressed** (`compressedAssets` in `pages.js`, gzip in nginx). A new kind of static file served by
+  Express gets the same treatment.
+- **Measure, do not guess.** Before calling a speed change done, open the page in a browser and compare first paint, the size of
+  what is downloaded and the number of requests, before and after; put the numbers in the pull request.
+
+## Database and API speed (always)
+
+Every endpoint stays fast as the company grows. Budgets for server time (the `Server-Timing: app;dur=…` header that
+[backend/src/timing.js](backend/src/timing.js) adds to every response): read one thing ≤ 150 ms, a list ≤ 300 ms, a write ≤ 400 ms.
+Anything that can take longer (a whole-company export, an external service) runs in the background or is cached.
+
+- **An index for every read path.** A new `WHERE` or `ORDER BY` on a table that grows gets an index in `schema.sql`
+  (`CREATE INDEX IF NOT EXISTS`, named). Email lookups are written `lower(x)=$1` and need a `lower(x)` index; a plain index on
+  the column is not used. Check a new query with `EXPLAIN ANALYZE` on the local database: no `Seq Scan` on a table that grows.
+- **No query inside a loop on a request.** Fetch everything at once with `= ANY($1)` (or one `JOIN`), then match in memory with
+  a `Map`; write many rows with one statement (`unnest`) where it is easy. Loops are fine in start-up steps and background jobs.
+- **Independent reads go together** with `Promise.all` on the pool. Inside a transaction they must take turns (one client):
+  use the `together(db, …)` pattern in `payroll/store.js`.
+- **Lists are bounded and lean.** A `LIMIT` (at most 500, page beyond that), only the columns the page shows (no `SELECT *` in
+  a list), and correlated subqueries only when they hit an index.
+- **Never wait on another service in a request** (Claude, Google, SendGrid, Gemini): start it in the background (as
+  `syncClaudeSoon` and the notices do) or give it a timeout and a fallback.
+- **Use the shared pools** (`pool`, `payPool` in `db.js`): they keep connections warm and have a statement timeout. Never create
+  a new `pg.Pool` or `Client` for a request.
+- **Expensive results that do not change by the second** (a payroll preview, a whole-company report) are kept for a short time
+  in memory (see `previewTotals` in `payroll/routes.js`), and the cache is cleared or short enough to stay correct.
+- **Prove it.** Before calling a change done, call the new or changed endpoints a few times on the local server and read the
+  `Server-Timing` header; the server log must have no `[slow request]` line for them. Put the numbers in the pull request.
+
+## Loading: always skeletons, never "Loading…" (always)
+
+Nothing anywhere shows a "Loading…" text, spinner-only box or blank area while it waits. It shows the **shape of what is coming**,
+softly lit, from the shared pieces in [frontend/src/components/ui.jsx](frontend/src/components/ui.jsx):
+
+| While this loads | Use |
+|---|---|
+| A whole page | `<PageSkeleton />` (`stats={0}` when the page has no figures) |
+| A card or list body | `<ListSkeleton rows={…} />` (`faces={false}` for lists without people) or `<CardSkeleton lines={…} />` |
+| Table rows | `<TableSkeletonRow cols={…} />` inside `<tbody>` |
+| One line of text | `<LineSkeleton width="w-40" />` |
+| A picture being drawn | `<Skeleton className="aspect-square w-full rounded-card" />` |
+
+- Match the real layout (same card, same row height, faces where faces will be), so nothing jumps when the content arrives.
+- Each skeleton already says "Loading" to screen readers only (`role="status"`); add no visible text.
+- Its gentle sheen is the one looping animation allowed (it stops when the content arrives, and the reduced-motion rule turns it off).
+- Empty and error states stay as words ("No requests yet.", the error): a skeleton is only for waiting.
+- Words for an action in progress on its own button ("Saving…", "Uploading…") are fine: that is feedback, not loading.
 
 ## Responsive on every screen, tested with Playwright (always)
 
@@ -166,6 +315,7 @@ This applies to everyone who works in this repo, on every screen they add or cha
   `frontend/src`, rebuild and commit `dist` in the same change.
 - **The schema lives in `backend/src/schema.sql`**, applied on every server start. `backend/migrations/hrhub-schema.sql`
   is an older copy. Schema changes must be safe to run again on a live database.
+- **A new page loads on demand**: add it with `lazy(() => import("./Page.jsx"))` (in `App.jsx` or the module's `index.jsx`), never a plain import, or it goes back into the first script everyone downloads.
 - **A new public path needs two edits**: `backend/src/pages.js` and `frontend/nginx.conf.template`.
 - **Logos are served from the site root by Express**, not copied by Vite (`publicDir` is off). A new file in
   `frontend/public` must be added to the list in `backend/src/pages.js` and to the dev proxy in `frontend/vite.config.js`.

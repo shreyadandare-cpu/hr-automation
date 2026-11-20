@@ -1,8 +1,7 @@
-import BackButton from "../components/BackButton.jsx";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { api, apiMsg } from "../api.js";
 import { useAuth } from "../auth.jsx";
-import { SectionHead } from "../components/ui.jsx";
+import { SectionHead, pill, ListSkeleton } from "../components/ui.jsx";
 import { useToast } from "../components/toast.jsx";
 import Pager, { usePaged } from "../components/Pager.jsx";
 import { byEmployeeNo } from "../lib/people.js";
@@ -15,14 +14,15 @@ function WhoCell({ name, title, email }) {
   const lead = leadership(title);
   return (
     <td>
-      <b>{name || email}</b>{lead && <span className="pill p-info" style={{ marginLeft: 8, verticalAlign: "middle" }}>{lead}</span>}
+      <b>{name || email}</b>{lead && <span className={pill("info")} style={{ marginLeft: 8, verticalAlign: "middle" }}>{lead}</span>}
       <div className="muted">{title && title !== "—" && !lead ? `${title} · ` : ""}{email}</div>
     </td>
   );
 }
 
 export default function Users() {
-  const { user, isHr } = useAuth();
+  const { user, canAll, superAdmin } = useAuth();
+  const manages = canAll("users.manage");   // logins; giving the HR role or IT admin is for super admins only
   const toast = useToast();
   const [d, setD] = useState(null);
   const [defaultPw, setDefaultPw] = useState("");
@@ -33,7 +33,7 @@ export default function Users() {
     if (r.ok) { setD(r.data); setDefaultPw(r.data.defaultPassword || ""); }
     else { toast(apiMsg(r)); setD({ users: [], withoutAccount: 0, defaultPassword: "" }); }
   }, [toast]);
-  useEffect(() => { if (isHr) load(); }, [isHr, load]);
+  useEffect(() => { if (manages) load(); }, [manages, load]);
 
   const everyone = useMemo(() => {
     if (!d) return [];
@@ -43,7 +43,7 @@ export default function Users() {
   }, [d, q]);
   const { rows: pageRows, pager } = usePaged(everyone, q);
 
-  if (!isHr) return <section className="section"><SectionHead eyebrow="People" title="Logins and" accent="roles." /><div className="empty">Only HR can manage logins.</div></section>;
+  if (!manages) return <section className="section"><SectionHead eyebrow="People" title="Users" /><div className="empty">You do not have access to logins. Please ask a super admin if you need it.</div></section>;
 
   const act = async (p, ok, after = load) => { const r = await p; toast(r.ok ? ok : apiMsg(r)); if (r.ok) after(); return r; };
   const makeLogin = async (p) => {
@@ -65,9 +65,8 @@ export default function Users() {
 
   return (
     <section className="section">
-      <BackButton />
-      <SectionHead eyebrow="People" title="Logins and" accent="roles." sub="HR creates every account. New accounts start with the default password, and people can change it on their Account page." />
-      {!d ? <div className="card"><div className="card-b muted">Loading…</div></div> : (
+      <SectionHead eyebrow="People" title="Users" sub="HR creates every account. New accounts start with the default password, and people can change it on their Account page." />
+      {!d ? <div className="card"><ListSkeleton rows={3} faces={false} /></div> : (
         <>
           <div className="card"><div className="card-h"><h3>Default password</h3><span className="muted">Given to every new account and every reset</span></div><div className="card-b">
             <form className="row" onSubmit={(e) => { e.preventDefault(); act(api("PUT", "/api/users/default-password", { value: defaultPw }), "Default password changed. It applies to new accounts and resets."); }}>
@@ -78,8 +77,8 @@ export default function Users() {
           </div></div>
 
           <div className="card"><div className="card-h"><h3>Everyone</h3>
-              <div className="row"><span className="muted">{d.users.length} with a login · {(d.noLogin || []).length} without</span>
-                <input className="input" placeholder="Search by name, ID or email" aria-label="Search people" value={q} onChange={(e) => setQ(e.target.value)} style={{ maxWidth: 260 }} /></div></div>
+              <span className="muted">{d.users.length} with a login, {(d.noLogin || []).length} without</span></div>
+            <div className="filters"><input className="input grow" placeholder="Search by name, ID or email" aria-label="Search people" value={q} onChange={(e) => setQ(e.target.value)} /></div>
             <div className="tbl-wrap"><table className="users-table">
               <thead><tr><th>ID</th><th>Person</th><th>Role</th><th>IT admin</th><th className="hide-sm">Last sign-in</th><th></th></tr></thead>
               <tbody>
@@ -88,8 +87,8 @@ export default function Users() {
                   <tr key={u.email}>
                     <td className="num-cell"><span className="emp-no">{u.no}</span></td>
                     <WhoCell name={u.name} title={u.title} email={u.email} />
-                    <td><select className="input" aria-label={`Role for ${u.email}`} value={u.role} onChange={(e) => changeRole(u, e.target.value)}><option value="employee">Employee</option><option value="hr">HR</option></select></td>
-                    <td><label className="row" style={{ gap: 8 }}><input type="checkbox" aria-label={`IT admin: ${u.email}`} checked={!!u.itAdmin} onChange={(e) => act(api("PUT", `/api/users/${encodeURIComponent(u.email)}/it-admin`, { value: e.target.checked }), e.target.checked ? "Made IT admin. They can now see and manage Assets." : "IT admin removed.")} /><span className="muted">Assets</span></label></td>
+                    <td><select className="input" aria-label={`Role for ${u.email}`} value={u.role} disabled={!superAdmin} title={superAdmin ? undefined : "Only a super admin can change this."} onChange={(e) => changeRole(u, e.target.value)}><option value="employee">Employee</option><option value="hr">HR</option></select></td>
+                    <td><label className="row" style={{ gap: 8 }}><input type="checkbox" aria-label={`IT admin: ${u.email}`} checked={!!u.itAdmin} disabled={!superAdmin} title={superAdmin ? undefined : "Only a super admin can change this."} onChange={(e) => act(api("PUT", `/api/users/${encodeURIComponent(u.email)}/it-admin`, { value: e.target.checked }), e.target.checked ? "Made IT admin. They can now see and manage Assets." : "IT admin removed.")} /><span className="muted">Assets</span></label></td>
                     <td className="hide-sm u-last">{u.lastLogin ? new Date(u.lastLogin).toLocaleString("en-IN", { day: "numeric", month: "short", year: "numeric", hour: "numeric", minute: "2-digit" }) : "Never"}</td>
                     <td><div className="u-actions">
                       <button type="button" className="btn glass sm" onClick={() => resend(u)}>{u.inviteExpires ? "Resend invite" : "Send invite"}</button>
@@ -105,7 +104,7 @@ export default function Users() {
                     <td><span className="muted">No login yet</span></td>
                     <td><span className="muted">—</span></td>
                     <td className="hide-sm"><span className="muted">—</span></td>
-                    <td><button type="button" className="btn primary sm" onClick={() => makeLogin(u)}>Create login &amp; send invite</button></td>
+                    <td><button type="button" className="btn glass sm" onClick={() => makeLogin(u)}>Create login and send invite</button></td>
                   </tr>
                 ))}
               </tbody>

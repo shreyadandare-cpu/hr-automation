@@ -1,14 +1,15 @@
 // Tool access HR gives from the Employees page (Claude today), and the audit log. Mounted by index.js.
 import express from "express";
 import { pool } from "./db.js";
-import { requireAuth, requireHr } from "./auth.js";
+import { requireAuth } from "./auth.js";
+import { canAll, needAll } from "./access.js";
 import { claudeMode, grantClaude, removeClaude, recordAccess, syncClaude, syncClaudeSoon } from "./anthropic.js";
 import { confirmOwnClaude, requestClaude } from "./claude-requests.js";
 
 export function toolAccessRouter(wrap) {
   const r = express.Router();
-  // The audit log: every recorded action, newest first. HR only.
-  r.get("/api/audit", requireHr, wrap(async (req, res) => {
+  // The audit log: every recorded action, newest first. "Audit log" (audit.view) only.
+  r.get("/api/audit", needAll("audit.view"), wrap(async (req, res) => {
     const limit = Math.min(Number(req.query.limit) || 200, 1000);
     const { rows } = await pool.query(
       `SELECT a.id, a.ts, a.action, a.work_email, e.name FROM audit_log a LEFT JOIN employees e ON lower(e.work_email)=lower(a.work_email) ORDER BY a.ts DESC, a.id DESC LIMIT $1`, [limit]);
@@ -17,13 +18,16 @@ export function toolAccessRouter(wrap) {
 
   // Tool access HR gives from the Employees page. Claude is real when ANTHROPIC_ADMIN_KEY is set.
   r.get("/api/tool-access", requireAuth, wrap(async (req, res) => {
-    await syncClaudeSoon();   // pick up people added to Claude outside this app
-    const { rows } = await pool.query("SELECT work_email, tool, status, detail FROM tool_access");
-    const hr = req.user.role === "hr";   // everyone sees who has access; only HR sees the tool's own message
+    // Pick up people added to Claude outside this app, in the background: every page loads this list at start, so it never waits
+    // for Claude's servers (the next load shows any change).
+    syncClaudeSoon().catch(() => {});
+    const hr = canAll(req, "tools.manage");   // "Tool access" holders see everyone, with the tool's own message; others only themselves
+    const { rows } = hr ? await pool.query("SELECT work_email, tool, status, detail FROM tool_access")
+      : await pool.query("SELECT work_email, tool, status, detail FROM tool_access WHERE lower(work_email)=$1", [req.user.email.toLowerCase()]);
     res.json({ claudeMode: claudeMode(), rows: rows.map((r) => ({ email: r.work_email, tool: r.tool, status: r.status, detail: hr ? r.detail : null })) });
   }));
-  // HR: check the Claude organisation right now instead of waiting for the automatic check, and bring the app in line with it.
-  r.post("/api/tool-access/claude/refresh", requireHr, wrap(async (req, res) => {
+  // "Tool access": check the Claude organisation right now instead of waiting for the automatic check, and bring the app in line with it.
+  r.post("/api/tool-access/claude/refresh", needAll("tools.manage"), wrap(async (req, res) => {
     if (claudeMode() === "simulated") return res.json({ mode: "simulated", changed: 0 });
     let changed;
     try { changed = await syncClaude(); } catch (err) { return res.status(502).json({ error: `Claude could not be reached: ${err.message}` }); }
@@ -38,7 +42,7 @@ export function toolAccessRouter(wrap) {
     if (!r) return res.status(409).json({ error: "There is no Claude invite waiting for you." });
     res.json(r);
   }));
-  r.post("/api/tool-access/claude", requireHr, wrap(async (req, res) => {
+  r.post("/api/tool-access/claude", needAll("tools.manage"), wrap(async (req, res) => {
     const email = String((req.body && req.body.email) || "").toLowerCase();
     const action = req.body && req.body.action;
     if (!["grant", "remove"].includes(action)) return res.status(400).json({ error: "Action must be grant or remove." });

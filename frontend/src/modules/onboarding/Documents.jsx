@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { api, apiMsg } from "../../api.js";
 import { useAuth } from "../../auth.jsx";
 import { useData } from "../../data.jsx";
-import { SectionHead } from "../../components/ui.jsx";
+import { SectionHead, ViewTabs, pill, PageSkeleton } from "../../components/ui.jsx";
 import { useToast } from "../../components/toast.jsx";
 import { DOCS, MAX_MB, ObTabs, DocRows, docCount, fileProblem, fmtSize, groupDocs } from "./shared.jsx";
 
@@ -10,15 +10,14 @@ import { DOCS, MAX_MB, ObTabs, DocRows, docCount, fileProblem, fmtSize, groupDoc
 function DocsHr() {
   const { people, docs, reload } = useData();
   useEffect(() => { reload(); }, [reload]);   // employees upload while HR is working
-  if (!people) return <section className="section"><div className="empty">Loading…</div></section>;
+  if (!people) return <PageSkeleton />;
   const by = groupDocs(docs);
   const mine = (e) => by[e.email.toLowerCase()] || {};
   const withDocs = people.filter((e) => docCount(mine(e)) > 0).sort((a, b) => a.name.localeCompare(b.name));
   const waiting = people.filter((e) => e.status === "onboarding" && !docCount(mine(e))).sort((a, b) => a.name.localeCompare(b.name));
   return (
     <section className="section">
-      <ObTabs cur="docs" />
-      <SectionHead eyebrow="Onboarding" title="Employee" accent="documents." sub="Employees upload their own documents after signing in. You can open or save every file here." />
+      <SectionHead title="Onboarding" sub="Employees upload their own documents after signing in. You can open or save every file here." tabs={<ObTabs cur="docs" />} />
       {withDocs.length ? withDocs.map((e) => { const m = mine(e), n = docCount(m); return (
         <div className="card" key={e.id}><div className="card-h"><h3>{e.name}</h3><span className="muted">{e.email} · {n} file{n === 1 ? "" : "s"}</span></div><DocRows m={m} /></div>
       ); }) : <div className="card"><div className="card-b muted">No employee has uploaded a document yet.</div></div>}
@@ -69,12 +68,12 @@ function MyDocs() {
   const n = docCount(m);
   return (
     <section className="section">
-      <SectionHead eyebrow="Onboarding" title="Your" accent="documents." sub="Upload your own documents for onboarding. HR can see them and fills in the document data from them." />
+      <SectionHead eyebrow="Onboarding" title="My documents" sub="Upload your own documents for onboarding. HR can see them and fills in the document data from them." />
       <div className="card"><div className="card-h"><h3>Your documents</h3><span className="muted">{n} file{n === 1 ? "" : "s"} uploaded</span></div>
         {DOCS.map((def) => {
           const fl = m[def.k] || [], er = errs[def.k];
           return (
-            <div className="doc-row" key={def.k}><div className="grow"><b>{def.name} <span className={`pill ${fl.length ? "p-ok" : "p-mute"}`}>{fl.length ? "Uploaded" : "Optional"}</span></b>
+            <div className="doc-row" key={def.k}><div className="grow"><b>{def.name} <span className={pill(fl.length ? "p-ok" : "p-mute")}>{fl.length ? "Uploaded" : "Optional"}</span></b>
               <span className="sub">PDF, JPG or PNG, up to {MAX_MB} MB{def.multi ? `, up to ${def.max} files` : ""}</span>
               <div>{fl.map((f) => (
                 <span className="fchip" key={f.id}><a href={`/api/documents/${f.id}/file`} target="_blank" rel="noopener">{f.name}</a> · {fmtSize(f.size)} · <a href={`/api/documents/${f.id}/file?download=1`} download={f.name}>Save</a>
@@ -90,7 +89,17 @@ function MyDocs() {
   );
 }
 
+/* Company-wide "See documents" opens the review list. A holder for a team only also keeps their own documents, with a switch
+   between the two; everyone else sees their own. The list holds only the people the viewer may see (the server decides). */
 export default function Documents() {
-  const { isHr } = useAuth();
-  return isHr ? <DocsHr /> : <MyDocs />;
+  const { can, canAll } = useAuth();
+  const [view, setView] = useState("team");
+  if (!can("documents.view")) return <MyDocs />;
+  if (canAll("documents.view")) return <DocsHr />;
+  return (
+    <>
+      <ViewTabs label="Documents" view={view} onView={setView} views={[["team", "My team's documents"], ["mine", "My documents"]]} />
+      {view === "team" ? <DocsHr /> : <MyDocs />}
+    </>
+  );
 }

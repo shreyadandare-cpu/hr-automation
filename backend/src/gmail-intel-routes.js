@@ -1,11 +1,16 @@
 import express from "express";
 import crypto from "node:crypto";
 import { pool } from "./db.js";
-import { requireAuth, requireHr } from "./auth.js";
+import { requireAuth } from "./auth.js";
+import { canAll, needAll } from "./access.js";
+
 import * as gmail from "./gmail-api.js";
 import { sendEmail } from "./notify.js";
 import { publicUrl } from "./mail.js";
 import { parseMessage, processMessage, claudeConfigured } from "./gmail-intel.js";
+
+// Running the engine and seeing every project's report need "See personal details" for the whole company (people.view); everyone else sees only their own projects.
+const requireHr = needAll("people.view");
 
 /* Gmail Intelligence Engine: database side, sync and the HR screens' API. Everything is HR-only except the Pub/Sub push,
    which proves itself with GMAIL_PUSH_TOKEN. Off unless GMAIL_INTEL_ENABLED=true and the service account is set (gmail-api.js). */
@@ -265,7 +270,7 @@ export function renderReportEmail(rep, link) {
 export function projectReportRouter() {
   const r = express.Router();
   const visible = async (req) => {
-    const hr = req.user.role === "hr";
+    const hr = canAll(req, "people.view");
     const { rows } = await pool.query(
       `SELECT DISTINCT p.id, p.name, p.status FROM projects p
          ${hr ? "" : `JOIN employee_project_allocations a ON a.project_id = p.id AND a.status = 'Active'

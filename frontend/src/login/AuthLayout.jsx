@@ -1,5 +1,7 @@
 import { useState } from "react";
 import { currentTheme, toggleTheme } from "../theme.js";
+import { BRAND, PRODUCT } from "../brand.js";
+import { FestivalArt, FestiveFrame, festivalTheme, festivalWhen, useFestivalLook } from "../components/FestivalLook.jsx";
 
 /* The sign-in and invitation pages share this layout: the maroon brand panel on the left (a short band on phones)
    and only the form on the right. Keep it clean: no sun, flower or glow shapes. Colours and fonts come from
@@ -13,25 +15,32 @@ const POINTS = [
   [<Icon><path d="M7 3h7l4 4v14H7zM14 3v4h4M10 12h5M10 16h5" /></Icon>, "Payslips", "Every month's payslip, ready to download."],
   [<Icon><rect x="3" y="6" width="18" height="13" rx="3" /><path d="M3 10h18M16 15h2" /></Icon>, "Expenses", "Claim reimbursements and track their status."],
   [<Icon><circle cx="12" cy="8.5" r="3.5" /><path d="M5 20c0-3.6 3.1-6 7-6s7 2.4 7 6" /></Icon>, "Profile and documents", "Your details and records, kept up to date."],
-  [<Icon><rect x="3" y="7" width="18" height="13" rx="3" /><path d="M9 7V5.5A1.5 1.5 0 0 1 10.5 4h3A1.5 1.5 0 0 1 15 5.5V7M3 13h18" /></Icon>, "Digital Kit", "Wohlig letterheads, decks and email signatures."],
+  [<Icon><rect x="3" y="7" width="18" height="13" rx="3" /><path d="M9 7V5.5A1.5 1.5 0 0 1 10.5 4h3A1.5 1.5 0 0 1 15 5.5V7M3 13h18" /></Icon>, "Digital Kit", `${BRAND.company.name} letterheads, decks and email signatures.`],
 ];
 export default function AuthLayout({ children }) {
   const [theme, setTheme] = useState(currentTheme);
+  const fest = useFestivalLook();
   return (
     <div className="auth">
-      <aside className="auth-panel" aria-label="About Wohlig One">
-        <img className="auth-logo auth-rise" src="/wohlig-logo-dark.svg" alt="Wohlig" />
+      <aside className={`auth-panel ${fest ? "[&>*:not(canvas,.fest-veil)]:relative [&>*:not(canvas,.fest-veil)]:z-1" : ""}`} aria-label={`About ${PRODUCT}`}>
+        {/* Festival days: the festival's lit scene behind the panel, darkened on the reading side so the words stay clear. */}
+        {fest && <><FestiveFrame fest={fest} /><FestivalArt slug={fest.slug} className="object-[75%_50%] animate-fest-art" /><span aria-hidden="true" className="fest-veil pointer-events-none absolute inset-0 bg-[linear-gradient(100deg,rgba(20,6,10,.9)_0%,rgba(20,6,10,.7)_45%,rgba(20,6,10,.15)_100%)]" /></>}
+        <img className="auth-logo auth-rise" src={BRAND.logos.dark} alt={BRAND.company.name} />
         <div className="auth-pitch">
-          <p className="auth-eyebrow auth-rise" style={{ "--d": 1 }}>Wohlig One</p>
-          <p className="auth-headline auth-rise" style={{ "--d": 2 }}>Your workday, made <em>wohlig.</em></p>
-          <p className="auth-lede auth-rise" style={{ "--d": 3 }}>One secure place for everyone at Wohlig, with your attendance, leave, pay and more.</p>
-          <ul className="auth-points">
+          <p className="auth-eyebrow auth-rise inline-flex items-center gap-2" style={{ "--d": 1 }}>
+            {fest && <span aria-hidden="true" className="flex -space-x-1">{festivalTheme(fest.slug).colors.map((c) => <i key={c} className="size-2.5 rounded-full ring-2 ring-maroon-deep" style={{ background: c }} />)}</span>}{PRODUCT}
+          </p>
+          {fest
+            ? <p className="auth-headline auth-rise" style={{ "--d": 2 }}>{festivalWhen(fest)}, <em>from everyone at {BRAND.company.name}.</em></p>
+            : <p className="auth-headline auth-rise" style={{ "--d": 2 }}>{BRAND.product.headline} <em>{BRAND.product.headlineAccent}</em></p>}
+          <p className="auth-lede auth-rise" style={{ "--d": 3 }}>{BRAND.product.lede}</p>
+          {!fest && <ul className="auth-points">
             {POINTS.map(([ico, title, text], i) => <li key={title} className="auth-rise" style={{ "--d": 4 + i * 0.5 }}><span className="auth-ico">{ico}</span><div><b>{title}</b><span>{text}</span></div></li>)}
-          </ul>
+          </ul>}
         </div>
         <div className="auth-foot auth-rise" style={{ "--d": 8 }}>
-          <p className="auth-motto">Rooted in warmth. Built for what's next.</p>
-          <p className="auth-secure"><Icon><rect x="5" y="11" width="14" height="9.5" rx="2.5" /><path d="M8 11V8a4 4 0 0 1 8 0v3" /></Icon>Protected by your Wohlig Google account</p>
+          <p className="auth-motto">{BRAND.product.motto}</p>
+          <p className="auth-secure"><Icon><rect x="5" y="11" width="14" height="9.5" rx="2.5" /><path d="M8 11V8a4 4 0 0 1 8 0v3" /></Icon>{BRAND.product.signInNote}</p>
         </div>
       </aside>
       <div className="auth-pane">

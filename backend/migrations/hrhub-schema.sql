@@ -830,4 +830,326 @@ CREATE TABLE IF NOT EXISTS gmail_ai_usage (
   cost_usd NUMERIC(10,5) NOT NULL DEFAULT 0
 );
 
+-- ---------------------------------------------------------------------------------------------------------------------
+-- Engage and requests (2026-11-19): polls, praise, articles, app links, advance requests, attendance requests.
+-- All new tables; nothing existing changes shape. Rows are never hard-deleted by the app (deleted_at), except votes.
+-- ---------------------------------------------------------------------------------------------------------------------
+-- A poll HR puts to everyone: one question, 2 to 6 options, an optional closing time.
+CREATE TABLE IF NOT EXISTS polls (
+  id SERIAL PRIMARY KEY, question TEXT NOT NULL, options JSONB NOT NULL, closes_at TIMESTAMPTZ, created_by TEXT NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(), deleted_at TIMESTAMPTZ);
+CREATE INDEX IF NOT EXISTS polls_recent ON polls (created_at DESC) WHERE deleted_at IS NULL;
+-- One vote per person per poll. The app only ever shows totals, never who chose what.
+CREATE TABLE IF NOT EXISTS poll_votes (
+  poll_id INT NOT NULL REFERENCES polls(id) ON DELETE CASCADE, email TEXT NOT NULL, option_index INT NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(), PRIMARY KEY (poll_id, email));
+-- Praise: a short public thank-you from one colleague to another.
+CREATE TABLE IF NOT EXISTS praises (
+  id SERIAL PRIMARY KEY, from_email TEXT NOT NULL, to_email TEXT NOT NULL, message TEXT NOT NULL, badge TEXT NOT NULL DEFAULT 'thanks',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(), deleted_at TIMESTAMPTZ);
+CREATE INDEX IF NOT EXISTS praises_recent ON praises (created_at DESC) WHERE deleted_at IS NULL;
+CREATE INDEX IF NOT EXISTS praises_to ON praises (lower(to_email), created_at DESC) WHERE deleted_at IS NULL;
+-- Articles: longer pieces HR writes for everyone (policies explained, guides, news). Drafts are HR-only.
+CREATE TABLE IF NOT EXISTS articles (
+  id SERIAL PRIMARY KEY, title TEXT NOT NULL, body TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'draft', author_email TEXT NOT NULL,
+  published_at TIMESTAMPTZ, created_at TIMESTAMPTZ NOT NULL DEFAULT now(), updated_at TIMESTAMPTZ NOT NULL DEFAULT now(), deleted_at TIMESTAMPTZ);
+CREATE INDEX IF NOT EXISTS articles_live ON articles (published_at DESC) WHERE deleted_at IS NULL AND status = 'live';
+-- Apps: links to the other tools the company uses, kept by HR.
+CREATE TABLE IF NOT EXISTS app_links (
+  id SERIAL PRIMARY KEY, title TEXT NOT NULL, url TEXT NOT NULL, description TEXT NOT NULL DEFAULT '', created_by TEXT NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(), deleted_at TIMESTAMPTZ);
+-- A request for a salary advance. Recording the advance itself and its recovery stays with HR (employee_advances).
+-- Money is whole paise (amount_minor) with its currency, so there is no rounding.
+CREATE TABLE IF NOT EXISTS advance_requests (
+  id SERIAL PRIMARY KEY, email TEXT NOT NULL, amount_minor BIGINT NOT NULL, currency TEXT NOT NULL DEFAULT 'INR', reason TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'pending', decided_by TEXT, decided_at TIMESTAMPTZ, decision_note TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(), deleted_at TIMESTAMPTZ);
+CREATE INDEX IF NOT EXISTS advance_requests_email ON advance_requests (lower(email), created_at DESC) WHERE deleted_at IS NULL;
+CREATE INDEX IF NOT EXISTS advance_requests_pending ON advance_requests (created_at) WHERE deleted_at IS NULL AND status = 'pending';
+-- A request about one day's attendance: a missed punch, working from home, or on duty elsewhere. A record for HR to act on;
+-- approving one does not change punches or hours by itself.
+CREATE TABLE IF NOT EXISTS attendance_requests (
+  id SERIAL PRIMARY KEY, email TEXT NOT NULL, on_date DATE NOT NULL, kind TEXT NOT NULL, note TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'pending', decided_by TEXT, decided_at TIMESTAMPTZ, decision_note TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(), deleted_at TIMESTAMPTZ);
+CREATE INDEX IF NOT EXISTS attendance_requests_email ON attendance_requests (lower(email), on_date DESC) WHERE deleted_at IS NULL;
+CREATE INDEX IF NOT EXISTS attendance_requests_pending ON attendance_requests (created_at) WHERE deleted_at IS NULL AND status = 'pending';
+
+-- Tax declaration requests (2026-11-19): what a person tells payroll for one financial year: the regime they choose and
+-- the investments and expenses they plan to claim. Payroll reads it and then enters what it accepts into its own
+-- tax_declarations table (payroll/schema.sql), which is the only one the payroll calculation uses. This table changes no
+-- payslip. One row per person per year; amounts are whole paise. Visible to the person and HR only.
+CREATE TABLE IF NOT EXISTS tax_declaration_requests (
+  id SERIAL PRIMARY KEY, email TEXT NOT NULL, financial_year INT NOT NULL, regime TEXT NOT NULL DEFAULT 'new',
+  items JSONB NOT NULL DEFAULT '[]', status TEXT NOT NULL DEFAULT 'draft', submitted_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(), updated_at TIMESTAMPTZ NOT NULL DEFAULT now());
+CREATE UNIQUE INDEX IF NOT EXISTS tax_declaration_requests_one ON tax_declaration_requests (lower(email), financial_year);
+-- Proofs (2026-11-19): what HR notes about the proof for each line, as { "<line number>": { status, note, by, at } }.
+-- Cleared when the person changes the lines, so a note never sits against a line it was not written for.
+ALTER TABLE tax_declaration_requests ADD COLUMN IF NOT EXISTS proofs JSONB NOT NULL DEFAULT '{}';
+-- Goals (2026-11-19): what a person is working towards, with a due date and how far along it is.
+-- Visible to the person and HR only, until HR decides the wider performance-review rules.
+CREATE TABLE IF NOT EXISTS goals (
+  id SERIAL PRIMARY KEY, email TEXT NOT NULL, title TEXT NOT NULL, detail TEXT NOT NULL DEFAULT '', due_on DATE,
+  progress INT NOT NULL DEFAULT 0, created_at TIMESTAMPTZ NOT NULL DEFAULT now(), updated_at TIMESTAMPTZ NOT NULL DEFAULT now(), deleted_at TIMESTAMPTZ);
+CREATE INDEX IF NOT EXISTS goals_email ON goals (lower(email), created_at DESC) WHERE deleted_at IS NULL;
+
+-- ---------------------------------------------------------------------------------------------------------------------
+-- HR tools (2026-11-19): probation decisions, helpdesk, policy sign-off, exit interviews, hiring, performance reviews.
+-- All new tables, plus one new column on `articles` (added on 2026-11-19 too). Nothing older changes shape.
+-- ---------------------------------------------------------------------------------------------------------------------
+-- Probation: a row only once HR decides something. Until then the end date is the joining date plus six months.
+CREATE TABLE IF NOT EXISTS probations (
+  email TEXT PRIMARY KEY, ends_on DATE NOT NULL, status TEXT NOT NULL DEFAULT 'in-probation', note TEXT,
+  decided_by TEXT, decided_at TIMESTAMPTZ, updated_at TIMESTAMPTZ NOT NULL DEFAULT now());
+-- Helpdesk: a question someone raises with HR or IT, and the replies under it.
+CREATE TABLE IF NOT EXISTS tickets (
+  id SERIAL PRIMARY KEY, email TEXT NOT NULL, category TEXT NOT NULL, subject TEXT NOT NULL, body TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'open', created_at TIMESTAMPTZ NOT NULL DEFAULT now(), updated_at TIMESTAMPTZ NOT NULL DEFAULT now(), deleted_at TIMESTAMPTZ);
+CREATE INDEX IF NOT EXISTS tickets_email ON tickets (lower(email), updated_at DESC) WHERE deleted_at IS NULL;
+CREATE INDEX IF NOT EXISTS tickets_open ON tickets (updated_at DESC) WHERE deleted_at IS NULL AND status <> 'closed';
+CREATE TABLE IF NOT EXISTS ticket_replies (
+  id SERIAL PRIMARY KEY, ticket_id INT NOT NULL REFERENCES tickets(id) ON DELETE CASCADE, author_email TEXT NOT NULL, body TEXT NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now());
+CREATE INDEX IF NOT EXISTS ticket_replies_ticket ON ticket_replies (ticket_id, id);
+-- Policy sign-off: an article can ask everyone to confirm they have read it.
+ALTER TABLE articles ADD COLUMN IF NOT EXISTS requires_ack BOOLEAN NOT NULL DEFAULT false;
+CREATE TABLE IF NOT EXISTS article_acks (
+  article_id INT NOT NULL REFERENCES articles(id) ON DELETE CASCADE, email TEXT NOT NULL, acked_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (article_id, email));
+-- Exit interviews: why someone left, recorded by HR. One per person. HR only.
+CREATE TABLE IF NOT EXISTS exit_interviews (
+  email TEXT PRIMARY KEY, reason TEXT NOT NULL, notes TEXT NOT NULL DEFAULT '', would_rehire BOOLEAN, recorded_by TEXT NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(), updated_at TIMESTAMPTZ NOT NULL DEFAULT now());
+-- Hiring: open roles and the candidates for each, moved through stages by HR. HR only.
+CREATE TABLE IF NOT EXISTS job_openings (
+  id SERIAL PRIMARY KEY, title TEXT NOT NULL, dept TEXT NOT NULL DEFAULT '', description TEXT NOT NULL DEFAULT '', status TEXT NOT NULL DEFAULT 'open',
+  created_by TEXT NOT NULL, created_at TIMESTAMPTZ NOT NULL DEFAULT now(), deleted_at TIMESTAMPTZ);
+CREATE TABLE IF NOT EXISTS candidates (
+  id SERIAL PRIMARY KEY, opening_id INT NOT NULL REFERENCES job_openings(id) ON DELETE CASCADE, name TEXT NOT NULL, email TEXT NOT NULL DEFAULT '',
+  phone TEXT NOT NULL DEFAULT '', stage TEXT NOT NULL DEFAULT 'applied', notes TEXT NOT NULL DEFAULT '',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(), updated_at TIMESTAMPTZ NOT NULL DEFAULT now(), deleted_at TIMESTAMPTZ);
+CREATE INDEX IF NOT EXISTS candidates_opening ON candidates (opening_id, id) WHERE deleted_at IS NULL;
+-- Performance reviews: HR opens one for a person and a period; the person writes a self-review; HR writes the review and a rating.
+-- Visible to the person and HR only.
+CREATE TABLE IF NOT EXISTS reviews (
+  id SERIAL PRIMARY KEY, email TEXT NOT NULL, period TEXT NOT NULL, self_text TEXT, self_at TIMESTAMPTZ, hr_text TEXT, rating INT,
+  status TEXT NOT NULL DEFAULT 'self-pending', created_by TEXT NOT NULL, created_at TIMESTAMPTZ NOT NULL DEFAULT now(), updated_at TIMESTAMPTZ NOT NULL DEFAULT now());
+CREATE UNIQUE INDEX IF NOT EXISTS reviews_one ON reviews (lower(email), period);
+
+-- ---------------------------------------------------------------------------------------------------------------------
+-- Accountant tools (2026-11-19). Two new tables and one new column; nothing older changes shape.
+-- ---------------------------------------------------------------------------------------------------------------------
+-- Payments to contractors and consultants, with the tax deducted at source, for the quarterly return (Form 26Q).
+-- Money in paise. Only a masked PAN is kept, as for staff; has_pan says whether one was given (no PAN means 20%).
+CREATE TABLE IF NOT EXISTS contractor_payments (
+  id SERIAL PRIMARY KEY, name TEXT NOT NULL, pan_masked TEXT NOT NULL DEFAULT '', has_pan BOOLEAN NOT NULL DEFAULT false,
+  section TEXT NOT NULL, paid_on DATE NOT NULL, amount_minor BIGINT NOT NULL CHECK (amount_minor > 0),
+  tds_rate NUMERIC(5,2) NOT NULL, tds_minor BIGINT NOT NULL CHECK (tds_minor >= 0), note TEXT NOT NULL DEFAULT '',
+  created_by TEXT NOT NULL, created_at TIMESTAMPTZ NOT NULL DEFAULT now(), deleted_at TIMESTAMPTZ, deleted_by TEXT);
+CREATE INDEX IF NOT EXISTS contractor_payments_paid ON contractor_payments (paid_on DESC) WHERE deleted_at IS NULL;
+-- The document a person uploads as proof for one line of their tax declaration. One file per line; the file itself is
+-- on disk (UPLOAD_DIR) under `stored`. Removed when the person changes the lines.
+CREATE TABLE IF NOT EXISTS tax_proof_files (
+  id SERIAL PRIMARY KEY, request_id INTEGER NOT NULL REFERENCES tax_declaration_requests(id) ON DELETE CASCADE, line_index INTEGER NOT NULL,
+  name TEXT NOT NULL, mime TEXT NOT NULL, size INTEGER NOT NULL, stored TEXT NOT NULL, uploaded_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (request_id, line_index));
+-- How much of a person's time a project takes, in per cent, for the cost-by-project report. Empty = share what is left equally.
+ALTER TABLE employee_project_allocations ADD COLUMN IF NOT EXISTS share_percent INTEGER CHECK (share_percent BETWEEN 1 AND 100);
+
+-- ---------------------------------------------------------------------------------------------------------------------
+-- HR gaps (2026-11-19): timesheets, surveys, training, notice periods, approval stand-ins, review cycles with a manager
+-- review and colleague feedback, and interviews. All new tables plus new nullable columns on `reviews`; nothing older
+-- changes meaning. Design: docs/HR_GAPS_DESIGN.md.
+-- ---------------------------------------------------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS timesheet_weeks (
+  id SERIAL PRIMARY KEY, email TEXT NOT NULL, week_start DATE NOT NULL, status TEXT NOT NULL DEFAULT 'draft'
+    CHECK (status IN ('draft','submitted','approved','returned')),
+  submitted_at TIMESTAMPTZ, decided_by TEXT, decided_at TIMESTAMPTZ, decision_note TEXT NOT NULL DEFAULT '',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(), updated_at TIMESTAMPTZ NOT NULL DEFAULT now());
+CREATE UNIQUE INDEX IF NOT EXISTS timesheet_weeks_one ON timesheet_weeks (lower(email), week_start);
+CREATE INDEX IF NOT EXISTS timesheet_weeks_waiting ON timesheet_weeks (status, week_start) WHERE status = 'submitted';
+-- Minutes per project per day. project_id empty = internal work (not on a client project).
+CREATE TABLE IF NOT EXISTS timesheet_entries (
+  id SERIAL PRIMARY KEY, week_id INTEGER NOT NULL REFERENCES timesheet_weeks(id) ON DELETE CASCADE,
+  project_id INTEGER REFERENCES projects(id) ON DELETE SET NULL, work_date DATE NOT NULL, minutes INTEGER NOT NULL CHECK (minutes BETWEEN 1 AND 1440));
+CREATE INDEX IF NOT EXISTS timesheet_entries_week ON timesheet_entries (week_id);
+CREATE INDEX IF NOT EXISTS timesheet_entries_day ON timesheet_entries (work_date);
+
+CREATE TABLE IF NOT EXISTS surveys (
+  id SERIAL PRIMARY KEY, title TEXT NOT NULL, intro TEXT NOT NULL DEFAULT '', questions JSONB NOT NULL, anonymous BOOLEAN NOT NULL DEFAULT true,
+  closes_on DATE NOT NULL, created_by TEXT NOT NULL, created_at TIMESTAMPTZ NOT NULL DEFAULT now(), deleted_at TIMESTAMPTZ);
+CREATE INDEX IF NOT EXISTS surveys_open ON surveys (closes_on DESC) WHERE deleted_at IS NULL;
+-- Who has answered (one answer each). Kept apart from the answers so an anonymous answer has no name on it.
+CREATE TABLE IF NOT EXISTS survey_takers (
+  survey_id INTEGER NOT NULL REFERENCES surveys(id) ON DELETE CASCADE, email TEXT NOT NULL, PRIMARY KEY (survey_id, email));
+-- email is filled only for a named survey.
+CREATE TABLE IF NOT EXISTS survey_responses (
+  id SERIAL PRIMARY KEY, survey_id INTEGER NOT NULL REFERENCES surveys(id) ON DELETE CASCADE, email TEXT, answers JSONB NOT NULL);
+CREATE INDEX IF NOT EXISTS survey_responses_survey ON survey_responses (survey_id);
+
+CREATE TABLE IF NOT EXISTS trainings (
+  id SERIAL PRIMARY KEY, title TEXT NOT NULL, detail TEXT NOT NULL DEFAULT '', link TEXT NOT NULL DEFAULT '', due_on DATE,
+  created_by TEXT NOT NULL, created_at TIMESTAMPTZ NOT NULL DEFAULT now(), deleted_at TIMESTAMPTZ);
+CREATE TABLE IF NOT EXISTS training_assignments (
+  training_id INTEGER NOT NULL REFERENCES trainings(id) ON DELETE CASCADE, email TEXT NOT NULL, assigned_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  completed_on DATE, note TEXT NOT NULL DEFAULT '', PRIMARY KEY (training_id, email));
+CREATE INDEX IF NOT EXISTS training_assignments_email ON training_assignments (lower(email));
+
+-- Notice periods. HR records the resignation; the expected last day is resigned_on + notice_days.
+CREATE TABLE IF NOT EXISTS resignations (
+  email TEXT PRIMARY KEY, resigned_on DATE NOT NULL, notice_days INTEGER NOT NULL CHECK (notice_days BETWEEN 0 AND 365),
+  agreed_last_day DATE, note TEXT NOT NULL DEFAULT '', recorded_by TEXT NOT NULL, updated_at TIMESTAMPTZ NOT NULL DEFAULT now(), withdrawn_at TIMESTAMPTZ);
+
+-- Someone who decides leave requests for a manager while they are away. The manager can still decide too.
+CREATE TABLE IF NOT EXISTS approval_stand_ins (
+  id SERIAL PRIMARY KEY, for_email TEXT NOT NULL, stand_in_email TEXT NOT NULL, from_day DATE NOT NULL, to_day DATE NOT NULL CHECK (to_day >= from_day),
+  created_by TEXT NOT NULL, created_at TIMESTAMPTZ NOT NULL DEFAULT now(), cancelled_at TIMESTAMPTZ);
+CREATE INDEX IF NOT EXISTS approval_stand_ins_for ON approval_stand_ins (lower(for_email), to_day) WHERE cancelled_at IS NULL;
+CREATE INDEX IF NOT EXISTS approval_stand_ins_by ON approval_stand_ins (lower(stand_in_email), to_day) WHERE cancelled_at IS NULL;
+
+-- Review cycles: HR opens a review for everyone (or a department) at once; the reporting manager reviews after the person.
+CREATE TABLE IF NOT EXISTS review_cycles (
+  id SERIAL PRIMARY KEY, name TEXT NOT NULL, dept TEXT NOT NULL DEFAULT '', self_due DATE NOT NULL, manager_due DATE NOT NULL,
+  status TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open','closed')), created_by TEXT NOT NULL, created_at TIMESTAMPTZ NOT NULL DEFAULT now());
+ALTER TABLE reviews ADD COLUMN IF NOT EXISTS cycle_id INTEGER REFERENCES review_cycles(id);
+ALTER TABLE reviews ADD COLUMN IF NOT EXISTS manager_email TEXT;
+ALTER TABLE reviews ADD COLUMN IF NOT EXISTS manager_text TEXT;
+ALTER TABLE reviews ADD COLUMN IF NOT EXISTS manager_rating INT;
+ALTER TABLE reviews ADD COLUMN IF NOT EXISTS manager_at TIMESTAMPTZ;
+CREATE INDEX IF NOT EXISTS reviews_manager ON reviews (lower(manager_email)) WHERE manager_email IS NOT NULL;
+-- Colleague (360) feedback on a review. Seen by HR and the reviewer's manager, never by the person reviewed.
+CREATE TABLE IF NOT EXISTS review_feedback (
+  id SERIAL PRIMARY KEY, review_id INTEGER NOT NULL REFERENCES reviews(id) ON DELETE CASCADE, from_email TEXT NOT NULL, asked_by TEXT NOT NULL,
+  text TEXT, submitted_at TIMESTAMPTZ, created_at TIMESTAMPTZ NOT NULL DEFAULT now(), UNIQUE (review_id, from_email));
+CREATE INDEX IF NOT EXISTS review_feedback_from ON review_feedback (lower(from_email));
+
+-- Interviews for a candidate. Interviewers each leave a recommendation and notes.
+CREATE TABLE IF NOT EXISTS interviews (
+  id SERIAL PRIMARY KEY, candidate_id INTEGER NOT NULL REFERENCES candidates(id) ON DELETE CASCADE, at TIMESTAMPTZ NOT NULL,
+  minutes INTEGER NOT NULL CHECK (minutes BETWEEN 15 AND 240), mode TEXT NOT NULL, place TEXT NOT NULL DEFAULT '', note TEXT NOT NULL DEFAULT '',
+  interviewers JSONB NOT NULL DEFAULT '[]', verdicts JSONB NOT NULL DEFAULT '{}', created_by TEXT NOT NULL, created_at TIMESTAMPTZ NOT NULL DEFAULT now(), cancelled_at TIMESTAMPTZ);
+CREATE INDEX IF NOT EXISTS interviews_candidate ON interviews (candidate_id, at);
+CREATE INDEX IF NOT EXISTS interviews_at ON interviews (at) WHERE cancelled_at IS NULL;
+
+-- ---------------------------------------------------------------------------------------------------------------------
+-- Access hierarchy (2026-11-19): super admins, permissions ticked per person, and the reporting tree on emails.
+-- Design: docs/ACCESS_DESIGN.md. Rules and the permission list: src/access-rules.js; decisions: src/access.js.
+
+-- The reporting manager by email (expand step: employees.manager, the name, stays filled for older code until the contract step).
+ALTER TABLE employees ADD COLUMN IF NOT EXISTS manager_email TEXT;
+CREATE INDEX IF NOT EXISTS employees_manager_email ON employees (lower(manager_email));
+-- Any write that changes the manager's NAME without giving the email works the email out: the one current employee with that
+-- name. Two current people with the same name leave it empty, so nobody gets the wrong team; HR then picks the person.
+CREATE OR REPLACE FUNCTION employees_manager_email_sync() RETURNS trigger AS $$
+BEGIN
+  IF (TG_OP = 'INSERT' AND NEW.manager_email IS NULL)
+     OR (TG_OP = 'UPDATE' AND NEW.manager IS DISTINCT FROM OLD.manager AND NEW.manager_email IS NOT DISTINCT FROM OLD.manager_email) THEN
+    IF NEW.manager IS NULL OR btrim(NEW.manager) = '' THEN
+      NEW.manager_email := NULL;
+    ELSE
+      SELECT CASE WHEN count(*) = 1 THEN lower(min(m.work_email)) END INTO NEW.manager_email
+        FROM employees m WHERE lower(m.name) = lower(btrim(NEW.manager)) AND m.status <> 'offboarded' AND lower(m.work_email) <> lower(NEW.work_email);
+    END IF;
+  END IF;
+  RETURN NEW;
+END $$ LANGUAGE plpgsql;
+DROP TRIGGER IF EXISTS employees_manager_email_sync ON employees;
+CREATE TRIGGER employees_manager_email_sync BEFORE INSERT OR UPDATE ON employees FOR EACH ROW EXECUTE FUNCTION employees_manager_email_sync();
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM app_migrations WHERE key = 'manager-email-backfill') THEN
+    UPDATE employees e SET manager_email = (
+      SELECT CASE WHEN count(*) = 1 THEN lower(min(m.work_email)) END FROM employees m
+       WHERE lower(m.name) = lower(btrim(e.manager)) AND m.status <> 'offboarded' AND lower(m.work_email) <> lower(e.work_email))
+     WHERE e.manager IS NOT NULL AND btrim(e.manager) <> '' AND e.manager_email IS NULL;
+    INSERT INTO app_migrations (key) VALUES ('manager-email-backfill');
+  END IF;
+END $$;
+
+-- Super admins have every permission and are the only people who give access. There is always at least one (src/access.js).
+ALTER TABLE users ADD COLUMN IF NOT EXISTS is_super_admin BOOLEAN NOT NULL DEFAULT false;
+-- A blocked login cannot sign in, even with Google, and its sessions stop working. Set when a login is deleted or someone leaves.
+ALTER TABLE users ADD COLUMN IF NOT EXISTS login_blocked BOOLEAN NOT NULL DEFAULT false;
+
+-- One ticked permission for one person: for the whole company, or for a reporting tree (everyone below scope_root_email, or below
+-- the person themselves when it is empty). Removing it keeps the row, so the history of who gave and removed what stays.
+CREATE TABLE IF NOT EXISTS access_grants (
+  id               SERIAL PRIMARY KEY,
+  email            TEXT NOT NULL,
+  permission       TEXT NOT NULL CHECK (char_length(permission) <= 60),
+  scope            TEXT NOT NULL CHECK (scope IN ('company','tree')),
+  scope_root_email TEXT,
+  note             TEXT NOT NULL DEFAULT '' CHECK (char_length(note) <= 300),
+  granted_by       TEXT NOT NULL,
+  granted_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
+  expires_at       DATE,
+  revoked_at       TIMESTAMPTZ,
+  revoked_by       TEXT,
+  CHECK (scope = 'tree' OR scope_root_email IS NULL));
+CREATE INDEX IF NOT EXISTS access_grants_email ON access_grants (lower(email)) WHERE revoked_at IS NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS access_grants_once ON access_grants (lower(email), permission, scope, coalesce(lower(scope_root_email), ''))
+  WHERE revoked_at IS NULL;
+
+-- ---------------------------------------------------------------------------------------------------------------------
+-- Speed (2026-11-19): indexes for read paths that had none. All additive and safe to run again.
+CREATE INDEX IF NOT EXISTS audit_log_recent ON audit_log (ts DESC, id DESC);                          -- the audit log, newest first
+CREATE INDEX IF NOT EXISTS audit_log_person ON audit_log (lower(work_email), ts DESC);                -- one person's history
+CREATE INDEX IF NOT EXISTS employee_project_allocations_employee ON employee_project_allocations (employee_id);   -- roster projects
+CREATE INDEX IF NOT EXISTS employee_project_allocations_project ON employee_project_allocations (project_id);
+CREATE INDEX IF NOT EXISTS profile_photos_email_lower ON profile_photos (lower(email));               -- photo versions on the roster
+CREATE INDEX IF NOT EXISTS tool_access_email_lower ON tool_access (lower(work_email));                -- your own tool access
+CREATE INDEX IF NOT EXISTS sessions_expires ON sessions (expires_at);                                 -- clearing ended sign-ins
+CREATE INDEX IF NOT EXISTS leave_requests_recent ON leave_requests (from_date DESC, id DESC);          -- everyone's leave, newest first
+CREATE INDEX IF NOT EXISTS leave_requests_pending ON leave_requests (status) WHERE status = 'pending'; -- waiting for a decision
+
+-- ---------------------------------------------------------------------------------------------------------------------
+-- Tools and their cost (2026-11-19): every paid tool (AI assistants and others), who has a seat, and what it costs.
+-- Claude keeps its live connection (anthropic.js); the others are tracked by hand. Design: docs/TOOLS_DESIGN.md.
+-- Rules: src/tools-rules.js; API: src/tools.js (tools.manage manages, finance.view also sees cost).
+CREATE TABLE IF NOT EXISTS tools (
+  slug            TEXT PRIMARY KEY CHECK (slug ~ '^[a-z0-9][a-z0-9-]{0,39}$'),
+  name            TEXT NOT NULL CHECK (char_length(name) BETWEEN 1 AND 60),
+  vendor          TEXT NOT NULL DEFAULT '' CHECK (char_length(vendor) <= 60),
+  category        TEXT NOT NULL DEFAULT 'ai' CHECK (category IN ('ai','coding','design','productivity','other')),
+  billing         TEXT NOT NULL DEFAULT 'seat' CHECK (billing IN ('seat','usage','seat_and_usage','free')),
+  seat_cost_minor INTEGER CHECK (seat_cost_minor IS NULL OR seat_cost_minor >= 0),   -- per seat per month, in paise or cents; null = not set yet
+  currency        TEXT NOT NULL DEFAULT 'INR' CHECK (currency IN ('INR','USD')),
+  connected       BOOLEAN NOT NULL DEFAULT false,   -- true: seats are added and removed through the tool itself (Claude)
+  url             TEXT NOT NULL DEFAULT '' CHECK (char_length(url) <= 300),
+  notes           TEXT NOT NULL DEFAULT '' CHECK (char_length(notes) <= 500),
+  is_active       BOOLEAN NOT NULL DEFAULT true,
+  sort            INTEGER NOT NULL DEFAULT 100,
+  created_by      TEXT NOT NULL DEFAULT 'system',
+  created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at      TIMESTAMPTZ NOT NULL DEFAULT now());
+INSERT INTO tools (slug, name, vendor, category, billing, currency, connected, url, sort) VALUES
+  ('claude',     'Claude',         'Anthropic', 'ai',     'seat',  'USD', true,  'https://claude.ai',       1),
+  ('chatgpt',    'ChatGPT',        'OpenAI',    'ai',     'seat',  'USD', false, 'https://chatgpt.com',     2),
+  ('gemini',     'Gemini',         'Google',    'ai',     'seat',  'USD', false, 'https://gemini.google.com', 3),
+  ('copilot',    'GitHub Copilot', 'GitHub',    'coding', 'seat',  'USD', false, 'https://github.com/features/copilot', 4),
+  ('cursor',     'Cursor',         'Anysphere', 'coding', 'seat',  'USD', false, 'https://cursor.com',      5),
+  ('perplexity', 'Perplexity',     'Perplexity','ai',     'seat',  'USD', false, 'https://www.perplexity.ai', 6),
+  ('notion-ai',  'Notion AI',      'Notion',    'productivity', 'seat', 'USD', false, 'https://www.notion.so', 7)
+ON CONFLICT (slug) DO NOTHING;
+
+-- A seat: who has which tool (tool_access already holds Claude). A person's own price overrides the tool's (null = the tool's).
+ALTER TABLE tool_access ADD COLUMN IF NOT EXISTS seat_cost_minor INTEGER;
+ALTER TABLE tool_access ADD COLUMN IF NOT EXISTS since DATE;
+ALTER TABLE tool_access ADD COLUMN IF NOT EXISTS updated_by TEXT;
+CREATE INDEX IF NOT EXISTS tool_access_tool ON tool_access (tool, status);
+
+-- What a tool actually cost in a month (usage-based tools, or the vendor's invoice). Removing one keeps the row.
+CREATE TABLE IF NOT EXISTS tool_bills (
+  id           SERIAL PRIMARY KEY,
+  tool         TEXT NOT NULL REFERENCES tools(slug) ON UPDATE CASCADE,
+  month        TEXT NOT NULL CHECK (month ~ '^\d{4}-(0[1-9]|1[0-2])$'),
+  amount_minor INTEGER NOT NULL CHECK (amount_minor > 0),
+  currency     TEXT NOT NULL CHECK (currency IN ('INR','USD')),
+  note         TEXT NOT NULL DEFAULT '' CHECK (char_length(note) <= 300),
+  created_by   TEXT NOT NULL,
+  created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
+  deleted_at   TIMESTAMPTZ);
+CREATE INDEX IF NOT EXISTS tool_bills_month ON tool_bills (month, tool) WHERE deleted_at IS NULL;
+
 COMMIT;

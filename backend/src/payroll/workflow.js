@@ -35,24 +35,28 @@ const T = {
   approve: { from: ["pending_review"], to: "approved", who: "reviewer" },
   reject: { from: ["pending_review"], to: "rejected", who: "reviewer", note: true },
   request_changes: { from: ["pending_review"], to: "changes_requested", who: "reviewer", note: true },
-  bank_file: { from: ["approved", "bank_ready"], to: "bank_ready", who: "hr" },
+  bank_file: { from: ["approved", "bank_ready"], to: "bank_ready", who: "bank" },
   mark_paid: { from: ["bank_ready"], to: "paid", who: "hr" },
 };
 export const ACTIONS = Object.keys(T);
 
 /**
- * Can `actor` do `action` on `run`? actor = { email, hr, reviewer }. Returns { ok: true, to } or { ok: false, error }.
- * The person who sent the payroll for review can't approve it themselves (maker-checker).
+ * Can `actor` do `action` on `run`? actor = { email, hr, reviewer, bank, maker } (hr = payroll.prepare, reviewer = payroll.approve,
+ * bank = payroll.bank; maker = they started, edited, recalculated, calculated or generated the report of this run).
+ * Returns { ok: true, to } or { ok: false, error }.
+ * The person who sent the payroll for review can't review it themselves, and someone who prepared it can't approve it (maker-checker).
  */
 export function check(run, action, actor, note) {
   const t = T[action];
   if (!t) return { ok: false, error: "Unknown action." };
   if (!run.workflow) return { ok: false, error: "This payroll was processed before the review workflow and can only be viewed." };
-  if (t.who === "hr" && !actor.hr) return { ok: false, error: "Only HR can do this." };
-  if (t.who === "reviewer" && !actor.reviewer) return { ok: false, error: "Only the payroll reviewer can do this." };
+  if (t.who === "hr" && !actor.hr) return { ok: false, error: "You do not have access to this." };
+  if (t.who === "reviewer" && !actor.reviewer) return { ok: false, error: "Only a payroll approver can do this." };
+  if (t.who === "bank" && !actor.bank) return { ok: false, error: "Only someone with access to the bank file can do this." };
   if (!t.from.includes(run.status)) return { ok: false, error: `Not possible while the payroll is ${STATUS[run.status] ? STATUS[run.status].toLowerCase() : run.status}.` };
   if (t.who === "reviewer" && run.submitted_by && run.submitted_by.toLowerCase() === String(actor.email).toLowerCase())
     return { ok: false, error: "You sent this payroll for review, so someone else has to review it." };
+  if (action === "approve" && actor.maker) return { ok: false, error: "You prepared part of this payroll, so someone else has to approve it." };
   if (t.note && String(note || "").trim().length < 5) return { ok: false, error: "Give a reason (at least 5 characters)." };
   return { ok: true, to: t.to };
 }

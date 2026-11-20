@@ -6,12 +6,13 @@ const notify = (to, n) => (PAYROLL_SEPARATE ? Promise.resolve(console.log(`Payro
 import { cleanStructure, grossOf, structureFromRow } from "./payroll-calc.js";
 import { structuresFor, toStructure, monthName } from "./payroll/store.js";
 import { audit } from "./payroll/routes.js";
+import { hrOnly } from "./payroll/access.js";
 
 /*
  * Salary structures (HR only). A person's breakdown applies from a month on; a revision is a new row from a later month,
  * so earlier months keep the structure they were paid on. Each month's payroll stores its own copy of every payslip
  * (payroll_items.slip), so a revision never changes a month already calculated.
- * Runs, review and payments are in payroll/routes.js. Mounted behind requireHr.
+ * Runs, review and payments are in payroll/routes.js. Every route needs payroll.prepare (hrOnly, also applied where index.js mounts it).
  */
 const num = (v) => (v === null || v === undefined ? null : Number(v));
 const inr = (n) => "₹" + Number(n).toLocaleString("en-IN", { maximumFractionDigits: 2 });
@@ -64,7 +65,7 @@ async function saveStructure(client, emp, email, v, actor) {
 export const payrollRouter = express.Router();
 
 // One person's salary breakdowns, newest first, and their PF number.
-payrollRouter.get("/structures/:email", wrap(async (req, res) => {
+payrollRouter.get("/structures/:email", hrOnly, wrap(async (req, res) => {
   const email = String(req.params.email).toLowerCase();
   const { rows: [emp] } = await pool.query("SELECT name, pf_number, monthly_gross, start_date FROM employees WHERE lower(work_email)=$1", [email]);
   if (!emp) return res.status(404).json({ error: "Employee not found." });
@@ -88,7 +89,7 @@ const saving = async (fn) => {
 };
 
 // Save the breakdown that applies from a month on. Months already calculated keep their payslips.
-payrollRouter.put("/structures/:email", wrap(async (req, res) => {
+payrollRouter.put("/structures/:email", hrOnly, wrap(async (req, res) => {
   const email = String(req.params.email).toLowerCase();
   const { errors, value: v } = cleanStructure(req.body || {});
   if (errors) return res.status(400).json({ error: "Please check the highlighted fields.", errors });
@@ -108,7 +109,7 @@ payrollRouter.put("/structures/:email", wrap(async (req, res) => {
 
 // Salary breakdowns for many people at once, from HR's spreadsheet (one row per person, read as CSV in the browser).
 // All or nothing: if any row has a problem nothing is saved, and each problem is listed with its row number.
-payrollRouter.post("/structures/import", wrap(async (req, res) => {
+payrollRouter.post("/structures/import", hrOnly, wrap(async (req, res) => {
   const rows = Array.isArray(req.body && req.body.rows) ? req.body.rows : null;
   if (!rows || !rows.length) return res.status(400).json({ error: "The file has no rows to import." });
   if (rows.length > 1000) return res.status(400).json({ error: "Import at most 1,000 rows at a time." });
@@ -143,7 +144,7 @@ payrollRouter.post("/structures/import", wrap(async (req, res) => {
 
 // Runs processed before the review workflow: marking one paid also pays its reimbursements (automation 6).
 // Workflow runs are marked paid through /runs/:id/actions/mark_paid instead.
-payrollRouter.post("/runs/:id/pay", wrap(async (req, res) => {
+payrollRouter.post("/runs/:id/pay", hrOnly, wrap(async (req, res) => {
   let run, paid = [];
   const out = await saving(async (client) => {
     ({ rows: [run] } = await client.query("SELECT * FROM payroll_runs WHERE id=$1 FOR UPDATE", [Number(req.params.id) || 0]));

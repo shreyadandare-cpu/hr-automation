@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { api, apiMsg } from "../../api.js";
 import ConfirmDialog from "../../components/ConfirmDialog.jsx";
 import Modal, { Field } from "../../components/Modal.jsx";
-import { Pill, shortDate } from "../../components/ui.jsx";
+import { Pill, shortDate, ViewTabs, TableSkeletonRow } from "../../components/ui.jsx";
 import { useToast } from "../../components/toast.jsx";
 import { kb } from "./kit.js";
 
@@ -11,9 +11,15 @@ const LABEL = Object.fromEntries(MODULES);
 const WITH_BODY = new Set(["text", "template"]);
 const day = (t) => (t ? shortDate(String(t).slice(0, 10)) : "—");
 
-/* HR: manage the shared resources. Employees never reach this screen or its routes. */
+/* HR: manage the shared resources and the details used to personalise each person's kit. Employees never reach these screens or routes. */
 export default function Manage({ onChanged }) {
-  return <div className="dk-stack"><Resources onChanged={onChanged} /></div>;
+  const [sub, setSub] = useState("resources");
+  return (
+    <div className="dk-stack">
+      <ViewTabs label="Manage" views={[["resources", "Shared resources"], ["people", "People"]]} view={sub} onView={setSub} />
+      {sub === "resources" ? <Resources onChanged={onChanged} /> : <People onChanged={onChanged} />}
+    </div>
+  );
 }
 
 function Resources({ onChanged }) {
@@ -41,10 +47,6 @@ function Resources({ onChanged }) {
   const pick = (r) => { target.current = r.id; fileRef.current.value = ""; fileRef.current.click(); };
   const picked = async (e) => { const f = e.target.files[0]; if (!f || !target.current) return; const d = await upload(target.current, f); if (d) after("File uploaded. Employees get the new version."); };
 
-  useEffect(() => {   // a click outside closes the open "More" menu
-    const close = (e) => document.querySelectorAll(".dk-menu[open]").forEach((d) => { if (!d.contains(e.target)) d.open = false; });
-    document.addEventListener("click", close); return () => document.removeEventListener("click", close);
-  }, []);
   const list = (rows || []).filter((r) => !filter || r.module === filter);
   return (
     <>
@@ -55,30 +57,25 @@ function Resources({ onChanged }) {
           <select className="input" aria-label="Section" value={filter} onChange={(e) => setFilter(e.target.value)}><option value="">All sections</option>{MODULES.map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select>
           <span className="muted">Published items show to every employee straight away. Changing one updates it for everyone; nobody needs to redo their kit.</span>
         </div>
-        <div className="tbl-wrap dk-res-wrap"><table className="dk-res">
-          <thead><tr><th>Resource</th><th>Status</th><th>File</th><th>Updated</th><th aria-label="Actions" /></tr></thead>
+        <div className="tbl-wrap"><table>
+          <thead><tr><th>Title</th><th>Section</th><th>For</th><th>Status</th><th>File</th><th>Version</th><th>Updated</th><th aria-label="Actions" /></tr></thead>
           <tbody>
-            {rows === null ? <tr><td colSpan="5"><div className="empty">Loading…</div></td></tr>
+            {rows === null ? <TableSkeletonRow cols={8} />
               : list.length ? list.map((r) => (
                 <tr key={r.id}>
-                  <td className="dk-res-t"><b>{r.title}</b>
-                    <div className="muted dk-res-sub">{LABEL[r.module]}{r.category ? ` · ${r.category}` : ""}
-                      {r.audience && r.audience.length > 0 && <span className="dk-tags dk-res-for">{r.audience.slice(0, 3).map((w) => <i key={w}>{w}</i>)}{r.audience.length > 3 && <i>+{r.audience.length - 3}</i>}</span>}</div></td>
+                  <td><b>{r.title}</b>{r.category && <div className="muted" style={{ fontSize: 12.5 }}>{r.category}</div>}</td>
+                  <td>{LABEL[r.module]}</td>
+                  <td>{r.audience && r.audience.length ? <span className="dk-tags" style={{ justifyContent: "flex-start" }}>{r.audience.slice(0, 3).map((w) => <i key={w}>{w}</i>)}{r.audience.length > 3 && <i>+{r.audience.length - 3}</i>}</span> : <span className="muted">Everyone</span>}</td>
                   <td><Pill tone={r.published ? "ok" : "mute"}>{r.published ? "Published" : "Draft"}</Pill></td>
-                  <td className="dk-nw">{r.hasFile ? <span title={r.filename}>{(r.filename || "").split(".").pop().toUpperCase()} · {kb(r.size)}</span> : WITH_BODY.has(r.module) ? "Text" : <span className="muted">None</span>}</td>
-                  <td className="dk-nw">{day(r.updatedAt)} <span className="muted">· v{r.version}</span></td>
-                  <td className="dk-res-act">
-                    <button type="button" className="btn glass sm" onClick={() => setEdit(r)}>Edit</button>
-                    <button type="button" className="btn glass sm" onClick={() => toggle(r)}>{r.published ? "Unpublish" : "Publish"}</button>
-                    <details className="dk-menu" onToggle={(e) => { if (e.currentTarget.open) document.querySelectorAll(".dk-menu[open]").forEach((d) => { if (d !== e.currentTarget) d.open = false; }); }}>
-                      <summary className="btn glass sm" aria-label={`More for ${r.title}`}>More</summary>
-                      <div className="dk-menu-box">
-                        <button type="button" onClick={(e) => { e.currentTarget.closest("details").open = false; pick(r); }}>{r.hasFile ? "Replace file" : "Upload file"}</button>
-                        <button type="button" className="danger" onClick={(e) => { e.currentTarget.closest("details").open = false; setDel(r); }}>Delete</button>
-                      </div>
-                    </details>
+                  <td>{r.hasFile ? <span title={r.filename}>{(r.filename || "").split(".").pop().toUpperCase()} · {kb(r.size)}</span> : WITH_BODY.has(r.module) ? "Text" : <span className="muted">None</span>}</td>
+                  <td>v{r.version}</td><td>{day(r.updatedAt)}</td>
+                  <td style={{ textAlign: "right", whiteSpace: "nowrap" }}>
+                    <button type="button" className="btn glass sm" onClick={() => setEdit(r)}>Edit</button>{" "}
+                    <button type="button" className="btn glass sm" onClick={() => pick(r)}>{r.hasFile ? "Replace file" : "Upload file"}</button>{" "}
+                    <button type="button" className="btn glass sm" onClick={() => toggle(r)}>{r.published ? "Unpublish" : "Publish"}</button>{" "}
+                    <button type="button" className="btn link sm" onClick={() => setDel(r)}>Delete</button>
                   </td></tr>))
-                : <tr><td colSpan="5"><div className="empty">Nothing here yet. Add the first resource.</div></td></tr>}
+                : <tr><td colSpan="8"><div className="empty">Nothing here yet. Add the first resource.</div></td></tr>}
           </tbody></table></div>
       </div>
       {edit && <ResourceModal item={edit} onClose={() => setEdit(null)} upload={upload} onSaved={(m) => { setEdit(null); after(m); }} />}
@@ -116,6 +113,67 @@ function ResourceModal({ item, onClose, onSaved, upload }) {
         <Field id="dk-a" label="Who is it for?" hint="Leave empty for everyone. Or type words such as hr, sales, engineer, designer, separated by commas: only people whose designation or department has one of them will see it. Use hr for the HR team." error={errors.audience}><input className="input" id="dk-a" value={f.audience} maxLength={200} placeholder="Everyone" onChange={set("audience")} /></Field>
         <Field id="dk-o" label="Order" hint="Smaller numbers come first. The official items use 10 to 70." error={errors.sortOrder}><input className="input" id="dk-o" type="number" value={f.sortOrder} onChange={set("sortOrder")} /></Field>
         <label className="check"><input type="checkbox" checked={f.published} onChange={set("published")} /> Published (visible to all employees)</label>
+      </div>
+      <div className="modal-f"><button type="button" className="btn glass" onClick={onClose} disabled={busy}>Cancel</button><button type="button" className="btn primary" onClick={save} disabled={busy}>{busy ? "Saving…" : "Save"}</button></div>
+    </Modal>
+  );
+}
+
+function People({ onChanged }) {
+  const toast = useToast();
+  const [rows, setRows] = useState(null), [q, setQ] = useState(""), [edit, setEdit] = useState(null), [busy, setBusy] = useState(false);
+  const load = useCallback(async () => { const r = await api("GET", "/api/digital-kit/admin/employees"); if (r.ok) setRows(r.data); else toast(apiMsg(r)); }, [toast]);
+  useEffect(() => { load(); }, [load]);
+  const without = (rows || []).filter((r) => !r.hasKit).length;
+  const init = async () => { setBusy(true); const r = await api("POST", "/api/digital-kit/admin/init"); setBusy(false); if (!r.ok) return toast(apiMsg(r)); toast(r.data.created ? `Created ${r.data.created} kit${r.data.created === 1 ? "" : "s"}.` : "Everyone already has a kit."); load(); };
+  const list = (rows || []).filter((r) => !q.trim() || `${r.name} ${r.email} ${r.empNo}`.toLowerCase().includes(q.trim().toLowerCase()));
+  return (
+    <>
+      <div className="card">
+        <div className="card-h"><h3>People</h3>{rows && <span className="muted">{rows.length - without} of {rows.length} have a kit{without ? `, ${without} without` : ""}</span>}</div>
+        <div className="filters">
+          <input className="input grow" type="search" placeholder="Search name, email or employee number" aria-label="Search people" value={q} onChange={(e) => setQ(e.target.value)} />
+          {without > 0 && <button type="button" className="btn glass sm" disabled={busy} onClick={init}>Create missing kits</button>}
+        </div>
+        <div className="tbl-wrap"><table>
+          <thead><tr><th>Employee</th><th>Designation</th><th>Phone</th><th>Kit</th><th>Missing</th><th aria-label="Actions" /></tr></thead>
+          <tbody>
+            {rows === null ? <TableSkeletonRow cols={6} />
+              : list.length ? list.map((r) => (
+                <tr key={r.id}>
+                  <td><b>{r.name}</b><div className="muted" style={{ fontSize: 12.5 }}>{r.email}{r.empNo ? ` · ${r.empNo}` : ""}</div></td>
+                  <td>{r.title || <span className="muted">—</span>}{r.overrides.title && <span className="dk-tag">set by HR</span>}</td>
+                  <td>{r.phone || <span className="muted">—</span>}</td>
+                  <td><Pill tone={r.hasKit ? "ok" : "warn"}>{r.hasKit ? "Ready" : "Not created"}</Pill></td>
+                  <td>{r.missing.length ? <Pill tone="warn">{r.missing.join(", ")}</Pill> : <span className="muted">Complete</span>}</td>
+                  <td style={{ textAlign: "right" }}><button type="button" className="btn glass sm" onClick={() => setEdit(r)}>Edit details</button></td>
+                </tr>)) : <tr><td colSpan="6"><div className="empty">No one matches.</div></td></tr>}
+          </tbody></table></div>
+      </div>
+      {edit && <PersonModal person={edit} onClose={() => setEdit(null)} onSaved={() => { setEdit(null); toast("Saved."); load(); onChanged && onChanged(); }} />}
+    </>
+  );
+}
+
+function PersonModal({ person, onClose, onSaved }) {
+  const toast = useToast();
+  const [f, setF] = useState({ ...person.overrides }), [errors, setErrors] = useState({}), [busy, setBusy] = useState(false);
+  const set = (k) => (e) => setF({ ...f, [k]: e.target.value });
+  const save = async () => {
+    setBusy(true); const r = await api("PUT", `/api/digital-kit/admin/employees/${person.id}`, f); setBusy(false);
+    if (r.ok) return onSaved();
+    if (r.status === 400 && r.data && r.data.errors) return setErrors(r.data.errors);
+    toast(apiMsg(r));
+  };
+  return (
+    <Modal onClose={busy ? () => {} : onClose}>
+      <div className="card-h"><h3>Details for {person.name}</h3></div>
+      <div className="card-b form">
+        <p className="muted dk-hint" style={{ margin: 0 }}>These are used in this person's signature, card, badge and LinkedIn kit instead of what is on their record. Leave a box empty to use the record.</p>
+        <Field id="pm-t" label="Designation"><input className="input" id="pm-t" value={f.title} maxLength={120} placeholder={person.title || "Not on record"} onChange={set("title")} /></Field>
+        <Field id="pm-p" label="Phone" error={errors.phone}><input className="input" id="pm-p" value={f.phone} maxLength={20} placeholder={person.phone || "Not on record"} onChange={set("phone")} /></Field>
+        <Field id="pm-l" label="Location"><input className="input" id="pm-l" value={f.location} maxLength={80} placeholder={person.location || "Not on record"} onChange={set("location")} /></Field>
+        <Field id="pm-h" label="LinkedIn headline" hint="Shown first in their LinkedIn kit."><input className="input" id="pm-h" value={f.linkedinHeadline} maxLength={220} onChange={set("linkedinHeadline")} /></Field>
       </div>
       <div className="modal-f"><button type="button" className="btn glass" onClick={onClose} disabled={busy}>Cancel</button><button type="button" className="btn primary" onClick={save} disabled={busy}>{busy ? "Saving…" : "Save"}</button></div>
     </Modal>

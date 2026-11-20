@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api, apiMsg } from "../../api.js";
 import Modal, { Field } from "../../components/Modal.jsx";
-import { Pill } from "../../components/ui.jsx";
+import { Pill, Skeleton } from "../../components/ui.jsx";
 import PhotoEditor from "../../components/PhotoEditor.jsx";
 import PersonAvatar from "../../components/PersonAvatar.jsx";
 import { useToast } from "../../components/toast.jsx";
 import { OCCASIONS, canvasToBlob, defaultsFor, loadImage, msgFor, renderPoster } from "./poster.js";
+import { BRAND } from "../../brand.js";
 
 const STEPS = ["Occasion", "Employee photo", "Template", "Customize", "Preview", "Send"];
 const THEMES = [["maroon", "Maroon", "Deep maroon with cream text."], ["light", "Warm light", "Warm ivory with maroon text."]];
@@ -59,7 +60,7 @@ export default function Wizard({ overview, start, onClose, onDone }) {
   /* ---- drawing ---- */
   const draw = useCallback(async (look = theme) => {
     if (!assets.current) {
-      const [dark, light, mark] = await Promise.all(["/wohlig-logo-dark.svg", "/wohlig-logo.svg", "/google-cloud-mark.png"].map((u) => loadImage(u).catch(() => null)));
+      const [dark, light, mark] = await Promise.all([BRAND.logos.dark, BRAND.logos.light, "/google-cloud-mark.png"].map((u) => loadImage(u).catch(() => null)));
       assets.current = { logos: { dark, light }, mark };
     }
     const img = photo ? await loadImage(photo.url).catch(() => null) : null;
@@ -246,7 +247,7 @@ export default function Wizard({ overview, start, onClose, onDone }) {
         {step === 4 && (
           <div style={{ display: "grid", gap: 18 }}>
             <p style={{ margin: 0, color: "var(--ink-dim)" }}>This is exactly what everyone will receive.</p>
-            <div className="cel-preview">{poster ? <img src={poster.url} alt={`${OCCASIONS[occasion].name} poster for ${f.name}`} /> : <div className="empty">{busy ? "Drawing the poster…" : "No poster yet."}</div>}</div>
+            <div className="cel-preview">{poster ? <img src={poster.url} alt={`${OCCASIONS[occasion].name} poster for ${f.name}`} /> : busy ? <Skeleton className="aspect-[4/5] w-full rounded-card" /> : <div className="empty">No poster yet.</div>}</div>
           </div>)}
 
         {step === 5 && (

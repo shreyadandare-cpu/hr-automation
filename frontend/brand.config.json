@@ -1,0 +1,121 @@
+{
+  "$comment": "The one place for the brand. The interface (frontend/src/brand.js) and the server (backend/src/brand.js) both read this file. To use the portal for another company or product, change the values here and the logo files named under logos (in frontend/public/), then rebuild. Colours must be 6-digit hex. Fonts are loaded from Google Fonts by fonts.url.",
+  "product": {
+    "name": "Wohlig One",
+    "short": "One",
+    "headline": "Your workday, made",
+    "headlineAccent": "wohlig.",
+    "lede": "One secure place for everyone at Wohlig, with your attendance, leave, pay and more.",
+    "motto": "Rooted in warmth. Built for what's next.",
+    "signInNote": "Protected by your Wohlig Google account"
+  },
+  "company": {
+    "name": "Wohlig",
+    "legalName": "Wohlig Transformations Private Limited",
+    "legalNameShort": "Wohlig Transformations Pvt Ltd",
+    "emailDomain": "wohlig.com",
+    "website": "https://wohlig.com"
+  },
+  "logos": {
+    "light": "/wohlig-logo.svg",
+    "dark": "/wohlig-logo-dark.svg",
+    "mark": "/wohlig-smile-mark.svg"
+  },
+  "colors": {
+    "maroon": "#800d35",
+    "maroonDeep": "#5c0926",
+    "orange": "#f7781d",
+    "ivory": "#fff7e9",
+    "beige": "#ead9c2",
+    "terracotta": "#c85f44",
+    "olive": "#76775a",
+    "ink": "#2e1a1f",
+    "muted": "#6b5654",
+    "faint": "#7a645f",
+    "line": "#e9d9c3",
+    "surface": "#fffdf8",
+    "field": "#fbf3e6"
+  },
+  "fonts": {
+    "display": "Fraunces",
+    "body": "Lato",
+    "url": "https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300..700;1,9..144,300..700&family=Lato:wght@400;700&display=swap"
+  },
+  "festivalLook": {
+    "daysBefore": 2,
+    "$comment": "The sign-in page and the app take a festival's look from this many days before each festival date in the festivals table, through the day itself. HR can turn it off on the Festival wishes page. Each festival below sets its three colours (a, b, c: used for the top bar ribbon, the festival chip and the celebration), its celebration (lanterns, colours, snow, crescents, gulal, dandiya, sparks or confetti; see components/FestivalLook.jsx) and its greeting. A festival not listed uses default.",
+    "default": {
+      "colors": [
+        "#f7781d",
+        "#c85f44",
+        "#800d35"
+      ],
+      "burst": "confetti"
+    },
+    "festivals": {
+      "diwali": {
+        "colors": [
+          "#f2b33d",
+          "#f7781d",
+          "#c8302e"
+        ],
+        "burst": "lanterns",
+        "greeting": "Happy Diwali"
+      },
+      "holi": {
+        "colors": [
+          "#e0367f",
+          "#2fa7c4",
+          "#f2b33d"
+        ],
+        "burst": "colours",
+        "greeting": "Happy Holi"
+      },
+      "christmas": {
+        "colors": [
+          "#2f7d4f",
+          "#c8302e",
+          "#e8c36a"
+        ],
+        "burst": "snow",
+        "greeting": "Merry Christmas"
+      },
+      "eid-ul-fitr": {
+        "colors": [
+          "#1f7a6b",
+          "#e8c36a",
+          "#2e5d8a"
+        ],
+        "burst": "crescents",
+        "greeting": "Eid Mubarak"
+      },
+      "eid-ul-adha": {
+        "colors": [
+          "#1f7a6b",
+          "#e8c36a",
+          "#2e5d8a"
+        ],
+        "burst": "crescents",
+        "greeting": "Eid Mubarak"
+      },
+      "ganesh-chaturthi": {
+        "colors": [
+          "#f7781d",
+          "#e0a32e",
+          "#b3263a"
+        ],
+        "burst": "gulal",
+        "greeting": "Ganpati Bappa Morya"
+      },
+      "navratri": {
+        "colors": [
+          "#e0367f",
+          "#f2b33d",
+          "#2f7d4f"
+        ],
+        "burst": "dandiya",
+        "greeting": "Happy Navratri"
+      }
+    }
+  }
+}

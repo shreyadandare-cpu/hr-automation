@@ -2,6 +2,8 @@ import express from "express";
 import { pool } from "./db.js";
 import { mailConfigured, sendMail } from "./mail.js";
 import { mailSkipped } from "./notify.js";
+import { BRAND } from "./brand.js";
+import { canAll } from "./access.js";
 
 /*
  * Festival Wishes: the list of festivals and when each next falls, for everyone who is signed in. The greeting images themselves
@@ -13,6 +15,74 @@ const wrap = (fn) => (req, res, next) => fn(req, res, next).catch(next);
 const ist = () => new Date(Date.now() + 330 * 60000).toISOString().slice(0, 10);
 const utc = (d) => Date.parse(`${d}T00:00:00Z`);
 const daysBetween = (from, to) => Math.round((utc(to) - utc(from)) / 86400000);
+
+/*
+ * The festival look: from a few days before a festival date (brand.config.json festivalLook.daysBefore) through the day itself,
+ * the sign-in page and the dashboard take that festival's colours and artwork. Public (the sign-in page asks before anyone is
+ * signed in) and harmless: it says only which festival is near. HR can switch it off (settings key festival_look = off).
+ * ?preview=<slug> shows a festival's look on any day, so HR can see it before the date.
+ */
+export async function festivalNow(preview = "") {
+  const { rows: [setting] } = await pool.query("SELECT value FROM settings WHERE key='festival_look'");
+  const on = !setting || setting.value !== "off";
+  if (preview) {
+    const { rows: [f] } = await pool.query("SELECT slug, name FROM festivals WHERE slug=$1", [String(preview)]);
+    return { on, festival: f ? { slug: f.slug, name: f.name, day: ist(), preview: true } : null };
+  }
+  if (!on) return { on, festival: null };
+  const before = Math.max(0, Math.min(14, Number(BRAND.festivalLook && BRAND.festivalLook.daysBefore) || 0));
+  const today = ist();
+  const { rows: [f] } = await pool.query(
+    `SELECT f.slug, f.name, to_char(d.day,'YYYY-MM-DD') AS day FROM festival_dates d JOIN festivals f ON f.slug = d.slug
+     WHERE f.active AND d.day BETWEEN $1::date AND $1::date + $2::int ORDER BY d.day LIMIT 1`, [today, before]);
+  return { on, festival: f ? { slug: f.slug, name: f.name, day: f.day, inDays: daysBetween(today, f.day) } : null };
+}
+export const festivalLookRouter = express.Router();
+festivalLookRouter.get("/festival-look", wrap(async (req, res) => {
+  res.set("Cache-Control", "public, max-age=300");
+  res.json(await festivalNow(typeof req.query.preview === "string" ? req.query.preview.slice(0, 40) : ""));
+}));
+/* "Festivals" (festivals.manage) switches the festival look on or off. */
+festivalsRouter.put("/look", wrap(async (req, res) => {
+  if (!mayKeepFestivals(req, res)) return;
+  const on = (req.body || {}).on !== false;
+  await pool.query("INSERT INTO settings (key, value) VALUES ('festival_look', $1) ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value", [on ? "on" : "off"]);
+  res.json(await festivalNow());
+}));
+
+/*
+ * HR keeps the dates: a festival's look, banner and greeting appear only around a date listed here. Lunar festivals (Eid,
+ * Diwali, Holi...) move every year, and moon-sighted Eid can move by a day, so HR adds next year's dates and corrects one by
+ * removing it and adding the right day. A date may be from a year back to five years ahead.
+ */
+export function checkFestivalDay(day, today) {
+  if (typeof day !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(day) || Number.isNaN(utc(day)) || new Date(utc(day)).toISOString().slice(0, 10) !== day) return "Please choose a date.";
+  const away = daysBetween(today, day);
+  if (away < -366) return "Please choose a date from the last year or later.";
+  if (away > 5 * 366) return "Please choose a date in the next five years.";
+  return null;
+}
+/** Festivals and the festival look are kept by people with "Festivals" (festivals.manage), company-wide. */
+function mayKeepFestivals(req, res) {
+  if (!req.user) { res.status(401).json({ error: "Please sign in." }); return false; }
+  if (!canAll(req, "festivals.manage")) { res.status(403).json({ error: "You do not have access to this." }); return false; }
+  return true;
+}
+festivalsRouter.post("/:slug/dates", wrap(async (req, res) => {
+  if (!mayKeepFestivals(req, res)) return;
+  const day = (req.body || {}).day, problem = checkFestivalDay(day, ist());
+  if (problem) return res.status(400).json({ error: problem, errors: { day: problem } });
+  const { rows: [f] } = await pool.query("SELECT slug FROM festivals WHERE slug=$1", [req.params.slug]);
+  if (!f) return res.status(404).json({ error: "This festival is not on the list." });
+  await pool.query("INSERT INTO festival_dates (slug, day) VALUES ($1, $2) ON CONFLICT DO NOTHING", [f.slug, day]);
+  res.json({ ok: true });
+}));
+festivalsRouter.delete("/:slug/dates/:day", wrap(async (req, res) => {
+  if (!mayKeepFestivals(req, res)) return;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(req.params.day)) return res.status(400).json({ error: "Please choose a date." });
+  await pool.query("DELETE FROM festival_dates WHERE slug=$1 AND day=$2", [req.params.slug, req.params.day]);
+  res.json({ ok: true });
+}));
 
 festivalsRouter.get("/", wrap(async (_req, res) => {
   const today = ist();

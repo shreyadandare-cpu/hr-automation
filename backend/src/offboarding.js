@@ -1,9 +1,10 @@
 import express from "express";
 import L from "../../frontend/leave-rules.cjs";
 import { pool } from "./db.js";
-import { requireHr } from "./auth.js";
+import { needAll, invalidateTree } from "./access.js";
 import { TOOL_NAMES, removeAccess } from "./connectors.js";
 import { computeClearance, inMonthEndWindow, inr, latestClearance, leaveSettlement, money, saveClearance } from "./clearance.js";
+import { PRODUCT } from "./brand.js";
 
 // Tools offboarding removes for now: Claude only. Add ids from connectors.js (gws, gemini, github, gcp) to bring others back.
 const TOOLS = ["claude"];
@@ -92,6 +93,7 @@ async function settle(db, id) {
   await db.query("UPDATE offboardings SET status=$2, completed_at=$3 WHERE id=$1", [id, next, allDone ? new Date() : null]);
   if (allDone) {
     await db.query("UPDATE employees SET status='offboarded' WHERE lower(work_email)=$1", [o[0].work_email.toLowerCase()]);
+    invalidateTree();
     // Someone who has left is no longer on any project: their current allocations end, and stay in the history.
     await db.query(`UPDATE employee_project_allocations SET status='Ended', end_date=CURRENT_DATE, end_reason='Left the company'
       WHERE status='Active' AND employee_id=(SELECT id FROM employees WHERE lower(work_email)=$1)`, [o[0].work_email.toLowerCase()]);
@@ -130,6 +132,7 @@ export async function runRemoval(id) {
   const o = rows[0];
   try {
     await pool.query("UPDATE employees SET status='offboarding' WHERE lower(work_email)=$1", [o.work_email.toLowerCase()]);
+    invalidateTree();
     // Their Wohlig One login goes too (signing them out), unless they are the last HR account.
     const lc = o.work_email.toLowerCase();
     const { rows: hrLeft } = await pool.query("SELECT count(*)::int AS n FROM users WHERE role='hr' AND lower(email)<>$1", [lc]);
@@ -137,7 +140,7 @@ export async function runRemoval(id) {
       "DELETE FROM users WHERE lower(email)=$1 AND (role<>'hr' OR $2::int > 0)", [lc, hrLeft[0].n]);
     if (gone) {
       await pool.query("DELETE FROM sessions WHERE lower(email)=$1", [lc]);
-      await audit(pool, "Wohlig One login removed", o.work_email);
+      await audit(pool, `${PRODUCT} login removed`, o.work_email);
     }
     if (before[0] && before[0].status === "scheduled") await audit(pool, "Scheduled offboarding started: removing tool access", o.work_email);
     const { rows: tools } = await pool.query(
@@ -168,7 +171,7 @@ export async function runDue() {
 
 export function offboardingRouter(wrap) {
   const r = express.Router();
-  r.use("/api/offboarding", requireHr);   // offboarding is HR work
+  r.use("/api/offboarding", needAll("offboarding.manage"));   // "Run offboarding", company-wide
 
   r.get("/api/offboarding", wrap(async (_req, res) => {
     const { rows } = await pool.query("SELECT id FROM offboardings WHERE status<>'cancelled' ORDER BY created_at");
@@ -212,6 +215,14 @@ export function offboardingRouter(wrap) {
          RETURNING id`, [emp.work_email, lastDay, t[0] ? t[0].work_email : null, when === "later" ? "scheduled" : "in_progress"]);
       const id = o[0].id;
       for (const k of tools) await db.query("INSERT INTO offboarding_steps (offboarding_id, kind, key, label) VALUES ($1,'tool',$2,$3)", [id, k, `Remove access: ${TOOL_NAMES[k]}`]);
+      // Seats in tools tracked by hand (ChatGPT, Cursor...): a checklist item each, ticked once the seat is removed in the tool.
+      const { rows: seats } = await db.query(
+        `SELECT t.slug, t.name, t.vendor FROM tool_access a JOIN tools t ON t.slug = a.tool
+          WHERE lower(a.work_email)=$1 AND NOT t.connected AND lower(a.status) IN ('active','member','invited','pending') ORDER BY t.sort, t.name`, [emp.work_email.toLowerCase()]);
+      for (const st of seats) {
+        await db.query("INSERT INTO offboarding_steps (offboarding_id, kind, key, label) VALUES ($1,'task',$2,$3)",
+          [id, `seat-${st.slug}`, `Remove the ${st.name} seat${st.vendor ? ` (in ${st.vendor}'s admin)` : ""}`]);
+      }
       for (const [k, label] of TASKS) {
         const [done, detail] = checklist[k] || [false, null];
         await db.query("INSERT INTO offboarding_steps (offboarding_id, kind, key, label, status, detail, done_at) VALUES ($1,'task',$2,$3,$4,$5,$6)",
@@ -285,6 +296,11 @@ export function offboardingRouter(wrap) {
       if ((s.status === "done") === done && !detail) return [200, {}];
       await db.query("UPDATE offboarding_steps SET status=$2, done_at=$3, detail=$4 WHERE id=$1", [s.id, done ? "done" : "pending", done ? new Date() : null, done ? detail : null]);
       await audit(db, `Checklist: ${s.label}${done ? (detail ? ` (${detail})` : "") : " (unticked)"}`, s.work_email);
+      // A tool seat removed in the tool: it stops counting in Tools and their cost (and comes back if unticked).
+      if (s.key.startsWith("seat-")) {
+        await db.query("UPDATE tool_access SET status=$3, updated_by=$4, updated_at=now() WHERE lower(work_email)=lower($1) AND tool=$2",
+          [s.work_email, s.key.slice(5), done ? "removed" : "active", req.user.email.toLowerCase()]);
+      }
       await settle(db, s.offboarding_id);
       return [200, {}];
     }).then(async ([status, body]) => res.status(status).json(status < 400 ? await load(pool, Number(req.params.id)) : body));

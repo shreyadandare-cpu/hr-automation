@@ -1,6 +1,6 @@
 /* What the app knows about each person, worked out the same way the older pages do it. */
 export const NEW_FROM = "2026-09-15";   // joined on or after this date: onboarding is still open
-export const AVATAR_COLORS = ["#800d35", "#c85f44", "#d9630f", "#76775a", "#5c0926", "#9a5a07", "#6b4a52", "#8a5a44"];
+export const AVATAR_COLORS = ["#800d35", "#c85f44", "#d9630f", "#76775a", "#5c0926", "#9a5a07", "#6b5654", "#8a5a44"];
 
 export function deptOf(title) {
   const t = String(title || "").toLowerCase();
@@ -42,7 +42,7 @@ export function buildPerson(r, i, toolRows, offs) {
   const errors = {};
   for (const t of toolRows) if (String(t.email).toLowerCase() === String(r.email).toLowerCase()) { grants[t.tool] = t.status; if (t.status === "failed") errors[t.tool] = t.detail; }
   return {
-    id: r.id, no: r.no || "Not assigned", name: r.name, email: r.email, start, title, dept: deptOf(title), manager: r.manager || "",
+    id: r.id, no: r.no || "Not assigned", name: r.name, email: r.email, start, title, dept: deptOf(title), manager: r.manager || "", managerEmail: String(r.managerEmail || "").toLowerCase(),
     lastDay, intern: r.employmentType === "Intern", mailPlan: r.mailPlan || (isTop({ title }) ? "Business" : "Starter"), location: r.location || "", projects: r.projects || [], photoV: r.photoV || 0, status, grants, errors, color: AVATAR_COLORS[i % AVATAR_COLORS.length],
   };
 }
@@ -72,15 +72,16 @@ export const byEmployeeNo = (a, b) =>
   (a.status === "offboarded") - (b.status === "offboarded") || numOf(a) - numOf(b) || String(a.no).localeCompare(String(b.no)) || a.name.localeCompare(b.name);
 
 /** Everyone under a person: `direct` are the people who report to them, `team` is everyone below them at any depth.
- *  Found from the reporting managers (matched by name). Safe if the data ever contains a loop. */
+ *  Found from the reporting manager's email (the same tree the server uses for access), or the name for older data.
+ *  Safe if the data ever contains a loop. */
 export function teamUnder(people, email) {
   const lc = (x) => String(x || "").trim().toLowerCase();
   const active = (people || []).filter((p) => p.status !== "offboarded");
   const me = active.find((p) => lc(p.email) === lc(email));
   if (!me) return { direct: [], team: [] };
-  const under = (name) => active.filter((p) => lc(p.manager) === lc(name) && p.id !== me.id);
-  const direct = under(me.name).sort(byEmployeeNo), seen = new Set([me.id]), team = [];
-  const walk = (list) => list.forEach((p) => { if (seen.has(p.id)) return; seen.add(p.id); team.push(p); walk(under(p.name).sort(byEmployeeNo)); });
+  const under = (boss) => active.filter((p) => p.id !== me.id && (p.managerEmail ? p.managerEmail === lc(boss.email) : lc(p.manager) === lc(boss.name)));
+  const direct = under(me).sort(byEmployeeNo), seen = new Set([me.id]), team = [];
+  const walk = (list) => list.forEach((p) => { if (seen.has(p.id)) return; seen.add(p.id); team.push(p); walk(under(p).sort(byEmployeeNo)); });
   walk(direct);
   return { direct, team };
 }

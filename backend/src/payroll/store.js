@@ -12,6 +12,9 @@ const lc = (s) => String(s || "").toLowerCase();
 export const monthName = (p) => new Date(p + "-01T00:00:00").toLocaleDateString("en-IN", { month: "long", year: "numeric" });
 /** Runs async functions one after another and returns their results in order. */
 const inTurn = async (fns) => { const out = []; for (const f of fns) out.push(await f()); return out; };
+/** A pool (not one transaction's client) can run independent reads side by side; a transaction's client must take turns. */
+const isPool = (db) => db && typeof db.connect === "function" && "totalCount" in db;
+const together = (db, fns) => (isPool(db) ? Promise.all(fns.map((f) => f())) : inTurn(fns));
 const monthEnd = (p) => { const [y, m] = p.split("-").map(Number); return `${p}-${String(new Date(Date.UTC(y, m, 0)).getUTCDate()).padStart(2, "0")}`; };
 
 /** Department from the job title when none is recorded (same rule as frontend/src/lib/people.js). */
@@ -89,8 +92,8 @@ export async function buildLines(db, period, runId = null, existing = []) {
   const fy = fyOf(period);
   const emps = await staffFor(db, period);
   const kept = new Map(existing.map((i) => [lc(i.work_email), i]));
-  // One query at a time: `db` may be a single transaction's client, which can't run queries in parallel.
-  const [{ rows: claims }, { rows: lop }, { rows: hols }, structures, { rows: rules }, { rows: decls }, { rows: adjs }, { rows: banks }, paid] = await inTurn([
+  // Side by side on the pool; one at a time inside a transaction (its single client can't run queries in parallel).
+  const [{ rows: claims }, { rows: lop }, { rows: hols }, structures, { rows: rules }, { rows: decls }, { rows: adjs }, { rows: banks }, paid] = await together(db, [
     () => db.query(`SELECT * FROM reimbursements WHERE (status='payroll_pending' AND payroll_period <= $1) OR (status='in_payroll' AND payroll_run_id=$2) ORDER BY id`, [period, runId]),
     () => db.query("SELECT * FROM leave_requests WHERE status='approved' AND lop_days > 0 AND from_date < $1::date + interval '1 month'", [period + "-01"]),
     () => db.query("SELECT day FROM holidays"),

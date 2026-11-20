@@ -1,10 +1,11 @@
 import express from "express";
 import L from "../../frontend/leave-rules.cjs";
 import { pool } from "./db.js";
-import { requireHr } from "./auth.js";
+import { needAll } from "./access.js";
 import { publicUrl } from "./mail.js";
 import { sendEmail } from "./notify.js";
 import { hrList } from "./leave-mail.js";
+import { COMPANY_LEGAL, MAROON, PRODUCT, SIGN_OFF } from "./brand.js";
 
 /*
  * Daily leave digest: one email to each HR person, every working morning, listing everyone on approved leave today,
@@ -76,8 +77,8 @@ export function renderDigest(d) {
     n ? `${n} ${n === 1 ? "person is" : "people are"} on leave today:` : "No one is on leave today.", "",
     ...d.people.map((p) => `• ${p.name}${p.title ? ` (${p.title})` : ""}: ${p.leaves.map(leaveText).join("; ")}${p.back !== d.day ? `. Back on ${short(p.back)}` : ""}`),
     ...(d.waiting ? ["", `${d.waiting} leave request${d.waiting === 1 ? "" : "s"} for today ${d.waiting === 1 ? "is" : "are"} still waiting for approval.`] : []),
-    "", `Open Leave in Wohlig One: ${link}`,
-    "", "Regards,", "Wohlig One", "WOHLIG TRANSFORMATIONS PRIVATE LIMITED",
+    "", `Open Leave in ${PRODUCT}: ${link}`,
+    "", "Regards,", PRODUCT, COMPANY_LEGAL.toUpperCase(),
   ].join("\n");
   const row = (p) => `
     <tr><td style="padding:14px 0;border-top:1px solid #f1e4d0;vertical-align:top;width:56px">
@@ -92,7 +93,7 @@ export function renderDigest(d) {
         ${p.back !== d.day ? `Back on<br><b style="color:#2a1016">${esc(short(p.back))}</b>` : `<b style="color:#9a5a07">Half day</b>`}</td></tr>`;
   const html = `<!doctype html><html><body style="margin:0;background:#fff7e9;padding:24px 12px">
   <div style="max-width:600px;margin:0 auto;background:#ffffff;border-radius:14px;overflow:hidden;border:1px solid #eadfcf">
-    <div style="background:#800d35;padding:30px 32px">
+    <div style="background:${MAROON};padding:30px 32px">
       <div style="font:600 13px/1.4 Arial,Helvetica,sans-serif;letter-spacing:.18em;color:#f3dcc6">DAILY LEAVE DIGEST</div>
       <div style="font:600 20px/1.4 Arial,Helvetica,sans-serif;letter-spacing:.06em;color:#ffffff;margin-top:6px">${esc(longDay(d.day).toUpperCase())}</div>
     </div>
@@ -101,9 +102,9 @@ export function renderDigest(d) {
       <div style="font:14px/1.5 Arial,Helvetica,sans-serif;color:#8a7a78;margin-top:4px">${n ? "Approved leave covering today." : "No approved leave covers today."}</div>
       ${n ? `<table role="presentation" cellpadding="0" cellspacing="0" style="width:100%;margin-top:16px;border-collapse:collapse">${d.people.map(row).join("")}</table>` : ""}
       ${d.waiting ? `<div style="margin-top:12px;padding:12px 14px;border-radius:10px;background:#fdf1dc;font:13.5px/1.5 Arial,Helvetica,sans-serif;color:#7a4705">${d.waiting} leave request${d.waiting === 1 ? "" : "s"} for today ${d.waiting === 1 ? "is" : "are"} still waiting for approval.</div>` : ""}
-      <div style="margin:22px 0 18px"><a href="${esc(link)}" style="display:inline-block;background:#800d35;color:#ffffff;text-decoration:none;font:600 14px/1 Arial,Helvetica,sans-serif;padding:12px 20px;border-radius:999px">Open Leave in Wohlig One</a></div>
+      <div style="margin:22px 0 18px"><a href="${esc(link)}" style="display:inline-block;background:${MAROON};color:#ffffff;text-decoration:none;font:600 14px/1 Arial,Helvetica,sans-serif;padding:12px 20px;border-radius:999px">Open Leave in ${PRODUCT}</a></div>
     </div>
-    <div style="padding:16px 32px 22px;border-top:1px solid #f1e4d0;font:12px/1.5 Arial,Helvetica,sans-serif;color:#8a7a78">Wohlig One · WOHLIG TRANSFORMATIONS PRIVATE LIMITED</div>
+    <div style="padding:16px 32px 22px;border-top:1px solid #f1e4d0;font:12px/1.5 Arial,Helvetica,sans-serif;color:#8a7a78">${PRODUCT} · ${COMPANY_LEGAL.toUpperCase()}</div>
   </div></body></html>`;
   return { subject, text, html };
 }
@@ -131,10 +132,10 @@ export async function runLeaveDigest(now = new Date()) {
   return { day, onLeave: d.people.length, sentTo: to.length };
 }
 
-/* HR can look at today's (or any day's) digest in the browser, or email it to themselves to check it. */
+/* People with "Manage leave settings" (leave.manage) can look at today's (or any day's) digest in the browser, or email it to themselves to check it. */
 export function leaveDigestRouter(wrap) {
   const r = express.Router();
-  r.use("/api/leave/digest", requireHr);
+  r.use("/api/leave/digest", needAll("leave.manage"));
   const dayOf = (q) => (L.validDate(String(q || "")) ? String(q) : istDay());
   r.get("/api/leave/digest", wrap(async (req, res) => {
     const d = await digestFor(dayOf(req.query.date));

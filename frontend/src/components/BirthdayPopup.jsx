@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { api } from "../api.js";
+import { api, apiShared } from "../api.js";
 import { useAuth } from "../auth.jsx";
 import Modal from "./Modal.jsx";
 import PersonAvatar from "./PersonAvatar.jsx";
@@ -26,7 +26,7 @@ export default function BirthdayPopup() {
 
   useEffect(() => {
     let live = true;
-    api("GET", "/api/leave/today").then((r) => {
+    apiShared("/api/leave/today").then((r) => {
       if (!live || !r.ok) return;
       const d = r.data, todays = (d.birthdays || []).filter((b) => b.date === d.today);
       const mine = todays.find((b) => lc(b.email) === lc(user.email)), others = todays.filter((b) => lc(b.email) !== lc(user.email));

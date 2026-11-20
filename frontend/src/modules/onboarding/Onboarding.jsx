@@ -3,9 +3,10 @@ import { useNavigate } from "react-router-dom";
 import { api, apiMsg } from "../../api.js";
 import { useAuth } from "../../auth.jsx";
 import { useData } from "../../data.jsx";
-import { Callout, SectionHead } from "../../components/ui.jsx";
+import { Callout, SectionHead, pill, PageSkeleton } from "../../components/ui.jsx";
+import BackButton from "../../components/BackButton.jsx";
 import { useToast } from "../../components/toast.jsx";
-import { ACCESS_HELP, ACCESS_LABEL, DEPTS, DOMAIN, DocRows, ObTabs, ON_TOOLS, V, docCount, fdate, groupDocs, hrConfirm, makeWorkEmail, nameSplit } from "./shared.jsx";
+import { ACCESS_HELP, ACCESS_LABEL, DEPTS, DOMAIN, DocRows, ON_TOOLS, V, docCount, fdate, groupDocs, hrConfirm, makeWorkEmail, nameSplit } from "./shared.jsx";
 
 const OB_STEPS = ["Details and work email", "Create login", "Tools and review"];
 const OB_DRAFT_KEY = "hr_ob_draft";
@@ -73,7 +74,7 @@ function WorkEmailCard({ ob, taken, onCreate }) {
   const label = { active: "Active in Google Workspace", simulated: "Created (simulated)", existing: "Already in the employee list", failed: "Google could not create it" }[w.google] || w.google;
   const ok = w.google !== "failed";
   return (
-    <div className="card"><div className="card-h"><h3>Work email</h3><span className={`pill ${ok ? "p-ok" : "p-bad"}`}>{label}</span></div>
+    <div className="card"><div className="card-h"><h3>Work email</h3><span className={pill(ok ? "p-ok" : "p-bad")}>{label}</span></div>
       <div className="card-b" style={{ display: "flex", flexDirection: "column", gap: 14 }}>
         <div className="input mono" style={{ background: "var(--paper-2)", fontSize: 18 }}>{w.email}</div>
         {w.google === "failed" ? <Callout>{w.error || "Google returned an error."} The address is reserved for this person. Retry when the problem is fixed.</Callout>
@@ -88,7 +89,9 @@ function WorkEmailCard({ ob, taken, onCreate }) {
 }
 
 export default function Onboarding() {
-  const { isHr } = useAuth();
+  const { canAll, superAdmin } = useAuth();
+  const mayRun = canAll("onboarding.manage");    // "Run onboarding", company-wide
+  const mayLogin = canAll("users.manage");     // creating the login and sending the invitation
   const { people, records, docs, reload, claudeMode } = useData();
   const toast = useToast(), nav = useNavigate();
   const [ob, setOb] = useState(newOb);
@@ -97,14 +100,14 @@ export default function Onboarding() {
   const [focusTick, setFocusTick] = useState(0);
   const touched = useRef(false);
   const [nextNo, setNextNo] = useState("");   // the next employee ID in the series
-  useEffect(() => { if (isHr) api("GET", "/api/onboarding/next-employee-no").then((r) => { if (r.ok && r.data && r.data.empNo) setNextNo(r.data.empNo); }).catch(() => {}); }, [isHr, ob.work]);
+  useEffect(() => { if (mayRun) api("GET", "/api/onboarding/next-employee-no").then((r) => { if (r.ok && r.data && r.data.empNo) setNextNo(r.data.empNo); }).catch(() => {}); }, [mayRun, ob.work]);
   useEffect(() => { if (nextNo && !ob.d.empNo && !ob.work) setOb((o) => (o.d.empNo || o.work ? o : { ...o, d: { ...o.d, empNo: nextNo } })); }, [nextNo, ob.d.empNo, ob.work]);
   const patch = (p) => setOb((o) => ({ ...o, ...p }));
   const setD = (k, v) => setOb((o) => ({ ...o, d: { ...o.d, [k]: v } }));
 
   // A saved draft (server first, then this browser) fills in the details when the page opens.
   useEffect(() => {
-    if (!isHr) return;
+    if (!mayRun) return;
     let live = true;
     (async () => {
       let saved = null;
@@ -113,7 +116,7 @@ export default function Onboarding() {
       if (live && saved && !touched.current) { const { empNo: _old, ...rest } = saved; setOb((o) => ({ ...o, d: { ...o.d, ...rest } })); setRestored(true); }   // an old draft never brings back an old employee ID
     })();
     return () => { live = false; };
-  }, [isHr]);
+  }, [mayRun]);
   useEffect(() => { reload(); }, [reload]);
   useEffect(() => {
     if (!focusTick) return;
@@ -121,8 +124,8 @@ export default function Onboarding() {
     if (el) { el.scrollIntoView({ block: "center" }); const i = el.closest(".field")?.querySelector("input,textarea"); if (i) i.focus(); }
   }, [focusTick]);
 
-  if (!isHr) return <section className="section"><SectionHead eyebrow="Onboarding" title="Add a new" accent="joiner." /><div className="empty">Only HR can onboard people.</div></section>;
-  if (!people) return <section className="section"><div className="empty">Loading…</div></section>;
+  if (!mayRun) return <section className="section"><SectionHead eyebrow="Onboarding" title="Add a new joiner" /><div className="empty">Only the people who run onboarding can add a new joiner.</div></section>;
+  if (!people) return <PageSkeleton />;
 
   const lc = (s) => String(s || "").toLowerCase();
   const recOf = (email) => (records || []).find((r) => lc(r.email) === lc(email));
@@ -131,7 +134,7 @@ export default function Onboarding() {
   const picked = ob.email && people.find((x) => lc(x.email) === lc(ob.email));
   const taken = (x) => people.some((p) => lc(p.email) === lc(x));
   const { d } = ob, er = ob.errors;
-  const role = ob.role || (d.dept === "HR" ? "hr" : "employee");
+  const role = ob.role || (d.dept === "HR" && superAdmin ? "hr" : "employee");   // only a super admin gives the HR role
 
   const fetchPerson = (e) => {
     const { first, last } = nameSplit(e.name), rec = recOf(e.email) || {};
@@ -264,8 +267,8 @@ export default function Onboarding() {
 
   return (
     <section className="section">
-      <ObTabs cur="onboard" />
-      <SectionHead eyebrow="Onboarding" title="Add a new" accent="joiner." sub="HR enters the details and the work email is created in Google. HR then creates the login, and the employee uploads their own documents later." />
+      <BackButton to="/app/onboarding/progress" label="Onboarding" />
+      <SectionHead eyebrow="Onboarding" title="Add a new joiner" sub="HR enters the details and the work email is created in Google. HR then creates the login, and the employee uploads their own documents later." />
       <Stepper step={ob.step} />
       {restored && <Callout>A saved draft was restored. It holds name, contact and job details only. <button type="button" className="btn link" onClick={cancel}>Start over</button></Callout>}
       <form className="grid" style={{ gap: 22 }} noValidate onSubmit={submit}>
@@ -299,12 +302,12 @@ export default function Onboarding() {
           <DocsCard person={picked} docs={docs} />
         </>}
         {ob.step === 2 && w && (
-          <div className="card"><div className="card-h"><h3>Login for the app</h3><span className="muted">Only HR can create it</span></div>
+          <div className="card"><div className="card-h"><h3>Login for the app</h3><span className="muted">{mayLogin ? "Created here, with the default password" : "Created by the people who manage logins"}</span></div>
             <div className="card-b" style={{ display: "flex", flexDirection: "column", gap: 14 }}>
               <dl className="rv"><div><dt>Signs in with</dt><dd><span className="mono">{w.email}</span></dd></div><div><dt>App access</dt><dd>{ACCESS_LABEL[(l && l.role) || role] || "Employee"}</dd></div></dl>
               {!l && <div className="field"><label htmlFor="ob-role">App access level</label>
-                <select className="input" id="ob-role" style={{ maxWidth: 320 }} value={role} onChange={(e) => patch({ role: e.target.value })}>{["employee", "hr"].map((r) => <option key={r} value={r}>{ACCESS_LABEL[r]}</option>)}</select>
-                <span className="hint">{ACCESS_HELP[role]}{d.dept === "HR" ? " This person is joining HR, so HR rights are preselected." : ""}</span></div>}
+                <select className="input" id="ob-role" style={{ maxWidth: 320 }} value={role} onChange={(e) => patch({ role: e.target.value })}>{(superAdmin ? ["employee", "hr"] : ["employee"]).map((r) => <option key={r} value={r}>{ACCESS_LABEL[r]}</option>)}</select>
+                <span className="hint">{ACCESS_HELP[role]}{d.dept === "HR" && superAdmin ? " This person is joining HR, so HR rights are preselected." : ""}</span></div>}
               <p style={{ margin: 0, color: "var(--ink-dim)" }}>The employee signs in with their work email and the default password, then uploads their own documents. Details from their resume will be added later.</p>
               {!l && <label className="row" style={{ gap: 8, alignItems: "flex-start" }}>
                 <input type="checkbox" checked={ob.sendInvite !== false} onChange={(e) => patch({ sendInvite: e.target.checked })} style={{ marginTop: 4 }} />
@@ -312,9 +315,10 @@ export default function Onboarding() {
               {l ? <>
                   <Callout>{l.existing ? "This person already has a login." : <>Login created{l.role === "hr" ? <> with <b>HR rights</b></> : ""}. Password: <b className="mono">{l.password || "the default password"}</b>. Tell them to change it on their Account page.</>}</Callout>
                   {l.invite && <Callout>{l.invite.mode === "email" ? <>Invitation emailed to <b>{l.invite.to}</b>. The link works for 30 minutes.</> : <>The invitation email could not be sent. Check the email settings, then press the button below to try again.</>}</Callout>}
-                  <div className="row"><button type="button" className="btn" disabled={ob.busy} onClick={resendInvite}>{ob.busy ? "Sending…" : l.invite ? "Resend invitation" : "Email invitation"}</button></div>
+                  {mayLogin && <div className="row"><button type="button" className="btn" disabled={ob.busy} onClick={resendInvite}>{ob.busy ? "Sending…" : l.invite ? "Resend invitation" : "Email invitation"}</button></div>}
                 </>
-                : <div className="row"><button type="button" className="btn primary" disabled={ob.busy} onClick={makeLogin}>{ob.busy ? "Creating…" : ob.sendInvite !== false ? "Create login and send invite" : "Create login"}</button></div>}
+                : mayLogin ? <div className="row"><button type="button" className="btn primary" disabled={ob.busy} onClick={makeLogin}>{ob.busy ? "Creating…" : ob.sendInvite !== false ? "Create login and send invite" : "Create login"}</button></div>
+                : <Callout>Please ask someone who manages logins to create the login for <b className="mono">{w.email}</b>, then open this joiner again to continue.</Callout>}
             </div></div>
         )}
         {ob.step === 3 && w && <>

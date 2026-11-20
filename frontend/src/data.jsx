@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
-import { api } from "./api.js";
+import { api, apiShared } from "./api.js";
 import { useAuth } from "./auth.jsx";
 import { buildPerson } from "./lib/people.js";
 
@@ -8,7 +8,9 @@ const DataContext = createContext(null);
 export const useData = () => useContext(DataContext);
 
 export function DataProvider({ children }) {
-  const { isHr } = useAuth();
+  const { canAll } = useAuth();
+  // The company-wide lists are fetched only by people who hold them for the whole company, so no one else gets a refusal.
+  const offboards = canAll("offboarding.manage"), onboards = canAll("onboarding.manage");
   const [roster, setRoster] = useState(null);
   const [tools, setTools] = useState([]);
   const [claudeMode, setClaudeMode] = useState("live");   // "simulated" = no Claude admin key: access is requested from the Claude admin instead
@@ -16,21 +18,22 @@ export function DataProvider({ children }) {
   const [docs, setDocs] = useState([]);
   const [profile, setProfile] = useState(null);
   const [leave, setLeave] = useState(null);
-  const [records, setRecords] = useState([]);   // HR only: personal details collected at onboarding
+  const [records, setRecords] = useState([]);   // onboarding.manage only: personal details collected at onboarding
 
+  // Each list is applied as soon as it arrives, so the page draws with the staff list and fills in the rest, rather than
+  // waiting for the slowest request. A failed request (server busy or offline) never leaves the page loading forever.
   const reload = useCallback(async () => {
-    const [r, t, o, d, p, rec, lv] = await Promise.all([
-      api("GET", "/api/roster"), api("GET", "/api/tool-access"), isHr ? api("GET", "/api/offboarding") : { ok: false }, api("GET", "/api/documents"), api("GET", "/api/profile"),
-      isHr ? api("GET", "/api/onboarding") : { ok: false }, api("GET", "/api/leave"),
+    const apply = (p, fn) => p.then((r) => { if (r && r.ok) fn(r.data); return r; });
+    await Promise.all([
+      api("GET", "/api/roster").then((r) => { setRoster(r.ok ? r.data : []); return r; }),
+      apply(api("GET", "/api/tool-access"), (d) => { setTools(d.rows); setClaudeMode(d.claudeMode); }),
+      offboards ? apply(api("GET", "/api/offboarding"), (d) => { if (Array.isArray(d)) setOffs(d); }) : null,
+      apply(api("GET", "/api/documents"), setDocs),
+      apply(api("GET", "/api/profile"), setProfile),
+      onboards ? apply(api("GET", "/api/onboarding"), setRecords) : null,
+      apply(apiShared("/api/leave"), setLeave),
     ]);
-    if (lv.ok) setLeave(lv.data);
-    if (rec.ok) setRecords(rec.data);
-    setRoster(r.ok ? r.data : []);
-    if (t.ok) { setTools(t.data.rows); setClaudeMode(t.data.claudeMode); }
-    if (o.ok && Array.isArray(o.data)) setOffs(o.data);
-    if (d.ok) setDocs(d.data);
-    if (p.ok) setProfile(p.data);
-  }, [isHr]);
+  }, [offboards, onboards]);
   const reloadLeave = useCallback(async () => { const r = await api("GET", "/api/leave"); if (r.ok) setLeave(r.data); return r; }, []);
   useEffect(() => { reload(); }, [reload]);
 

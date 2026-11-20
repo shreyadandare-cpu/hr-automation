@@ -3,7 +3,7 @@ import { api, apiMsg } from "../api.js";
 import { useAuth } from "../auth.jsx";
 import { useData } from "../data.jsx";
 import { useToast } from "../components/toast.jsx";
-import { Pill, SectionHead, Stat, shortDate } from "../components/ui.jsx";
+import { Pill, SectionHead, Stat, shortDate, ListSkeleton, TableSkeletonRow } from "../components/ui.jsx";
 import Pager, { Paged } from "../components/Pager.jsx";
 import Modal, { Field } from "../components/Modal.jsx";
 
@@ -109,7 +109,7 @@ function HistoryModal({ asset, onClose }) {
     <Modal onClose={onClose}>
       <div className="card-h" style={{ paddingTop: 24 }}><h3>History of {asset.tag}</h3></div>
       <div className="card-b">
-        {events === null ? <p className="muted">Loading…</p> : !events.length ? <p className="muted">Nothing recorded yet.</p> : (
+        {events === null ? <ListSkeleton rows={3} faces={false} /> : !events.length ? <p className="muted">Nothing recorded yet.</p> : (
           <ul style={{ listStyle: "none", margin: 0, padding: 0, display: "grid", gap: 10 }}>
             {events.map((e, i) => <li key={i}><b>{e.action}</b><div className="muted" style={{ fontSize: "12.5px" }}>{new Date(e.at).toLocaleString("en-IN", { day: "numeric", month: "short", year: "numeric", hour: "numeric", minute: "2-digit" })}{e.by ? ` · ${e.by}` : ""}</div></li>)}
           </ul>)}
@@ -120,7 +120,8 @@ function HistoryModal({ asset, onClose }) {
 }
 
 export default function Assets() {
-  const { user, itAdmin } = useAuth();
+  const { user, canAll } = useAuth();
+  const manages = canAll("assets.manage");
   const toast = useToast();
   const [d, setD] = useState(null);
   const [q, setQ] = useState(""), [cat, setCat] = useState(""), [st, setSt] = useState("");
@@ -129,7 +130,7 @@ export default function Assets() {
     const r = await api("GET", "/api/assets");
     if (r.ok) setD(r.data); else { toast(apiMsg(r)); setD({ categories: [], statuses: [], assets: [] }); }
   }, [toast]);
-  useEffect(() => { if (itAdmin) load(); }, [itAdmin, load]);
+  useEffect(() => { if (manages) load(); }, [manages, load]);
 
   const shown = useMemo(() => {
     const s = q.trim().toLowerCase();
@@ -137,14 +138,14 @@ export default function Assets() {
       && (!s || `${a.tag} ${a.name} ${a.serial} ${a.category} ${a.assignee ? a.assignee.name : ""}`.toLowerCase().includes(s)));
   }, [d, q, cat, st]);
 
-  if (!itAdmin) return <section className="section"><SectionHead eyebrow="IT" title="Company" accent="assets." /><div className="empty">Only IT admins and HR can see assets.</div></section>;
+  if (!manages) return <section className="section"><SectionHead eyebrow="IT" title="Assets" /><div className="empty">You do not have access to company assets. Please ask a super admin if you need it.</div></section>;
   const all = (d && d.assets) || [];
   const n = (s) => all.filter((a) => a.status === s).length;
   const close = () => setDlg(null);
 
   return (
     <section className="section">
-      <SectionHead eyebrow="IT" title="Company" accent="assets." sub="Laptops, phones and other equipment, and who has each one. Only IT admins and HR can see this page."
+      <SectionHead eyebrow="IT" title="Assets" sub="Laptops, phones and other equipment, and who has each one. Only IT admins and HR can see this page."
         actions={<button type="button" className="btn primary" onClick={() => setDlg({ kind: "add" })}>+ Add asset</button>} />
       <div className="rb-stats four" style={{ marginBottom: 18 }}>
         <Stat value={all.length} label="Total assets" /><Stat value={n("Assigned")} label="Assigned" /><Stat value={n("In stock")} label="In stock" /><Stat value={n("In repair")} label="In repair" />
@@ -159,7 +160,7 @@ export default function Assets() {
           <div className="tbl-wrap"><table className="alloc-table">
             <thead><tr><th>Tag</th><th>Asset</th><th>Serial</th><th>With</th><th>Status</th><th>Warranty</th><th></th></tr></thead>
             <tbody>
-              {d === null && <tr><td colSpan="7"><div className="empty">Loading…</div></td></tr>}
+              {d === null && <TableSkeletonRow cols={7} />}
               {d && !page.length && <tr><td colSpan="7"><div className="empty">{all.length ? "No assets match." : "No assets yet. Add the first one."}</div></td></tr>}
               {page.map((a) => (
                 <tr key={a.id}>

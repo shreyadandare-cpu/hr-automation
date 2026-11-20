@@ -42,7 +42,7 @@ attendance, payslips, reimbursements, the company feed and their Digital Kit (si
 | Server | Node 22 (Docker image), ES modules, Express 4, `pg` 8, `dotenv` |
 | Server libraries in use | `google-auth-library` (Workspace Admin SDK), `exceljs` (payroll Excel, tax import), `pdfkit` (payslip PDF) |
 | Database | PostgreSQL (shared Cloud SQL in practice; `postgres:16` for the optional local container) |
-| Interface | React 18, Vite 5, `react-router-dom` 6, plain CSS (no UI kit, no state library) |
+| Interface | React 18, Vite 5, `react-router-dom` 6, Tailwind CSS 4 (`@tailwindcss/vite`) with the Wohlig theme in one stylesheet (older hand-written rules are being moved to Tailwind classes in stages), `radix-ui` for unstyled behaviour (dialog, dropdown menu, popover, tabs, tooltip); no styled UI kit, no state library |
 | Email | SendGrid Web API over `fetch` |
 | Office connector | Node 20+, `node-zklib`, Windows batch and VBS launchers |
 | Tests | `node:test` plus two script-style flow tests |
@@ -80,15 +80,17 @@ In Docker, nginx decides who sees a page: it asks `GET /api/me` through `auth_re
 Values live in `backend/.env` (never committed). Names from [backend/.env.example](backend/.env.example):
 
 - Core: `PORT`, `DATABASE_URL`, `DB_SCHEMA`, `SEED_ROSTER`, `BACKGROUND_JOBS`, `PUBLIC_URL`, `FRONTEND_URL`, `ALLOWED_EMAIL_DOMAIN`
+- Speed: `DB_POOL_MAX` (database connections kept open, default 15), `DB_STATEMENT_TIMEOUT_MS` (longest one query may run, default 20000), `SLOW_REQUEST_MS` (log any /api request slower than this, default 400)
 - Accounts: `DEFAULT_PASSWORD`, `HR_ADMIN_EMAIL`, `HR_LEAVE_APPROVERS`, `ALLOW_PASSWORD_LOGIN`, `GOOGLE_OAUTH_CLIENT_ID`, `GOOGLE_OAUTH_CLIENT_SECRET`
 - Google Workspace: `GOOGLE_SERVICE_ACCOUNT_FILE`, `GOOGLE_ADMIN_EMAIL`, `GOOGLE_SKU_STARTER`, `GOOGLE_SKU_BUSINESS`, `GOOGLE_PRODUCT_ID`
 - Email: `SENDGRID_API_KEY`, `SENDGRID_EU`, `MAIL_FROM`, `MAIL_SKIP_RECIPIENTS`
 - Reimbursements: `REIMB_REMINDER_DAYS`, `REIMB_NO_RECEIPT_MAX`, `OCR_PROVIDER`
 - Claude access: `ANTHROPIC_ADMIN_KEY`, `ANTHROPIC_INVITE_ROLE`
-- Attendance: `ATTENDANCE_DEVICE_KEY`, `PORTAL_ATTENDANCE_SYNC`, `PORTAL_ATTENDANCE_SYNC_SECONDS`
+- Attendance: `ATTENDANCE_DEVICE_KEY`, `PORTAL_ATTENDANCE_SYNC`, `PORTAL_ATTENDANCE_SYNC_SECONDS`, `WEB_CLOCK_IN` (true lets everyone punch in and
+  out from the app; off by default, so the office machine stays the record)
 - AI (LinkedIn headline ideas in the Digital Kit): `GEMINI_API_KEY`, `GEMINI_MODEL`
 - Gmail Intelligence Engine (project emails to weekly report facts): `GMAIL_INTEL_ENABLED`, `GMAIL_COMPANY_DOMAIN`, `GMAIL_PUBSUB_TOPIC`, `GMAIL_PUSH_TOKEN`, `GMAIL_SYNC_MINUTES`, `ANTHROPIC_API_KEY` (a normal Claude key, separate from the admin key), `GMAIL_CLASSIFY_MODEL`, `GMAIL_EXTRACT_MODEL`, `GMAIL_PRICE_CLASSIFY`, `GMAIL_PRICE_EXTRACT`. It also reads `GOOGLE_SERVICE_ACCOUNT_FILE` and optional `OFFICE_LOCATION` (the work location saved when HR marks someone On-site, default Office)
-- Payroll: `PAYROLL_DATABASE_URL`, `PAYROLL_DB_SCHEMA`, `PAYROLL_REVIEWERS`, `PAYROLL_ENCRYPTION_KEY`, `PAYROLL_DEBIT_ACCOUNT`, `PAYROLL_DEBIT_BANK_CODE`, `PAYSLIP_AUTO`
+- Payroll: `PAYROLL_DATABASE_URL`, `PAYROLL_DB_SCHEMA`, `PAYROLL_REVIEWERS`, `FINANCE_VIEWERS` (the accountant: finance reports only), `NOTICE_PERIOD_DAYS` (default notice, 30), `PAYROLL_ENCRYPTION_KEY`, `PAYROLL_DEBIT_ACCOUNT`, `PAYROLL_DEBIT_BANK_CODE`, `PAYSLIP_AUTO`
 
 The code also reads these, which the example file does not list: `UPLOAD_DIR`, `MAIL_REPLY_TO`, `EMAIL_LINK_MINUTES`,
 `LEAVE_APPROVAL_LINK_HOURS`, `LEAVE_DIGEST_HOUR`, `LEAVE_DIGEST_SEND_EMPTY`, `LEAVE_DIGEST_EMAILS`, `LEAVE_HR_EMAILS`,
@@ -208,8 +210,17 @@ later `/api` route require sign-in. The pages router comes last. The JSON body l
 | [gmail-intel-routes.js](backend/src/gmail-intel-routes.js) | `/api/gmail-intel/*`, `/api/project-reports/*` | Mailbox list, sync, review queue and AI usage (HR); Pub/Sub push (token); weekly project reports with email (everyone sees their own projects, HR sees all) |
 | [assets.js](backend/src/assets.js) | `/api/assets` | Company assets; IT admins and HR |
 | [posts.js](backend/src/posts.js) | `/api/posts` | Company feed: posts, images, likes, comments, shares |
+| [engage.js](backend/src/engage.js), [engage-rules.js](backend/src/engage-rules.js) | `/api/polls`, `/api/praise`, `/api/articles`, `/api/apps`, `/api/requests/advance`, `/api/requests/attendance`, `/api/remote-today`, `/api/tax-declaration`, `/api/tax-declarations`, `/api/goals` | Polls (one vote each, totals only), praise between colleagues, HR articles, app links, and advance and attendance requests that HR approves or declines. The checking rules are in `engage-rules.js`, tested without a database |
+| [hr-tools.js](backend/src/hr-tools.js), [hr-tools-rules.js](backend/src/hr-tools-rules.js) | `/api/hr/probations`, `/api/tickets`, `/api/hr/exit-interviews`, `/api/hr/openings`, `/api/hr/candidates`, `/api/reviews`, `/api/review-cycles`, `/api/feedback-requests`, `/api/interviews` | HR tools: probation decisions, the helpdesk, exit interviews, hiring and performance reviews. Probation, exit interviews and hiring are HR only; people see only their own tickets and reviews. Rules in `hr-tools-rules.js`, tested without a database |
+| [hr-tools.js](backend/src/hr-tools.js), continued | `/api/review-cycles`, `/api/reviews/:id/manager`, `/api/reviews/:id/feedback-requests`, `/api/feedback-requests`, `/api/hr/candidates/:id/onboard`, `/api/hr/candidates/:id/interviews`, `/api/hr/interviews/:id/cancel`, `/api/interviews`, `/api/interviews/:id/verdict`, `/api/interviews/:id/calendar` | Review cycles for everyone or a department, the reporting manager's review between the self-review and HR, colleague feedback the person never sees, managers reading their team's goals (`/api/goals?email=`), a hired candidate copied into the HR user's onboarding draft, and interviews with each interviewer's recommendation and a calendar file (.ics) |
+| [workforce.js](backend/src/workforce.js), [workforce-rules.js](backend/src/workforce-rules.js) | `/api/timesheet`, `/api/timesheets/to-approve`, `/api/timesheets/:id/decision`, `/api/surveys`, `/api/training`, `/api/trainings`, `/api/hr/resignations`, `/api/stand-ins` | Timesheets (a week per person, approved by the reporting manager, a stand-in covering them, or HR), surveys (named or anonymous; HR creates them and sees results), training (HR assigns, people mark done), notice periods (HR records resignations; expected last day = resigned on + notice days) and approval stand-ins (someone who decides leave for a manager while they are away). `workforce-rules.js` holds the checking rules, also for review cycles, colleague feedback and interviews (used by `hr-tools.js`), and timesheet minutes per project (used by `finance-reports.js`); tested without a database. Design: [docs/HR_GAPS_DESIGN.md](docs/HR_GAPS_DESIGN.md) |
+| [finance-reports.js](backend/src/finance-reports.js), [finance-rules.js](backend/src/finance-rules.js) | `/api/finance/periods`, `/api/finance/statutory`, `/api/finance/journal`, `/api/finance/cost`, `/api/finance/gratuity`, `/api/finance/tax-statements`, `/api/finance/tax-statements/:email`, `/api/finance/files`, `/api/finance/tds-sheet`, `/api/finance/shares`, `/api/finance/contractors` | Open to HR, payroll reviewers and the accountant (`FINANCE_VIEWERS`, who see only this). Also: employer ESIC (3.25%, worked out in the report), labour welfare fund for Maharashtra in June and December, the PF return (ECR) text file, the ESIC contribution sheet, a Tally import file for the journal, a TDS sheet per quarter, project shares in per cent (HR sets them; `employee_project_allocations.share_percent`) and contractor payments with TDS (`contractor_payments`). Finance reports for the accountant, read from payroll that is already calculated: statutory dues (PF, ESIC, professional tax, TDS) with due dates, the month as one balanced journal entry, cost by department and project, a gratuity estimate, and the year's salary and TDS per person and per quarter. Open to HR and the payroll reviewers. Nothing here writes to payroll. `finance-rules.js` also checks HR's proof notes on tax declarations (`PUT /api/tax-declarations/:email/proofs` in engage.js) |
+| [workforce.js](backend/src/workforce.js), [workforce-rules.js](backend/src/workforce-rules.js) | `/api/timesheet`, `/api/timesheets/to-approve`, `/api/timesheets/:id/decision`, `/api/surveys`, `/api/surveys/:id/answers`, `/api/surveys/:id/results`, `/api/training`, `/api/trainings`, `/api/hr/resignations`, `/api/stand-ins` | Timesheets (a week of hours per project; the reporting manager, a stand-in or HR approves; approved hours set cost by project), surveys (anonymous by default, results hidden below 3 answers, eNPS), training records, notice periods (resignation date plus notice days, short notice flagged) and approval stand-ins (cover a manager's leave approvals; `teams.js` `coveredBy`, used by `leave.js` and `leave-mail.js`). Design: [docs/HR_GAPS_DESIGN.md](docs/HR_GAPS_DESIGN.md) |
 | [celebrations.js](backend/src/celebrations.js) | `/api/celebrations`, `/p` | Birthday and welcome posters emailed by HR; public poster picture |
-| [festivals.js](backend/src/festivals.js) | `/api/festivals` | Festival list and dates; share a greeting |
+| [access.js](backend/src/access.js), [access-rules.js](backend/src/access-rules.js), [access-routes.js](backend/src/access-routes.js) | `/api/access/people`, `/api/access/people/:email/history`, `/api/access/grants`, `/api/access/super-admins/:email` | Super admins only: who may do what, for the company or a reporting tree; give and remove access; add and remove super admins. Every change is audited and kept as history |
+| [tools.js](backend/src/tools.js), [tools-rules.js](backend/src/tools-rules.js) | `/api/tools`, `/api/tools/:slug`, `/api/tools/:slug/seats`, `/api/tools/costs`, `/api/tools/:slug/bills`, `/api/tools/bills/:id` | Every paid tool (AI assistants and others): who has a seat, price per seat, monthly bills, cost per tool, department and currency (₹ and $ apart). Tool access manages; finance sees cost. Design: [docs/TOOLS_DESIGN.md](docs/TOOLS_DESIGN.md) |
+| [festivals.js](backend/src/festivals.js) | `/api/festivals`, `/api/festival-look` (public), `PUT /api/festivals/look`, `POST /api/festivals/:slug/dates`, `DELETE /api/festivals/:slug/dates/:day` | Festival list and dates (HR adds and removes dates on Festival wishes > Festival dates; a year back to five years ahead); share a greeting; the festival look (from `festivalLook.daysBefore` days before a festival through the day, the sign-in page and the dashboard banner show its scene; HR switches it off with the `settings` key `festival_look`; `?preview=<slug>` previews one) |
+| [brand.js](backend/src/brand.js) | none | Reads [frontend/brand.config.json](frontend/brand.config.json) (product name, company names, colours) for emails, PDFs, Excel files and the sign-off. The Docker image copies the file in |
 | [reimbursements.js](backend/src/reimbursements.js) | `/api/reimbursements` | Expense claims, receipts, review workflow; [extract.js](backend/src/extract.js) reads invoice PDFs |
 | [budgets.js](backend/src/budgets.js) | `/api/budget-requests` | Pre-approved spending requests |
 | [payroll/routes.js](backend/src/payroll/routes.js) | `/api/payroll` | Payroll runs, review workflow, bank details, tax rules, adjustments |
@@ -234,9 +245,19 @@ Payroll internals in [backend/src/payroll/](backend/src/payroll/): `access.js` (
 - Sign-in is Google OAuth at `/auth/google`. Password login works only when `ALLOW_PASSWORD_LOGIN=true`.
 - A session is a random token in the `sid` cookie (HttpOnly, SameSite=Lax, 12 hours). Only its SHA-256 hash is stored in `sessions`.
 - `loadSession` runs on every request and sets `req.user = { email, role, it_admin }`. `requireAuth` and `requireHr` live in [auth.js](backend/src/auth.js).
+- **Access hierarchy** ([docs/ACCESS_DESIGN.md](docs/ACCESS_DESIGN.md)):
+  - Super admins (`users.is_super_admin`) can do everything and are the only people who give access. The first ones are Chintan, Chirag, Jagruti and Pratik (set once at start-up). There is always at least one.
+  - Everyone else holds the permissions a super admin ticked for them on Company > Access (`access_grants`). Each is for the whole company or for a reporting tree: everyone below a person, to any depth.
+  - The catalogue of permissions and the pure rules are in [access-rules.js](backend/src/access-rules.js). The decisions (`can`, `scopeOf`, `mayDecide`, `need`, `needSuper`, with the tree cached for a minute) are in [access.js](backend/src/access.js). The Access page's API is [access-routes.js](backend/src/access-routes.js).
+  - `loadSession` loads `req.access` with the session in one query.
+  - At the first start, a one-time step turned today's roles into grants (HR → the HR team set, IT admin, payroll reviewers, accountant), so nobody's access changed.
+  - Every server check of what a caller may do goes through `access.js` (phase 3 done). The menu and pages follow `useAuth().can/canAll/canAny` (phase 4). Notices go to whoever holds the matching permission (`notify("perm:<key>")`). Giving or removing the HR role or IT admin adds or removes the matching grants (`syncRoleGrants`). Nobody but a super admin can re-invite, reset or remove a login with more access than their own (`mayActOnLogin`), and sign-in links for anyone who has signed in before go to the work email only. `users.role` is now only a label (shown on Users, kept in step with the HR access set). Leave is decided by anyone above the person in the reporting lines (or a stand-in the direct manager named), or by a super admin; nobody decides their own, HR included. Someone with no manager: the super admins. A new request notifies the direct manager and stand-ins (the super admins when there is no manager); `leave.approve` lets someone see team leave and add leave for people, not decide it. PAYROLL_REVIEWERS and FINANCE_VIEWERS are read only once, by the first start-up step. Someone with only "Bank details" gets a bank-accounts list without salaries (`GET /api/payroll/bank-people`). Reporting managers can add a person who has no manager and no access of their own to their team; onboarding manager changes run the same checks (`checkManager` in people.js). Super admins still also count as HR for those. `test/access-flow.mjs` checks the matrix end to end against a local server.
+  - Reporting lines are matched on `employees.manager_email`. A database trigger fills it whenever only the manager's name is written, and leaves it empty when two current people share that name.
+  - A removed login is blocked (`users.login_blocked`), not deleted. A blocked login, or anyone who is leaving or has left, cannot sign in or keep a session.
 - `users.role` is `hr` or `employee`. Three more capabilities are derived, not roles:
   - IT admin: `users.it_admin` (HR counts too). Checked by `requireItAdmin` in [assets.js](backend/src/assets.js).
   - Payroll reviewer: an email listed in `PAYROLL_REVIEWERS` ([payroll/access.js](backend/src/payroll/access.js)).
+  - Accountant: an email listed in `FINANCE_VIEWERS` ([finance-rules.js](backend/src/finance-rules.js)). Opens Finance reports only; not payroll, not HR pages.
   - Manager: anyone with people whose `employees.manager` is their name. Project leads manage their own projects.
 - A first Google sign-in by someone on the staff list creates their `employee` login automatically.
 
@@ -261,12 +282,12 @@ All paths below were read from the code. Unless noted, a signed-in session is re
 | Device | `POST /api/attendance/device/punches` (device key, no session), `GET/PUT /api/attendance/device/users` | Connector; HR |
 | Reimbursements | `GET/POST /api/reimbursements`, `POST /from-document`, `PUT /:id/items/:itemId/document`, `POST /:id/submit`, `/approve`, `/reject`, `/request-changes`, `/resubmit`, `GET/PUT /categories` | Own claims; review by HR |
 | Budgets | `GET/POST /api/budget-requests`, `POST /:id/approve`, `POST /:id/reject` | Own requests; decisions by HR |
-| Payroll | `GET /api/payroll/overview`, `GET/POST /api/payroll/runs`, `POST /runs/:id/recalculate`, `POST /runs/:id/actions/:action`, `GET /runs/:id/files/:fileId`, `GET/PUT /bank/:email`, `GET/PUT /structures/:email`, `GET /tax-rules`, `GET/POST /adjustments`, `GET /audit` | HR and payroll reviewers |
+| Payroll | `GET /api/payroll/overview`, `GET/POST /api/payroll/runs`, `POST /runs/:id/recalculate`, `POST /runs/:id/actions/:action`, `GET /runs/:id/files/:fileId`, `GET/PUT /bank/:email`, `GET/PUT /structures/:email`, `GET /tax-rules`, `GET/POST /adjustments`, `GET /audit` | HR, payroll reviewers and the accountant (`FINANCE_VIEWERS`) |
 | Payslips | `GET /api/payslips`, `GET /api/payslips/:period`, `GET /api/payslips/:period/pdf` | Own payslips |
 | Tool access | `GET /api/tool-access`, `POST /api/tool-access/claude`, `POST /api/tool-access/claude/refresh`, `POST /api/tool-access/claude/confirm`, `GET /api/claude-requests` | HR; IT admins for the queue |
 | Assets | `GET/POST /api/assets`, `PUT /api/assets/:id`, `POST /api/assets/:id/assign`, `POST /api/assets/:id/return` | IT admins, HR |
 | Feed | `GET/POST /api/posts`, `PATCH/DELETE /api/posts/:id`, `PUT/DELETE /api/posts/:id/like`, `GET/POST /api/posts/:id/comments`, `POST /api/posts/images` | Everyone |
-| Celebrations and festivals | `GET/POST /api/celebrations`, `POST /api/celebrations/:id/send`, `GET /p/:file` (public), `GET /api/festivals`, `POST /api/festivals/share` | HR; festivals for everyone |
+| Celebrations and festivals | `GET/POST /api/celebrations`, `POST /api/celebrations/:id/send`, `GET /p/:file` (public), `GET /api/festivals`, `POST /api/festivals/share`, `GET /api/festival-look` (public), `PUT /api/festivals/look`, `POST /api/festivals/:slug/dates`, `DELETE /api/festivals/:slug/dates/:day` (HR) | HR; festivals for everyone |
 | Digital Kit | `GET /api/digital-kit`, `GET /api/digital-kit/resources/:id/file`, `POST /api/digital-kit/headline-ai` (10 an hour each), `/api/digital-kit/admin/*` | Everyone; admin part HR |
 | Gmail engine and project reports | `GET /api/gmail-intel/status`, `/usage`, `/extractions`, `POST /api/gmail-intel/mailboxes`, `/sync`, `/extractions/:id/review` (HR); `POST /api/gmail-intel/push?token=` (Pub/Sub, no session); `GET /api/project-reports`, `/:id?week=`, `POST /api/project-reports/:id/email` (company addresses only, at most 10) | HR; reports for project members |
 | Other | `GET /api/notifications`, `POST /api/notifications/read`, `GET /api/audit` | Everyone; audit HR |
@@ -299,12 +320,24 @@ Vite builds both with `base: "/app/"` and `publicDir: false` ([frontend/vite.con
 
 ### Routing
 
+- **Loading speed:** every page except the dashboard is loaded the first time it is opened (`lazy()` in `App.jsx` and in each `modules/*/index.jsx`; `Shell.jsx` holds the frame in a `Suspense` meanwhile), so the first script is about 70 KB compressed instead of one 1 MB file. Express sends `/app/assets` scripts and styles compressed (Brotli or gzip, compressed once and kept in memory: `compressedAssets` in `pages.js`); the Docker nginx turns on gzip. The Google font stylesheet loads without holding up the first paint. Requests several cards make at once share one call (`apiShared` in `api.js`).
+
 Routes are in [frontend/src/App.jsx](frontend/src/App.jsx). Page routes are listed there; module routes are collected with
 `import.meta.glob("./modules/*/index.jsx")`, each module exporting `routes`. Unknown paths go to `/app/dashboard`.
 
 | Path | Component |
 |---|---|
 | `/app/dashboard` | `pages/Dashboard.jsx` |
+| `/app/inbox` | `pages/Inbox.jsx` |
+| `/app/my-attendance` | `pages/Attendance.jsx` (own attendance only, also for HR) |
+| `/app/my-team` | `pages/MyTeam.jsx` (the people who report to you: away today, waiting for you, away soon) |
+| `/app/my-finances` | `pages/MyFinances.jsx` (pay at a glance from published payslips) |
+| `/app/org-documents` | `modules/digitalkit/OrgDocuments.jsx` (company templates and files, the Digital Kit's shared resources) |
+| `/app/polls`, `/app/praise`, `/app/articles`, `/app/articles/:id`, `/app/apps`, `/app/requests`, `/app/hr-requests`, `/app/tax`, `/app/goals` | `modules/engage/` (Polls, Praise, Articles, Apps, Requests: own requests, and everyone's for HR; Tax: a declaration for payroll to review; Goals) |
+| `/app/hr-reports`, `/app/probation`, `/app/letters`, `/app/exit-interviews`, `/app/hiring`, `/app/hiring/:id`, `/app/helpdesk`, `/app/helpdesk/:id`, `/app/hr-helpdesk`, `/app/hr-helpdesk/:id`, `/app/reviews`, `/app/hr-reviews` | `modules/hrtools/` (Reports counted from the staff list and leave data, with a spreadsheet download; Probation; Letters printed from the browser; Exit interviews; Hiring; Helpdesk; Reviews) |
+| `/app/timesheet`, `/app/surveys`, `/app/surveys/:id`, `/app/surveys/:id/results`, `/app/training`, `/app/training/:id`, `/app/interviews`, `/app/notice-periods`, `/app/stand-ins` | `modules/workforce/` (Timesheet, Surveys, Training, and People pages for interviews, notice periods and approval stand-ins) | Everyone for their own timesheet, surveys and training; managers and HR approve; results, notice periods and training setup are HR only |
+| `/app/finance-reports`, `/app/finance-reports/tax/:email` | `modules/finance/` (Finance reports: Statutory dues, Payroll journal, Cost (with project shares), Gratuity, Annual tax and Contractors tabs, each with a spreadsheet download; one person's annual tax statement to print) | HR and payroll reviewers |
+| `/app/timesheet`, `/app/surveys`, `/app/surveys/:id`, `/app/surveys/:id/results`, `/app/training`, `/app/training/:id`, `/app/interviews`, `/app/notice-periods`, `/app/stand-ins` | `modules/workforce/` (Timesheet with My week and To approve; Surveys to answer and, for HR, create and read; Training with Manage for HR; Interviews for interviewers; Notice periods for HR; Approval cover) | Everyone; approving weeks for managers, stand-ins and HR; creating surveys and trainings, notice periods for HR |
 | `/app/employees` | `pages/Employees.jsx` |
 | `/app/employees/:email` | `modules/employee/EmployeePage.jsx` |
 | `/app/allocations` | `pages/Allocations.jsx` |
@@ -339,16 +372,25 @@ The "HR only" marks come from the `HR_ONLY` list in `App.jsx`. Every other page 
 - [src/api.js](frontend/src/api.js): `api(method, url, body)` returns `{ ok, status, data }` and sends the browser to `/login` on 401.
 - [src/auth.jsx](frontend/src/auth.jsx): `useAuth()` gives `user`, `isHr`, `itAdmin`, `isManager`, `payrollReviewer`.
 - [src/data.jsx](frontend/src/data.jsx): `useData()` loads roster, tool access, documents, profile and leave once, with `reload()`.
-- [src/components/](frontend/src/components/): `Shell.jsx` (top bar, menus, layout), `Modal`, `ConfirmDialog`, `DatePicker`, `Pager`,
-  `PeoplePicker`, `PersonAvatar`, `PhotoEditor`, `OrgChart`, `NotificationBell`, `TodayCards`, `toast.jsx`, `ui.jsx`,
-  `charts.jsx`, `leaveParts.jsx`, `leaveSummary.jsx`, `attendance.jsx`, `BackButton`, `BirthdayPopup`, `CelebrateCard`, `NextHolidayPopup`,
-  `LeaveSwitch` (tabs joining Leave management, My leave and Team leave). The top menu groups Attendance and the leave pages under "Attendance & leave".
-- [src/lib/](frontend/src/lib/): `leave.js` (re-exports `window.LeaveRules`), `useLeave.js`, `people.js`.
-- [src/modules/](frontend/src/modules/): `budgets`, `celebrations`, `digitalkit`, `employee`, `festivals`, `offboarding`, `onboarding`, `payroll`, `posts`, `projectreport`, `reimbursements`.
+- [src/components/](frontend/src/components/): `Shell.jsx` (the app layout, as on wohlig.com: one top bar with the logo, the sections (Home, My work, To do, My team, Pay, Company, Community and, for HR, HR; filtered
+  by role; each opens its pages in a menu; Keka features that still need new tables are designed in [docs/KEKA_PARITY_DESIGN.md](docs/KEKA_PARITY_DESIGN.md)); then search, notifications and the account menu (which holds Appearance: light, dark or the device setting); the bar floats as a rounded capsule like wohlig.com's;
+  on screens under 1024px the sections move into a drawer listing every page), `QuickSearch` (Ctrl+K or "/": finds any menu page or colleague),
+  `Modal` (the one dialog, on Radix UI Dialog: focus kept inside and returned, Escape, page scroll locked, close button, a bottom sheet on phones; the
+  reimbursement `Dlg` is the same component), `ConfirmDialog`, `DatePicker`, `Pager`,
+  `PeoplePicker`, `PersonAvatar`, `PhotoEditor`, `OrgChart`, `NotificationBell`, `TodayCards`, `TimeToday` (Home: time worked today, and the punch button when `WEB_CLOCK_IN` is on), `RemoteToday` (Home: who is working from home today), `RemoteToday` (Home: who has an approved work-from-home request for today, from `/api/remote-today`), `toast.jsx`, `ui.jsx`,
+  `charts.jsx`, `leaveParts.jsx`, `leaveSummary.jsx`, `attendance.jsx`, `BackButton`, `BirthdayPopup`, `CelebrateCard`, `NextHolidayPopup`.
+  Every page opens with `SectionHead` from `ui.jsx`: the page name, one line, the page's actions on the right and, for a
+  page with several views (Employees, Onboarding, Reimbursements), `PageTabs` under it. My leave, Team leave and Leave management are
+  separate menu items. Onboarding and Offboarding open on their lists; adding a joiner and offboarding someone are buttons there.
+- Brand in one place: [brand.config.json](frontend/brand.config.json) holds the product and company names, the headline and copy of the sign-in page, logo paths, brand colours, fonts and `festivalLook.daysBefore`. [src/brand.js](frontend/src/brand.js) exports `BRAND` and `PRODUCT` and `applyBrand()` (both entries call it after `styles.css`), which sets the `--brand-*` colour and font variables the theme is built on; [backend/src/brand.js](backend/src/brand.js) reads the same file. Re-branding for another product means editing this one file and the logo files.
+- [src/components/FestivalLook.jsx](frontend/src/components/FestivalLook.jsx): `useFestivalLook()` (asks `/api/festival-look`; `?festival=<slug>` in any address previews one), `festivalTheme` (each festival's three colours, celebration and greeting from `festivalLook.festivals` in `brand.config.json`), `festivalGreeting`, `festivalFrom`, `festivalWhen`, `FestivalArt` (the festival's scene drawn once into a canvas), `FestiveFrame` (sets `data-festival` and `--fest-a/b/c` on `<html>`, draws the colour ribbon along the top of every page and plays the celebration: about four seconds of the festival's own motion (`burst`: lanterns, colours, snow, crescents, gulal, dandiya, sparks or confetti), once a day per festival, never under reduced motion) and `FestivalChip` (the top bar's "Diwali in 2 days" chip, linking to Festival wishes). Used by `Shell.jsx`, the sign-in layout (festival headline) and the dashboard banner (festival greeting, no buttons inside the banner).
+- [src/lib/](frontend/src/lib/): `leave.js` (re-exports `window.LeaveRules`), `useLeave.js`, `people.js`, `menu.js` (the menu for each role,
+  shared by the sidebar and quick search).
+- [src/modules/](frontend/src/modules/): `access` (Company > Access, super admins only), `tools` (Manage > Tools & cost), `budgets`, `celebrations`, `digitalkit`, `employee`, `engage`, `festivals`, `finance`, `hrtools`, `offboarding`, `onboarding`, `payroll`, `posts`, `projectreport`, `reimbursements`, `workforce`.
 
 ### Styling and theme
 
-- [src/styles.css](frontend/src/styles.css) is the one stylesheet for the whole interface; both entries import it and no other CSS file exists. Its numbered sections: 1 brand tokens (`--brand-*`, `--btn-*`), 2 celebrations (`.cel-*`), 3 Digital Kit (`.dk-*`), 4 festival wishes (`.fw-*`), 5 birthday cards (`.bd-*`, `.cc-*`), 6 the signed-in app, 7 the sign-in and invitation pages (everything under `.auth`; `login.html` puts `auth-page` on `<body>`).
+- [src/styles.css](frontend/src/styles.css) is the one stylesheet for the whole interface; both entries import it and no other CSS file exists. It opens with the Tailwind CSS setup (layer order `theme, base, legacy, components, utilities`; no preflight yet) and the Wohlig theme (`@theme`: brand and theme-following colours, fonts, radii, breakpoints that match the older `max-width` steps). The older hand-written rules follow inside `@layer legacy` and are deleted as screens move to Tailwind classes; converted so far: `SectionHead`, `PageTabs`, `ViewTabs` and `Stat` in `components/ui.jsx`, the app shell in `components/Shell.jsx` (sidebar, top bar, account menu, tooltips) dialogs in `components/Modal.jsx` (the frame, and the title row, body and footer bar it holds) quick search in `components/QuickSearch.jsx` and status pills (`Pill` and `pill()` in `components/ui.jsx`); the button (`.btn`) stays a class in the legacy layer for now. The numbered sections of the legacy layer: 1 brand tokens (`--brand-*`, `--btn-*`), 2 celebrations (`.cel-*`), 3 Digital Kit (`.dk-*`), 4 festival wishes (`.fw-*`), 5 birthday cards (`.bd-*`, `.cc-*`), 6 the signed-in app, 7 the sign-in and invitation pages (everything under `.auth`; `login.html` puts `auth-page` on `<body>`).
 - Buttons are one standard, the wohlig.com button: `btn primary`, `btn glass`, with `lg`, `sm`, `block`. The rules are in [CLAUDE.md](CLAUDE.md) and [docs/BRAND_GUIDELINES.md](docs/BRAND_GUIDELINES.md).
 - Sign-in components: [login/AuthLayout.jsx](frontend/src/login/AuthLayout.jsx) (shared layout), [login/PasswordField.jsx](frontend/src/login/PasswordField.jsx).
 - Theme: [src/theme.js](frontend/src/theme.js) stores `light` or `dark` under `localStorage` key `hr_theme` and sets `data-theme` on `<html>`.
@@ -356,7 +398,7 @@ The "HR only" marks come from the `HR_ONLY` list in `App.jsx`. Every other page 
 
 ## 8. Data model
 
-[backend/src/schema.sql](backend/src/schema.sql) defines 53 tables; [backend/src/payroll/schema.sql](backend/src/payroll/schema.sql) adds 6.
+[backend/src/schema.sql](backend/src/schema.sql) defines 85 tables; [backend/src/payroll/schema.sql](backend/src/payroll/schema.sql) adds 6.
 People are linked mostly by work email (text, compared in lower case), not by foreign key. `employees.manager` and
 `projects.project_lead` hold a person's name.
 
@@ -381,14 +423,52 @@ People are linked mostly by work email (text, compared in lower case), not by fo
 | `tool_access` | Which tools a person has and what the tool said | by email |
 | `notifications`, `email_outbox`, `email_links` | Bell items, log of every email attempt, short-lived link hashes | by email |
 | `posts`, `post_likes`, `post_comments`, `post_images`, `post_shares` | Company feed | FK to `posts` |
+| `polls`, `poll_votes` | Polls and one vote per person | FK to `polls` |
+| `praises` | Praise from one colleague to another | emails |
+| `articles` | HR articles, draft or live | author email |
+| `app_links` | Links to the company's other tools | none |
+| `advance_requests`, `attendance_requests` | Requests people raise and HR decides; approving records the decision only | emails |
+| `tax_declaration_requests` | What a person submits to payroll for a financial year (regime and planned claims). Payroll's own `tax_declarations` (payroll schema) is separate and is the only one the calculation reads. `proofs` holds HR's note on the proof for each line and is cleared when the lines change | email |
+| `tax_proof_files` | The document a person uploads as proof for one line of their declaration (`PUT /api/tax-declaration/proofs/:index/file`); the file is on disk under `UPLOAD_DIR`. Removed when the lines change | request_id |
+| `contractor_payments` | Payments to contractors and consultants with the tax deducted (section, rate, amount in paise). Only a masked PAN is kept. Soft delete | paid_on |
+| `timesheet_weeks`, `timesheet_entries` | A week of hours per person (draft, submitted, approved, returned) and the minutes per project per day; no project = internal work | email + week_start; week_id |
+| `surveys`, `survey_takers`, `survey_responses` | A survey and its questions (JSON); who answered (one each, kept apart); the answers, with no email when anonymous | survey_id |
+| `trainings`, `training_assignments` | A training and who must do it, with the day they finished | training_id; email |
+| `resignations` | Resignation date, notice days and an agreed last day, for notice periods | email |
+| `approval_stand_ins` | Who covers a manager's leave approvals, and from when to when | for_email; stand_in_email |
+| `review_cycles`, `review_feedback` | A review cycle opened for everyone or a department; colleague feedback on a review. `reviews` gained `cycle_id`, `manager_email`, `manager_text`, `manager_rating`, `manager_at` | review_id |
+| `interviews` | A candidate's interview: time, length, how, where, interviewers and their recommendations | candidate_id |
+| `goals` | A person's own goals with due date and progress; visible to them and HR | email |
+| `probations` | HR's decision on a person's probation (confirmed or extended); with no row it ends six months after joining | email |
+| `tickets`, `ticket_replies` | Helpdesk questions and the replies under them | FK to `tickets` |
+| `article_acks` (and `articles.requires_ack`) | Policy sign-off: who confirmed they read an article | FK to `articles` |
+| `exit_interviews` | Why a person left, recorded by HR; HR only | email |
+| `job_openings`, `candidates` | Hiring: open roles and candidates by stage; HR only | FK to `job_openings` |
+| `reviews` | Performance reviews: self-review, HR review and rating; the person and HR only | email |
+| `timesheet_weeks`, `timesheet_entries` | A person's week (draft, submitted, approved or returned) and minutes per project per day; empty project = internal work | entries FK to weeks |
+| `surveys`, `survey_takers`, `survey_responses` | Surveys, who answered (one each), and the answers; an anonymous answer carries no email | FK to `surveys` |
+| `trainings`, `training_assignments` | Trainings HR sets up and who must finish them by when | assignments FK to `trainings` |
+| `resignations` | Notice periods recorded by HR: resigned on, notice days, agreed last day, withdrawn | email |
+| `approval_stand_ins` | Who decides leave for a manager between two days; the manager can still decide | emails |
+| `review_cycles`, `review_feedback` (and new nullable manager columns on `reviews`) | HR opens reviews for everyone or a department at once; colleague (360) feedback, seen by HR and the manager, never the person reviewed | `reviews` link to cycles; feedback FK to `reviews` |
+| `interviews` | Interviews for a candidate; each interviewer leaves a recommendation and notes | FK to `candidates` |
 | `assets`, `asset_events` | Company assets and their history | `assigned_to` FK to `employees` |
 | `celebrations`, `celebration_recipients`, `celebration_alerts` | Posters, delivery per recipient, alerts already sent | recipients FK to `celebrations` |
 | `digital_kits`, `digital_kit_resources`, `digital_kit_state` | Per-person kit, shared resources, seeding flags | kits FK to `employees` |
+| `tools`, `tool_bills` | The tool catalogue with seat prices (INR or USD) and monthly bills; seats are `tool_access` rows | `tool_bills.tool` → `tools.slug` |
+| `access_grants` | One ticked permission for one person: company-wide or a reporting tree (`scope_root_email`), with an optional end date; a removed one keeps its row | `users.is_super_admin`, `users.login_blocked`, `employees.manager_email` belong to the same change |
 | `festivals`, `festival_dates` | Festivals and their yearly dates | dates FK to `festivals` |
 | `app_migrations` | Keys of one-time data fixes that already ran | none |
 
 ## 9. Cross-cutting concerns
 
+- **Speed.** [timing.js](backend/src/timing.js) puts a `Server-Timing: app;dur=…` header on every response (the browser's Network panel
+  shows it) and logs `[slow request]` for any /api request over `SLOW_REQUEST_MS`. The pools in [db.js](backend/src/db.js) keep
+  connections open (opening one is the slowest part of a quick request) with a statement timeout; the start-up schema step runs
+  without it. Every read path has an index (lower(email) indexes for email lookups; see the "Speed" block at the end of
+  `schema.sql`). Independent reads run side by side; inside a transaction they take turns (payroll/store.js `together`). The payroll
+  overview keeps its month preview for a minute. Measured locally over 83 list endpoints: median 6 ms, all under 60 ms except
+  a first payroll preview.
 - **Auth.** See section 6. Only `@wohlig.com` addresses can hold a login; a database check constraint enforces it as well.
 - **Permissions.** Enforced on the server per router. The interface hides pages but is not the control.
 - **Audit log.** Modules insert a plain sentence into `audit_log` after a change. Payroll has its own append-only `payroll_audit`.

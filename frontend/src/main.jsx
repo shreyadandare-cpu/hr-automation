@@ -7,6 +7,9 @@ import { ToastProvider } from "./components/toast.jsx";
 import { DataProvider } from "./data.jsx";
 import { applyTheme, currentTheme } from "./theme.js";
 import "./styles.css";
+import { applyBrand } from "./brand.js";
+
+applyBrand();   // colours, fonts and the page title from brand.config.json
 
 applyTheme(currentTheme());
 createRoot(document.getElementById("root")).render(

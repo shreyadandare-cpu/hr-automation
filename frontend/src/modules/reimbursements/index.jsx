@@ -1,6 +1,8 @@
-import ReimbList from "./ReimbList.jsx";
-import ClaimNew from "./ClaimNew.jsx";
-import ClaimDetail from "./ClaimDetail.jsx";
+import { lazy } from "react";
+/* Each page loads only when it is first opened (code splitting), so the app starts fast. */
+const ReimbList = lazy(() => import("./ReimbList.jsx"));
+const ClaimNew = lazy(() => import("./ClaimNew.jsx"));
+const ClaimDetail = lazy(() => import("./ClaimDetail.jsx"));
 
 // "new" is listed before ":id" so it is never read as a claim number.
 export const routes = [

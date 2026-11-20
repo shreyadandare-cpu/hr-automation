@@ -6,6 +6,8 @@ import { emailLink, linkMinutes } from "./email-links.js";
 import { istMonth, previousMonth } from "./payroll-calc.js";
 import { recalcRun, totalsOfLines, monthName } from "./payroll/store.js";
 import { audit } from "./payroll/routes.js";
+import { hrOnly } from "./payroll/access.js";
+import { COMPANY_LEGAL, MAROON, PRODUCT, SIGN_OFF } from "./brand.js";
 
 /*
  * Last month's payroll, started automatically. Checked every hour with the other background jobs.
@@ -27,7 +29,7 @@ export const tellReady = (people, period) => PAYROLL_SEPARATE
   ? Promise.resolve(console.log(`Payroll on its own database: payslip-ready notices for ${period} not sent`))
   : Promise.all(people.map(async (email) => notify(email, {
     title: `Your payslip for ${monthName(period)} is ready.`, body: "View or download it in My payslips.", link: "/app/payslips",
-    email: { subject: `Payslip for ${monthName(period)}`, body: `Your payslip for ${monthName(period)} is ready.\n\nView or download it here: ${await emailLink("/app/payslips")} (works for ${linkMinutes()} minutes). After that, sign in to Wohlig One and open My payslips.` } })));
+    email: { subject: `Payslip for ${monthName(period)}`, body: `Your payslip for ${monthName(period)} is ready.\n\nView or download it here: ${await emailLink("/app/payslips")} (works for ${linkMinutes()} minutes). After that, sign in to ${PRODUCT} and open My payslips.` } })));
 
 /** One check. `now` can be set for tests. Returns what it did. */
 export async function runPayslips(now = new Date()) {
@@ -61,14 +63,14 @@ export async function runPayslips(now = new Date()) {
   } finally {
     client.release();
   }
-  if (hr) await notify("hr", { ...hr, link: "/app/payroll", email: { subject: hr.title, body: hr.body } });
+  if (hr) await notify("perm:payroll.prepare", { ...hr, link: "/app/payroll", email: { subject: hr.title, body: hr.body } });
   return out;
 }
 
-// HR: publish the payslips of a run processed before the review workflow. Workflow runs are published on approval.
+// payroll.prepare: publish the payslips of a run processed before the review workflow. Workflow runs are published on approval.
 export const payslipAutoRouter = express.Router();
 const wrap = (fn) => (req, res, next) => fn(req, res, next).catch(next);
-payslipAutoRouter.post("/runs/:id/publish", wrap(async (req, res) => {
+payslipAutoRouter.post("/runs/:id/publish", hrOnly, wrap(async (req, res) => {
   const { rows: [run] } = await pool.query("SELECT * FROM payroll_runs WHERE id=$1", [Number(req.params.id) || 0]);
   if (!run) return res.status(404).json({ error: "Payroll run not found." });
   if (run.workflow) return res.status(409).json({ error: "Payslips for this month are published when the payroll is approved." });

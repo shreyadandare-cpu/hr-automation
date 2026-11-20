@@ -1,17 +1,19 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { api, apiMsg } from "../api.js";
 import { useAuth } from "../auth.jsx";
-import { Callout, DownloadIcon, Person, Pill, SectionHead, Stat, hours, shortDate } from "../components/ui.jsx";
+import { Callout, DownloadIcon, Person, Pill, SectionHead, Stat, hours, shortDate, ViewTabs, ListSkeleton, TableSkeletonRow } from "../components/ui.jsx";
+import Requests from "../modules/engage/Requests.jsx";
 import { ActionsCard, AttendanceLog, DayCell, ForgotPunchPopup, StatsCard, TimingsCard, istNow, useH24, useMonths, useNow } from "../components/attendance.jsx";
 import Pager, { usePaged } from "../components/Pager.jsx";
 import { useData } from "../data.jsx";
+import { scopeSet } from "../lib/useLeave.js";
 import Modal, { Field } from "../components/Modal.jsx";
 
 const TONE = { Present: "ok", "Half day": "warn", Working: "info", "Short hours": "warn", "On leave": "info", "No punch": "mute", "Half day leave": "info", Weekend: "mute", Holiday: "mute", "Off-site": "info" };
 const StatusPill = ({ status }) => (status ? <Pill tone={TONE[status] || (/^Worked/.test(status) ? "ok" : "mute")}>{status}</Pill> : <span className="muted">—</span>);
 
-/* Everyone for one day: HR sees all, a reporting manager sees their team. */
-function DayTable({ day, onOpen, onFix }) {
+/* Everyone for one day: the people this person may see (everyone with company-wide access), or a reporting manager's team. */
+function DayTable({ day, onOpen, onFix, canFix }) {
   const people = day.people;
   const [q, setQ] = useState("");
   const shown = useMemo(() => {
@@ -39,7 +41,7 @@ function DayTable({ day, onOpen, onFix }) {
             <td><Person name={x.name} sub={x.title || x.email} /></td>
             <td><StatusPill status={x.status} />{x.missingOut && <> <Pill tone="warn">No punch out</Pill></>}</td>
             <td>{x.firstIn || "—"}</td><td>{x.lastPunch ? <>{x.lastPunch}{x.punchCount > 1 ? "" : <span className="muted"> · only punch</span>}</> : "—"}</td><td className="hide-sm"><DayCell x={x} /></td><td>{x.forgotOut ? <>{hours(x.minutes)}<div className="muted" style={{ fontSize: 12 }}>forgot to punch out</div></> : x.minutes ? hours(x.minutes) : x.punchCount ? <span className="muted">{x.missingOut ? "No punch out" : "Just started"}</span> : "—"}</td>
-          {onFix && <td>{day.date < day.today && (x.status === "No punch" || x.missingOut || x.forgotOut)
+          {onFix && <td>{day.date < day.today && (x.status === "No punch" || x.missingOut || x.forgotOut) && (!canFix || canFix(x))
               ? <button type="button" className="btn glass sm" onClick={(e) => { e.stopPropagation(); onFix(x); }}>Fix</button> : null}</td>}
           </tr>
         ))}</tbody>
@@ -204,7 +206,7 @@ function MonthlyReport({ onOpen }) {
       <div className="tbl-wrap"><table>
         <thead><tr><th>Employee</th><th>Working days</th><th>Present</th><th>Half days</th><th>On leave</th><th>Half-day leave</th><th>Off-site</th><th>No punch</th><th>Forgot punch out</th><th>Hours</th></tr></thead>
         <tbody>
-          {!d && !error && <tr><td colSpan="10"><div className="empty">Loading…</div></td></tr>}
+          {!d && !error && <TableSkeletonRow cols={10} />}
           {d && !rows.length && <tr><td colSpan="10"><div className="empty">{q.trim() ? `No one matches “${q.trim()}”.` : "No one to show."}</div></td></tr>}
           {rows.map((x) => (
             <tr key={x.email} className="click" tabIndex={0} onClick={() => onOpen(x)} onKeyDown={(e) => e.key === "Enter" && onOpen(x)}>
@@ -302,8 +304,15 @@ function PersonView({ person, canEdit, onBack, say }) {
   );
 }
 
-export default function Attendance() {
-  const { isHr, isManager, user } = useAuth();
+/* `onlyMine`: show just the signed-in person's own attendance (Me > Attendance), also for HR. */
+export default function Attendance({ onlyMine = false }) {
+  const auth = useAuth(), { can, canAll, isManager, user } = auth;
+  const { people } = useData();
+  // attendance.view (company or a team) opens everyone's view; attendance.edit decides who can fix punches, and the
+  // whole-company monthly report and the device settings need it for the whole company.
+  const seesOthers = can("attendance.view"), editsAll = canAll("attendance.edit");
+  const editScope = can("attendance.edit") ? scopeSet(auth, "attendance.edit", people) : new Set();
+  const mayEdit = (email) => !editScope || editScope.has(String(email || "").toLowerCase());
   const [today, setToday] = useState(null);      // my punches today
   const mine = useMonths(null);                  // my own months
   const [day, setDay] = useState(null);          // team (or everyone for HR) for one date
@@ -319,6 +328,17 @@ export default function Attendance() {
   const say = (m) => { setToast(m); setTimeout(() => setToast(""), 3400); };
   const load = useCallback(async (get) => { const r = await api("GET", get); if (!r.ok) { setError(apiMsg(r)); return null; } setError(""); return r.data; }, []);
   const loadToday = useCallback(async () => { const t = await load("/api/attendance/today"); if (t) setToday(t); }, [load]);
+  // Web clock-in (only offered when the server says so): one tap punches in when you are out, and out when you are in.
+  const [punching, setPunching] = useState(false);
+  const [myTab, setMyTab] = useState("log");   // My attendance: the log, or my attendance requests
+  const punch = async () => {
+    setPunching(true);
+    const r = await api("POST", "/api/attendance/punch");
+    setPunching(false);
+    if (!r.ok) { setError(apiMsg(r)); return; }
+    say(r.data.direction === "IN" ? "You are punched in." : "You are punched out.");
+    await loadToday(); mine.reload && mine.reload();
+  };
   const loadDay = useCallback(async (d) => {
     const x = await load(`/api/attendance/day${d ? `?date=${d}` : ""}`);
     if (x) { setDay(x); setDate(x.date); }
@@ -326,11 +346,11 @@ export default function Attendance() {
 
   useEffect(() => {
     loadToday();
-    if (isHr || isManager) loadDay();
-  }, [isHr, isManager, loadToday, loadDay]);
+    if (seesOthers || isManager) loadDay();
+  }, [seesOthers, isManager, loadToday, loadDay]);
 
   // Looking at one person.
-  if (person) return <PersonView key={person.email} person={person} canEdit={isHr} onBack={() => setPerson(null)} say={say} />;
+  if (person) return <PersonView key={person.email} person={person} canEdit={mayEdit(person.email)} onBack={() => setPerson(null)} say={say} />;
 
   const datePick = <input className="input" type="date" aria-label="Date" value={date} style={{ width: "auto", padding: "8px 12px" }} onChange={(e) => e.target.value && loadDay(e.target.value)} />;
 
@@ -343,31 +363,27 @@ export default function Attendance() {
           <div className="att-top">
             <div className="att-col"><h3 className="att-h">Your numbers</h3><StatsCard byMonth={mine.byMonth} today={today.date} name={(user && user.name ? user.name.split(" ")[0] : "Me")} /></div>
             <div className="att-col"><h3 className="att-h">Today's shift</h3><TimingsCard today={today.date} punches={today.punches} minutesToday={today.minutes} now={now} h24={h24} byMonth={mine.byMonth} /></div>
-            <div className="att-col"><h3 className="att-h">Punch clock</h3><ActionsCard today={today.date} state={today.state} punches={today.punches} now={now} h24={h24} /></div>
+            <div className="att-col"><h3 className="att-h">Punch clock</h3><ActionsCard today={today.date} state={today.state} punches={today.punches} now={now} h24={h24} onPunch={today.canPunch ? punch : undefined} busy={punching} /></div>
           </div>
           <ForgotPunchPopup byMonth={mine.byMonth} today={today.date} h24={h24} />
           <AttendanceLog months={mine} today={today.date} />
         </>
-      ) : <div className="empty">{error || "Loading…"}</div>}
+      ) : error ? <div className="empty">{error}</div> : <ListSkeleton />}
     </>
   );
 
   // HR: everyone's attendance.
-  if (isHr) {
+  if (seesOthers && !onlyMine) {
     return (
       <section className="section">
-        <SectionHead eyebrow="Attendance" title="Everyone's" accent="attendance." sub="Who is in and who is on leave, for any day. Open a person to see their days, or to fix a missed punch." actions={tab === "day" ? datePick : null} />
+        <SectionHead eyebrow="Attendance" title="Attendance" sub="Who is in and who is on leave, for any day. Open a person to see their days, or to fix a missed punch." actions={tab === "day" ? datePick : null} />
+        {editsAll && <ViewTabs label="Attendance views" views={[["day", "By day"], ["month", "Monthly report"]]} view={tab} onView={setTab} />}
         {error && <Callout>{error}</Callout>}
-        <div className="row" style={{ gap: 8 }}>
-          <button type="button" className={`btn sm ${tab === "day" ? "primary" : "glass"}`} onClick={() => setTab("day")}>By day</button>
-          <button type="button" className={`btn sm ${tab === "month" ? "primary" : "glass"}`} onClick={() => setTab("month")}>Monthly report</button>
-          <button type="button" className={`btn sm ${tab === "me" ? "primary" : "glass"}`} onClick={() => setTab("me")}>My attendance</button>
-        </div>
         {tab === "me" ? myView
-          : tab === "month" ? <MonthlyReport onOpen={(x) => setPerson({ email: x.email, name: x.name })} />
-          : day ? <DayTable day={day} onOpen={(x) => setPerson({ email: x.email, name: x.name })} onFix={setFixing} /> : <div className="empty">{error || "Loading…"}</div>}
+          : tab === "month" && editsAll ? <MonthlyReport onOpen={(x) => setPerson({ email: x.email, name: x.name })} />
+          : day ? <DayTable day={day} onOpen={(x) => setPerson({ email: x.email, name: x.name })} onFix={can("attendance.edit") ? setFixing : undefined} canFix={(x) => mayEdit(x.email)} /> : error ? <div className="empty">{error}</div> : <ListSkeleton />}
         {fixing && day && <FixModal person={fixing} date={day.date} onClose={() => setFixing(null)} onDone={async (m) => { say(m); await loadDay(day.date); }} />}
-        <DeviceCard say={say} />
+        {editsAll && <DeviceCard say={say} />}
         {toast && <div className="toast" role="status">{toast}</div>}
       </section>
     );
@@ -376,15 +392,14 @@ export default function Attendance() {
   // Everyone else: my own attendance only.
   return (
     <section className="section">
-      <SectionHead eyebrow="Me" title="My" accent="attendance." sub="Your attendance is recorded by the office biometric machine, and your hours and days are counted from those punches. You see only your own attendance here. If a punch is missing, ask HR to add it." />
+      <SectionHead eyebrow="Me" title="My attendance" sub={today && today.canPunch ? "Punch in when you start and out when you finish. Your hours and days are counted from those punches. You see only your own attendance here. If a punch is missing, please raise a request or ask HR to add it." : "Your attendance is recorded by the office biometric machine, and your hours and days are counted from those punches. You see only your own attendance here. If a punch is missing, please raise a request or ask HR to add it."} />
+      <ViewTabs label="My attendance" view={myTab} onView={setMyTab} views={[["log", "Attendance log"], ["requests", "Attendance requests"]]} />
       {error && <Callout>{error}</Callout>}
-      {myView}
-      {isManager && (
+      {myTab === "requests" ? <Requests only="attendance" embedded /> : myView}
+      {isManager && !onlyMine && (
         <>
-          <div className="sec-head" style={{ marginTop: 28 }}>
-            <div><div className="eyebrow">My team</div><h2>Team attendance</h2></div><div className="row">{datePick}</div>
-          </div>
-          {day ? <DayTable day={day} onOpen={(x) => setPerson({ email: x.email, name: x.name })} /> : <div className="empty">Loading…</div>}
+          <SectionHead as="h2" title="Team attendance" actions={datePick} className="mt-7" />
+          {day ? <DayTable day={day} onOpen={(x) => setPerson({ email: x.email, name: x.name })} /> : <ListSkeleton />}
         </>
       )}
       {toast && <div className="toast" role="status">{toast}</div>}

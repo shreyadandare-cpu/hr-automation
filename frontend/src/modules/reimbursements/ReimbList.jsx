@@ -3,7 +3,8 @@ import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { api, apiMsg } from "../../api.js";
 import { useAuth } from "../../auth.jsx";
 import { useData } from "../../data.jsx";
-import { Avatar, Person } from "../../components/ui.jsx";
+import { Avatar, Person, pill } from "../../components/ui.jsx";
+import { Tabs as BudgetTabs } from "../budgets/Budgets.jsx";
 import { useToast } from "../../components/toast.jsx";
 import { Dlg, Fld, Head, Ico, RB_STATUS, RbPill, SkelRows, catName, dtShort, lc, money, monthLabel, rbExp, rbReq, useMeta } from "./util.jsx";
 
@@ -23,7 +24,7 @@ function Flags({ c }) {
   </>;
 }
 
-function Table({ claims, hr, state, meta, filtered, people, onReload }) {
+function Table({ claims, hr, me, state, meta, filtered, people, onReload }) {
   const nav = useNavigate();
   const head = <tr>{hr ? <th>Employee</th> : <th>Claim</th>}<th>Category</th><th className="hide-sm hide-md">Description</th><th className="num">Amount</th><th className="hide-sm">Submitted</th><th>Receipts</th><th>Status</th><th><span className="sr">Action</span></th></tr>;
   if (state === "loading" && !claims.length) return <div className="tbl-wrap"><table className="rb-table"><thead>{head}</thead><tbody><SkelRows n={5} cols={8} /></tbody></table></div>;
@@ -35,7 +36,7 @@ function Table({ claims, hr, state, meta, filtered, people, onReload }) {
       {claims.map((c) => {
         const exp = rbExp(c), cats = [...new Set(exp.map((x) => x.category))], nr = exp.filter((x) => x.noReceipt).length, d = c.documentCount || 0;
         const emp = people && people.find((p) => lc(p.email) === lc(c.email));
-        const review = hr && REVIEWING.includes(c.status);
+        const review = hr && lc(c.email) !== lc(me) && REVIEWING.includes(c.status);   // never your own claim
         return (
           <tr key={c.id} className="click" onClick={() => open(c.id)}>
             <td>{hr ? <Person name={c.employee.name} color={emp ? emp.color : "var(--purple)"} sub={`${c.employee.empNo || "No employee no."} · ${c.claimNo}`} /> : <b className="mono">{c.claimNo}</b>}</td>
@@ -104,10 +105,10 @@ function Monthly({ people, onEmp, refresh }) {
           {d.people.map((p) => { const e = (people && people.find((x) => lc(x.email) === lc(p.email))) || { name: p.name, color: "var(--purple)" };
             return <tr key={p.email} className="click" onClick={() => onEmp(e.name || p.email)}><td><Person name={e.name} color={e.color} sub={p.empNo || p.email} /></td><td className="num">{p.approvedCount || "—"}</td>
               <td className="num"><b>{p.approvedTotal ? money(p.approvedTotal) : "—"}</b></td><td className="num hide-sm">{p.waitingCount ? <>{money(p.waitingTotal)} <span className="muted">({p.waitingCount})</span></> : "—"}</td>
-              <td>{!p.approvedCount ? <span className="muted">Nothing approved</span> : p.paidTotal >= p.approvedTotal ? <span className="pill p-ok">Paid</span>
-                : ps === "processed" || p.inPayrollCount ? <span className="pill p-info">In payroll</span> : <span className="pill p-warn">Payroll pending</span>}</td></tr>; })}
+              <td>{!p.approvedCount ? <span className="muted">Nothing approved</span> : p.paidTotal >= p.approvedTotal ? <span className={pill("ok")}>Paid</span>
+                : ps === "processed" || p.inPayrollCount ? <span className={pill("info")}>In payroll</span> : <span className={pill("warn")}>Payroll pending</span>}</td></tr>; })}
           <tr className="rb-total"><td><b>Total for {monthLabel(d.period)}</b></td><td></td><td className="num"><b>{money(d.totals.approved)}</b></td><td className="num hide-sm">{d.totals.waiting ? money(d.totals.waiting) : "—"}</td>
-            <td>{ps === "paid" ? <span className="pill p-ok">Payroll paid</span> : ps === "processed" ? <span className="pill p-info">Payroll processed</span> : <Link className="btn link sm" to="/app/payroll">Go to payroll</Link>}</td></tr>
+            <td>{ps === "paid" ? <span className={pill("ok")}>Payroll paid</span> : ps === "processed" ? <span className={pill("info")}>Payroll processed</span> : <Link className="btn link sm" to="/app/payroll">Go to payroll</Link>}</td></tr>
         </tbody></table></div> : <div className="empty">No claims for {monthLabel(d.period)} yet.</div>}
     </div>
   );
@@ -134,7 +135,9 @@ function CategoryDlg({ cat, meta, onClose, onSaved }) {
 }
 
 export default function ReimbList() {
-  const { isHr: hr } = useAuth();
+  const { user, can, canAll } = useAuth();
+  const hr = can("expenses.approve");                 // the list holds the claims of the people in scope
+  const runsExpenses = canAll("expenses.approve");    // monthly totals and categories are company-wide
   const { people } = useData();
   const nav = useNavigate(), [params] = useSearchParams();
   const [meta, reloadMeta] = useMeta();
@@ -185,9 +188,7 @@ export default function ReimbList() {
 
   return (
     <section className="section">
-      <div className="subtabs" role="tablist"><button type="button" role="tab" className="on" aria-selected="true">Expense claims</button>
-        <button type="button" role="tab" aria-selected="false" onClick={() => nav("/app/budgets")}>Budget requests</button></div>
-      <Head eyebrow={hr ? "Finance" : "Me"} title={hr ? "Reimburse" : "My reimburse"} accent="ments."
+      <Head title={hr ? "Expenses" : "My expenses"} tabs={<BudgetTabs cur="reimb" />}
         sub={hr ? "Review expense claims against their invoices, approve in full or in part, and send approved amounts to payroll."
           : "Upload an invoice and the details are filled in for you. HR reviews the claim and the approved amount is paid with your salary."}
         actions={<button type="button" className="btn primary" onClick={() => nav("/app/reimbursements/new")}><Ico k="plus" />{hr ? "File a claim for someone" : "New claim"}</button>} />
@@ -204,13 +205,13 @@ export default function ReimbList() {
             <input className="input" type="number" min="0" step="100" id="rbf-max" value={f.max} placeholder="Max" aria-label="Maximum amount" onChange={(e) => setLater({ max: e.target.value }, 500)} /></label>
           {Object.values(f).some(Boolean) && <button type="button" className="btn link sm" onClick={() => setNow({ ...EMPTY })}>Clear filters</button>}
         </div>
-        <Table claims={claims} hr={hr} state={state} meta={meta} filtered={filtered} people={people} onReload={() => setTick((t) => t + 1)} />
+        <Table claims={claims} hr={hr} me={user.email} state={state} meta={meta} filtered={filtered} people={people} onReload={() => setTick((t) => t + 1)} />
       </div>
-      {hr && <Monthly people={people} refresh={tick} onEmp={(name) => { setNow({ ...EMPTY, q: name }); window.scrollTo(0, 0); }} />}
-      {hr && <div className="card"><div className="card-h"><h3>Categories</h3><span className="muted">Limits flag claims above them. A travel class rule reimburses only the allowed class's fare when someone books higher.</span></div>
+      {runsExpenses && <Monthly people={people} refresh={tick} onEmp={(name) => { setNow({ ...EMPTY, q: name }); window.scrollTo(0, 0); }} />}
+      {runsExpenses && <div className="card"><div className="card-h"><h3>Categories</h3><span className="muted">Limits flag claims above them. A travel class rule reimburses only the allowed class's fare when someone books higher.</span></div>
         <div className="tbl-wrap"><table><thead><tr><th>Category</th><th>Limit per claim</th><th>Travel class allowed</th><th>Status</th><th></th></tr></thead><tbody>
           {cats.map((c) => <tr key={c.key}><td>{c.name}</td><td>{c.maxAmount ? money(c.maxAmount) : <span className="muted">No limit</span>}</td><td>{c.allowedClass ? `Up to ${c.allowedClass}` : <span className="muted">No class rule</span>}</td>
-            <td>{c.active ? <span className="pill p-ok">On</span> : <span className="pill p-mute">Off</span>}</td><td className="num"><button type="button" className="btn glass sm" onClick={() => setCatEdit(c)}>Edit</button></td></tr>)}
+            <td>{c.active ? <span className={pill("ok")}>On</span> : <span className={pill("mute")}>Off</span>}</td><td className="num"><button type="button" className="btn glass sm" onClick={() => setCatEdit(c)}>Edit</button></td></tr>)}
         </tbody></table></div></div>}
       {catEdit && <CategoryDlg cat={catEdit} meta={meta} onClose={() => setCatEdit(null)} onSaved={async () => { setCatEdit(null); await reloadMeta(); setTick((t) => t + 1); }} />}
     </section>

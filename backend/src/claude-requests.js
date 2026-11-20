@@ -2,7 +2,7 @@ import express from "express";
 import { pool } from "./db.js";
 import { notify } from "./notify.js";
 import { frontendUrl } from "./mail.js";
-import { requireItAdmin } from "./assets.js";
+import { needAll } from "./access.js";
 
 /* Claude access without an Admin API key. HR asks for it (tool_access status "requested"), the Claude admin invites the
    person in Claude itself, then clicks Done here ("invited") and later marks them accepted ("active").
@@ -62,9 +62,9 @@ export async function runClaudeReminders() {
   return rows.length;
 }
 
-/* ---------- routes: HR and IT admins ---------- */
+/* ---------- routes: "Tool access" (tools.manage) ---------- */
 export const claudeRequestsRouter = express.Router();
-claudeRequestsRouter.use(requireItAdmin);
+claudeRequestsRouter.use(needAll("tools.manage"));
 
 const personOf = async (email) => (await pool.query("SELECT name FROM employees WHERE lower(work_email)=$1", [String(email || "").toLowerCase()])).rows[0];
 

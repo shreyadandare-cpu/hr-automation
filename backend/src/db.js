@@ -9,14 +9,24 @@ pg.types.setTypeParser(1082, (v) => v);
 // name (employees, users, ...) are never read or changed by mistake. Empty = the database's default schema.
 export const SCHEMA = (process.env.DB_SCHEMA || "").trim();
 if (SCHEMA && !/^[a-z_][a-z0-9_]*$/.test(SCHEMA)) throw new Error("DB_SCHEMA must be lowercase letters, digits and underscores");
-export const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL, ...(SCHEMA ? { options: `-c search_path=${SCHEMA}` } : {}) });
+// Connections stay open and warm: opening one costs tens of milliseconds locally and more through the Cloud SQL proxy, so a pool
+// that closed them after 10 idle seconds (the default) made the first requests after a pause slow. A bounded pool (DB_POOL_MAX,
+// default 15) with a statement timeout, so one slow query can never hold a connection for long.
+const POOL = () => ({
+  max: Number(process.env.DB_POOL_MAX) || 15,
+  idleTimeoutMillis: 10 * 60_000,
+  connectionTimeoutMillis: 10_000,
+  keepAlive: true,
+  statement_timeout: Number(process.env.DB_STATEMENT_TIMEOUT_MS) || 20_000,
+});
+export const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL, ...POOL(), ...(SCHEMA ? { options: `-c search_path=${SCHEMA}` } : {}) });
 
 // Payroll and payslips can run on their own database (PAYROLL_DATABASE_URL, schema PAYROLL_DB_SCHEMA), for example a local
 // copy with dummy salaries while everything else uses the shared one. Empty = the same database as everything else.
 export const PAY_SCHEMA = (process.env.PAYROLL_DB_SCHEMA || "").trim();
 if (PAY_SCHEMA && !/^[a-z_][a-z0-9_]*$/.test(PAY_SCHEMA)) throw new Error("PAYROLL_DB_SCHEMA must be lowercase letters, digits and underscores");
 export const payPool = process.env.PAYROLL_DATABASE_URL
-  ? new pg.Pool({ connectionString: process.env.PAYROLL_DATABASE_URL, ...(PAY_SCHEMA ? { options: `-c search_path=${PAY_SCHEMA}` } : {}) })
+  ? new pg.Pool({ connectionString: process.env.PAYROLL_DATABASE_URL, ...POOL(), ...(PAY_SCHEMA ? { options: `-c search_path=${PAY_SCHEMA}` } : {}) })
   : pool;
 // With its own database, payroll's notices and email links (which live in the main database) are skipped, so dummy
 // payslips never reach real people.
@@ -31,7 +41,8 @@ const here = new URL(".", import.meta.url);
 export async function initDb(db = pool, schema = SCHEMA) {
   const pool = db;
   if (schema) await pool.query(`CREATE SCHEMA IF NOT EXISTS ${schema}`);
-  await pool.query(fs.readFileSync(new URL("schema.sql", here), "utf8"));
+  // No time limit for the schema step: building an index on a large table at start-up may take longer than a request should.
+  await pool.query(`SET statement_timeout = 0;\n${fs.readFileSync(new URL("schema.sql", here), "utf8")}\nRESET statement_timeout;`);
   const { rows } = await pool.query("SELECT count(*)::int AS n FROM employees");
   // SEED_ROSTER=false: do not load the built-in HR sheet roster (the data comes from elsewhere, see scripts/import-portal-data.mjs).
   if (rows[0].n || process.env.SEED_ROSTER === "false") return;

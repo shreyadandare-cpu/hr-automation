@@ -7,7 +7,7 @@ import { fileURLToPath } from "node:url";
 import express from "express";
 import { pool } from "./db.js";
 import { UPLOAD_DIR } from "./documents.js";
-import { requireHr } from "./auth.js";
+import { canAll, needAll } from "./access.js";
 
 /*
  * Digital Kit: every employee's personalised resources (email signature, business card, call backgrounds, LinkedIn kit)
@@ -391,10 +391,10 @@ async function mine(req, r) {
   return !!me && forPerson(r.audience, me.person);
 }
 
-// A file is only reachable while it is published and meant for the person (HR can always reach it).
+// A file is only reachable while it is published and meant for the person (people with "Company posts and pages" can always reach it).
 digitalKitRouter.get("/resources/:id/file", wrap(async (req, res) => {
   const r = (await pool.query("SELECT * FROM digital_kit_resources WHERE id=$1", [idOf(req.params.id)])).rows[0];
-  if (!r || !r.stored_name || !(req.user.role === "hr" || (r.published && await mine(req, r)))) return res.status(404).json({ error: "Not found" });
+  if (!r || !r.stored_name || !(canAll(req, "engage.manage") || (r.published && await mine(req, r)))) return res.status(404).json({ error: "Not found" });
   const ext = Object.keys(MIME).find((k) => MIME[k] === r.mime) || "";
   res.set({
     "Content-Type": r.mime,
@@ -406,10 +406,10 @@ digitalKitRouter.get("/resources/:id/file", wrap(async (req, res) => {
   res.sendFile(file);
 }));
 
-// The preview picture of an official document, under the same rule: only while published (HR can always see it).
+// The preview picture of an official document, under the same rule: only while published (people with "Company posts and pages" can always see it).
 digitalKitRouter.get("/resources/:id/preview", wrap(async (req, res) => {
   const r = (await pool.query("SELECT * FROM digital_kit_resources WHERE id=$1", [idOf(req.params.id)])).rows[0];
-  if (!r || !hasPreview(r) || !(req.user.role === "hr" || (r.published && await mine(req, r)))) return res.status(404).json({ error: "Not found" });
+  if (!r || !hasPreview(r) || !(canAll(req, "engage.manage") || (r.published && await mine(req, r)))) return res.status(404).json({ error: "Not found" });
   res.set({ "Content-Type": "image/png", "X-Content-Type-Options": "nosniff", "Cache-Control": "private, max-age=3600" });
   // ?thumb=1 gives a small copy for the little pictures in lists; the full-size one is for the preview window.
   const base = path.basename(r.stored_name.slice(5)), small = path.join(SEED_DIR, `${base}.thumb.png`);
@@ -417,7 +417,7 @@ digitalKitRouter.get("/resources/:id/preview", wrap(async (req, res) => {
 }));
 
 // Raw file body, so it is read before the JSON parser below.
-digitalKitRouter.put("/admin/resources/:id/file", requireHr, express.raw({ type: () => true, limit: MAX_FILE }), wrap(async (req, res) => {
+digitalKitRouter.put("/admin/resources/:id/file", needAll("engage.manage"), express.raw({ type: () => true, limit: MAX_FILE }), wrap(async (req, res) => {
   const id = idOf(req.params.id), body = req.body;
   const cur = (await pool.query("SELECT * FROM digital_kit_resources WHERE id=$1", [id])).rows[0];
   if (!cur) return res.status(404).json({ error: "Not found" });
@@ -443,7 +443,7 @@ digitalKitRouter.get("/", wrap(async (req, res) => {
   if (!me) return res.status(404).json({ error: "There is no employee record for your account yet. Ask HR." });
   const rows = (await pool.query("SELECT * FROM digital_kit_resources WHERE published ORDER BY sort_order, id")).rows.filter((r) => forPerson(r.audience, me.person));   // only what is for this person's designation
   const resources = Object.fromEntries(MODULES.map((m) => [m, rows.filter((r) => r.module === m).map((r) => shape(r))]));
-  res.json({ ...me, resources, isHr: req.user.role === "hr" });
+  res.json({ ...me, resources, isHr: canAll(req, "engage.manage") });
 }));
 
 // LinkedIn headline ideas from Gemini. Only the person's own designation and department (read here, never taken from the request) go out;
@@ -486,9 +486,9 @@ digitalKitRouter.post("/hashtag-ai", wrap(async (req, res) => {
   }
 }));
 
-/* ----- HR administration (separate from employee access) ----- */
+/* ----- administration: "Company posts and pages" (engage.manage), separate from employee access ----- */
 const admin = express.Router();
-admin.use(requireHr);
+admin.use(needAll("engage.manage"));
 
 admin.get("/resources", wrap(async (_req, res) => {
   const { rows } = await pool.query("SELECT * FROM digital_kit_resources ORDER BY module, sort_order, id");

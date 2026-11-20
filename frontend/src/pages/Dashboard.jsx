@@ -9,7 +9,8 @@ import { Donut, Ring } from "../components/charts.jsx";
 import TodayCards from "../components/TodayCards.jsx";
 import BirthdayPopup from "../components/BirthdayPopup.jsx";
 import CelebrateCard from "../components/CelebrateCard.jsx";
-import { Icon, ToolIcon, shortDate, PageSkeleton } from "../components/ui.jsx";
+import { Icon, Pill, ToolIcon, shortDate, PageSkeleton } from "../components/ui.jsx";
+import { usePresence, presenceLabel } from "../lib/usePresence.js";
 import { AVATAR_COLORS, TOOLS, docCount, mgrOf } from "../lib/people.js";
 import { R } from "../lib/leave.js";
 import { FestivalArt, festivalFrom, festivalGreeting, festivalTheme, festivalWhen, useFestivalLook } from "../components/FestivalLook.jsx";
@@ -23,6 +24,7 @@ const greeting = () => { const h = new Date().getHours(); return h < 12 ? "Good 
 /* The head of the dashboard: a small photo, the greeting, the date and what needs you today. No buttons inside it: the actions sit in Quick access below. */
 function Head({ me, photo, today, sub }) {
   const fest = useFestivalLook();
+  const here = presenceLabel(usePresence()[String(me.email).toLowerCase()]);
   return (
     <section className={`db-head ${fest ? "overflow-hidden bg-none! [&>*:not(canvas,.fest-veil)]:relative [&>*:not(canvas,.fest-veil)]:z-1" : ""}`}>
       {fest && <><FestivalArt slug={fest.slug} className="object-[70%_45%] animate-fest-art" /><span aria-hidden="true" className="fest-veil pointer-events-none absolute inset-0 bg-[linear-gradient(90deg,rgba(20,6,10,.82)_0%,rgba(20,6,10,.55)_45%,rgba(20,6,10,.1)_100%)]" /></>}
@@ -32,6 +34,7 @@ function Head({ me, photo, today, sub }) {
       <div className="db-head-text">
         <h1 className={fest ? "animate-fest-rise" : ""}>{fest && !fest.inDays ? festivalGreeting(fest) : greeting()}, {first(me.name)}</h1>
         <p>{longDay(today)}. {sub}</p>
+        {here && <p className="mt-2!"><Pill tone={here[1]}>{here[0]}</Pill></p>}
         {fest && <p className="mt-2! animate-fest-rise font-display text-[17px] italic text-orange!">{fest.inDays ? `${festivalWhen(fest)}. ${festivalFrom(fest)}.` : `${festivalFrom(fest)}. Have a wonderful day.`}</p>}
       </div>
       {fest && <span aria-hidden="true" className="fest-veil pointer-events-none absolute inset-x-0 bottom-0 z-1 h-1" style={{ background: `linear-gradient(90deg, ${festivalTheme(fest.slug).colors.join(", ")})` }} />}

@@ -9,6 +9,7 @@ import { runLeaveDigest } from "./leave-digest.js";
 import { runClaudeReminders } from "./claude-requests.js";
 import { runCelebrationAlerts } from "./celebrations.js";
 import { startPortalAttendanceSync } from "./portal-attendance.js";
+import { startGmailIntel } from "./gmail-intel-routes.js";
 
 export function startBackgroundJobs() {
   // Scheduled offboardings run at 6 pm India time on the last working day; check every minute.
@@ -43,5 +44,6 @@ export function startBackgroundJobs() {
     .catch((err) => console.error("Celebration check failed:", err));
   checkCelebrations();
   setInterval(checkCelebrations, 60 * 60_000);
+  startGmailIntel();   // reads project emails from the mailboxes HR switched on (only when GMAIL_INTEL_ENABLED=true)
   startPortalAttendanceSync();   // copies the office device punches the Employee Portal received (only when PORTAL_ATTENDANCE_SYNC=true)
 }

@@ -1,36 +1,15 @@
 import { useEffect, useState } from "react";
 import AuthLayout from "./AuthLayout.jsx";
-import PasswordField from "./PasswordField.jsx";
 
-/* The link in the invitation email. Opening the page only checks the link: nothing is used up or activated until the
-   person chooses a password and presses the button. (Mail scanners open links on their own.) */
+/* The link in the invitation email. Opening the page only checks the link and sends the person to Google sign-in; no password is chosen. */
 export default function Invite() {
   const token = location.pathname.split("/").filter(Boolean).pop();
   const [info, setInfo] = useState(null); // { state, firstName?, message? }
-  const [password, setPassword] = useState("");
-  const [again, setAgain] = useState("");
-  const [error, setError] = useState("");
-  const [busy, setBusy] = useState(false);
-
+  const [accepted, setAccepted] = useState(false);
   useEffect(() => {
     fetch(`/invite/${encodeURIComponent(token)}/info`).then((r) => r.json()).then(setInfo)
       .catch(() => setInfo({ state: "error", message: "The server can't be reached. Try again." }));
   }, [token]);
-
-  const submit = async (e) => {
-    e.preventDefault();
-    setError("");
-    if (password.length < 8) { setError("Choose a password of at least 8 characters."); return; }
-    if (password !== again) { setError("The two passwords don't match."); return; }
-    setBusy(true);
-    try {
-      const r = await fetch("/api/auth/accept-invitation", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ token, password }) });
-      const d = await r.json().catch(() => ({}));
-      if (r.ok) { location.href = "/app/dashboard"; return; }
-      setError(d.error || "Could not accept the invitation.");
-    } catch { setError("The server can't be reached. Try again."); }
-    setBusy(false);
-  };
 
   const pending = info && info.state === "pending";
   return (
@@ -41,16 +20,21 @@ export default function Invite() {
         <div className="auth-alert" role="alert">{info.message}</div>
         <a className="btn primary lg flex w-full" href="/login">Go to sign in</a>
       </>}
-      {pending && <>
+      {pending && !accepted && <>
         <h1>Welcome, {info.firstName}.</h1>
-        <p className="auth-sub">Choose a password to activate your account. This link works once and only for a short time.</p>
-        <form onSubmit={submit} noValidate>
-          {error && <div className="auth-alert" role="alert">{error}</div>}
-          <PasswordField id="pw1" label="New password" autoComplete="new-password" autoFocus value={password} onChange={setPassword} />
-          <PasswordField id="pw2" label="Repeat the password" autoComplete="new-password" value={again} onChange={setAgain} />
-          <button type="submit" className="btn primary lg flex w-full" disabled={busy}>{busy ? "Activating…" : "Accept invitation"}</button>
-        </form>
-        <p className="auth-hint">Next time, sign in with “Continue with Google” using your @wohlig.com account.</p>
+        <p className="auth-sub">You have been invited to Wohlig One. Please accept the invitation to continue.</p>
+        <button type="button" className="btn primary lg flex w-full" onClick={() => setAccepted(true)}>Accept invitation</button>
+      </>}
+      {pending && accepted && <>
+        <h1>Thank you, {info.firstName}.</h1>
+        <p className="auth-sub">Sign in with your Wohlig Google account to get started.</p>
+        <a className="btn primary lg flex w-full" href="/auth/google">
+          <span className="auth-g">
+          <svg viewBox="0 0 48 48" aria-hidden="true"><path fill="#EA4335" d="M24 9.5c3.5 0 6.6 1.2 9.1 3.6l6.8-6.8C35.8 2.4 30.3 0 24 0 14.6 0 6.5 5.4 2.6 13.2l7.9 6.1C12.4 13.6 17.7 9.5 24 9.5z"/><path fill="#4285F4" d="M46.5 24.5c0-1.6-.1-3.1-.4-4.5H24v9h12.7c-.6 3-2.3 5.5-4.8 7.2l7.5 5.8c4.4-4.1 7.1-10.1 7.1-17.5z"/><path fill="#FBBC05" d="M10.5 28.7a14.5 14.5 0 0 1 0-9.4l-7.9-6.1a24 24 0 0 0 0 21.6l7.9-6.1z"/><path fill="#34A853" d="M24 48c6.5 0 11.9-2.1 15.9-5.8l-7.5-5.8c-2.1 1.4-4.9 2.3-8.4 2.3-6.3 0-11.6-4.1-13.5-9.8l-7.9 6.1C6.5 42.6 14.6 48 24 48z"/></svg>
+        </span>
+          Continue with Google
+        </a>
+        <p className="auth-hint">Please use your @wohlig.com account. You will not need a password.</p>
       </>}
     </AuthLayout>
   );

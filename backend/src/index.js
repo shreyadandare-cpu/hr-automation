@@ -10,6 +10,7 @@ import { timing } from "./timing.js";
 import { toolsRouter } from "./tools.js";
 import { sessionRouter, accountRouter, usersRouter } from "./users.js";
 import { profileRouter } from "./profile.js";
+import { idCardRouter } from "./id-card.js";
 import { leaveRouter } from "./leave.js";
 import { postsRouter } from "./posts.js";
 import { engageRouter } from "./engage.js";
@@ -22,6 +23,7 @@ import { leaveDigestRouter } from "./leave-digest.js";
 import { attendanceRouter } from "./attendance.js";
 import { assetsRouter } from "./assets.js";
 import { deviceRouter } from "./device.js";
+import { gmailIntelRouter, projectReportRouter } from "./gmail-intel-routes.js";
 import { payslipsRouter } from "./payslips.js";
 import { payPinRouter, requirePayUnlock } from "./pay-pin.js";
 import { claudeRequestsRouter } from "./claude-requests.js";
@@ -61,9 +63,11 @@ app.use(express.json({ limit: "100kb" }));
 app.use("/api", sessionRouter); // login and logout are public
 app.use("/api", festivalLookRouter);   // public: which festival is near, for the sign-in page's festival look
 app.use(deviceRouter()); // the office device posts punches with its own key (no session); the linking screens check for HR themselves
+app.use(gmailIntelRouter());   // Gmail Intelligence Engine: each HR route checks for HR itself; Google's Pub/Sub push has no session and proves itself with a token, so this sits before the login-guarded routers (off until GMAIL_INTEL_ENABLED=true)
 app.use("/api", accountRouter);
 app.use("/api/users", usersRouter);
 app.use("/api/profile", profileRouter);
+app.use(projectReportRouter());   // weekly project reports built from the collected emails: HR sees all projects, others only their own
 const wrap = (fn) => (req, res) => fn(req, res).catch((err) => {
   console.error(err);
   res.status(500).json({ error: "Server error" });
@@ -81,6 +85,7 @@ app.use(toolsRouter(wrap));   // every paid tool (AI and others): seats and mont
 app.use(financeRouter(wrap));   // statutory dues, payroll journal, cost, gratuity, annual tax statements (read only)
 app.use(leaveDigestRouter(wrap));   // HR: preview or test the daily leave digest email
 app.use(attendanceRouter(wrap));
+app.use(idCardRouter(wrap));   // staff ID cards as CR80 PDFs: own for everyone, anyone's for people.view
 app.use(assetsRouter(wrap));   // IT admins only
 app.use(payslipsRouter(wrap));
 app.use(toolAccessRouter(wrap));   // the audit log and Claude access

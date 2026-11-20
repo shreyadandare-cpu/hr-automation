@@ -154,6 +154,33 @@ function FixModal({ person, date, onClose, onDone }) {
   );
 }
 
+/* HR: say whether a person works from the office (On-site) or from elsewhere (Off-site). */
+function SiteModal({ person, site, onClose, onDone }) {
+  const [place, setPlace] = useState("");
+  const [busy, setBusy] = useState(false), [error, setError] = useState("");
+  const save = async () => {
+    setBusy(true); setError("");
+    const r = await api("PUT", "/api/attendance/work-site", { email: person.email, site, location: place });
+    setBusy(false);
+    if (!r.ok) return setError(apiMsg(r));
+    onDone(`${person.name} is now ${site === "on" ? "On-site" : "Off-site"}.`); onClose();
+  };
+  return (
+    <Modal onClose={onClose}>
+      <h3>{site === "on" ? `Mark ${person.name} as On-site?` : `Mark ${person.name} as Off-site`}</h3>
+      {site === "on"
+        ? <p className="muted">They will be expected to punch at the office. Days without a punch will show as No punch, not Off-site.</p>
+        : <div className="field"><label htmlFor="site-place">Works from</label><input id="site-place" className="input" autoFocus placeholder="For example Client site, or Pune" value={place} onChange={(e) => setPlace(e.target.value)} />
+            <span className="hint">Days without an office punch will show as Off-site instead of No punch.</span></div>}
+      {error && <div className="ferr" role="alert">{error}</div>}
+      <div className="row" style={{ justifyContent: "flex-end", gap: 8, marginTop: 16 }}>
+        <button type="button" className="btn glass" onClick={onClose}>Cancel</button>
+        <button type="button" className="btn primary" disabled={busy || (site === "off" && !place.trim())} onClick={save}>{busy ? "Saving…" : site === "on" ? "Mark on-site" : "Mark off-site"}</button>
+      </div>
+    </Modal>
+  );
+}
+
 /* HR: a month for everyone, one row per person, with a spreadsheet download. */
 function MonthlyReport({ onOpen }) {
   const [month, setMonth] = useState(istNow().date.slice(0, 7));
@@ -230,7 +257,8 @@ function PersonView({ person, canEdit, onBack, say }) {
     if (!r.ok) { say(apiMsg(r)); return; }
     say("Punch added."); months.refresh();
   };
-  const { people } = useData();
+  const { people, reload } = useData();
+  const [siting, setSiting] = useState(null);   // HR: switching this person between On-site and Off-site
   const info = (people || []).find((x) => String(x.email).toLowerCase() === String(person.email).toLowerCase());
   const sum = months.byMonth[now.date.slice(0, 7)]?.summary;
   const details = (
@@ -238,6 +266,11 @@ function PersonView({ person, canEdit, onBack, say }) {
       {info && <div className="muted" style={{ display: "flex", flexWrap: "wrap", gap: "6px 22px" }}>
         <span>ID <b style={{ color: "var(--ink)" }}>{info.no}</b></span><span>{info.title}</span>
         <span>Reports to <b style={{ color: "var(--ink)" }}>{info.manager || "no one"}</b></span>{info.location && <span>{info.location}</span>}
+        {canEdit && info.status !== "offboarded" && <span className="row" style={{ gap: 6, alignItems: "center" }}>Works from
+          {[["on", "On-site"], ["off", "Off-site"]].map(([k, label]) => {
+            const current = (!!info.location && !/office/i.test(info.location)) ? "off" : "on";
+            return <button key={k} type="button" className={`btn sm ${current === k ? "primary" : "glass"}`} aria-pressed={current === k} onClick={() => current !== k && setSiting(k)}>{label}</button>;
+          })}</span>}
         <span>Joined <b style={{ color: "var(--ink)" }}>{info.start ? shortDate(info.start) : "—"}</b></span>
         <span>{info.status === "offboarded" ? "Has left" : info.status}</span></div>}
       {sum && <div className="grid g2">
@@ -257,6 +290,7 @@ function PersonView({ person, canEdit, onBack, say }) {
         actions={<button type="button" className="back" onClick={onBack}><span className="back-ar" aria-hidden="true">←</span>{canEdit ? "Back to everyone" : "Back"}</button>} />
       {months.error && <Callout>{months.error}</Callout>}
       {details}
+      {siting && <SiteModal person={{ email: person.email, name }} site={siting} onClose={() => setSiting(null)} onDone={async (m) => { say(m); await reload(); months.refresh(); }} />}
       <div className="att-top">
         <div className="att-col"><h3 className="att-h">Your numbers</h3><StatsCard byMonth={months.byMonth} today={now.date} name={name.split(" ")[0]} /></div>
         {todayDay ? <>

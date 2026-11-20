@@ -11,6 +11,7 @@ import OrgChart from "../components/OrgChart.jsx";
 import { AddMemberModal } from "../modules/employee/cards.jsx";
 import { STATUS, TOOLS, leaving, byEmployeeNo, isTop, mgrOf, teamUnder, toolIds } from "../lib/people.js";
 import { scopeSet } from "../lib/useLeave.js";
+import { usePresence, presenceLabel } from "../lib/usePresence.js";
 
 function StatusPill({ person }) {
   if (person.status === "active" && person.lastDay) { const [w, tone] = leaving(person); return <Pill tone={tone}>{w} {shortDate(person.lastDay)}</Pill>; }
@@ -59,6 +60,7 @@ export default function Employees() {
   // and seeing former employees are company-wide; the Claude status refresh belongs to tool access.
   const editsAll = canAll("people.edit"), seesFormer = canAll("people.view") || editsAll, managesTools = canAll("tools.manage");
   const { people, reload, claudeMode } = useData();
+  const presence = usePresence();
   const toast = useToast();
   const [refreshing, setRefreshing] = useState(false);
   const nav = useNavigate();
@@ -127,6 +129,7 @@ export default function Employees() {
                 <span className="avatar dir-av" style={{ background: p.color }}>{p.name.split(/\s+/).map((x) => x[0]).slice(0, 2).join("").toUpperCase()}</span>
                 <span className="dir-t">
                   <b>{p.name}</b>
+                  {(() => { const l = presenceLabel(presence[String(p.email).toLowerCase()]); return l ? <span><Pill tone={l[1]}>{l[0]}</Pill></span> : null; })()}
                   <span className="dir-role">{p.title && p.title !== "—" ? p.title : "Wohlig"}</span>
                   <span><i>Department</i>{p.dept && p.dept !== "—" ? p.dept : "Not set"}</span>
                   {p.location && <span><i>Location</i>{p.location}</span>}

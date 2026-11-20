@@ -189,6 +189,71 @@ export async function drawBanner({ theme = "light", headline = "", emphasis = ""
   return c;
 }
 
+/* Welcome & celebrations: a square LinkedIn card and a ready caption for the moments worth sharing. */
+export const CELEBRATIONS = {
+  welcome: { label: "Welcome aboard", eyebrow: "WELCOME TO THE TEAM", h: "Welcome to", e: "Wohlig,", tags: ["#Wohlig", "#NewBeginnings", "#WelcomeAboard", "#GoogleCloud"],
+    caption: "I'm excited to share that I've joined Wohlig as [your role]!\n\nWohlig is a Google Cloud Premier Partner that builds AI agents and agentic workflows, and I'm looking forward to [what you'll be working on].\n\nThank you to everyone who has made me feel welcome already. Excited for what comes next." },
+  anniversary: { label: "Work anniversary", eyebrow: "WORK ANNIVERSARY", h: "Another year of", e: "wohlig.", tags: ["#WorkAnniversary", "#Wohlig", "#Gratitude", "#Teamwork"],
+    caption: "Today marks [number] year(s) at Wohlig!\n\nLooking back, I'm grateful for [a project or lesson that mattered] and for the people I get to build with.\n\nHere's to what we ship next." },
+  certified: { label: "Newly certified", eyebrow: "NEWLY CERTIFIED", h: "Certified and", e: "ready.", tags: ["#Certified", "#GoogleCloud", "#Learning", "#Wohlig"],
+    caption: "I'm happy to share that I've earned the [certification name] certification!\n\nThank you to my team at Wohlig for the support along the way. I'm excited to put it to work on [what it helps you do]." },
+  role: { label: "New role", eyebrow: "NEW ROLE", h: "A new chapter at", e: "Wohlig.", tags: ["#NewRole", "#Wohlig", "#CareerGrowth", "#Teamwork"],
+    caption: "I'm excited to share that I've taken on a new role as [your new role] at Wohlig!\n\nThank you to [the people who helped] for the trust and support. Looking forward to [what's next]." },
+};
+/** "a Software Developer Engineer", "an HR Manager": the person's own designation with the right article. Empty when there is no designation. */
+export function roleWithArticle(title) {
+  const t = String(title || "").trim();
+  if (!t) return "";
+  return `${/^(?:[aeiou]|hr\b|sde\b|ai\b|ml\b|ui\b|ux\b|it\b)/i.test(t) ? "an" : "a"} ${t}`;
+}
+/** The caption for an occasion with the person's own role filled in. Anything still unknown stays in [brackets] for them to complete. */
+export function captionFor(kind, p) {
+  const role = roleWithArticle(p && p.title);
+  return (CELEBRATIONS[kind] || CELEBRATIONS.welcome).caption.replace("[your role]", role || "[your role]").replace("[your new role]", role || "[your new role]");
+}
+export async function drawCelebrate({ occasion = "welcome", theme = "maroon", headline = "", emphasis = "", name = "", title = "", photoUrl = "" } = {}) {
+  const O = CELEBRATIONS[occasion] || CELEBRATIONS.welcome, [W, H] = [1080, 1080], c = newCanvas(W, H), x = c.getContext("2d");
+  await loadFonts();
+  const dark = theme !== "light";
+  const [logoImg, badge] = await Promise.all([loadImage(dark ? LOGO_DARK : LOGO_LIGHT), loadImage("/wohlig-premier-partner-badge.png")]);
+  const g = x.createLinearGradient(0, 0, W * 0.55, H);
+  if (dark) { g.addColorStop(0, "#7d1535"); g.addColorStop(1, "#4e0820"); } else { g.addColorStop(0, "#fff7e9"); g.addColorStop(0.6, "#fbe9d6"); g.addColorStop(1, "#f7d6bb"); }
+  x.fillStyle = g; x.fillRect(0, 0, W, H);
+  x.save(); x.beginPath(); x.rect(0, 0, W, H); x.clip();
+  const line = dark ? C.ivory : C.terracotta;
+  flower(x, W * 0.93, H * 0.1, 470, 0.2, line, dark ? 0.2 : 0.4, 2.4);
+  flower(x, W * 0.93, H * 0.1, 330, 0.2 + Math.PI / 8, line, dark ? 0.12 : 0.22, 1.8);
+  x.restore();
+  const L = 98, ink = dark ? C.ivory : C.maroon;
+  // the eyebrow
+  x.fillStyle = C.orange; x.fillRect(L, 138, 60, 4);
+  x.fillStyle = dark ? C.beige : C.maroon; x.font = `800 22px ${SANS}`; x.letterSpacing = "5px"; x.fillText(O.eyebrow, L + 86, 150); x.letterSpacing = "0px";
+  // the headline, on two lines: the words, then the emphasis in italic
+  const h = String(headline || "").trim() || O.h, em = String(emphasis || "").trim() || O.e, maxW = photoUrl ? 520 : 860;
+  let size = 150;
+  const widest = (sz) => { x.font = `600 ${sz}px ${SERIF}`; const a = x.measureText(h).width; x.font = `italic 400 ${sz}px ${SERIF}`; return Math.max(a, x.measureText(em).width); };
+  while (size > 56 && widest(size) > maxW) size -= 2;
+  x.font = `600 ${size}px ${SERIF}`; x.fillStyle = ink; x.fillText(h, L, 440);
+  x.font = `italic 400 ${size}px ${SERIF}`; x.fillStyle = dark ? "#f4a06c" : "rgba(128,13,53,.8)"; x.fillText(em, L, 440 + size * 1.04);
+  // the person
+  const ny = 440 + size * 1.04 + 130;
+  x.fillStyle = ink; const ns = fit(x, String(name || "").slice(0, 60), maxW, 50, 700, SANS, 28); x.font = `700 ${ns}px ${SANS}`; x.fillText(String(name || "").slice(0, 60), L, ny);
+  if (title) { x.fillStyle = dark ? C.beige : C.inkDim; const ts = fit(x, title, maxW, 28, 400, SANS, 16); x.font = `400 ${ts}px ${SANS}`; x.fillText(title, L, ny + 46); }
+  // the photo, if one was added: it is drawn only into the download and never leaves the device
+  if (photoUrl) {
+    const cx = W - 262, cy = 640, r = 168;
+    x.save(); x.beginPath(); x.arc(cx, cy, r, 0, Math.PI * 2); x.closePath(); x.clip();
+    try { const im = await loadImage(photoUrl), s = Math.min(im.naturalWidth, im.naturalHeight); x.drawImage(im, (im.naturalWidth - s) / 2, (im.naturalHeight - s) / 2, s, s, cx - r, cy - r, r * 2, r * 2); } catch { x.fillStyle = C.beige; x.fillRect(cx - r, cy - r, r * 2, r * 2); }
+    x.restore(); x.strokeStyle = dark ? "rgba(255,247,233,.85)" : C.maroon; x.lineWidth = 6; x.beginPath(); x.arc(cx, cy, r + 8, 0, Math.PI * 2); x.stroke();
+  }
+  // the footer: a rule, the logo and the partner badge
+  x.fillStyle = dark ? "rgba(255,247,233,.28)" : "rgba(128,13,53,.22)"; x.fillRect(L, 918, W - L * 2, 2);
+  const lh = 74; logo(x, logoImg, L, 954, lh);
+  x.fillStyle = C.ivory; x.beginPath(); x.arc(W - L - 52, 992, 54, 0, Math.PI * 2); x.fill();
+  const bh = 86, bw = bh * (badge.naturalWidth / badge.naturalHeight || 1); x.drawImage(badge, W - L - 52 - bw / 2, 992 - bh / 2, bw, bh);
+  return c;
+}
+
 /** The employee badge, 600 x 900. Uses the profile photo when there is one. */
 export async function drawBadge(p, photoUrl) {
   const [W, H] = [600, 900], c = newCanvas(W, H), x = c.getContext("2d");

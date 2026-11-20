@@ -438,6 +438,7 @@ CREATE TABLE IF NOT EXISTS attendance_punches (
   employee_id INTEGER NOT NULL REFERENCES employees(id) ON DELETE CASCADE,
   work_date DATE NOT NULL, punch_time TIME NOT NULL, direction TEXT NOT NULL, source TEXT, note TEXT, created_by TEXT);
 CREATE INDEX IF NOT EXISTS attendance_punches_day ON attendance_punches (employee_id, work_date);
+CREATE INDEX IF NOT EXISTS attendance_punches_date ON attendance_punches (work_date);
 
 -- Office biometric device: which device user ID is which employee, and punches from IDs nobody has linked yet.
 CREATE TABLE IF NOT EXISTS device_users (
@@ -775,6 +776,61 @@ INSERT INTO festival_dates (slug, day) VALUES
   ('christmas', '2026-12-25'), ('christmas', '2027-12-25')
 ON CONFLICT DO NOTHING;
 
+-- Gmail Intelligence Engine: project emails read from authorised work mailboxes, sorted and summarised by AI.
+-- Only what the AI extracted is kept (no full email bodies). Off until GMAIL_INTEL_ENABLED=true and a service account is set.
+CREATE TABLE IF NOT EXISTS gmail_mailboxes (
+  id SERIAL PRIMARY KEY,
+  work_email TEXT NOT NULL UNIQUE,
+  enabled BOOLEAN NOT NULL DEFAULT TRUE,
+  history_id TEXT,              -- Gmail's cursor: where the last sync stopped
+  watch_expires_at TIMESTAMPTZ, -- Gmail change notifications must be renewed before this
+  last_synced_at TIMESTAMPTZ,
+  last_error TEXT
+);
+CREATE TABLE IF NOT EXISTS gmail_messages (
+  gmail_message_id TEXT PRIMARY KEY,   -- one row per message however many mailboxes hold a copy
+  thread_id TEXT NOT NULL,
+  mailbox TEXT NOT NULL,
+  sent_at TIMESTAMPTZ,
+  stage TEXT NOT NULL,                 -- filtered | classified | extracted | review | failed
+  relevance TEXT,                      -- relevant | partial | irrelevant
+  reason TEXT,
+  processed_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS gmail_messages_thread ON gmail_messages (thread_id);
+CREATE TABLE IF NOT EXISTS gmail_extractions (
+  id SERIAL PRIMARY KEY,
+  gmail_message_id TEXT NOT NULL REFERENCES gmail_messages(gmail_message_id) ON DELETE CASCADE,
+  thread_id TEXT NOT NULL,
+  project_id INTEGER REFERENCES projects(id) ON DELETE SET NULL,
+  project_name TEXT,
+  employee_name TEXT,
+  subject TEXT,
+  email_date TIMESTAMPTZ,
+  summary TEXT,
+  completed JSONB NOT NULL DEFAULT '[]',
+  pending JSONB NOT NULL DEFAULT '[]',
+  blockers JSONB NOT NULL DEFAULT '[]',
+  decisions JSONB NOT NULL DEFAULT '[]',
+  deadlines JSONB NOT NULL DEFAULT '[]',
+  next_steps JSONB NOT NULL DEFAULT '[]',
+  relevance TEXT NOT NULL,
+  confidence NUMERIC(3,2) NOT NULL,
+  needs_review BOOLEAN NOT NULL DEFAULT FALSE,
+  reviewed_by TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS gmail_extractions_project ON gmail_extractions (project_id, email_date);
+CREATE TABLE IF NOT EXISTS gmail_ai_usage (
+  id SERIAL PRIMARY KEY,
+  day DATE NOT NULL DEFAULT current_date,
+  model TEXT NOT NULL,
+  purpose TEXT NOT NULL,               -- classify | extract
+  input_tokens INTEGER NOT NULL DEFAULT 0,
+  output_tokens INTEGER NOT NULL DEFAULT 0,
+  cost_usd NUMERIC(10,5) NOT NULL DEFAULT 0
+);
+
 -- ---------------------------------------------------------------------------------------------------------------------
 -- Engage and requests (2026-11-19): polls, praise, articles, app links, advance requests, attendance requests.
 -- All new tables; nothing existing changes shape. Rows are never hard-deleted by the app (deleted_at), except votes.
@@ -1016,6 +1072,14 @@ END $$;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS is_super_admin BOOLEAN NOT NULL DEFAULT false;
 -- A blocked login cannot sign in, even with Google, and its sessions stop working. Set when a login is deleted or someone leaves.
 ALTER TABLE users ADD COLUMN IF NOT EXISTS login_blocked BOOLEAN NOT NULL DEFAULT false;
+-- Pages HR has hidden for one person (any of: articles, polls, surveys). Set on Users; the server refuses those pages for them.
+ALTER TABLE users ADD COLUMN IF NOT EXISTS hidden_features TEXT[] NOT NULL DEFAULT '{}';
+-- Rewards: HR gives a person a reward with a short note. They are told, and see it on Praise > Rewards.
+CREATE TABLE IF NOT EXISTS rewards (
+  id SERIAL PRIMARY KEY, to_email TEXT NOT NULL, from_email TEXT NOT NULL, title TEXT NOT NULL, message TEXT NOT NULL DEFAULT '',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(), deleted_at TIMESTAMPTZ);
+CREATE INDEX IF NOT EXISTS rewards_to ON rewards (lower(to_email), created_at DESC) WHERE deleted_at IS NULL;
+CREATE INDEX IF NOT EXISTS rewards_recent ON rewards (created_at DESC) WHERE deleted_at IS NULL;
 
 -- One ticked permission for one person: for the whole company, or for a reporting tree (everyone below scope_root_email, or below
 -- the person themselves when it is empty). Removing it keeps the row, so the history of who gave and removed what stays.

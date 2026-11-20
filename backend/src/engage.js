@@ -5,7 +5,7 @@ import express from "express";
 import { UPLOAD_DIR } from "./documents.js";
 import { MAX_BYTES, checkFile } from "./extract.js";
 import { pool } from "./db.js";
-import { requireAuth } from "./auth.js";
+import { requireAuth, unlessHidden } from "./auth.js";
 import { requirePayUnlock } from "./pay-pin.js";
 import { can, canAll, mayDecide, need, scopeOf } from "./access.js";
 import { notify } from "./notify.js";
@@ -37,7 +37,33 @@ async function namesFor(emails) {
 export function engageRouter(wrap) {
   const r = express.Router();
   r.use(["/api/tax-declaration", "/api/tax-declarations"], requireAuth, requirePayUnlock);   // tax declarations are pay: behind the Pay PIN (pay-pin.js)
-  r.use(["/api/polls", "/api/praise", "/api/articles", "/api/apps", "/api/requests", "/api/remote-today", "/api/tax-declaration", "/api/goals"], requireAuth);
+  r.use(["/api/polls", "/api/praise", "/api/rewards", "/api/articles", "/api/apps", "/api/requests", "/api/remote-today", "/api/tax-declaration", "/api/goals"], requireAuth);
+
+  r.use("/api/polls", unlessHidden("polls"));
+  r.use("/api/articles", unlessHidden("articles"));
+
+  /* ---------- Rewards (rewards.give gives; everyone reads their own) ---------- */
+  r.get("/api/rewards", wrap(async (req, res) => {
+    const all = req.query.scope === "all" && canAll(req, "rewards.give");
+    const { rows } = await pool.query(`SELECT id, from_email, to_email, title, message, created_at FROM rewards WHERE deleted_at IS NULL ${all ? "" : "AND lower(to_email) = $2"} ORDER BY created_at DESC LIMIT $1`, all ? [PAGE] : [PAGE, me(req)]);
+    const person = await namesFor(rows.flatMap((x) => [x.from_email, x.to_email]));
+    res.json({ canGive: canAll(req, "rewards.give"), rewards: rows.map((x) => ({ id: x.id, from: person(x.from_email), to: person(x.to_email), title: x.title, message: x.message, createdAt: x.created_at })) });
+  }));
+  r.post("/api/rewards", wrap(async (req, res) => {
+    if (!canAll(req, "rewards.give")) return res.status(403).json(NO_ACCESS);
+    const to = String(req.body?.to || "").trim().toLowerCase(), title = String(req.body?.title || "").trim(), message = String(req.body?.message || "").trim();
+    const errors = {};
+    if (!to) errors.to = "Please choose who the reward is for.";
+    else if (to === me(req)) errors.to = "Please choose a colleague. You cannot reward yourself.";
+    else if (!(await pool.query("SELECT 1 FROM employees WHERE lower(work_email)=$1", [to])).rowCount) errors.to = "That person was not found.";
+    if (!title) errors.title = "Please say what the reward is."; else if (title.length > 120) errors.title = "Please keep the reward under 120 characters.";
+    if (message.length > 500) errors.message = "Please keep the note under 500 characters.";
+    if (Object.keys(errors).length) return res.status(400).json({ errors });
+    const { rows: [row] } = await pool.query("INSERT INTO rewards (to_email, from_email, title, message) VALUES ($1,$2,$3,$4) RETURNING id", [to, me(req), title, message]);
+    await pool.query("INSERT INTO audit_log (action, work_email) VALUES ($1,$2)", [`Reward "${title}" given by ${req.user.email}`, to]);
+    res.status(201).json({ id: row.id });
+    notify(to, { title: `You received a reward: ${title}`, body: message.slice(0, 140), link: "/app/praise?view=rewards" }).catch(() => {});
+  }));
 
   /* ---------- Polls ---------- */
   r.get("/api/polls", wrap(async (req, res) => {

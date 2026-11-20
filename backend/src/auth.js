@@ -137,7 +137,7 @@ export async function loadSession(req, _res, next) {
     const t = tokenOf(req);
     if (t) {
       const { rows } = await pool.query(
-        `SELECT u.email, u.role, u.it_admin, u.is_super_admin,
+        `SELECT u.email, u.role, u.it_admin, u.is_super_admin, u.hidden_features,
                 COALESCE((SELECT json_agg(json_build_object('permission', g.permission, 'scope', g.scope, 'scope_root_email', g.scope_root_email))
                             FROM access_grants g WHERE lower(g.email)=lower(u.email) AND g.revoked_at IS NULL
                              AND (g.expires_at IS NULL OR g.expires_at >= (now() AT TIME ZONE 'Asia/Kolkata')::date)), '[]') AS grants
@@ -147,7 +147,7 @@ export async function loadSession(req, _res, next) {
       // A session only counts for a company address, whatever else is in the table.
       const u = rows[0];
       if (u && isCompanyEmail(u.email)) {
-        req.user = { email: u.email, role: u.is_super_admin ? "hr" : u.role, it_admin: u.it_admin || u.is_super_admin, stored_role: u.role };
+        req.user = { email: u.email, role: u.is_super_admin ? "hr" : u.role, it_admin: u.it_admin || u.is_super_admin, stored_role: u.role, hidden: u.hidden_features || [] };
         req.access = { email: u.email.toLowerCase(), superAdmin: !!u.is_super_admin, grants: u.grants || [] };
       }
     }
@@ -160,6 +160,12 @@ export async function endOtherSessions(req, email) {
   const t = tokenOf(req);
   await pool.query("DELETE FROM sessions WHERE lower(email)=lower($1) AND token_hash <> $2", [email, t ? sha(t) : ""]);
 }
+
+/** Refuses a page HR has hidden for this person (Users > Manage). Put it after requireAuth. */
+export const unlessHidden = (feature) => (req, res, next) =>
+  req.user && (req.user.hidden || []).includes(feature)
+    ? res.status(403).json({ error: "HR has turned this page off for your account. Please ask the HR team if you need it." })
+    : next();
 
 export const requireAuth = (req, res, next) =>
   req.user ? next() : res.status(401).json({ error: "Please sign in." });

@@ -1,6 +1,6 @@
 import express from "express";
 import { pool } from "./db.js";
-import { requireAuth } from "./auth.js";
+import { requireAuth, unlessHidden } from "./auth.js";
 import { can, canAll, mayDecide, need, needAll, scopeOf } from "./access.js";
 import { notify } from "./notify.js";
 import { coveredBy, managerOf, reportsOf } from "./teams.js";
@@ -140,6 +140,8 @@ export function workforceRouter(wrap) {
       ? { title: "Your timesheet was approved", body: `Week of ${w.week}`, link: `/app/timesheet?week=${w.week}` }
       : { title: "Your timesheet was sent back", body: `Week of ${w.week}: ${note}`.slice(0, 180), link: `/app/timesheet?week=${w.week}` }).catch(() => {});
   }));
+
+  r.use("/api/surveys", unlessHidden("surveys"));
 
   /* ---------- Surveys ---------- */
   const surveyOut = (s) => ({ id: s.id, title: s.title, intro: s.intro, questions: s.questions, anonymous: s.anonymous, closesOn: s.closes_on, createdAt: s.created_at });

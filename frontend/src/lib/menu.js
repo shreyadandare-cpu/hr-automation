@@ -2,7 +2,11 @@
 /* The menu, in sections (the rail) and their pages (the strip under the top bar; the full list in the phone drawer). Each item is
    [path, label, icon, other paths that belong to it]. Items a person may not use are left out: everything follows access
    (useAuth().can / canAll, the permissions a super admin ticked on Company > Access), plus "My team" for reporting managers. */
-export function menuFor({ isManager, superAdmin, can = () => false, canAll = () => false, canAny = () => false }) {
+/* Pages kept out of the menu (and quick search) for now. The pages and their addresses still work. To bring one back, delete its path here. */
+const OFF_MENU = new Set(["/app/timesheet", "/app/goals", "/app/reviews", "/app/training", "/app/interviews", "/app/helpdesk", "/app/praise", "/app/apps", "/app/profile", "/app/org-documents", "/app/id-card", "/app/polls", "/app/surveys", "/app/articles", "/app/hr-reports", "/app/hr-reviews", "/app/hiring", "/app/exit-interviews"]);
+
+export function menuFor({ user, isManager, superAdmin, can = () => false, canAll = () => false, canAny = () => false }) {
+  const hidden = (user && user.hidden) || [];   // pages HR has turned off for this person (Users > Manage)
   const payroll = canAny("payroll.prepare", "payroll.approve", "payroll.bank", "payroll.view");
   const groups = [
     { label: "Home", icon: "home", items: [["/app/dashboard", "Dashboard", "house"]] },
@@ -21,6 +25,7 @@ export function menuFor({ isManager, superAdmin, can = () => false, canAll = () 
       ["/app/apps", "Apps", "grid"],
       ["/app/profile", "Profile", "user", ["/app/account"]],
       ["/app/digital-kit", "Digital Kit", "idcard"],
+      ["/app/id-card", "ID card", "idcard"],
       !canAll("documents.view") && ["/app/documents", "Documents", "folder"],
     ] },
     { label: "To do", icon: "mail", items: [["/app/inbox", "To do", "inbox"]] },
@@ -36,12 +41,13 @@ export function menuFor({ isManager, superAdmin, can = () => false, canAll = () 
       ["/app/employees", "Employees", "people"],
       ["/app/org-documents", "Documents", "folder"],
       ["/app/allocations", "Allocations", "project"],
+      ["/app/project-reports", "Project reports", "chart"],
     ] },
     { label: "Community", icon: "feed", items: [
       ["/app/posts", "Announcements", "megaphone"],
-      ["/app/polls", "Polls", "poll"],
-      ["/app/surveys", "Surveys", "survey"],
-      ["/app/articles", "Articles", "book"],
+      !hidden.includes("polls") && ["/app/polls", "Polls", "poll"],
+      !hidden.includes("surveys") && ["/app/surveys", "Surveys", "survey"],
+      !hidden.includes("articles") && ["/app/articles", "Articles", "book"],
       canAll("celebrations.manage") && ["/app/celebrations", "Celebrations", "cake"],
       ["/app/festivals", "Festival wishes", "gift"],
     ] },
@@ -64,12 +70,13 @@ export function menuFor({ isManager, superAdmin, can = () => false, canAll = () 
       canAll("assets.manage") && ["/app/assets", "Assets", "laptop"],
       (canAll("tools.manage") || canAll("finance.view")) && ["/app/tools", "Tools & cost", "grid"],
       canAll("tools.manage") && ["/app/claude-requests", "Claude access", "key"],
+      canAll("rewards.give") && ["/app/rewards", "Rewards", "medal"],
       canAll("users.manage") && ["/app/users", "Users", "settings"],
       superAdmin && ["/app/access", "Access", "shield"],
       canAll("audit.view") && ["/app/audit", "Audit log", "history"],
     ] },
   ];
-  return groups.filter(Boolean).map((g) => ({ ...g, items: g.items.filter(Boolean) })).filter((g) => g.items.length);
+  return groups.filter(Boolean).map((g) => ({ ...g, items: g.items.filter((it) => it && !OFF_MENU.has(it[0])) })).filter((g) => g.items.length);
 }
 
 export const under = (pathname, p) => pathname === p || pathname.startsWith(p + "/");

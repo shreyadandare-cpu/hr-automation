@@ -79,7 +79,7 @@ accountRouter.get("/me", wrap(async (req, res) => {
   const { rows } = await pool.query("SELECT name FROM employees WHERE lower(work_email)=$1", [req.user.email.toLowerCase()]);
   // superAdmin and access (each permission held: "company" or the emails whose teams it covers) drive the menu and pages.
   res.json({ email: req.user.email, role: req.user.role, itAdmin: !!req.user.it_admin, payrollReviewer: ["payroll.approve", "payroll.bank", "payroll.view"].some((k) => k in summary(req.access)), financeViewer: canAll(req, "finance.view") || canAll(req, "payroll.approve"), name: rows[0]?.name || req.user.email,
-    superAdmin: isSuper(req), access: summary(req.access) });
+    superAdmin: isSuper(req), access: summary(req.access), hidden: req.user.hidden || [] });
 }));
 
 accountRouter.post("/password", wrap(async (req, res) => {
@@ -99,7 +99,7 @@ accountRouter.post("/password", wrap(async (req, res) => {
 export const usersRouter = express.Router();
 usersRouter.use(needAll("users.manage"));
 
-const toApi = (r) => ({ email: r.email, role: r.role, itAdmin: !!r.it_admin, superAdmin: !!r.is_super_admin, blocked: !!r.login_blocked, name: r.name || "", no: r.emp_no || "", title: r.title || "", lastLogin: r.last_login, createdAt: r.created_at, inviteExpires: r.invite_expires });
+const toApi = (r) => ({ email: r.email, role: r.role, itAdmin: !!r.it_admin, superAdmin: !!r.is_super_admin, blocked: !!r.login_blocked, hidden: r.hidden_features || [], name: r.name || "", no: r.emp_no || "", title: r.title || "", lastLogin: r.last_login, createdAt: r.created_at, inviteExpires: r.invite_expires });
 
 usersRouter.get("/", wrap(async (_req, res) => {
   const { rows } = await pool.query(
@@ -195,6 +195,34 @@ usersRouter.put("/:email/it-admin", needSuper, wrap(async (req, res) => {
   if (!r.rowCount) return res.status(404).json({ error: "No such account." });
   await syncRoleGrants(email, { itAdmin: on }, req.user.email);
   await pool.query("INSERT INTO audit_log (action, work_email) VALUES ($1,$2)", [`${on ? "Made IT admin" : "IT admin removed"} by ${req.user.email}`, email]);
+  res.json({ ok: true });
+}));
+
+// Hide articles, polls or surveys for one person (users.manage). The server refuses those pages for them and the menu drops them.
+export const HIDEABLE = ["articles", "polls", "surveys"];
+usersRouter.put("/:email/hidden", wrap(async (req, res) => {
+  const email = req.params.email.toLowerCase();
+  const features = [...new Set((Array.isArray(req.body?.features) ? req.body.features : []).filter((f) => HIDEABLE.includes(f)))];
+  const r = await pool.query("UPDATE users SET hidden_features=$1 WHERE lower(email)=$2", [features, email]);
+  if (!r.rowCount) return res.status(404).json({ error: "This person has no login yet, so there is nothing to hide." });
+  await pool.query("INSERT INTO audit_log (action, work_email) VALUES ($1,$2)", [`Hidden pages set to ${features.join(", ") || "none"} by ${req.user.email}`, email]);
+  res.json({ ok: true, hidden: features });
+}));
+
+// Disable or enable a login without deleting it (users.manage). A disabled login cannot sign in and is signed out everywhere.
+usersRouter.put("/:email/disabled", wrap(async (req, res) => {
+  const email = req.params.email.toLowerCase(), off = req.body?.value === true;
+  if (off && email === req.user.email.toLowerCase()) return res.status(400).json({ error: "You cannot disable your own login." });
+  const u = (await pool.query("SELECT is_super_admin, login_blocked FROM users WHERE lower(email)=$1", [email])).rows[0];
+  if (!u) return res.status(404).json({ error: "No such account." });
+  if (off && u.is_super_admin) return res.status(400).json({ error: "This person is a super admin. A super admin must remove that first on the Access page." });
+  if (!(await mayActOnLogin(req, email))) return res.status(403).json({ error: "This login has more access than yours, so only a super admin can change it." });
+  const r = await pool.query(
+    `UPDATE users SET login_blocked=$2 WHERE lower(email)=$1
+       AND (NOT $2 OR role <> 'hr' OR EXISTS (SELECT 1 FROM users o WHERE o.role='hr' AND NOT o.login_blocked AND lower(o.email)<>$1))`, [email, off]);
+  if (!r.rowCount) return res.status(400).json({ error: "There must be at least one HR account." });
+  if (off) await pool.query("DELETE FROM sessions WHERE lower(email)=$1", [email]);
+  await pool.query("INSERT INTO audit_log (action, work_email) VALUES ($1,$2)", [`Login ${off ? "disabled" : "enabled"} by ${req.user.email}`, email]);
   res.json({ ok: true });
 }));
 

@@ -15,14 +15,16 @@ const toNum = (v) => { const n = Number(String(v == null ? "" : v).replace(/[₹
    what you plan to claim. It is a record for the payroll team; it does not change any payslip by itself. HR also sees
    what everyone has submitted. */
 export default function Tax() {
-  const { can } = useAuth();
+  const { can, canAll } = useAuth();
   const seesOthers = can("payroll.view");   // others' declarations, for the people in scope
+  const sets = canAll("payroll.prepare");   // the regime policy: payroll sets the default regime and uploads the policy document
   const [tab, setTab] = useState("mine");
+  const views = [["mine", "My declaration"], ...(seesOthers ? [["all", "Submitted by everyone"]] : []), ...(sets ? [["policy", "Regime policy"]] : [])];
   return (
     <section className="section">
       <SectionHead title="Tax declaration" sub="Choose your tax regime for the year and declare what you plan to claim. Payroll reads this when it works out your tax."
-        tabs={seesOthers ? <ViewTabs label="Tax" view={tab} onView={setTab} views={[["mine", "My declaration"], ["all", "Submitted by everyone"]]} /> : null} />
-      {tab === "all" && seesOthers ? <Everyone /> : <Mine />}
+        tabs={views.length > 1 ? <ViewTabs label="Tax" view={tab} onView={setTab} views={views} /> : null} />
+      {tab === "all" && seesOthers ? <Everyone /> : tab === "policy" && sets ? <Policy /> : <Mine />}
     </section>
   );
 }
@@ -63,9 +65,14 @@ function Mine() {
       {error && <Callout>{error}</Callout>}
       <div className="card"><div className="card-h"><h3>Financial year {d.financialYear} to {d.financialYear + 1}</h3>{d.status === "submitted" ? <Pill tone="ok">Submitted {when(d.submittedAt)}</Pill> : <Pill tone="warn">Draft</Pill>}</div>
         <div className="card-b" style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+          {d.policy && d.policy.set && (
+            <p className="muted" style={{ margin: 0 }}>
+              Your company&rsquo;s policy makes the <b>{d.policy.defaultRegime === "old" ? "Old" : "New"} regime</b> the default, so it is selected for you. You can change it.
+              {d.policy.document && <> <a className="btn link nolink" href="/api/tax-declaration/policy/document" target="_blank" rel="noreferrer">Read the policy document</a></>}
+            </p>)}
           <div className="tx-regime" role="radiogroup" aria-label="Tax regime">
-            <label><input type="radio" name="regime" checked={d.regime === "new"} onChange={() => setD({ ...d, regime: "new" })} /><span><b>New regime</b>Lower rates, with no deductions to declare. This is the default.</span></label>
-            <label><input type="radio" name="regime" checked={d.regime === "old"} onChange={() => setD({ ...d, regime: "old" })} /><span><b>Old regime</b>Higher rates, with deductions for investments, insurance, rent and home loans.</span></label>
+            <label><input type="radio" name="regime" checked={d.regime === "new"} onChange={() => setD({ ...d, regime: "new" })} /><span><b>New regime</b>Lower rates, with no deductions to declare.{(d.policy ? d.policy.defaultRegime : "new") === "new" && " This is the company default."}</span></label>
+            <label><input type="radio" name="regime" checked={d.regime === "old"} onChange={() => setD({ ...d, regime: "old" })} /><span><b>Old regime</b>Higher rates, with deductions for investments, insurance, rent and home loans.{d.policy && d.policy.defaultRegime === "old" && " This is the company default."}</span></label>
           </div>
           {d.regime === "old" && <>
             <div className="field"><span className="lab">What you plan to claim</span>
@@ -90,6 +97,66 @@ function Mine() {
           </>}
           <Callout>Payroll works out your tax from this declaration and asks for proof before the year ends. Please add each proof to its line as a PDF, JPG or PNG of up to 10 MB; its status shows under the line. Changing a line asks payroll to check its proof again. Saving here does not change a payslip that is already published.</Callout>
           <div className="row" style={{ justifyContent: "flex-end" }}><button type="button" className="btn glass" disabled={busy} onClick={() => save(false)}>Save draft</button><button type="button" className="btn primary" disabled={busy} onClick={() => save(true)}>{busy ? "Saving…" : "Submit to payroll"}</button></div>
+        </div>
+      </div>
+    </>
+  );
+}
+
+/* HR (payroll.prepare): the default regime for the year and the policy document. When the policy changes, upload the new document and choose again. */
+function Policy() {
+  const toast = useToast();
+  const [p, setP] = useState(null), [pick, setPick] = useState("new"), [busy, setBusy] = useState(""), [error, setError] = useState("");
+  useEffect(() => { api("GET", "/api/tax-declaration/policy").then((r) => { if (r.ok) { setP(r.data); setPick(r.data.defaultRegime); } else setError(apiMsg(r)); }); }, []);
+  if (error && !p) return <Callout>{error}</Callout>;
+  if (!p) return <ListSkeleton />;
+  const year = `${p.financialYear}-${String(p.financialYear + 1).slice(2)}`;
+  const save = async () => {
+    setBusy("save"); setError("");
+    const r = await api("PUT", "/api/tax-declaration/policy", { defaultRegime: pick });
+    setBusy("");
+    if (!r.ok) return setError(apiMsg(r));
+    setP(r.data); toast(`The ${pick === "old" ? "Old" : "New"} regime is now the default for ${year}.`);
+  };
+  const upload = async (file) => {
+    if (!file) return;
+    setBusy("file"); setError("");
+    const r = await fetch(`/api/tax-declaration/policy/document?name=${encodeURIComponent(file.name)}`, { method: "PUT", headers: { "Content-Type": "application/octet-stream" }, body: file });
+    const body = await r.json().catch(() => ({}));
+    setBusy("");
+    if (!r.ok) return setError(body.error || "The document could not be uploaded. Please try again.");
+    setP(body); toast("The policy document was uploaded.");
+  };
+  const remove = async () => {
+    setBusy("file"); setError("");
+    const r = await api("DELETE", "/api/tax-declaration/policy/document");
+    setBusy("");
+    if (!r.ok) return setError(apiMsg(r));
+    setP(r.data); toast("The policy document was removed.");
+  };
+  const changed = pick !== p.defaultRegime;
+  return (
+    <>
+      {error && <Callout>{error}</Callout>}
+      <div className="card"><div className="card-h"><h3>Tax regime policy for {year}</h3>{p.set ? <Pill tone="ok">{p.defaultRegime === "old" ? "Old" : "New"} regime is the default</Pill> : <Pill tone="warn">Not set yet: the New regime is used</Pill>}</div>
+        <div className="card-b" style={{ display: "flex", flexDirection: "column", gap: 18 }}>
+          <p className="muted" style={{ margin: 0 }}>Choose the regime every declaration starts on, and keep the policy document here. Employees see it on their declaration and can still change their choice. When the policy changes, upload the new document and choose the regime again. It applies to declarations that are not saved yet; ones people have already saved keep their choice.</p>
+          <div className="tx-regime" role="radiogroup" aria-label="Default tax regime">
+            <label><input type="radio" name="default-regime" checked={pick === "new"} onChange={() => setPick("new")} /><span><b>New regime</b>Lower rates, with no deductions to declare.</span></label>
+            <label><input type="radio" name="default-regime" checked={pick === "old"} onChange={() => setPick("old")} /><span><b>Old regime</b>Higher rates, with deductions for investments, insurance, rent and home loans.</span></label>
+          </div>
+          <div><button type="button" className="btn primary" disabled={busy === "save" || (p.set && !changed)} onClick={save}>{busy === "save" ? "Saving…" : "Save default regime"}</button></div>
+          <div className="field"><span className="lab">Policy document</span>
+            {p.document
+              ? <div style={{ display: "flex", flexWrap: "wrap", gap: 10, alignItems: "center" }}>
+                  <a className="btn link nolink" href="/api/tax-declaration/policy/document" target="_blank" rel="noreferrer">{p.document.name}</a>
+                  <span className="muted">{Math.max(1, Math.round(p.document.size / 1024))} KB</span>
+                  <label className="btn glass sm" style={{ cursor: "pointer" }}>{busy === "file" ? "Uploading…" : "Replace"}<input type="file" hidden accept={ACCEPT} disabled={busy === "file"} onChange={(e) => { upload(e.target.files[0]); e.target.value = ""; }} /></label>
+                  <button type="button" className="btn glass sm" disabled={busy === "file"} onClick={remove}>Remove</button>
+                </div>
+              : <div><label className="btn glass" style={{ cursor: "pointer" }}>{busy === "file" ? "Uploading…" : "Upload the policy document"}<input type="file" hidden accept={ACCEPT} disabled={busy === "file"} onChange={(e) => { upload(e.target.files[0]); e.target.value = ""; }} /></label></div>}
+            <span className="hint">PDF, JPG or PNG, up to 10 MB.{p.updatedBy ? ` Last changed by ${p.updatedBy}.` : ""}</span>
+          </div>
         </div>
       </div>
     </>

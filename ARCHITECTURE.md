@@ -283,6 +283,7 @@ All paths below were read from the code. Unless noted, a signed-in session is re
 | Payroll | `GET /api/payroll/overview`, `GET/POST /api/payroll/runs`, `POST /runs/:id/recalculate`, `POST /runs/:id/actions/:action`, `GET /runs/:id/files/:fileId`, `GET/PUT /bank/:email`, `GET/PUT /structures/:email`, `GET /tax-rules`, `GET/POST /adjustments`, `GET /audit` | HR, payroll reviewers and the accountant (`FINANCE_VIEWERS`) |
 | Payslips | `GET /api/payslips`, `GET /api/payslips/:period`, `GET /api/payslips/:period/pdf` | Own payslips; Pay unlocked |
 | Pay PIN | `GET /api/pay/status`, `POST /api/pay/pin`, `POST /api/pay/unlock`, `POST /api/pay/touch`, `POST /api/pay/lock`, `POST /api/pay/recover/reset`; `GET /auth/google/pay-recover` | Signed in; the last one starts the fresh Google sign-in for Forgot PIN |
+| Tax regime policy | `GET/PUT /api/tax-declaration/policy`, `GET/PUT/DELETE /api/tax-declaration/policy/document` | Read: signed in, Pay unlocked. Change: `payroll.prepare` (company-wide) |
 | Tool access | `GET /api/tool-access`, `POST /api/tool-access/claude`, `POST /api/tool-access/claude/refresh`, `POST /api/tool-access/claude/confirm`, `GET /api/claude-requests` | HR; IT admins for the queue |
 | Assets | `GET/POST /api/assets`, `PUT /api/assets/:id`, `POST /api/assets/:id/assign`, `POST /api/assets/:id/return` | IT admins, HR |
 | Feed | `GET/POST /api/posts`, `PATCH/DELETE /api/posts/:id`, `PUT/DELETE /api/posts/:id/like`, `GET/POST /api/posts/:id/comments`, `POST /api/posts/images` | Everyone |
@@ -425,6 +426,7 @@ People are linked mostly by work email (text, compared in lower case), not by fo
 | `articles` | HR articles, draft or live | author email |
 | `app_links` | Links to the company's other tools | none |
 | `advance_requests`, `attendance_requests` | Requests people raise and HR decides; approving records the decision only | emails |
+| `tax_regime_policies` | The regime a tax declaration starts on for a financial year (New or Old, set by payroll on Pay > Tax declaration > Regime policy) and the policy document behind it (file in `UPLOAD_DIR`). A year without a row uses the latest earlier one; none at all means New. Saved declarations are never changed by it. | `financial_year` is the starting year |
 | `tax_declaration_requests` | What a person submits to payroll for a financial year (regime and planned claims). Payroll's own `tax_declarations` (payroll schema) is separate and is the only one the calculation reads. `proofs` holds HR's note on the proof for each line and is cleared when the lines change | email |
 | `tax_proof_files` | The document a person uploads as proof for one line of their declaration (`PUT /api/tax-declaration/proofs/:index/file`); the file is on disk under `UPLOAD_DIR`. Removed when the lines change | request_id |
 | `contractor_payments` | Payments to contractors and consultants with the tax deducted (section, rate, amount in paise). Only a masked PAN is kept. Soft delete | paid_on |

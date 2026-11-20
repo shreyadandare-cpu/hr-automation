@@ -244,14 +244,81 @@ export function engageRouter(wrap) {
     for (const f of rows) await fs.rm(path.join(UPLOAD_DIR, path.basename(f.stored)), { force: true }).catch(() => {});
     return rows.length;
   };
-  const taxOut = (x, fy, files = []) => ({ financialYear: fy, regime: x ? x.regime : "new", status: x ? x.status : "draft", submittedAt: x ? x.submitted_at : null,
+  const taxOut = (x, fy, files = [], fallback = "new") => ({ financialYear: fy, regime: x ? x.regime : fallback, status: x ? x.status : "draft", submittedAt: x ? x.submitted_at : null,
     items: x ? x.items.map((i, n) => { const pr = (x.proofs || {})[n]; return { section: i.section, description: i.description, amount: Number(i.amountMinor) / 100, proof: pr ? { status: pr.status, note: pr.note || "", at: pr.at } : null, file: (() => { const f = files.find((y) => y.line_index === n); return f ? { name: f.name, size: f.size } : null; })() }; }) : [] });
+  /* ---------- Regime policy: which regime a declaration starts on, and the policy document behind it. ----------
+     payroll.prepare (company-wide) sets the default (New or Old) for a financial year and uploads the policy document. It carries over
+     to the next year until it is changed. Everyone sees it on their declaration, which starts on that regime; they can still change it.
+     It never changes a declaration someone has saved, and it does not touch payroll's own tax_declarations (which the calculation uses). */
+  const policyOf = async (fy) => {
+    const { rows: [p] } = await pool.query("SELECT financial_year, default_regime, doc_name, doc_size, updated_by, updated_at FROM tax_regime_policies WHERE financial_year <= $1 ORDER BY financial_year DESC LIMIT 1", [fy]);
+    if (!p) return { financialYear: fy, defaultRegime: "new", set: false, document: null, updatedBy: null, updatedAt: null };
+    const who = await namesFor([p.updated_by]);
+    return { financialYear: fy, setForYear: p.financial_year, defaultRegime: p.default_regime, set: true, document: p.doc_name ? { name: p.doc_name, size: p.doc_size } : null, updatedBy: who(p.updated_by).name, updatedAt: p.updated_at };
+  };
+  const mayManagePolicy = (req, res) => (canAll(req, "payroll.prepare") ? true : (res.status(403).json(NO_ACCESS), false));
+  const noteAudit = (req, text) => pool.query("INSERT INTO audit_log (action, work_email) VALUES ($1,$2)", [text, me(req)]).catch(() => {});
+  /** The row for this year (made from last year's policy if this year has none yet), so the default and the document are kept together. */
+  const rowForYear = async (fy, email) => {
+    const { rows: [mine] } = await pool.query("SELECT * FROM tax_regime_policies WHERE financial_year=$1", [fy]);
+    if (mine) return mine;
+    const { rows: [prev] } = await pool.query("SELECT * FROM tax_regime_policies WHERE financial_year < $1 ORDER BY financial_year DESC LIMIT 1", [fy]);
+    const { rows: [made] } = await pool.query(
+      "INSERT INTO tax_regime_policies (financial_year, default_regime, doc_name, doc_mime, doc_size, doc_stored, updated_by) VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *",
+      [fy, prev ? prev.default_regime : "new", prev ? prev.doc_name : null, prev ? prev.doc_mime : null, prev ? prev.doc_size : null, prev ? prev.doc_stored : null, email]);
+    return made;
+  };
+  const stillUsed = async (stored, fy) => stored && (await pool.query("SELECT 1 FROM tax_regime_policies WHERE doc_stored=$1 AND financial_year <> $2 LIMIT 1", [stored, fy])).rowCount > 0;
+  r.get("/api/tax-declaration/policy", wrap(async (req, res) => {
+    res.json({ ...(await policyOf(financialYear(await today()))), canManage: canAll(req, "payroll.prepare") });
+  }));
+  r.put("/api/tax-declaration/policy", wrap(async (req, res) => {
+    if (!mayManagePolicy(req, res)) return;
+    const regime = req.body && req.body.defaultRegime;
+    if (regime !== "new" && regime !== "old") return res.status(400).json({ error: "Choose the New regime or the Old regime." });
+    const fy = financialYear(await today());
+    await rowForYear(fy, me(req));
+    await pool.query("UPDATE tax_regime_policies SET default_regime=$2, updated_by=$3, updated_at=now() WHERE financial_year=$1", [fy, regime, me(req)]);
+    await noteAudit(req, `Tax regime policy for ${fy}-${String(fy + 1).slice(2)}: ${regime === "old" ? "Old" : "New"} regime is the default`);
+    res.json({ ...(await policyOf(fy)), canManage: true });
+  }));
+  r.put("/api/tax-declaration/policy/document", express.raw({ type: () => true, limit: MAX_BYTES }), wrap(async (req, res) => {
+    if (!mayManagePolicy(req, res)) return;
+    const file = await checkFile(req.body);
+    if (!file.ok) return res.status(400).json({ error: file.checks.find((c) => !c.ok).label });
+    const fy = financialYear(await today()), row = await rowForYear(fy, me(req));
+    const stored = crypto.randomUUID() + "." + file.type.ext, name = String(req.query.name || "tax-policy").replace(/[^\w.\- ()]/g, "_").slice(0, 120);
+    await fs.mkdir(UPLOAD_DIR, { recursive: true });
+    await fs.writeFile(path.join(UPLOAD_DIR, stored), req.body);
+    await pool.query("UPDATE tax_regime_policies SET doc_name=$2, doc_mime=$3, doc_size=$4, doc_stored=$5, updated_by=$6, updated_at=now() WHERE financial_year=$1", [fy, name, file.type.mime, req.body.length, stored, me(req)]);
+    if (row.doc_stored && !(await stillUsed(row.doc_stored, fy))) await fs.rm(path.join(UPLOAD_DIR, path.basename(row.doc_stored)), { force: true }).catch(() => {});
+    await noteAudit(req, `Tax regime policy document uploaded for ${fy}-${String(fy + 1).slice(2)}`);
+    res.json({ ...(await policyOf(fy)), canManage: true });
+  }));
+  r.delete("/api/tax-declaration/policy/document", wrap(async (req, res) => {
+    if (!mayManagePolicy(req, res)) return;
+    const fy = financialYear(await today()), row = await rowForYear(fy, me(req));
+    await pool.query("UPDATE tax_regime_policies SET doc_name=NULL, doc_mime=NULL, doc_size=NULL, doc_stored=NULL, updated_by=$2, updated_at=now() WHERE financial_year=$1", [fy, me(req)]);
+    if (row.doc_stored && !(await stillUsed(row.doc_stored, fy))) await fs.rm(path.join(UPLOAD_DIR, path.basename(row.doc_stored)), { force: true }).catch(() => {});
+    await noteAudit(req, `Tax regime policy document removed for ${fy}-${String(fy + 1).slice(2)}`);
+    res.json({ ...(await policyOf(fy)), canManage: true });
+  }));
+  r.get("/api/tax-declaration/policy/document", wrap(async (_req, res) => {
+    const { rows: [p] } = await pool.query("SELECT doc_name, doc_mime, doc_stored FROM tax_regime_policies WHERE financial_year <= $1 AND doc_stored IS NOT NULL ORDER BY financial_year DESC LIMIT 1", [financialYear(await today())]);
+    if (!p) return res.status(404).json({ error: "No policy document has been uploaded yet." });
+    const file = path.join(UPLOAD_DIR, path.basename(p.doc_stored));
+    try { await fs.access(file); } catch { return res.status(410).json({ error: "The policy document is missing from storage. Please ask the payroll team to upload it again." }); }
+    res.set({ "Content-Type": p.doc_mime, "Content-Disposition": `inline; filename="${p.doc_name.replace(/"/g, "")}"`, "X-Content-Type-Options": "nosniff", "Cache-Control": "private, no-store" });
+    res.sendFile(file);
+  }));
+
   r.get("/api/tax-declaration", wrap(async (req, res) => {
     const asked = req.query.email ? String(req.query.email).toLowerCase() : me(req);
     const target = asked === me(req) || (await can(req, "payroll.view", asked)) ? asked : me(req);
     const fy = financialYear(await today());
     const { rows: [x] } = await pool.query("SELECT id, regime, items, status, submitted_at, proofs FROM tax_declaration_requests WHERE lower(email)=$1 AND financial_year=$2", [target, fy]);
-    res.json(taxOut(x, fy, await filesOf(x && x.id)));
+    const pol = await policyOf(fy);
+    res.json({ ...taxOut(x, fy, await filesOf(x && x.id), pol.defaultRegime), policy: pol });   // someone who has not saved a declaration starts on the company's default regime
   }));
   r.put("/api/tax-declaration", wrap(async (req, res) => {
     const { regime, items, submit, errors } = readTaxDeclaration(req.body);

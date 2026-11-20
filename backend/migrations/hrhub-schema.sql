@@ -1111,4 +1111,15 @@ ALTER TABLE sessions ADD COLUMN IF NOT EXISTS pay_unlocked_until TIMESTAMPTZ;
 ALTER TABLE sessions ADD COLUMN IF NOT EXISTS pay_unlocked_at    TIMESTAMPTZ;
 ALTER TABLE sessions ADD COLUMN IF NOT EXISTS pay_recover_until  TIMESTAMPTZ;   -- set after a fresh Google sign-in for "Forgot PIN"
 
+-- Tax regime policy (engage.js): the regime a declaration starts on for a financial year (New or Old) and the policy document behind it.
+-- A year without a row uses the latest earlier one; no rows at all means the New regime.
+CREATE TABLE IF NOT EXISTS tax_regime_policies (
+  financial_year INTEGER PRIMARY KEY,                 -- the year it starts, like 2026 for 2026-27
+  default_regime TEXT NOT NULL CHECK (default_regime IN ('new','old')),
+  doc_name       TEXT, doc_mime TEXT, doc_size INTEGER,
+  doc_stored     TEXT,                                -- the file in UPLOAD_DIR
+  updated_by     TEXT NOT NULL,
+  updated_at     TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
 COMMIT;

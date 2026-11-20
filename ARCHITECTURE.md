@@ -198,6 +198,7 @@ later `/api` route require sign-in. The pages router comes last. The JSON body l
 | [documents.js](backend/src/documents.js) | `/api/documents` | Personal document uploads; owns `UPLOAD_DIR` |
 | [digital-kit.js](backend/src/digital-kit.js) | `/api/digital-kit` | Each person's kit; HR manages shared resources under `/admin` |
 | [gemini.js](backend/src/gemini.js) | none | LinkedIn headline ideas from Gemini for the Digital Kit. Sends only designation, department and an optional note; cleans the replies |
+| [holiday-import.js](backend/src/holiday-import.js) | none (used by leave.js) | Reads an Excel or CSV holiday list (any year) into holidays, compares it with the saved list, builds the template |
 | [leave.js](backend/src/leave.js) | absolute `/api/leave/*`, `/api/employees/:email/pay` | Leave requests, decisions, comp offs, holidays, salary cuts |
 | [leave-digest.js](backend/src/leave-digest.js) | `/api/leave/digest` | Daily "who is on leave" email to HR |
 | [leave-mail.js](backend/src/leave-mail.js), [teams.js](backend/src/teams.js) | none | Leave emails; who approves whose leave |
@@ -276,6 +277,7 @@ All paths below were read from the code. Unless noted, a signed-in session is re
 | Offboarding | `GET/POST /api/offboarding`, `POST /api/offboarding/:id/run`, `/cancel`, `/steps/:key`, `/steps/:key/retry`, `/clearance/complete`, `GET /api/offboarding/:id/clearance`, `GET/POST /api/advances` | HR |
 | Profile and documents | `GET/PUT /api/profile`, `PUT/GET/DELETE /api/profile/photo`, `GET /api/documents`, `PUT /api/documents/:docKey`, `GET /api/documents/:id/file` | Own data |
 | Leave | `GET /api/leave`, `GET /api/leave/today`, `POST /api/leave/requests`, `POST /api/leave/requests/:id/decision`, `POST /api/leave/requests/:id/cancel`, `POST /api/leave/comp-off-requests`, `POST/PUT/DELETE /api/leave/holidays`, `GET /api/leave/salary-cuts` | Everyone; decisions by approver or HR |
+| Holiday list upload | `GET /api/leave/holidays/template?year=`, `POST /api/leave/holidays/import` (preview, saves nothing), `POST /api/leave/holidays/import/apply` | `leave.manage` (company-wide); the sheet is read by `holiday-import.js` and each row is saved like the 2026 holidays, marked `imported` |
 | Attendance | `GET /api/attendance/today`, `/month`, `/day`, `/report`, `POST /api/attendance/punch`, `POST /api/attendance/punches` | Everyone; team data for managers and HR |
 | Device | `POST /api/attendance/device/punches` (device key, no session), `GET/PUT /api/attendance/device/users` | Connector; HR |
 | Reimbursements | `GET/POST /api/reimbursements`, `POST /from-document`, `PUT /:id/items/:itemId/document`, `POST /:id/submit`, `/approve`, `/reject`, `/request-changes`, `/resubmit`, `GET/PUT /categories` | Own claims; review by HR |
@@ -376,7 +378,7 @@ The "HR only" marks come from the `HR_ONLY` list in `App.jsx`. Every other page 
   `Modal` (the one dialog, on Radix UI Dialog: focus kept inside and returned, Escape, page scroll locked, close button, a bottom sheet on phones; the
   reimbursement `Dlg` is the same component), `ConfirmDialog`, `DatePicker`, `Pager`,
   `PeoplePicker`, `PersonAvatar`, `PhotoEditor`, `OrgChart`, `NotificationBell`, `TodayCards`, `TimeToday` (Home: time worked today, and the punch button when `WEB_CLOCK_IN` is on), `RemoteToday` (Home: who is working from home today), `RemoteToday` (Home: who has an approved work-from-home request for today, from `/api/remote-today`), `toast.jsx`, `ui.jsx`,
-  `charts.jsx`, `leaveParts.jsx`, `leaveSummary.jsx`, `attendance.jsx`, `BackButton`, `BirthdayPopup`, `CelebrateCard`, `NextHolidayPopup`.
+  `charts.jsx`, `leaveParts.jsx`, `leaveSummary.jsx`, `attendance.jsx`, `BackButton`, `BirthdayPopup`, `CelebrateCard`, `NextHolidayPopup`, `HolidayImport` (HR's holiday list upload dialog).
   Every page opens with `SectionHead` from `ui.jsx`: the page name, one line, the page's actions on the right and, for a
   page with several views (Employees, Onboarding, Reimbursements), `PageTabs` under it. My leave, Team leave and Leave management are
   separate menu items. Onboarding and Offboarding open on their lists; adding a joiner and offboarding someone are buttons there.

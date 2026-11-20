@@ -4,6 +4,7 @@ import { useData } from "../data.jsx";
 import { useToast } from "./toast.jsx";
 import Modal from "./Modal.jsx";
 import Pager, { usePaged } from "./Pager.jsx";
+import HolidayImport from "./HolidayImport.jsx";
 import { Pill, shortDate } from "./ui.jsx";
 import { R } from "../lib/leave.js";
 import { LSTAT, LTYPE, dd, lc, rangeText, useLeave } from "../lib/useLeave.js";
@@ -223,6 +224,7 @@ export function HolidayTiles({ editable, onEdit }) {
   const thisYear = yearOf(lv.today);
   const [y, setY] = useState(thisYear);
   const [add, setAdd] = useState({ day: "", name: "", type: "" });
+  const [upload, setUpload] = useState(false);   // the Excel upload dialog (HR)
   const years = lv.holidays.map((h) => yearOf(h.day));
   const lo = Math.min(thisYear, ...years), hi = Math.max(thisYear + 1, ...years);
   const list = lv.holidays.filter((h) => yearOf(h.day) === y).sort((a, b) => (a.day < b.day ? -1 : 1));
@@ -240,11 +242,13 @@ export function HolidayTiles({ editable, onEdit }) {
   };
   return (
     <div className="card" id="holiday-calendar">
+      {upload && <HolidayImport year={y} onClose={() => setUpload(false)} onSaved={(yr) => { setUpload(false); if (yr) setY(yr); reloadLeave(); }} />}
       <div className="card-h"><div className="row" style={{ gap: 6 }}><h3>Holidays</h3>
         <button type="button" className="btn glass sm" aria-label="Previous year" disabled={y <= lo} onClick={() => setY(y - 1)}>‹</button>
         <b className="lv-year">{y}</b>
         <button type="button" className="btn glass sm" aria-label="Next year" disabled={y >= hi} onClick={() => setY(y + 1)}>›</button></div>
-        <span className="muted">{list.length} holiday{list.length === 1 ? "" : "s"} · never counted as leave</span></div>
+        <div className="row" style={{ gap: 10 }}><span className="muted">{list.length} holiday{list.length === 1 ? "" : "s"} · never counted as leave</span>
+          {editable && <button type="button" className="btn glass sm" onClick={() => setUpload(true)}>Upload Excel</button>}</div></div>
       {list.length ? <div className="hol-grid">{list.map((h) => {
         const d = new Date(h.day + "T00:00:00"), m = d.getMonth();
         return (

@@ -5,6 +5,7 @@ import { requireAuth } from "./auth.js";
 import { can, isSuper, mayDecide, need, needAll, scopeOf, treeOf } from "./access.js";
 import { approverOf, approverMap, coveredBy, hrLeaveApprovers, reportsOf } from "./teams.js";
 import { tellLeave } from "./leave-mail.js";
+import { compare, parseHolidays, readTable, templateXlsx } from "./holiday-import.js";
 
 const num = (v) => (v === null || v === undefined ? null : Number(v));
 // Today in India (UTC+5:30), so "today" turns over at midnight IST, not 5:30 am.
@@ -293,6 +294,48 @@ export function leaveRouter(wrap) {
   }));
 
   r.post("/api/leave/comp-offs", need("leave.approve"), addCompOff("approved"));
+  /* ---------- Holiday list as an Excel sheet (holiday-import.js): download a template, upload the sheet, check the preview, confirm.
+     Any year, any number of years in one file. Each row becomes a holiday like the 2026 ones (date, name, type, marked imported). ---------- */
+  r.get("/api/leave/holidays/template", needAll("leave.manage"), wrap(async (req, res) => {
+    const year = Number(req.query.year) >= 1990 && Number(req.query.year) <= 2100 ? Number(req.query.year) : Number(todayIso().slice(0, 4));
+    const { rows } = await pool.query("SELECT to_char(day,'YYYY-MM-DD') AS day, name, type FROM holidays WHERE extract(year FROM day) = $1 ORDER BY day", [year]);
+    res.set({ "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "Content-Disposition": `attachment; filename="holiday-list-${year}.xlsx"` });
+    res.send(await templateXlsx(year, rows));
+  }));
+  // Reads the file and says what would change. Nothing is saved here.
+  r.post("/api/leave/holidays/import", needAll("leave.manage"), express.raw({ type: () => true, limit: 1024 * 1024 }), wrap(async (req, res) => {
+    if (!Buffer.isBuffer(req.body) || !req.body.length) return res.status(400).json({ error: "Choose the Excel or CSV file with the holiday list." });
+    let table;
+    try { table = await readTable(req.body); } catch (err) { return res.status(422).json({ error: err.message }); }
+    const { holidays, errors } = parseHolidays(table);
+    const { rows } = holidays.length ? await pool.query("SELECT to_char(day,'YYYY-MM-DD') AS day, name, type FROM holidays WHERE day = ANY($1::date[])", [holidays.map((h) => h.day)]) : { rows: [] };
+    const list = compare(holidays, new Map(rows.map((h) => [h.day, h])));
+    res.json({ holidays: list, errors, years: [...new Set(list.map((h) => Number(h.day.slice(0, 4))))],
+      counts: { new: list.filter((h) => h.status === "new").length, changed: list.filter((h) => h.status === "changed").length, same: list.filter((h) => h.status === "same").length } });
+  }));
+  // Saves what HR confirmed. Every row is checked again here; a date that is already a holiday takes the new name and type.
+  r.post("/api/leave/holidays/import/apply", needAll("leave.manage"), wrap(async (req, res) => {
+    const sent = Array.isArray(req.body && req.body.holidays) ? req.body.holidays : [];
+    if (!sent.length || sent.length > 400) return res.status(400).json({ error: "There are no holidays to save." });
+    const days = new Set(), list = [];
+    for (const h of sent) {
+      const name = String((h && h.name) || "").trim().replace(/\s+/g, " "), type = String((h && h.type) || "").trim() || null;
+      if (!L.validDate(h && h.day) || !name || name.length > 80 || (type && type.length > 40) || days.has(h.day)) return res.status(400).json({ error: "The list changed or has a problem. Please upload the file again." });
+      days.add(h.day); list.push({ day: h.day, name, type });
+    }
+    await tx(res, async (client) => {
+      let added = 0, updated = 0;
+      for (const h of list) {
+        const { rows: [was] } = await client.query("SELECT name, type FROM holidays WHERE day=$1 FOR UPDATE", [h.day]);
+        if (!was) { await client.query("INSERT INTO holidays (day, name, type, source, updated_by, updated_at) VALUES ($1,$2,$3,'imported',$4,now())", [h.day, h.name, h.type, req.user.email]); added++; }
+        else if (was.name !== h.name || (was.type || null) !== h.type) { await client.query("UPDATE holidays SET name=$2, type=$3, source='imported', updated_by=$4, updated_at=now() WHERE day=$1", [h.day, h.name, h.type, req.user.email]); updated++; }
+      }
+      const years = [...new Set(list.map((h) => h.day.slice(0, 4)))].join(", ");
+      await audit(client, `Holiday list uploaded for ${years}: ${added} added, ${updated} updated, ${list.length - added - updated} unchanged`, null);
+      return [200, { added, updated, unchanged: list.length - added - updated, years: [...new Set(list.map((h) => Number(h.day.slice(0, 4))))] }];
+    });
+  }));
+
   r.post("/api/leave/holidays", needAll("leave.manage"), wrap(async (req, res) => {
     const { day, name } = req.body || {};
     const type = String((req.body && req.body.type) || "").trim().slice(0, 40) || null;

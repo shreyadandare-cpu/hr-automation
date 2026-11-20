@@ -110,15 +110,15 @@ function mailFor(c) {
 }
 
 /* ---------- sending ---------- */
-/** Emails everyone the poster has not reached yet. Runs in the background; progress is read from celebration_recipients. */
-async function deliver(id) {
+/** Emails everyone (or only `only`, the people picked on the first send) the poster has not reached yet. Runs in the background; progress is read from celebration_recipients. */
+async function deliver(id, only = null) {
   try {
     const { rows: [c] } = await pool.query("SELECT * FROM celebrations WHERE id=$1", [id]);
     if (!c) return;
     const skip = new Set(mailSkipped());
     const { rowCount: have } = await pool.query("SELECT 1 FROM celebration_recipients WHERE celebration_id=$1 LIMIT 1", [id]);
     if (!have) {   // the first send fixes the list
-      for (const e of await activeEmployees()) {
+      for (const e of (await activeEmployees()).filter((x) => !only || only.has(x.email.toLowerCase()))) {
         await pool.query(
           "INSERT INTO celebration_recipients (celebration_id, email, name, status, error) VALUES ($1,$2,$3,$4,$5) ON CONFLICT DO NOTHING",
           [id, e.email, e.name, skip.has(e.email.toLowerCase()) ? "skipped" : "pending", skip.has(e.email.toLowerCase()) ? "No email is sent to the directors." : null]);
@@ -324,9 +324,18 @@ celebrationsRouter.post("/:id/send", wrap(async (req, res) => {
   const c = await loadDraft(req, res); if (!c) return;
   if (!mailConfigured()) return res.status(409).json({ error: "Email is not set up yet. Add SENDGRID_API_KEY and MAIL_FROM to the backend settings, then try again." });
   if (!publicOk()) return res.status(409).json(NEEDS_PUBLIC);
+  // Everyone (the default), or only the people HR picked: 1 to 200 current employees.
+  let only = null;
+  if (req.body && req.body.audience === "selected") {
+    const asked = [...new Set((Array.isArray(req.body.to) ? req.body.to : []).map((e) => String(e).trim().toLowerCase()).filter(Boolean))];
+    if (!asked.length || asked.length > 200) return res.status(400).json({ error: "Choose between 1 and 200 people to send this to." });
+    const staff = new Set((await activeEmployees()).map((e) => e.email.toLowerCase()));
+    if (asked.some((e) => !staff.has(e))) return res.status(400).json({ error: "Everyone you choose must be a current employee." });
+    only = new Set(asked);
+  }
   const bad = await claim(c.id, false);
   if (bad) return forbid(res, bad);
-  deliver(c.id);   // in the background; the page watches GET /:id
+  deliver(c.id, only);   // in the background; the page watches GET /:id
   res.status(202).json({ status: "sending" });
 }));
 

@@ -4,6 +4,7 @@ import Modal, { Field } from "../../components/Modal.jsx";
 import { Pill, Skeleton } from "../../components/ui.jsx";
 import PhotoEditor from "../../components/PhotoEditor.jsx";
 import PersonAvatar from "../../components/PersonAvatar.jsx";
+import PeoplePicker from "../../components/PeoplePicker.jsx";
 import { useToast } from "../../components/toast.jsx";
 import { OCCASIONS, canvasToBlob, defaultsFor, loadImage, msgFor, renderPoster } from "./poster.js";
 import { BRAND } from "../../brand.js";
@@ -35,6 +36,8 @@ export default function Wizard({ overview, start, onClose, onDone }) {
   const [adjust, setAdjust] = useState(false);     // the photo crop dialog
   const [confirm, setConfirm] = useState(false);  // the "are you sure?" before anything is emailed
   const [list, setList] = useState(null);          // recipients, when HR asks to review them
+  const [audience, setAudience] = useState("all"); // "all" employees, or only the people picked
+  const [to, setTo] = useState([]);                 // the people picked
   const assets = useRef(null);
 
   const profilePhoto = emp && emp.photoV ? `/api/profile/photo?email=${encodeURIComponent(emp.email)}&v=${emp.photoV}` : "";
@@ -125,11 +128,11 @@ export default function Wizard({ overview, start, onClose, onDone }) {
   useEffect(() => { if (job && job.status !== "sending") onDone(); }, [job && job.status]);   // eslint-disable-line react-hooks/exhaustive-deps
   const send = async (retry) => {
     setBusy(true); setErr("");
-    const r = await api("POST", `/api/celebrations/${draft}/${retry ? "retry" : "send"}`);
+    const r = await api("POST", `/api/celebrations/${draft}/${retry ? "retry" : "send"}`, retry ? undefined : { audience, to });
     setBusy(false);
     if (!r.ok) return setErr(apiMsg(r));
     await watch(draft);
-    toast(retry ? "Retrying the emails that failed…" : "Sending to everyone…");
+    toast(retry ? "Retrying the emails that failed…" : audience === "all" ? "Sending to everyone…" : "Sending…");
   };
   const review = async () => {
     if (list) return setList(null);
@@ -246,7 +249,7 @@ export default function Wizard({ overview, start, onClose, onDone }) {
 
         {step === 4 && (
           <div style={{ display: "grid", gap: 18 }}>
-            <p style={{ margin: 0, color: "var(--ink-dim)" }}>This is exactly what everyone will receive.</p>
+            <p style={{ margin: 0, color: "var(--ink-dim)" }}>This is exactly what the recipients will receive.</p>
             <div className="cel-preview">{poster ? <img src={poster.url} alt={`${OCCASIONS[occasion].name} poster for ${f.name}`} /> : busy ? <Skeleton className="aspect-[4/5] w-full rounded-card" /> : <div className="empty">No poster yet.</div>}</div>
           </div>)}
 
@@ -259,18 +262,26 @@ export default function Wizard({ overview, start, onClose, onDone }) {
                 {f.detail && <><dt>Certification</dt><dd>{f.detail}</dd></>}
                 {f.joiningDate && <><dt>Joining date</dt><dd>{shortDate(f.joiningDate)}</dd></>}
                 <dt>Subject</dt><dd>{SUBJECT(occasion, emp.name)}</dd>
-                <dt>Recipients</dt><dd>{overview.recipients} people · all active employees</dd>
+                <dt>Recipients</dt><dd>{audience === "all" ? `${overview.recipients} people · all active employees` : `${to.length} ${to.length === 1 ? "person" : "people"} chosen`}</dd>
               </dl>
               {!overview.mailReady && !job && <div className="cel-warn">Email is not set up on this server, so nothing can be sent yet. Add <code>SENDGRID_API_KEY</code> and <code>MAIL_FROM</code> to the backend settings and restart.</div>}
-              {!job && <button type="button" className="btn link" style={{ justifySelf: "start" }} onClick={review}>{list ? "Hide recipient list" : "Review recipient list"}</button>}
-              {list && !job && (
+              {!job && (
+                <div className="field">
+                  <span className="lab">Send to</span>
+                  <div className="fw-seg" role="group" aria-label="Send to">
+                    {[["all", "Everyone"], ["selected", "Chosen people"]].map(([k, label]) => <button key={k} type="button" className={audience === k ? "on" : ""} aria-pressed={audience === k} onClick={() => { setAudience(k); setList(null); }}>{label}</button>)}
+                  </div>
+                  {audience === "selected" && <PeoplePicker id="cel-to" people={overview.employees.filter((e) => e.email !== emp.email)} value={to} onChange={(v) => setTo(v.slice(0, 200))} multi placeholder="Search by name…" />}
+                </div>)}
+              {!job && audience === "all" && <button type="button" className="btn link" style={{ justifySelf: "start" }} onClick={review}>{list ? "Hide recipient list" : "Review recipient list"}</button>}
+              {list && !job && audience === "all" && (
                 <div className="cel-problems" aria-label="Recipients">
                   {list.map((p) => <div key={p.email}><b style={{ fontWeight: 600 }}>{p.name}</b><span style={{ color: p.skipped ? "var(--ink-faint)" : "var(--ink-dim)" }}>{p.skipped ? "no email sent" : p.email}</span></div>)}
                 </div>)}
               {job && (
                 <div style={{ display: "grid", gap: 12 }} aria-live="polite">
                   <div className="row" style={{ display: "flex", gap: 10, alignItems: "center" }}>
-                    <Pill tone={job.status === "sent" ? "ok" : job.status === "sending" ? "info" : "bad"}>{{ sending: "Sending…", sent: "Sent to everyone", partial: "Partly sent", failed: "Not sent" }[job.status]}</Pill>
+                    <Pill tone={job.status === "sent" ? "ok" : job.status === "sending" ? "info" : "bad"}>{{ sending: "Sending…", sent: audience === "all" ? "Sent to everyone" : "Sent", partial: "Partly sent", failed: "Not sent" }[job.status]}</Pill>
                     <span className="muted">{job.counts.sent} sent{job.counts.failed ? ` · ${job.counts.failed} failed` : ""}{job.counts.skipped ? ` · ${job.counts.skipped} skipped` : ""} of {job.counts.total}</span>
                   </div>
                   <div className="cel-bar" role="progressbar" aria-valuenow={pct} aria-valuemin="0" aria-valuemax="100"><i style={{ width: `${pct}%` }} /></div>
@@ -299,7 +310,7 @@ export default function Wizard({ overview, start, onClose, onDone }) {
           {step < 4 && <button type="button" className="btn primary" disabled={!ready} onClick={() => { setErr(""); setStep(step + 1); }}>Next</button>}
           {step === 5 && !job && <>
             <button type="button" className="btn glass" onClick={() => setStep(4)}>Back</button>
-            <button type="button" className="btn primary" disabled={busy || !overview.mailReady} onClick={() => setConfirm(true)}>{busy ? "Starting…" : "Send announcement"}</button>
+            <button type="button" className="btn primary" disabled={busy || !overview.mailReady || (audience === "selected" && !to.length)} onClick={() => setConfirm(true)}>{busy ? "Starting…" : "Send announcement"}</button>
           </>}
         </div>
       </div>
@@ -308,7 +319,7 @@ export default function Wizard({ overview, start, onClose, onDone }) {
           <div className="card-h" style={{ paddingTop: 24 }}><h3>Send announcement?</h3></div>
           <div className="card-b" style={{ display: "grid", gap: 10 }}>
             <p style={{ margin: 0 }}>Are you sure you want to send this announcement?</p>
-            <p className="muted" style={{ margin: 0 }}>{OCCASIONS[occasion].name} for <b>{f.name}</b> will be emailed to {overview.recipients} people. It cannot be taken back once it is sent.</p>
+            <p className="muted" style={{ margin: 0 }}>{OCCASIONS[occasion].name} for <b>{f.name}</b> will be emailed to {audience === "all" ? `${overview.recipients} people` : `${to.length} chosen ${to.length === 1 ? "person" : "people"}`}. It cannot be taken back once it is sent.</p>
           </div>
           <div className="modal-f">
             <button type="button" className="btn glass" disabled={busy} onClick={() => setConfirm(false)}>Cancel</button>

@@ -23,6 +23,7 @@ import { attendanceRouter } from "./attendance.js";
 import { assetsRouter } from "./assets.js";
 import { deviceRouter } from "./device.js";
 import { payslipsRouter } from "./payslips.js";
+import { payPinRouter, requirePayUnlock } from "./pay-pin.js";
 import { claudeRequestsRouter } from "./claude-requests.js";
 import { offboardingRouter } from "./offboarding.js";
 import { clearanceRouter } from "./clearance.js";
@@ -87,7 +88,8 @@ app.use("/api/claude-requests", claudeRequestsRouter);   // HR and IT admins: wh
 app.use("/api/reimbursements", requireAuth, reimbursementsRouter);   // own claims for everyone; review actions are HR-only inside
 app.use("/api/budget-requests", requireAuth, budgetsRouter);   // own requests for everyone; decisions are HR-only inside
 // Payroll: payroll.prepare holders prepare it and payroll.approve holders approve it; everything after the workflow router needs payroll.prepare.
-app.use("/api/payroll", requirePayrollAccess, payrollWorkflowRouter, hrOnly, payslipAutoRouter, payrollRouter);
+app.use("/api/pay", payPinRouter);   // the Pay section PIN: set it, unlock, lock, forgot PIN (pay-pin.js)
+app.use("/api/payroll", requirePayrollAccess, requirePayUnlock, payrollWorkflowRouter, hrOnly, payslipAutoRouter, payrollRouter);
 app.use("/api/notifications", requireAuth, notificationsRouter);
 app.use("/api/celebrations", requireAuth, celebrationsRouter);   // HR: birthday and welcome posters, emailed to everyone
 app.use("/api/festivals", requireAuth, festivalsRouter);   // everyone: festivals and their dates for the Festival Wishes page

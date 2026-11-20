@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 import PDFDocument from "pdfkit";
 import { payPool as pool } from "./db.js";   // payroll may use its own database (PAYROLL_DATABASE_URL)
 import { requireAuth } from "./auth.js";
+import { requirePayUnlock } from "./pay-pin.js";
 import { can, canAll } from "./access.js";
 import { BRAND } from "./brand.js";
 
@@ -156,7 +157,7 @@ export function drawPdf(doc, p) {
 
 export function payslipsRouter(wrap) {
   const r = express.Router();
-  r.use("/api/payslips", requireAuth);
+  r.use("/api/payslips", requireAuth, requirePayUnlock);   // pay is behind the Pay PIN as well (pay-pin.js)
   r.use("/api/payslips", (_req, res, next) => { res.setHeader("Cache-Control", "private, no-store"); next(); });
 
   // Months with a payslip, newest first.

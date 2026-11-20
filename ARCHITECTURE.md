@@ -14,7 +14,7 @@ tags:
   - postgres
 repo: hr-automation
 role: Wohlig's internal HR portal — one Express API plus a React interface, on Postgres
-updated: 2026-11-19
+updated: 2026-11-20
 ---
 
 # Wohlig One — Architecture
@@ -89,7 +89,7 @@ Values live in `backend/.env` (never committed). Names from [backend/.env.exampl
 - Attendance: `ATTENDANCE_DEVICE_KEY`, `PORTAL_ATTENDANCE_SYNC`, `PORTAL_ATTENDANCE_SYNC_SECONDS`, `WEB_CLOCK_IN` (true lets everyone punch in and
   out from the app; off by default, so the office machine stays the record)
 - AI (LinkedIn headline ideas in the Digital Kit): `GEMINI_API_KEY`, `GEMINI_MODEL`
-- Payroll: `PAYROLL_DATABASE_URL`, `PAYROLL_DB_SCHEMA`, `PAYROLL_REVIEWERS`, `FINANCE_VIEWERS` (the accountant: finance reports only), `NOTICE_PERIOD_DAYS` (default notice, 30), `PAYROLL_ENCRYPTION_KEY`, `PAYROLL_DEBIT_ACCOUNT`, `PAYROLL_DEBIT_BANK_CODE`, `PAYSLIP_AUTO`
+- Payroll: `PAYROLL_DATABASE_URL`, `PAYROLL_DB_SCHEMA`, `PAYROLL_REVIEWERS`, `FINANCE_VIEWERS` (the accountant: finance reports only), `NOTICE_PERIOD_DAYS` (default notice, 30), `PAYROLL_ENCRYPTION_KEY`, `PAYROLL_DEBIT_ACCOUNT`, `PAYROLL_DEBIT_BANK_CODE`, `PAYSLIP_AUTO`, `PAY_PIN_PEPPER` (server secret mixed into every Pay PIN hash; falls back to `PAYROLL_ENCRYPTION_KEY`)
 
 The code also reads these, which the example file does not list: `UPLOAD_DIR`, `MAIL_REPLY_TO`, `EMAIL_LINK_MINUTES`,
 `LEAVE_APPROVAL_LINK_HOURS`, `LEAVE_DIGEST_HOUR`, `LEAVE_DIGEST_SEND_EMPTY`, `LEAVE_DIGEST_EMAILS`, `LEAVE_HR_EMAILS`,
@@ -221,7 +221,8 @@ later `/api` route require sign-in. The pages router comes last. The JSON body l
 | [budgets.js](backend/src/budgets.js) | `/api/budget-requests` | Pre-approved spending requests |
 | [payroll/routes.js](backend/src/payroll/routes.js) | `/api/payroll` | Payroll runs, review workflow, bank details, tax rules, adjustments |
 | [payslip-auto.js](backend/src/payslip-auto.js), [payroll.js](backend/src/payroll.js) | `/api/payroll` (HR only) | Automatic monthly draft, publish, salary structures, mark paid |
-| [payslips.js](backend/src/payslips.js) | `/api/payslips` | A person's own payslips and PDF |
+| [payslips.js](backend/src/payslips.js) | `/api/payslips` | A person's own payslips and PDF (behind the Pay PIN) |
+| [pay-pin.js](backend/src/pay-pin.js) | `/api/pay` | The Pay section PIN: status, set PIN, unlock, heartbeat, lock, reset after Google; `requirePayUnlock` guards payslips, payroll, finance reports and tax declarations |
 | [offboarding.js](backend/src/offboarding.js) | `/api/offboarding` | Offboarding records, steps, scheduled runs |
 | [clearance.js](backend/src/clearance.js) | `/api/offboarding/.../clearance`, `/api/advances` | Final settlement figures and employee advances |
 | [claude-requests.js](backend/src/claude-requests.js) | `/api/claude-requests` | Queue of Claude access requests when no admin key is set |
@@ -239,6 +240,7 @@ Payroll internals in [backend/src/payroll/](backend/src/payroll/): `access.js` (
 ### Auth, sessions and roles
 
 - Sign-in is Google OAuth at `/auth/google`. Password login works only when `ALLOW_PASSWORD_LOGIN=true`.
+- **Pay PIN** ([pay-pin.js](backend/src/pay-pin.js)): a second lock on pay. Each person sets a 6-digit PIN once; opening Pay needs it. A correct PIN unlocks that browser session only, for 2 minutes after the last activity (the page sends a heartbeat while the person is active), never more than an hour in one go. `requirePayUnlock` answers 423 to payslips, payroll, finance reports and tax declarations without a live unlock, on top of the usual role checks. 5 wrong PINs stop PIN checks for 15 minutes. Locking, sign-out, a reset or the session ending end the unlock. Forgot PIN needs a fresh Google sign-in as the same person (`/auth/google/pay-recover`). Every step is written to `audit_log` in words, never with a PIN. The screens and the auto-lock (2 idle minutes, tab hidden, leaving the Pay pages, reload) are in `modules/paysecurity`. Test: `backend/test/pay-pin-flow.mjs`.
 - A session is a random token in the `sid` cookie (HttpOnly, SameSite=Lax, 12 hours). Only its SHA-256 hash is stored in `sessions`.
 - `loadSession` runs on every request and sets `req.user = { email, role, it_admin }`. `requireAuth` and `requireHr` live in [auth.js](backend/src/auth.js).
 - **Access hierarchy** ([docs/ACCESS_DESIGN.md](docs/ACCESS_DESIGN.md)):
@@ -279,7 +281,8 @@ All paths below were read from the code. Unless noted, a signed-in session is re
 | Reimbursements | `GET/POST /api/reimbursements`, `POST /from-document`, `PUT /:id/items/:itemId/document`, `POST /:id/submit`, `/approve`, `/reject`, `/request-changes`, `/resubmit`, `GET/PUT /categories` | Own claims; review by HR |
 | Budgets | `GET/POST /api/budget-requests`, `POST /:id/approve`, `POST /:id/reject` | Own requests; decisions by HR |
 | Payroll | `GET /api/payroll/overview`, `GET/POST /api/payroll/runs`, `POST /runs/:id/recalculate`, `POST /runs/:id/actions/:action`, `GET /runs/:id/files/:fileId`, `GET/PUT /bank/:email`, `GET/PUT /structures/:email`, `GET /tax-rules`, `GET/POST /adjustments`, `GET /audit` | HR, payroll reviewers and the accountant (`FINANCE_VIEWERS`) |
-| Payslips | `GET /api/payslips`, `GET /api/payslips/:period`, `GET /api/payslips/:period/pdf` | Own payslips |
+| Payslips | `GET /api/payslips`, `GET /api/payslips/:period`, `GET /api/payslips/:period/pdf` | Own payslips; Pay unlocked |
+| Pay PIN | `GET /api/pay/status`, `POST /api/pay/pin`, `POST /api/pay/unlock`, `POST /api/pay/touch`, `POST /api/pay/lock`, `POST /api/pay/recover/reset`; `GET /auth/google/pay-recover` | Signed in; the last one starts the fresh Google sign-in for Forgot PIN |
 | Tool access | `GET /api/tool-access`, `POST /api/tool-access/claude`, `POST /api/tool-access/claude/refresh`, `POST /api/tool-access/claude/confirm`, `GET /api/claude-requests` | HR; IT admins for the queue |
 | Assets | `GET/POST /api/assets`, `PUT /api/assets/:id`, `POST /api/assets/:id/assign`, `POST /api/assets/:id/return` | IT admins, HR |
 | Feed | `GET/POST /api/posts`, `PATCH/DELETE /api/posts/:id`, `PUT/DELETE /api/posts/:id/like`, `GET/POST /api/posts/:id/comments`, `POST /api/posts/images` | Everyone |
@@ -380,7 +383,7 @@ The "HR only" marks come from the `HR_ONLY` list in `App.jsx`. Every other page 
 - [src/components/FestivalLook.jsx](frontend/src/components/FestivalLook.jsx): `useFestivalLook()` (asks `/api/festival-look`; `?festival=<slug>` in any address previews one), `festivalTheme` (each festival's three colours, celebration and greeting from `festivalLook.festivals` in `brand.config.json`), `festivalGreeting`, `festivalFrom`, `festivalWhen`, `FestivalArt` (the festival's scene drawn once into a canvas), `FestiveFrame` (sets `data-festival` and `--fest-a/b/c` on `<html>`, draws the colour ribbon along the top of every page and plays the celebration: about four seconds of the festival's own motion (`burst`: lanterns, colours, snow, crescents, gulal, dandiya, sparks or confetti), once a day per festival, never under reduced motion) and `FestivalChip` (the top bar's "Diwali in 2 days" chip, linking to Festival wishes). Used by `Shell.jsx`, the sign-in layout (festival headline) and the dashboard banner (festival greeting, no buttons inside the banner).
 - [src/lib/](frontend/src/lib/): `leave.js` (re-exports `window.LeaveRules`), `useLeave.js`, `people.js`, `menu.js` (the menu for each role,
   shared by the sidebar and quick search).
-- [src/modules/](frontend/src/modules/): `access` (Company > Access, super admins only), `tools` (Manage > Tools & cost), `budgets`, `celebrations`, `digitalkit`, `employee`, `engage`, `festivals`, `finance`, `hrtools`, `offboarding`, `onboarding`, `payroll`, `posts`, `reimbursements`, `workforce`.
+- [src/modules/](frontend/src/modules/): `access` (Company > Access, super admins only), `tools` (Manage > Tools & cost), `budgets`, `celebrations`, `digitalkit`, `employee`, `engage`, `festivals`, `finance`, `hrtools`, `offboarding`, `onboarding`, `paysecurity` (the Pay PIN screens and auto-lock, wrapping every Pay page), `payroll`, `posts`, `reimbursements`, `workforce`.
 
 ### Styling and theme
 
@@ -400,7 +403,8 @@ People are linked mostly by work email (text, compared in lower case), not by fo
 |---|---|---|
 | `employees` | Everyone on staff; status `onboarding`, `active` or `offboarded`; masked ID numbers only | Hub of the model |
 | `rate_limits` | One row per sign-in failure or rate-limited attempt, by key; rows older than a day are removed | none |
-| `users`, `sessions`, `settings`, `invites` | Logins (`role`, `it_admin`), session hashes, default password, invite link hashes | `users.email` = `employees.work_email` |
+| `users`, `sessions`, `settings`, `invites` | Logins (`role`, `it_admin`), session hashes (with `pay_unlocked_until`, `pay_unlocked_at`, `pay_recover_until`: whether this browser may open Pay), default password, invite link hashes | `users.email` = `employees.work_email` |
+| `pay_pins` | One salted hash of each person's Pay PIN (HMAC with `PAY_PIN_PEPPER`, then scrypt), wrong-try count and lockout end. Never the PIN. | `email` = `users.email`, lower case |
 | `onboarding_drafts` | One unsaved onboarding form per HR user | keyed by HR email |
 | `audit_log` | Every recorded action (`action`, `work_email`, `ts`) | by email |
 | `documents`, `profiles`, `profile_photos` | Uploaded documents, profile sections, photo | by email |
@@ -470,7 +474,7 @@ People are linked mostly by work email (text, compared in lower case), not by fo
 - **Sensitive data.** Aadhaar, PAN and account numbers are stored masked at onboarding. Payroll bank numbers and bank files are encrypted with `PAYROLL_ENCRYPTION_KEY`.
 - **Migrations.** There is no migration tool. `initDb()` runs all of `schema.sql` on every start, so every statement is written to be repeatable (`CREATE TABLE IF NOT EXISTS`, `ADD COLUMN IF NOT EXISTS`, guarded `DO` blocks, `app_migrations` keys). `npm run migrate` does the same by hand, with `-- --dry-run`. `npm run migrate:sql` regenerates [backend/migrations/hrhub-schema.sql](backend/migrations/hrhub-schema.sql).
 - **Tests.** Run from `backend/`:
-  - `npm test` runs `test/*.test.mjs` (`leave-rules`, `payroll-calc`, `tax-import`, `architecture`). No database needed.
+  - `npm test` runs `test/*.test.mjs` (`leave-rules`, `payroll-calc`, `tax-import`, `pay-pin`, `architecture`). No database needed.
   - `npm run check:docs` runs [backend/scripts/check-architecture.mjs](backend/scripts/check-architecture.mjs): it fails when this file no longer names every server file, route mount, table, `.env.example` variable, page, module and component, or when the docs link to a missing file. The `architecture` test runs the same check, and a Claude Code Stop hook in [.claude/settings.json](.claude/settings.json) runs it at the end of each Claude turn.
   - `npm run test:invites` and `npm run test:device` start a throwaway server and use the database in `DATABASE_URL`; they create and remove temporary rows.
   - The frontend has no tests and no lint script.

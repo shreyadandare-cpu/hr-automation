@@ -20,6 +20,7 @@ const Inbox = lazy(() => import("./pages/Inbox.jsx"));
 const MyTeam = lazy(() => import("./pages/MyTeam.jsx"));
 const MyFinances = lazy(() => import("./pages/MyFinances.jsx"));
 import { useAuth } from "./auth.jsx";
+import { PayGate, PayProvider } from "./modules/paysecurity/PayLock.jsx";
 
 /* Every page except the dashboard (the first one people see) loads only when it is first opened, so the app starts fast;
    Shell shows a quiet placeholder meanwhile. Bigger features live in src/modules/<name>/index.jsx and export `routes = [{ path, element }]`. They are picked up here. */
@@ -57,11 +58,12 @@ export default function App() {
   const auth = useAuth();
   usePrefetchPages();
   return (
+    <PayProvider>
     <Routes>
       <Route element={<Shell />}>
         <Route path="/app/attendance" element={<Attendance />} />
         <Route path="/app/my-attendance" element={<Attendance onlyMine />} />
-        <Route path="/app/payslips" element={<Payslips />} />
+        <Route path="/app/payslips" element={<PayGate><Payslips /></PayGate>} />
         <Route path="/app/account" element={<Account />} />
         <Route path="/app/users" element={<Users />} />
         <Route path="/app/employees" element={<Employees />} />
@@ -71,7 +73,7 @@ export default function App() {
         <Route path="/app/dashboard" element={<Dashboard />} />
         <Route path="/app/inbox" element={<Inbox />} />
         <Route path="/app/my-team" element={<MyTeam />} />
-        <Route path="/app/my-finances" element={<MyFinances />} />
+        <Route path="/app/my-finances" element={<PayGate><MyFinances /></PayGate>} />
         <Route path="/app/audit" element={<Audit />} />
         <Route path="/app/leave" element={<LeaveHr />} />
         <Route path="/app/leave/apply" element={<LeaveApply />} />
@@ -82,6 +84,7 @@ export default function App() {
       </Route>
       <Route path="*" element={<ToDashboard />} />
     </Routes>
+    </PayProvider>
   );
 }
 

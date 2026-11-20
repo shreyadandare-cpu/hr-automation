@@ -6,6 +6,7 @@ import { UPLOAD_DIR } from "./documents.js";
 import { MAX_BYTES, checkFile } from "./extract.js";
 import { pool } from "./db.js";
 import { requireAuth } from "./auth.js";
+import { requirePayUnlock } from "./pay-pin.js";
 import { can, canAll, mayDecide, need, scopeOf } from "./access.js";
 import { notify } from "./notify.js";
 import { readProof } from "./finance-rules.js";
@@ -35,6 +36,7 @@ async function namesFor(emails) {
 
 export function engageRouter(wrap) {
   const r = express.Router();
+  r.use(["/api/tax-declaration", "/api/tax-declarations"], requireAuth, requirePayUnlock);   // tax declarations are pay: behind the Pay PIN (pay-pin.js)
   r.use(["/api/polls", "/api/praise", "/api/articles", "/api/apps", "/api/requests", "/api/remote-today", "/api/tax-declaration", "/api/goals"], requireAuth);
 
   /* ---------- Polls ---------- */

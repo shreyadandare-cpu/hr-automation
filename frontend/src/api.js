@@ -13,6 +13,8 @@ export async function api(method, url, body) {
   }
   const data = await r.json().catch(() => null);
   if (r.status === 401) location.href = "/login";
+  // A pay endpoint answered "locked" (the Pay PIN, modules/paysecurity): the page shows the PIN screen at once.
+  if (r.status === 423 && data && /^PAY_/.test(data.code || "")) window.dispatchEvent(new CustomEvent("pay-locked", { detail: data.code }));
   return { ok: r.ok, status: r.status, data };
 }
 export const apiMsg = (r) => (r.data && r.data.error) || "Something went wrong. Try again.";

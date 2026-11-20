@@ -1,6 +1,7 @@
 import express from "express";
 import { pool, payPool } from "./db.js";
 import { requireAuth } from "./auth.js";
+import { requirePayUnlock } from "./pay-pin.js";
 import { canAll } from "./access.js";
 import { summaryOfLegacy } from "./payroll/engine.js";
 import { deptOf } from "./payroll/store.js";
@@ -58,7 +59,7 @@ const periodOf = (req, res) => { const p = String(req.query.period || ""); if (!
 
 export function financeRouter(wrap) {
   const r = express.Router();
-  r.use("/api/finance", requireAuth, requireFinanceAccess);
+  r.use("/api/finance", requireAuth, requirePayUnlock, requireFinanceAccess);
 
   r.get("/api/finance/periods", wrap(async (req, res) => {
     const all = seesDrafts(req);

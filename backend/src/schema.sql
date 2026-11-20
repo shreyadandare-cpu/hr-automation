@@ -1087,3 +1087,17 @@ CREATE TABLE IF NOT EXISTS tool_bills (
   created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
   deleted_at   TIMESTAMPTZ);
 CREATE INDEX IF NOT EXISTS tool_bills_month ON tool_bills (month, tool) WHERE deleted_at IS NULL;
+
+-- Pay section PIN (pay-pin.js). One salted hash per person (never the PIN), a count of wrong tries, and the time a lockout ends.
+CREATE TABLE IF NOT EXISTS pay_pins (
+  email           TEXT PRIMARY KEY,                      -- lower case, same as users.email
+  pin_hash        TEXT NOT NULL,
+  failed_attempts INT NOT NULL DEFAULT 0,
+  locked_until    TIMESTAMPTZ,
+  created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+-- Whether this browser session may open Pay, and until when. Cleared by locking, by a PIN reset, and when the session ends.
+ALTER TABLE sessions ADD COLUMN IF NOT EXISTS pay_unlocked_until TIMESTAMPTZ;
+ALTER TABLE sessions ADD COLUMN IF NOT EXISTS pay_unlocked_at    TIMESTAMPTZ;
+ALTER TABLE sessions ADD COLUMN IF NOT EXISTS pay_recover_until  TIMESTAMPTZ;   -- set after a fresh Google sign-in for "Forgot PIN"

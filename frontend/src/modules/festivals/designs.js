@@ -22,6 +22,8 @@ export const FESTIVALS = {
     say: { heading: "Ganpati", emphasis: "Bappa Morya", message: "May Lord Ganesha bless you and your family with wisdom, prosperity and new beginnings. Thank you for everything you bring to Wohlig." } },
   navratri: { short: "Navratri", emoji: "💃", vivid: { dark: "#2c0a4a", mid: "#d6246e" }, wish: "a joyful Navratri!",
     say: { heading: "Happy", emphasis: "Navratri", message: "May the nine nights bring you strength, joy and the victory of good over evil. Thank you for everything you bring to Wohlig." } },
+  muharram: { short: "Muharram", emoji: "🌙", vivid: { dark: "#0a1738", mid: "#1b3a8a" }, wish: "peace and blessings on this auspicious occasion.",
+    say: { heading: "Happy", emphasis: "Muharram", message: "May this new year bring peace, prosperity and happiness to you and your family." } },
   christmas: { short: "Christmas", emoji: "🎄", vivid: { dark: "#4a0612", mid: "#c0392b" }, wish: "a joyful Christmas!",
     say: { heading: "Merry", emphasis: "Christmas", message: "Wishing you warmth, joy and good company this season. Thank you for everything you brought to Wohlig this year." } },
 };

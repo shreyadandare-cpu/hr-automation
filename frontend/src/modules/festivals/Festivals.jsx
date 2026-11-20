@@ -8,7 +8,7 @@ import { Icon, SectionHead, CardSkeleton, Skeleton } from "../../components/ui.j
 import { useToast } from "../../components/toast.jsx";
 import PhotoEditor from "../../components/PhotoEditor.jsx";
 import { FESTIVALS, THEMES, loadImage, renderGreeting, templateName, toBlob } from "./designs.js";
-import { artCanvas, artFor, artThumb } from "./images.js";
+import { ART, artFor, renderArt } from "./artTemplates.js";
 import { BRAND } from "../../brand.js";
 import { festivalTheme } from "../../components/FestivalLook.jsx";
 
@@ -64,7 +64,17 @@ export default function Festivals() {
 
 function FestivalCard({ f, onOpen, big }) {
   const [src, setSrc] = useState("");
-  useEffect(() => { const art = artFor(f.slug); if (art) { let live = true; artThumb(art).then((u) => live && setSrc(u)).catch(() => {}); return () => { live = false; }; } let on = true; thumb(f.slug, "traditional").then((u) => on && setSrc(u)).catch(() => {}); return () => { on = false; }; }, [f.slug]);
+  useEffect(() => {
+    let on = true;
+    (async () => {
+      try {
+        const F = FESTIVALS[f.slug], art = artFor(f.slug);
+        const u = art ? (await renderArt({ slug: f.slug, version: art.versions[0].id, ...F.say, wish: `Wishing you and your family ${F.wish}`, sender: "Team Wohlig", logos: await logos(), scale: 0.4 })).toDataURL("image/jpeg", 0.85) : await thumb(f.slug, "traditional");
+        if (on) setSrc(u);
+      } catch { /* the card keeps its emoji */ }
+    })();
+    return () => { on = false; };
+  }, [f.slug]);
   return (
     <article className={`card fw-card${big ? " big" : ""}`}>
       <button type="button" className="fw-pic" onClick={onOpen} aria-label={`Explore ${f.name} templates`}>{src ? <img src={src} alt="" /> : <span className="fw-ph">{FESTIVALS[f.slug].emoji}</span>}</button>
@@ -85,11 +95,11 @@ function Studio({ fest, onBack }) {
   const toast = useToast();
   const me = (people || []).find((p) => p.email.toLowerCase() === user.email.toLowerCase());
   const mine = me && me.photoV ? `/api/profile/photo?email=${encodeURIComponent(user.email)}&v=${me.photoV}` : "";
-  const art = artFor(fest.slug);   // a ready-made picture for this festival, offered as the first template
-  const templates = art ? [{ id: "original", name: "Original", note: "The ready-made Wohlig greeting exactly as designed. Its words cannot be changed; choose another template to write your own." }, ...THEMES] : THEMES;
+  const art = artFor(fest.slug);   // a supplied picture for this festival: its four colour versions are the templates
+  const wishText = `Wishing you and your family ${FESTIVALS[fest.slug].wish}`;
+  const templates = art ? art.versions.map((v) => ({ id: v.id, name: v.name, note: `The ${v.name.toLowerCase()} version of the ${fest.name} greeting.` })) : THEMES;
   const [theme, setTheme] = useState(templates[0]);
-  const original = theme.id === "original";
-  const [f, setF] = useState({ ...FESTIVALS[fest.slug].say, sender: "Team Wohlig", recipient: "", align: "left" });
+  const [f, setF] = useState({ ...FESTIVALS[fest.slug].say, wish: wishText, sender: "Team Wohlig", recipient: "", align: "left" });
   const [photo, setPhoto] = useState(null);   // { url, label }
   const [adjust, setAdjust] = useState(false);
   const [looks, setLooks] = useState({});     // small pictures of the four looks
@@ -106,15 +116,15 @@ function Studio({ fest, onBack }) {
 
   useEffect(() => {   // the four looks, drawn once with the starting words
     let on = true;
-    (async () => { for (const t of THEMES) { const u = await thumb(fest.slug, t.id).catch(() => ""); if (!on) return; setLooks((p) => ({ ...p, [t.id]: u })); } })();
-    if (art) artThumb(art).then((u) => on && setLooks((p) => ({ ...p, original: u }))).catch(() => {});
+    if (!art) (async () => { for (const t of THEMES) { const u = await thumb(fest.slug, t.id).catch(() => ""); if (!on) return; setLooks((p) => ({ ...p, [t.id]: u })); } })();
+    if (art) (async () => { for (const v of art.versions) { const u = await renderArt({ slug: fest.slug, version: v.id, ...FESTIVALS[fest.slug].say, wish: wishText, sender: "Team Wohlig", logos: await logos(), scale: 0.4 }).then((c) => c.toDataURL("image/jpeg", 0.85)).catch(() => ""); if (!on) return; setLooks((p) => ({ ...p, [v.id]: u })); } })();
     return () => { on = false; };
   }, [fest.slug]);
   const draw = useCallback(async (scale) => {
-    if (original) return artCanvas(art);
     const img = photo ? await loadImage(photo.url).catch(() => null) : null;
+    if (art) return renderArt({ slug: fest.slug, version: theme.id, ...f, photo: img, logos: await logos(), scale });
     return renderGreeting({ slug: fest.slug, theme: theme.id, ...f, photo: img, logos: await logos(), scale });
-  }, [fest.slug, theme.id, f, photo, original, art]);
+  }, [fest.slug, theme.id, f, photo, art]);
   useEffect(() => {   // the preview follows what you do, then the full-size picture is made so Download, Copy and Share are instant
     const a = ++live.current, b = ++full.current;
     setFinal(null);
@@ -182,16 +192,17 @@ function Studio({ fest, onBack }) {
                   {looks[t.id] ? <img src={looks[t.id]} alt="" /> : <Skeleton className="aspect-square w-full rounded-field" />}<b>{t.name}</b>
                 </button>))}
             </div>
-            <span className="muted">{original ? `Original: ${theme.note}` : `${templateName(fest.slug, theme)}: ${theme.note}`}</span>
+            <span className="muted">{art ? theme.note : `${templateName(fest.slug, theme)}: ${theme.note}`}</span>
           </div></div>
-          {!original && <div className="card"><div className="card-b fw-form" style={{ paddingTop: 22 }}>
+          <div className="card"><div className="card-b fw-form" style={{ paddingTop: 22 }}>
             <Field id="fw-h" label="Headline"><input id="fw-h" className="input" maxLength={40} value={f.heading} onChange={(e) => set("heading", e.target.value)} /></Field>
             <Field id="fw-e" label="Emphasis, in italic"><input id="fw-e" className="input" maxLength={40} value={f.emphasis} onChange={(e) => set("emphasis", e.target.value)} /></Field>
             <div className="wide"><Field id="fw-m" label="Your greeting message" hint={`${f.message.length}/240`}><textarea id="fw-m" className="input" rows={3} maxLength={240} value={f.message} onChange={(e) => set("message", e.target.value)} /></Field></div>
+            {art && <div className="wide"><Field id="fw-w" label="Closing wish"><input id="fw-w" className="input" maxLength={90} value={f.wish} onChange={(e) => set("wish", e.target.value)} /></Field></div>}
             <Field id="fw-s" label="From (your name)"><input id="fw-s" className="input" maxLength={60} value={f.sender} onChange={(e) => set("sender", e.target.value)} /></Field>
             <Field id="fw-r" label="To (optional)" hint="Adds “Dear …” above the message."><input id="fw-r" className="input" maxLength={60} placeholder="Recipient's name" value={f.recipient} onChange={(e) => set("recipient", e.target.value)} /></Field>
-            <div className="wide"><div className="field"><span className="lab">Text placement</span>
-              <div className="fw-seg" role="group" aria-label="Text placement">{[["left", "Left aligned"], ["center", "Centred"]].map(([k, label]) => <button key={k} type="button" className={f.align === k ? "on" : ""} aria-pressed={f.align === k} onClick={() => set("align", k)}>{label}</button>)}</div></div></div>
+            {!art && <div className="wide"><div className="field"><span className="lab">Text placement</span>
+              <div className="fw-seg" role="group" aria-label="Text placement">{[["left", "Left aligned"], ["center", "Centred"]].map(([k, label]) => <button key={k} type="button" className={f.align === k ? "on" : ""} aria-pressed={f.align === k} onClick={() => set("align", k)}>{label}</button>)}</div></div></div>}
             <div className="wide"><div className="field"><span className="lab">Photograph (optional)</span>
               <div className="fw-photo">
                 {photo && <img src={photo.url} alt="Your photo" />}
@@ -200,7 +211,7 @@ function Studio({ fest, onBack }) {
                 {photo && <button type="button" className="btn glass sm" onClick={() => setAdjust(true)}>Adjust or crop</button>}
                 {photo && <button type="button" className="btn glass sm" onClick={() => changePhoto(null)}>Remove photo</button>}
               </div><span className="hint">JPG or PNG, up to 5 MB. The photo is only drawn onto the greeting on your device.</span></div></div>
-          </div></div>}
+          </div></div>
         </div>
 
         <div className="fw-side">

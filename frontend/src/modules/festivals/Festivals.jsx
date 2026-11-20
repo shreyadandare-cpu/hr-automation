@@ -8,10 +8,11 @@ import { Icon, SectionHead, CardSkeleton, Skeleton } from "../../components/ui.j
 import { useToast } from "../../components/toast.jsx";
 import PhotoEditor from "../../components/PhotoEditor.jsx";
 import { FESTIVALS, THEMES, loadImage, renderGreeting, templateName, toBlob } from "./designs.js";
-import { artBlob, artFor } from "./images.js";
+import { artCanvas, artFor, artThumb } from "./images.js";
 import { BRAND } from "../../brand.js";
 import { festivalTheme } from "../../components/FestivalLook.jsx";
 
+const HIDDEN = new Set(["eid-ul-adha"]);   // Eid is listed once (as Eid-ul-Fitr, which carries the Eid greeting)
 const MAX_PHOTO = 5 * 1024 * 1024, MAX_TO = 10, UPCOMING_DAYS = 45;   // a festival is listed from this many days before its date
 const dateText = (iso) => { const [y, m, d] = String(iso).split("-").map(Number); return new Date(Date.UTC(y, m - 1, d)).toLocaleDateString("en-IN", { day: "numeric", month: "long", year: "numeric", timeZone: "UTC" }); };
 const when = (f) => (f.next ? `${dateText(f.next)} · ${f.inDays === 0 ? "today" : f.inDays === 1 ? "tomorrow" : `in ${f.inDays} days`}` : "Date to be announced");
@@ -35,7 +36,7 @@ export default function Festivals() {
   const load = useCallback(async () => {
     const r = await api("GET", "/api/festivals");
     if (!r.ok) { setFailed(true); return; }
-    setFailed(false); setList(r.data.items.filter((f) => FESTIVALS[f.slug]));
+    setFailed(false); setList(r.data.items.filter((f) => FESTIVALS[f.slug] && !HIDDEN.has(f.slug)));
   }, []);
   useEffect(() => { load(); }, [load]);
 
@@ -63,7 +64,7 @@ export default function Festivals() {
 
 function FestivalCard({ f, onOpen, big }) {
   const [src, setSrc] = useState("");
-  useEffect(() => { const art = artFor(f.slug); if (art) { setSrc(art); return; } let on = true; thumb(f.slug, "creative").then((u) => on && setSrc(u)).catch(() => {}); return () => { on = false; }; }, [f.slug]);
+  useEffect(() => { const art = artFor(f.slug); if (art) { let live = true; artThumb(art).then((u) => live && setSrc(u)).catch(() => {}); return () => { live = false; }; } let on = true; thumb(f.slug, "traditional").then((u) => on && setSrc(u)).catch(() => {}); return () => { on = false; }; }, [f.slug]);
   return (
     <article className={`card fw-card${big ? " big" : ""}`}>
       <button type="button" className="fw-pic" onClick={onOpen} aria-label={`Explore ${f.name} templates`}>{src ? <img src={src} alt="" /> : <span className="fw-ph">{FESTIVALS[f.slug].emoji}</span>}</button>
@@ -77,87 +78,17 @@ function FestivalCard({ f, onOpen, big }) {
   );
 }
 
-/* A festival with a ready-made picture (images.js) opens as that picture; any other is drawn and can be written in. */
-function Studio(props) { const art = artFor(props.fest.slug); return art ? <ArtStudio {...props} art={art} /> : <DrawnStudio {...props} />; }
-
-/* ---------- a ready-made picture: shown as it is, shared without changes ---------- */
-function ArtStudio({ fest, art, onBack }) {
-  const { user } = useAuth();
-  const { people } = useData();
-  const toast = useToast();
-  const [final, setFinal] = useState(null);
-  const [err, setErr] = useState("");
-  const [to, setTo] = useState([]);
-  const [note, setNote] = useState("");
-  const [busy, setBusy] = useState("");
-  const [result, setResult] = useState(null);
-  const others = (people || []).filter((p) => p.email.toLowerCase() !== user.email.toLowerCase());
-  useEffect(() => { artBlob(art).then(setFinal).catch((e) => setErr(e.message)); }, [art]);
-  const name = `wohlig-${fest.slug}-greeting.png`, ready = !!final;
-  const canShare = typeof navigator !== "undefined" && !!navigator.canShare && ready && navigator.canShare({ files: [new File([final], name, { type: "image/png" })] });
-  const download = () => { const url = URL.createObjectURL(final); const a = document.createElement("a"); a.href = url; a.download = name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(url), 2000); };
-  const copy = async () => {
-    try { if (!navigator.clipboard || !window.ClipboardItem) throw new Error("unsupported"); await navigator.clipboard.write([new ClipboardItem({ "image/png": final })]); toast("Image copied. Paste it into WhatsApp, email or any chat."); }
-    catch { download(); toast("Copying images is not available here, so the image was downloaded instead."); }
-  };
-  const deviceShare = async () => {
-    try { await navigator.share({ files: [new File([final], name, { type: "image/png" })], title: `${fest.name} greeting`, text: `${fest.name} wishes from Wohlig` }); }
-    catch (e) { if (e && e.name !== "AbortError") toast("Sharing did not work on this device. Use Send by email or Copy image."); }
-  };
-  const email = async () => {
-    setBusy("email"); setResult(null); setErr("");
-    try {
-      const r = await fetch(`/api/festivals/share?slug=${encodeURIComponent(fest.slug)}&to=${encodeURIComponent(to.join(","))}&note=${encodeURIComponent(note)}`, { method: "POST", headers: { "Content-Type": "image/png" }, body: final });
-      const data = await r.json().catch(() => null);
-      if (r.status === 401) { location.href = "/login"; return; }
-      if (!r.ok) throw new Error((data && data.error) || "The email could not be sent.");
-      setResult(data); toast(data.sent.length ? `Sent to ${data.sent.length} ${data.sent.length === 1 ? "person" : "people"}.` : "Nothing was sent.");
-      if (data.sent.length && !data.failed.length) { setTo([]); setNote(""); }
-    } catch (e) { setErr(e.message); }
-    setBusy("");
-  };
-  const name1 = (e) => (people.find((p) => p.email === e) || {}).name || e;
-  return (
-    <div className="fw">
-      <button type="button" className="back" onClick={onBack}><span className="back-ar" aria-hidden="true">←</span>All festivals</button>
-      <SectionHead eyebrow={when(fest)} title={fest.name} accent="greeting" sub="This greeting is ready to use as it is. Download it, copy it or send it by email." />
-      {err && <div className="err" role="alert" style={{ background: "var(--bad-soft)", color: "var(--bad)", padding: "10px 14px", borderRadius: 12 }}>{err}</div>}
-      <div className="fw-edit">
-        <div className="fw-prev"><img src={art} alt={`${fest.name} greeting`} /></div>
-        <div className="card fw-sharebox"><div className="card-b" style={{ paddingTop: 18, display: "grid", gap: 14 }}>
-          <div className="field">
-            <label htmlFor="fw-to">Share with a colleague</label>
-            <PeoplePicker id="fw-to" people={others} value={to} onChange={(v) => setTo(v.slice(0, MAX_TO))} multi placeholder="Search by name…" />
-            <span className="hint">Up to {MAX_TO} people. They get the greeting by email.</span>
-          </div>
-          {to.length > 0 && <input className="input" maxLength={300} placeholder="Add a short note (optional)" aria-label="Note" value={note} onChange={(e) => setNote(e.target.value)} />}
-          <div className="fw-btns"><button type="button" className="btn primary" disabled={!to.length || !ready || busy === "email"} onClick={email}>{busy === "email" ? "Sending…" : "Send by email"}</button></div>
-          {result && (
-            <div className="muted" role="status">
-              {result.sent.length > 0 && <div>Emailed to {result.sent.map(name1).join(", ")}.</div>}
-              {result.skipped.length > 0 && <div>No email is sent to {result.skipped.map(name1).join(", ")}. Use Download or Copy image instead.</div>}
-              {result.failed.length > 0 && <div style={{ color: "var(--bad)" }}>Could not reach {result.failed.map((x) => name1(x.email)).join(", ")}.</div>}
-            </div>)}
-          <hr />
-          <div className="fw-btns">
-            <button type="button" className="btn glass" disabled={!ready} onClick={download}>Download</button>
-            <button type="button" className="btn glass" disabled={!ready} onClick={copy}>Copy image</button>
-            {canShare && <button type="button" className="btn glass" onClick={deviceShare}>Share…</button>}
-          </div>
-        </div></div>
-      </div>
-    </div>
-  );
-}
-
-/* ---------- a drawn greeting: the looks, the words, the photo, and sharing ---------- */
-function DrawnStudio({ fest, onBack }) {
+/* ---------- one page: the templates, the words, the photo, and sharing ---------- */
+function Studio({ fest, onBack }) {
   const { user } = useAuth();
   const { people } = useData();
   const toast = useToast();
   const me = (people || []).find((p) => p.email.toLowerCase() === user.email.toLowerCase());
   const mine = me && me.photoV ? `/api/profile/photo?email=${encodeURIComponent(user.email)}&v=${me.photoV}` : "";
-  const [theme, setTheme] = useState(THEMES[0]);
+  const art = artFor(fest.slug);   // a ready-made picture for this festival, offered as the first template
+  const templates = art ? [{ id: "original", name: "Original", note: "The ready-made Wohlig greeting exactly as designed. Its words cannot be changed; choose another template to write your own." }, ...THEMES] : THEMES;
+  const [theme, setTheme] = useState(templates[0]);
+  const original = theme.id === "original";
   const [f, setF] = useState({ ...FESTIVALS[fest.slug].say, sender: "Team Wohlig", recipient: "", align: "left" });
   const [photo, setPhoto] = useState(null);   // { url, label }
   const [adjust, setAdjust] = useState(false);
@@ -176,12 +107,14 @@ function DrawnStudio({ fest, onBack }) {
   useEffect(() => {   // the four looks, drawn once with the starting words
     let on = true;
     (async () => { for (const t of THEMES) { const u = await thumb(fest.slug, t.id).catch(() => ""); if (!on) return; setLooks((p) => ({ ...p, [t.id]: u })); } })();
+    if (art) artThumb(art).then((u) => on && setLooks((p) => ({ ...p, original: u }))).catch(() => {});
     return () => { on = false; };
   }, [fest.slug]);
   const draw = useCallback(async (scale) => {
+    if (original) return artCanvas(art);
     const img = photo ? await loadImage(photo.url).catch(() => null) : null;
     return renderGreeting({ slug: fest.slug, theme: theme.id, ...f, photo: img, logos: await logos(), scale });
-  }, [fest.slug, theme.id, f, photo]);
+  }, [fest.slug, theme.id, f, photo, original, art]);
   useEffect(() => {   // the preview follows what you do, then the full-size picture is made so Download, Copy and Share are instant
     const a = ++live.current, b = ++full.current;
     setFinal(null);
@@ -244,14 +177,14 @@ function DrawnStudio({ fest, onBack }) {
           <div className="card"><div className="card-b" style={{ paddingTop: 22 }}>
             <span className="lab" style={{ font: "600 13px/1.2 var(--body)" }}>Choose a template</span>
             <div className="fw-looks" role="group" aria-label="Templates">
-              {THEMES.map((t) => (
+              {templates.map((t) => (
                 <button key={t.id} type="button" className={theme.id === t.id ? "on" : ""} aria-pressed={theme.id === t.id} onClick={() => setTheme(t)}>
                   {looks[t.id] ? <img src={looks[t.id]} alt="" /> : <Skeleton className="aspect-square w-full rounded-field" />}<b>{t.name}</b>
                 </button>))}
             </div>
-            <span className="muted">{templateName(fest.slug, theme)}: {theme.note}</span>
+            <span className="muted">{original ? `Original: ${theme.note}` : `${templateName(fest.slug, theme)}: ${theme.note}`}</span>
           </div></div>
-          <div className="card"><div className="card-b fw-form" style={{ paddingTop: 22 }}>
+          {!original && <div className="card"><div className="card-b fw-form" style={{ paddingTop: 22 }}>
             <Field id="fw-h" label="Headline"><input id="fw-h" className="input" maxLength={40} value={f.heading} onChange={(e) => set("heading", e.target.value)} /></Field>
             <Field id="fw-e" label="Emphasis, in italic"><input id="fw-e" className="input" maxLength={40} value={f.emphasis} onChange={(e) => set("emphasis", e.target.value)} /></Field>
             <div className="wide"><Field id="fw-m" label="Your greeting message" hint={`${f.message.length}/240`}><textarea id="fw-m" className="input" rows={3} maxLength={240} value={f.message} onChange={(e) => set("message", e.target.value)} /></Field></div>
@@ -267,7 +200,7 @@ function DrawnStudio({ fest, onBack }) {
                 {photo && <button type="button" className="btn glass sm" onClick={() => setAdjust(true)}>Adjust or crop</button>}
                 {photo && <button type="button" className="btn glass sm" onClick={() => changePhoto(null)}>Remove photo</button>}
               </div><span className="hint">JPG or PNG, up to 5 MB. The photo is only drawn onto the greeting on your device.</span></div></div>
-          </div></div>
+          </div></div>}
         </div>
 
         <div className="fw-side">

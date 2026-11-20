@@ -10,6 +10,7 @@ import { timing } from "./timing.js";
 import { toolsRouter } from "./tools.js";
 import { sessionRouter, accountRouter, usersRouter } from "./users.js";
 import { profileRouter } from "./profile.js";
+import { idCardRouter } from "./id-card.js";
 import { leaveRouter } from "./leave.js";
 import { postsRouter } from "./posts.js";
 import { engageRouter } from "./engage.js";
@@ -83,6 +84,7 @@ app.use(toolsRouter(wrap));   // every paid tool (AI and others): seats and mont
 app.use(financeRouter(wrap));   // statutory dues, payroll journal, cost, gratuity, annual tax statements (read only)
 app.use(leaveDigestRouter(wrap));   // HR: preview or test the daily leave digest email
 app.use(attendanceRouter(wrap));
+app.use(idCardRouter(wrap));   // staff ID cards as CR80 PDFs: own for everyone, anyone's for people.view
 app.use(assetsRouter(wrap));   // IT admins only
 app.use(payslipsRouter(wrap));
 app.use(toolAccessRouter(wrap));   // the audit log and Claude access

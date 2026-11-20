@@ -20,9 +20,9 @@ const FOCUS = "focus-visible:outline-2 focus-visible:-outline-offset-2 focus-vis
 const FACE = "inline-grid flex-none place-items-center overflow-hidden rounded-full border-0 bg-accent p-0 font-body leading-none font-semibold text-white [&>img]:block [&>img]:size-full [&>img]:object-cover";
 const MENU_ITEM = "block w-full cursor-pointer rounded-field border-0 bg-transparent px-3 py-2.5 text-left font-display text-[14.5px] leading-[1.2] font-medium text-ink no-underline select-none data-highlighted:bg-tint data-highlighted:outline-0";
 
-/* Light, dark or the device's setting, chosen inside the account menu. */
+/* Light or dark, chosen inside the account menu. */
 function Appearance() {
-  const [choice, setChoice] = useState(themeChoice());
+  const [choice, setChoice] = useState(() => (themeChoice() === "system" ? currentTheme() : themeChoice()));   // no Device button: someone who followed the device sees the theme in use
   useEffect(() => {   // following the device: change when the device does
     if (choice !== "system" || !window.matchMedia) return;
     const m = matchMedia("(prefers-color-scheme: dark)"), on = () => applyTheme(currentTheme());
@@ -33,8 +33,8 @@ function Appearance() {
   return (
     <div className="px-3 pt-1.5 pb-2.5">
       <div className="mb-2 font-body text-[13px] font-bold text-ink-dim" id="appearance-label">Appearance</div>
-      <div className="grid grid-cols-3 gap-1 rounded-full bg-tint p-1" role="radiogroup" aria-labelledby="appearance-label">
-        {[["light", "Light"], ["dark", "Dark"], ["system", "Device"]].map(([k, label]) => (
+      <div className="grid grid-cols-2 gap-1 rounded-full bg-tint p-1" role="radiogroup" aria-labelledby="appearance-label">
+        {[["light", "Light"], ["dark", "Dark"]].map(([k, label]) => (
           <button key={k} type="button" role="radio" aria-checked={choice === k} onClick={() => pick(k)}
             className={`h-9 cursor-pointer rounded-full border-0 px-2 font-body text-[14px] leading-none font-bold transition-colors duration-150 ${FOCUS} ${choice === k ? "bg-surface text-accent shadow-raised" : "bg-transparent text-ink-dim hover:text-ink"}`}>{label}</button>))}
       </div>

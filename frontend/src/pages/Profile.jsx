@@ -5,6 +5,7 @@ import { useAuth } from "../auth.jsx";
 import { useData } from "../data.jsx";
 import { useToast } from "../components/toast.jsx";
 import { Avatar, Icon, Person, Pill, SectionHead, ToolIcon, initials, shortDate, pill, PageSkeleton } from "../components/ui.jsx";
+import { Card as IdCardPreview } from "../modules/idcard/IdCard.jsx";
 import { STATUS, TOOLS, chainOf, leaving, docCount, mgrOf, toolIds } from "../lib/people.js";
 
 const OPTS = {
@@ -181,7 +182,7 @@ export default function Profile() {
             {me.start && <p className="pf2-since">{years >= 1 ? `${years} year${years === 1 ? "" : "s"} at Wohlig` : `Joined ${shortDate(me.start)}`}</p>}
           </div>
           <nav className="card pf2-nav" aria-label="On this page"><h3>On this page</h3>
-            {[["pf-sec-story", "Your story"], ["pf-sec-line", "Reporting line"], ["pf-sec-personal", "Personal details"], ["pf-sec-education", "Education"], ["pf-sec-contact", "Contact and addresses"], ["pf-sec-work", "Work and documents"]]
+            {[["pf-sec-story", "Your story"], ["pf-sec-line", "Reporting line"], ["pf-sec-personal", "Personal details"], ["pf-sec-education", "Education"], ["pf-sec-contact", "Contact and addresses"], ["pf-sec-work", "Work and documents"], ["pf-sec-idcard", "ID card"]]
               .map(([id, l]) => <button key={id} type="button" onClick={() => jump(id)}>{l}</button>)}
           </nav>
         </aside>
@@ -218,6 +219,8 @@ export default function Profile() {
               <span className="muted">{nDocs ? `${nDocs} document${nDocs === 1 ? "" : "s"} uploaded` : "No documents uploaded yet"}</span>
               <a className="btn glass sm" href="/app/documents">{nDocs ? "Manage documents" : "Upload documents"}</a></div>
           </div></div>
+          <div className="card" id="pf-sec-idcard"><div className="card-h"><h3>ID card</h3><a className="btn primary sm" href={`/api/id-card.pdf?email=${encodeURIComponent(me.email)}`} download>Download PDF</a></div>
+            <div className="card-b"><p className="muted" style={{ marginTop: 0 }}>Your Wohlig ID card in the standard card size (85.6 × 54 mm), front and back.</p><IdCardPreview p={me} /></div></div>
         </div>
       </div>
     </section>

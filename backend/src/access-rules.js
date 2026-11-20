@@ -42,6 +42,7 @@ export const PERMISSIONS = [
   { key: "finance.view", group: "Money", team: false, label: "See finance reports", hint: "Statutory dues, journal, cost, gratuity and tax statements. Read only." },
   { key: "finance.contractors", group: "Money", team: false, label: "Record contractor payments", hint: "Add and remove contractor payments for the TDS return." },
   { key: "engage.manage", group: "Company", team: false, label: "Company posts and pages", hint: "Posts, polls, articles, app links, surveys and training." },
+  { key: "rewards.give", group: "Company", team: false, label: "Give rewards", hint: "Give a person a reward from the Users page." },
   { key: "celebrations.manage", group: "Company", team: false, label: "Celebrations", hint: "Birthday and welcome posters emailed to everyone." },
   { key: "festivals.manage", group: "Company", team: false, label: "Festivals", hint: "The festival look and festival dates." },
   { key: "helpdesk.answer", group: "Company", team: false, label: "Answer the helpdesk", hint: "Read and answer everyone's helpdesk tickets." },

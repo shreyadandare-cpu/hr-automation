@@ -123,6 +123,24 @@ export function attendanceRouter(wrap) {
     res.json({ date: now.day, time: hhmm(now.time), punches: ps, state: ps.length && ps[ps.length - 1].direction === "IN" ? "in" : "out", minutes: w.minutes, canPunch: webClockOn() });
   }));
 
+  // Who is in right now, for the directory and the dashboard (everyone signed in may read it). People who work away from the
+  // office (a client site, another city) are left out, because no punch is not "not in" for them; people on approved leave say so.
+  r.get("/api/attendance/presence", wrap(async (_req, res) => {
+    const now = await nowIst(pool);
+    const { rows } = await pool.query(
+      `SELECT lower(e.work_email) AS email, e.work_location,
+              (SELECT p.direction FROM attendance_punches p WHERE p.employee_id=e.id AND p.work_date=$1 ORDER BY p.punch_time DESC, p.id DESC LIMIT 1) AS last,
+              (SELECT p.punch_time FROM attendance_punches p WHERE p.employee_id=e.id AND p.work_date=$1 AND p.direction='IN' ORDER BY p.punch_time, p.id LIMIT 1) AS first_in,
+              EXISTS (SELECT 1 FROM leave_requests l WHERE lower(l.work_email)=lower(e.work_email) AND l.status='approved' AND l.from_date<=$1 AND l.to_date>=$1) AS on_leave
+         FROM employees e WHERE e.status NOT IN ('offboarding','offboarded') AND e.work_email IS NOT NULL LIMIT 500`, [now.day]);
+    const out = {};
+    for (const x of rows) {
+      if (offSite(x.work_location)) continue;
+      out[x.email] = x.last ? { state: x.last === "IN" ? "in" : "out", since: hhmm(x.first_in || "00:00") } : { state: x.on_leave ? "leave" : "notin" };
+    }
+    res.json({ date: now.day, people: out });
+  }));
+
   // One tap: punches IN when you are out, OUT when you are in. The server's clock is used, never the browser's.
   r.post("/api/attendance/punch", wrap(async (req, res) => {
     if (!webClockOn() && !canAll(req, "attendance.edit")) return res.status(403).json({ error: "Attendance is recorded by the office machine. If a punch is missing, please ask HR to add it." });

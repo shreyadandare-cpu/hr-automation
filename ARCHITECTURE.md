@@ -14,7 +14,7 @@ tags:
   - postgres
 repo: hr-automation
 role: Wohlig's internal HR portal — one Express API plus a React interface, on Postgres
-updated: 2026-11-19
+updated: 2026-11-20
 ---
 
 # Wohlig One — Architecture
@@ -186,6 +186,7 @@ later `/api` route require sign-in. The pages router comes last. The JSON body l
 | [users.js](backend/src/users.js) | `/api` (`sessionRouter`, `accountRouter`), `/api/users` | Password login (testing only), logout, invite acceptance, `/api/me`, HR user management |
 | [google-signin.js](backend/src/google-signin.js) | `/auth` | Google OAuth code flow with PKCE |
 | [onboarding-routes.js](backend/src/onboarding-routes.js) | `/api/onboarding/*`, `/api/work-email` (HR only) | New joiners: draft, work email, Google account, first login, final record |
+| [id-card.js](backend/src/id-card.js) | `/api/id-card.pdf`, `/api/id-cards.pdf` | Staff ID cards as CR80 PDFs (85.6 × 54 mm, front and back): own for everyone, anyone's in scope with `people.view`, all current staff for `people.view` company-wide |
 | [people.js](backend/src/people.js) | `/api/directory`, `/api/roster`, `/api/managers`, `/api/employees/{manager,number,status}`, `/api/team/members` | Who is at the company, reporting lines, employee IDs |
 | [projects.js](backend/src/projects.js) | `/api/allocations`, `/api/projects` | Projects and who works on them; handovers |
 | [tool-access.js](backend/src/tool-access.js) | `/api/audit`, `/api/tool-access` | The audit log and Claude access |
@@ -210,7 +211,7 @@ later `/api` route require sign-in. The pages router comes last. The JSON body l
 | [gmail-intel-routes.js](backend/src/gmail-intel-routes.js) | `/api/gmail-intel/*`, `/api/project-reports/*` | Mailbox list, sync, review queue and AI usage (HR); Pub/Sub push (token); weekly project reports with email (everyone sees their own projects, HR sees all) |
 | [assets.js](backend/src/assets.js) | `/api/assets` | Company assets; IT admins and HR |
 | [posts.js](backend/src/posts.js) | `/api/posts` | Company feed: posts, images, likes, comments, shares |
-| [engage.js](backend/src/engage.js), [engage-rules.js](backend/src/engage-rules.js) | `/api/polls`, `/api/praise`, `/api/articles`, `/api/apps`, `/api/requests/advance`, `/api/requests/attendance`, `/api/remote-today`, `/api/tax-declaration`, `/api/tax-declarations`, `/api/goals` | Polls (one vote each, totals only), praise between colleagues, HR articles, app links, and advance and attendance requests that HR approves or declines. The checking rules are in `engage-rules.js`, tested without a database |
+| [engage.js](backend/src/engage.js), [engage-rules.js](backend/src/engage-rules.js) | `/api/polls`, `/api/praise`, `/api/rewards`, `/api/articles`, `/api/apps`, `/api/requests/advance`, `/api/requests/attendance`, `/api/remote-today`, `/api/tax-declaration`, `/api/tax-declarations`, `/api/goals` | Polls (one vote each, totals only), praise between colleagues, rewards (`rewards.give` gives one from Users; people read their own on Praise > My rewards), HR articles, app links, and advance and attendance requests that HR approves or declines. The checking rules are in `engage-rules.js`, tested without a database |
 | [hr-tools.js](backend/src/hr-tools.js), [hr-tools-rules.js](backend/src/hr-tools-rules.js) | `/api/hr/probations`, `/api/tickets`, `/api/hr/exit-interviews`, `/api/hr/openings`, `/api/hr/candidates`, `/api/reviews`, `/api/review-cycles`, `/api/feedback-requests`, `/api/interviews` | HR tools: probation decisions, the helpdesk, exit interviews, hiring and performance reviews. Probation, exit interviews and hiring are HR only; people see only their own tickets and reviews. Rules in `hr-tools-rules.js`, tested without a database |
 | [hr-tools.js](backend/src/hr-tools.js), continued | `/api/review-cycles`, `/api/reviews/:id/manager`, `/api/reviews/:id/feedback-requests`, `/api/feedback-requests`, `/api/hr/candidates/:id/onboard`, `/api/hr/candidates/:id/interviews`, `/api/hr/interviews/:id/cancel`, `/api/interviews`, `/api/interviews/:id/verdict`, `/api/interviews/:id/calendar` | Review cycles for everyone or a department, the reporting manager's review between the self-review and HR, colleague feedback the person never sees, managers reading their team's goals (`/api/goals?email=`), a hired candidate copied into the HR user's onboarding draft, and interviews with each interviewer's recommendation and a calendar file (.ics) |
 | [workforce.js](backend/src/workforce.js), [workforce-rules.js](backend/src/workforce-rules.js) | `/api/timesheet`, `/api/timesheets/to-approve`, `/api/timesheets/:id/decision`, `/api/surveys`, `/api/training`, `/api/trainings`, `/api/hr/resignations`, `/api/stand-ins` | Timesheets (a week per person, approved by the reporting manager, a stand-in covering them, or HR), surveys (named or anonymous; HR creates them and sees results), training (HR assigns, people mark done), notice periods (HR records resignations; expected last day = resigned on + notice days) and approval stand-ins (someone who decides leave for a manager while they are away). `workforce-rules.js` holds the checking rules, also for review cycles, colleague feedback and interviews (used by `hr-tools.js`), and timesheet minutes per project (used by `finance-reports.js`); tested without a database. Design: [docs/HR_GAPS_DESIGN.md](docs/HR_GAPS_DESIGN.md) |
@@ -270,7 +271,7 @@ All paths below were read from the code. Unless noted, a signed-in session is re
 | Session | `POST /api/login`, `POST /api/logout`, `GET /api/login-options`, `POST /api/auth/accept-invitation`, `POST /api/auth/resend-invitation` | Public |
 | Sign-in | `GET /auth/google`, `GET /auth/google/callback`, `GET /invite/:token`, `GET /invite/:token/info`, `GET /l/:token` | Public |
 | Account | `GET /api/me`, `POST /api/password` | Everyone |
-| Users | `GET/POST /api/users`, `POST /api/users/bulk`, `POST /api/users/:email/invite`, `POST /api/users/:email/reset`, `PUT /api/users/:email/role`, `PUT /api/users/:email/it-admin`, `PUT /api/users/default-password`, `DELETE /api/users/:email` | HR |
+| Users | `GET/POST /api/users`, `POST /api/users/bulk`, `POST /api/users/:email/invite`, `POST /api/users/:email/reset`, `PUT /api/users/:email/role`, `PUT /api/users/:email/it-admin`, `PUT /api/users/:email/disabled` (disable or enable a login), `PUT /api/users/:email/hidden` (hide articles, polls or surveys for one person; the server refuses those pages and the menu drops them), `PUT /api/users/default-password`, `DELETE /api/users/:email` | HR |
 | People | `GET /api/roster`, `GET /api/directory`, `GET /api/managers` | Everyone |
 | People (HR) | `PUT /api/employees/manager`, `PUT /api/employees/number`, `PUT /api/employees/status`, `PUT /api/employees/:email/pay` | HR |
 | Teams and projects | `POST /api/team/members`, `GET /api/allocations`, `POST /api/projects`, `PATCH /api/projects/:id`, `POST /api/projects/:id/members`, `POST /api/allocations/:id/end` | Managers, leads, HR |
@@ -278,7 +279,7 @@ All paths below were read from the code. Unless noted, a signed-in session is re
 | Offboarding | `GET/POST /api/offboarding`, `POST /api/offboarding/:id/run`, `/cancel`, `/steps/:key`, `/steps/:key/retry`, `/clearance/complete`, `GET /api/offboarding/:id/clearance`, `GET/POST /api/advances` | HR |
 | Profile and documents | `GET/PUT /api/profile`, `PUT/GET/DELETE /api/profile/photo`, `GET /api/documents`, `PUT /api/documents/:docKey`, `GET /api/documents/:id/file` | Own data |
 | Leave | `GET /api/leave`, `GET /api/leave/today`, `POST /api/leave/requests`, `POST /api/leave/requests/:id/decision`, `POST /api/leave/requests/:id/cancel`, `POST /api/leave/comp-off-requests`, `POST/PUT/DELETE /api/leave/holidays`, `GET /api/leave/salary-cuts` | Everyone; decisions by approver or HR |
-| Attendance | `GET /api/attendance/today`, `/month`, `/day`, `/report`, `POST /api/attendance/punch`, `POST /api/attendance/punches`, `PUT /api/attendance/work-site` (HR: On-site or Off-site) | Everyone; team data for managers and HR |
+| Attendance | `GET /api/attendance/today`, `/presence` (who is in, not in yet or on leave today; shown on Employees and the dashboard head; off-site people left out), `/month`, `/day`, `/report`, `POST /api/attendance/punch`, `POST /api/attendance/punches`, `PUT /api/attendance/work-site` (HR: On-site or Off-site) | Everyone; team data for managers and HR |
 | Device | `POST /api/attendance/device/punches` (device key, no session), `GET/PUT /api/attendance/device/users` | Connector; HR |
 | Reimbursements | `GET/POST /api/reimbursements`, `POST /from-document`, `PUT /:id/items/:itemId/document`, `POST /:id/submit`, `/approve`, `/reject`, `/request-changes`, `/resubmit`, `GET/PUT /categories` | Own claims; review by HR |
 | Budgets | `GET/POST /api/budget-requests`, `POST /:id/approve`, `POST /:id/reject` | Own requests; decisions by HR |
@@ -351,6 +352,7 @@ Routes are in [frontend/src/App.jsx](frontend/src/App.jsx). Page routes are list
 | `/app/payslips` | `pages/Payslips.jsx` |
 | `/app/profile` | `pages/Profile.jsx` |
 | `/app/account` | `pages/Account.jsx` |
+| `/app/id-card` | `modules/idcard/` (ID card preview and PDF download; HR can pick anyone or download everyone's) |
 | `/app/users` | `pages/Users.jsx` |
 | `/app/audit` | `pages/Audit.jsx` |
 | `/app/onboarding`, `/app/onboarding/progress` | `modules/onboarding/Onboarding.jsx`, `Progress.jsx` (HR only) |
@@ -386,7 +388,7 @@ The "HR only" marks come from the `HR_ONLY` list in `App.jsx`. Every other page 
 - [src/components/FestivalLook.jsx](frontend/src/components/FestivalLook.jsx): `useFestivalLook()` (asks `/api/festival-look`; `?festival=<slug>` in any address previews one), `festivalTheme` (each festival's three colours, celebration and greeting from `festivalLook.festivals` in `brand.config.json`), `festivalGreeting`, `festivalFrom`, `festivalWhen`, `FestivalArt` (the festival's scene drawn once into a canvas), `FestiveFrame` (sets `data-festival` and `--fest-a/b/c` on `<html>`, draws the colour ribbon along the top of every page and plays the celebration: about four seconds of the festival's own motion (`burst`: lanterns, colours, snow, crescents, gulal, dandiya, sparks or confetti), once a day per festival, never under reduced motion) and `FestivalChip` (the top bar's "Diwali in 2 days" chip, linking to Festival wishes). Used by `Shell.jsx`, the sign-in layout (festival headline) and the dashboard banner (festival greeting, no buttons inside the banner).
 - [src/lib/](frontend/src/lib/): `leave.js` (re-exports `window.LeaveRules`), `useLeave.js`, `people.js`, `menu.js` (the menu for each role,
   shared by the sidebar and quick search).
-- [src/modules/](frontend/src/modules/): `access` (Company > Access, super admins only), `tools` (Manage > Tools & cost), `budgets`, `celebrations`, `digitalkit`, `employee`, `engage`, `festivals`, `finance`, `hrtools`, `offboarding`, `onboarding`, `payroll`, `posts`, `projectreport`, `reimbursements`, `workforce`.
+- [src/modules/](frontend/src/modules/): `access` (Company > Access, super admins only), `tools` (Manage > Tools & cost), `budgets`, `celebrations`, `digitalkit`, `employee`, `idcard`, `engage`, `festivals`, `finance`, `hrtools`, `offboarding`, `onboarding`, `payroll`, `posts`, `projectreport`, `reimbursements`, `workforce`.
 
 ### Styling and theme
 
@@ -425,6 +427,7 @@ People are linked mostly by work email (text, compared in lower case), not by fo
 | `posts`, `post_likes`, `post_comments`, `post_images`, `post_shares` | Company feed | FK to `posts` |
 | `polls`, `poll_votes` | Polls and one vote per person | FK to `polls` |
 | `praises` | Praise from one colleague to another | emails |
+| `rewards` | A reward HR gives a person, with a note | emails |
 | `articles` | HR articles, draft or live | author email |
 | `app_links` | Links to the company's other tools | none |
 | `advance_requests`, `attendance_requests` | Requests people raise and HR decides; approving records the decision only | emails |

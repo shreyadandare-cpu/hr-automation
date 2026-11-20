@@ -429,6 +429,7 @@ CREATE TABLE IF NOT EXISTS attendance_punches (
   employee_id INTEGER NOT NULL REFERENCES employees(id) ON DELETE CASCADE,
   work_date DATE NOT NULL, punch_time TIME NOT NULL, direction TEXT NOT NULL, source TEXT, note TEXT, created_by TEXT);
 CREATE INDEX IF NOT EXISTS attendance_punches_day ON attendance_punches (employee_id, work_date);
+CREATE INDEX IF NOT EXISTS attendance_punches_date ON attendance_punches (work_date);
 
 -- Office biometric device: which device user ID is which employee, and punches from IDs nobody has linked yet.
 CREATE TABLE IF NOT EXISTS device_users (
@@ -1062,6 +1063,14 @@ END $$;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS is_super_admin BOOLEAN NOT NULL DEFAULT false;
 -- A blocked login cannot sign in, even with Google, and its sessions stop working. Set when a login is deleted or someone leaves.
 ALTER TABLE users ADD COLUMN IF NOT EXISTS login_blocked BOOLEAN NOT NULL DEFAULT false;
+-- Pages HR has hidden for one person (any of: articles, polls, surveys). Set on Users; the server refuses those pages for them.
+ALTER TABLE users ADD COLUMN IF NOT EXISTS hidden_features TEXT[] NOT NULL DEFAULT '{}';
+-- Rewards: HR gives a person a reward with a short note. They are told, and see it on Praise > Rewards.
+CREATE TABLE IF NOT EXISTS rewards (
+  id SERIAL PRIMARY KEY, to_email TEXT NOT NULL, from_email TEXT NOT NULL, title TEXT NOT NULL, message TEXT NOT NULL DEFAULT '',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(), deleted_at TIMESTAMPTZ);
+CREATE INDEX IF NOT EXISTS rewards_to ON rewards (lower(to_email), created_at DESC) WHERE deleted_at IS NULL;
+CREATE INDEX IF NOT EXISTS rewards_recent ON rewards (created_at DESC) WHERE deleted_at IS NULL;
 
 -- One ticked permission for one person: for the whole company, or for a reporting tree (everyone below scope_root_email, or below
 -- the person themselves when it is empty). Removing it keeps the row, so the history of who gave and removed what stays.

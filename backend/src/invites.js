@@ -124,7 +124,7 @@ async function inviteState(token) {
 
 const MESSAGES = {
   invalid: "This invitation link is not valid. Please ask HR for a new invitation.",
-  used: "This invitation has already been used. Sign in with your email and password.",
+  used: "This invitation has already been used. Please sign in with your Wohlig Google account.",
   expired: `This invitation has expired (links last ${VALID_MINUTES} minutes). Please ask HR to send a new one.`,
   revoked: "A newer invitation was sent to you, so this link no longer works. Use the latest email.",
 };

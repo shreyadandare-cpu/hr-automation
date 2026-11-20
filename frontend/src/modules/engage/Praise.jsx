@@ -12,20 +12,27 @@ const badgeName = (k) => (BADGES.find(([b]) => b === k) || BADGES[0])[1];
 
 /* Me > Praise: thank a colleague in public. Everyone sees the wall; "Received" and "Given" are your own. */
 export default function Praise() {
-  const [scope, setScope] = useState("all");
-  const { data, error, reload } = useList(`/api/praise?scope=${scope}`);
+  const [scope, setScope] = useState(() => (new URLSearchParams(window.location.search).get("view") === "rewards" ? "rewards" : "all"));
+  const rewardsView = scope === "rewards";
+  const { data, error, reload } = useList(rewardsView ? "/api/rewards" : `/api/praise?scope=${scope}`);
   const toast = useToast();
   const person = usePerson();
   const [adding, setAdding] = useState(false);
-  const list = (data && data.praise) || [];
+  const list = (data && (rewardsView ? data.rewards : data.praise)) || [];
   const remove = async (x) => { const r = await api("DELETE", `/api/praise/${x.id}`); if (!r.ok) toast(apiMsg(r)); else { toast("The praise was removed."); reload(); } };
   return (
     <section className="section">
       <SectionHead title="Praise" sub="Thank a colleague for something they did. Everyone at Wohlig can see it."
         actions={<button type="button" className="btn primary" onClick={() => setAdding(true)}>Praise a colleague</button>}
-        tabs={<ViewTabs label="Praise" view={scope} onView={setScope} views={[["all", "Everyone"], ["mine", "Received"], ["given", "Given"]]} />} />
+        tabs={<ViewTabs label="Praise" view={scope} onView={setScope} views={[["all", "Everyone"], ["mine", "Received"], ["given", "Given"], ["rewards", "My rewards"]]} />} />
       {error && <Callout>{error}</Callout>}
-      {!data ? <ListSkeleton /> : list.length ? <div className="eg-grid">{list.map((x) => (
+      {!data ? <ListSkeleton /> : rewardsView ? (list.length ? <div className="eg-grid">{list.map((x) => (
+        <article className="card eg-praise" key={x.id}>
+          <div className="eg-praise-h"><Avatar person={person(x.to)} /><div><b>{x.title}</b><span>from {x.from.name}, {when(x.createdAt)}</span></div><Pill tone="info">Reward</Pill></div>
+          {x.message && <p>{x.message}</p>}
+        </article>))}</div>
+        : <div className="card"><div className="empty">You have not received a reward yet.</div></div>)
+      : list.length ? <div className="eg-grid">{list.map((x) => (
         <article className="card eg-praise" key={x.id}>
           <div className="eg-praise-h"><Avatar person={person(x.to)} /><div><b>{x.to.name}</b><span>from {x.from.name}, {when(x.createdAt)}</span></div><Pill tone="info">{badgeName(x.badge)}</Pill></div>
           <p>{x.message}</p>

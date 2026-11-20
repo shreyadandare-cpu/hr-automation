@@ -29,6 +29,7 @@ export default function Festivals() {
   const [list, setList] = useState(null);
   const [failed, setFailed] = useState(false);
   const [q, setQ] = useState("");
+  const [all, setAll] = useState(false);   // show every festival, not only the upcoming ones
   const [fest, setFest] = useState(null);   // the festival being worked on
   const load = useCallback(async () => {
     const r = await api("GET", "/api/festivals");
@@ -45,16 +46,16 @@ export default function Festivals() {
   const dated = list.filter((f) => f.next).sort((a, b) => a.inDays - b.inDays);
   const near = dated.filter((f) => f.inDays <= UPCOMING_DAYS);
   const upcoming = near.length ? near : dated.slice(0, 1);   // what is coming up; the nearest one when nothing falls in the window
-  const shown = term ? list.filter((f) => `${f.name} ${f.description}`.toLowerCase().includes(term)) : upcoming;
+  const shown = term || all ? list.filter((f) => `${f.name} ${f.description}`.toLowerCase().includes(term)) : upcoming;
   return (
     <div className="fw">
       <SectionHead eyebrow="For everyone" title="Festival wishes" sub="Pick an upcoming festival, choose a Wohlig-branded template, add your message and share the greeting with anyone."
         actions={<input className="input" style={{ minWidth: 240 }} type="search" placeholder="Search all festivals…" aria-label="Search all festivals" value={q} onChange={(e) => setQ(e.target.value)} />} />
       <LookSwitch list={list} reload={load} />
-      <h3 className="fw-h">{term ? `Results for "${q.trim()}"` : near.length ? "Coming up" : "Next festival"}</h3>
+      <h3 className="fw-h">{term ? `Results for "${q.trim()}"` : all ? "All festivals" : near.length ? "Coming up" : "Next festival"}</h3>
       {shown.length ? <div className="fw-grid">{shown.map((f) => <FestivalCard key={f.slug} f={f} onOpen={() => setFest(f)} />)}</div>
         : <div className="card"><div className="empty">{term ? "No festival matches your search." : "No festival date is set yet. HR can add dates under Festival dates."}</div></div>}
-      {!term && list.length > shown.length && <p className="muted">Other festivals appear here {UPCOMING_DAYS} days before their date. You can find any festival with the search box.</p>}
+      {!term && (all || list.length > shown.length) && <p className="muted">{all ? "Showing every festival." : `Other festivals appear here ${UPCOMING_DAYS} days before their date.`} <button type="button" className="btn link" onClick={() => setAll(!all)}>{all ? "Show only upcoming" : "Show all festivals"}</button></p>}
     </div>
   );
 }

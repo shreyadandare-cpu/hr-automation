@@ -9,27 +9,28 @@ const GOLD = ["#fbe39a", "#e9b94b", "#c8922a"], SERIF = (s, italic, w = 400) => 
 const SANS = (s, bold) => `${bold ? 700 : 400} ${s}px "Lato", "Helvetica Neue", Arial, sans-serif`, SCRIPT = (s) => `600 ${s}px "Dancing Script", cursive`;
 
 /* the four colour versions: a turn of the colour wheel and a little more or less colour */
-const V = (name, hue, sat = 1, light = 1) => ({ id: name.toLowerCase().replace(/\W+/g, "-"), name, hue, sat, light });
+const V = (name, tint) => ({ id: name.toLowerCase().replace(/\W+/g, "-"), name, tint });
+const PASTELS = () => [V("Blush pink", [255, 190, 212]), V("Lavender", [212, 198, 255]), V("Mint", [186, 236, 212]), V("Sky blue", [190, 222, 255])];
 
 const COMMON = { x: 0.085, msg: { size: 0.036, color: "#ffffff", w: 0.5 }, head: { color: "#ffffff" }, wish: { size: 0.034, color: "#ffffff", w: 0.5 }, rule: GOLD[1] };
 export const ART = {
   christmas: { logoKind: "dark", file: "christmas", ...COMMON, erase: [[0.02, 0.17, 0.65, 0.76, "light"], [0.62, 0.5, 0.13, 0.15, "light"]], msgY: 0.205, headY: 0.43, headSize: 0.11, emphY: 0.585, emphSize: 0.125, ruleY: 0.635, wishY: 0.69,
-    versions: [V("Ruby red", 0), V("Emerald green", 135), V("Royal blue", 225), V("Amber", 38, 1.1)] },
-  "eid-ul-fitr": { logoKind: "dark", file: "eid", ...COMMON, erase: [[0.02, 0.19, 0.55, 0.66, "light"]], msgY: 0.23, headY: 0.515, headSize: 0.12, emphY: 0.64, emphSize: 0.13, ruleY: 0.69, wishY: 0.75,
-    versions: [V("Teal", 0), V("Royal blue", 38), V("Forest green", -45), V("Violet", 105)] },
+    versions: PASTELS() },
+  "eid-ul-fitr": { logoKind: "dark", file: "eid", ...COMMON, erase: [[0.02, 0.19, 0.55, 0.66, "light"], [0.55, 0.52, 0.13, 0.16, "light"], [0.5, 0.76, 0.12, 0.1, "light"]], msgY: 0.23, headY: 0.515, headSize: 0.12, emphY: 0.64, emphSize: 0.13, ruleY: 0.69, wishY: 0.75,
+    versions: PASTELS() },
   holi: { logoKind: "light", file: "holi", x: 0.07, msg: { size: 0.036, color: "#26224a", w: 0.5 }, head: { color: "#26224a" }, wish: { size: 0.03, color: "#26224a", w: 0.5 }, rule: "#c026d3", erase: [[0.02, 0.19, 0.55, 0.62, "fill"], [0.02, 0.82, 0.48, 0.15, "fill"]],
     msgY: 0.235, headY: 0.49, headSize: 0.095, emphY: 0.69, emphSize: 0.21, emphScript: true, emphGrad: ["#9333ea", "#ec4899", "#f97316"], ruleY: 0, wishY: 0.85,
-    versions: [V("Pink", 0), V("Blue", 200), V("Green", 110), V("Rose", 330, 1.1)] },
+    versions: PASTELS() },
   muharram: { logoKind: "dark", file: "muharram", ...COMMON, erase: [[0.02, 0.19, 0.56, 0.72, "light"], [0.55, 0.5, 0.25, 0.2, "light"], [0.5, 0.74, 0.1, 0.12, "light"]], msgY: 0.24, headY: 0.525, headSize: 0.11, emphY: 0.66, emphSize: 0.125, ruleY: 0.71, wishY: 0.77,
-    versions: [V("Navy blue", 0), V("Teal", -50), V("Violet", 60), V("Maroon", 150)] },
+    versions: PASTELS() },
   "ganesh-chaturthi": { logoKind: "light", file: "ganesh-chaturthi", x: 0.08, msg: { size: 0.036, color: "#4a2b22", w: 0.48 }, head: { color: "#7a1530" }, wish: { size: 0.034, color: "#4a2b22", w: 0.48 }, rule: "#7a1530",
     erase: [[0.02, 0.19, 0.53, 0.53, "fill"], [0.02, 0.73, 0.53, 0.21, "fill"]], msgY: 0.23, headY: 0.44, headSize: 0.075, emphY: 0.58, emphSize: 0.115, emphColor: "#7a1530", emph2: true, ruleY: 0.74, wishY: 0.82,
-    versions: [V("Saffron", 0), V("Rose pink", 330), V("Green", 80), V("Sky blue", 170)] },
+    versions: PASTELS() },
   navratri: { logoKind: "dark", file: "navratri", ...COMMON, erase: [[0.02, 0.19, 0.56, 0.7, "light"]], msgY: 0.24, headY: 0.525, headSize: 0.09, emphY: 0.65, emphSize: 0.125, ruleY: 0.7, wishY: 0.77,
-    versions: [V("Plum", 0), V("Amber", 70), V("Green", 130), V("Indigo", -50)] },
+    versions: PASTELS() },
   diwali: { logoKind: "dark", file: "diwali", crop: [0.195, 0, 0.667, 1], x: 0.07, msg: { size: 0.036, color: "#ffffff", w: 0.5 }, head: { color: "#ffffff" }, wish: { size: 0.032, color: "#ffffff", w: 0.5 }, rule: GOLD[1], logo: true, sign: true,
-    erase: [[0, 0.03, 0.3, 0.15, "light"], [0, 0.17, 0.6, 0.45, "light"], [0, 0.62, 0.4, 0.37, "light"]], msgY: 0.215, headY: 0.475, headSize: 0.085, emphY: 0.62, emphSize: 0.115, ruleY: 0.385, wishY: 0.80,
-    versions: [V("Purple", 0), V("Green", 52), V("Teal", 150), V("Crimson", -50)] },
+    erase: [[0.72, 0.045, 0.28, 0.07, "light"], [0, 0.03, 0.3, 0.15, "light"], [0, 0.17, 0.6, 0.45, "light"], [0, 0.62, 0.4, 0.37, "light"]], msgY: 0.215, headY: 0.475, headSize: 0.085, emphY: 0.62, emphSize: 0.115, ruleY: 0.385, wishY: 0.80,
+    versions: PASTELS() },
 };
 export const artFor = (slug) => (ART[slug] && Object.entries(FILES).some(([p]) => p.includes(`/${ART[slug].file}.`)) ? ART[slug] : null);
 const fileUrl = (a) => Object.entries(FILES).find(([p]) => p.includes(`/${a.file}.`))[1];
@@ -87,18 +88,25 @@ function clear(ctx, rects) {
   }
   ctx.putImageData(img, 0, 0);
 }
-/** Turns the colours of the picture round the colour wheel. */
-function tint(ctx, hue, sat, light) {
-  if (!hue && sat === 1 && light === 1) return;
-  const img = ctx.getImageData(0, 0, SIZE, SIZE), d = img.data, a = (hue * Math.PI) / 180, c = Math.cos(a), s = Math.sin(a);
-  const m = [0.213 + c * 0.787 - s * 0.213, 0.715 - c * 0.715 - s * 0.715, 0.072 - c * 0.072 + s * 0.928, 0.213 - c * 0.213 + s * 0.143, 0.715 + c * 0.285 + s * 0.14, 0.072 - c * 0.072 - s * 0.283, 0.213 - c * 0.213 - s * 0.787, 0.715 - c * 0.715 + s * 0.715, 0.072 + c * 0.928 + s * 0.072];
+/** Makes the picture a soft pastel: the colour is eased back, then lifted toward the chosen tint so nothing stays dark. */
+function pastel(ctx, tint) {
+  const img = ctx.getImageData(0, 0, SIZE, SIZE), d = img.data, k = 0.7, veil = 0.14, lift = new Float32Array(256).map((_, v) => 255 * Math.pow(v / 255, 0.58));   // shadows are lifted first, so dark pictures turn soft, not dusty
+  const sr = 255 - tint[0] * k, sg = 255 - tint[1] * k, sb = 255 - tint[2] * k;
   for (let i = 0; i < d.length; i += 4) {
-    let r = d[i] * m[0] + d[i + 1] * m[1] + d[i + 2] * m[2], g = d[i] * m[3] + d[i + 1] * m[4] + d[i + 2] * m[5], b = d[i] * m[6] + d[i + 1] * m[7] + d[i + 2] * m[8];
-    const y = 0.299 * r + 0.587 * g + 0.114 * b; r = (y + (r - y) * sat) * light; g = (y + (g - y) * sat) * light; b = (y + (b - y) * sat) * light;
-    d[i] = r < 0 ? 0 : r > 255 ? 255 : r; d[i + 1] = g < 0 ? 0 : g > 255 ? 255 : g; d[i + 2] = b < 0 ? 0 : b > 255 ? 255 : b;
+    const R0 = lift[d[i]], G0 = lift[d[i + 1]], B0 = lift[d[i + 2]], y = 0.299 * R0 + 0.587 * G0 + 0.114 * B0;
+    let r = y + (R0 - y) * 0.75, g = y + (G0 - y) * 0.75, b = y + (B0 - y) * 0.75;
+    r = 255 - ((255 - r) * sr) / 255; g = 255 - ((255 - g) * sg) / 255; b = 255 - ((255 - b) * sb) / 255;
+    d[i] = r * (1 - veil) + 255 * veil; d[i + 1] = g * (1 - veil) + 255 * veil; d[i + 2] = b * (1 - veil) + 255 * veil;
   }
   ctx.putImageData(img, 0, 0);
 }
+/** How light the picture is where the words go (0 to 255). */
+function lightness(ctx) {
+  const d = ctx.getImageData(Math.round(SIZE * 0.06), Math.round(SIZE * 0.2), Math.round(SIZE * 0.5), Math.round(SIZE * 0.6)).data; let s = 0, n = 0;
+  for (let i = 0; i < d.length; i += 64) { s += 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2]; n++; }
+  return s / n;
+}
+const INK = "#3a2a4d", PLUM = ["#6d2a6b", "#b0397a", "#e0663c"];
 function wrap(ctx, text, maxW) {
   const out = []; let cur = "";
   for (const w of String(text).split(/\s+/).filter(Boolean)) { const t = cur ? `${cur} ${w}` : w; if (cur && ctx.measureText(t).width > maxW) { out.push(cur); cur = w; } else cur = t; }
@@ -107,20 +115,23 @@ function wrap(ctx, text, maxW) {
 
 /** The picture with the chosen colours and the person's words on it. o: { slug, version (id), heading, emphasis, message, wish, sender, recipient, photo, logos, scale } */
 export async function renderArt(o) {
-  const A = ART[o.slug], ver = A.versions.find((v) => v.id === o.version) || A.versions[0], scale = o.scale || 1;
+  const A0 = ART[o.slug], ver = A0.versions.find((v) => v.id === o.version) || A0.versions[0], scale = o.scale || 1;
+  let A = A0;
   if (document.fonts) await Promise.all([SERIF(60), SERIF(60, true), SERIF(60, false, 700), SANS(40, true), SANS(40, false), SCRIPT(60)].map((f) => document.fonts.load(f, "Aa").catch(() => {})));
   const img = await loadImg(fileUrl(A));
   const work = document.createElement("canvas"); work.width = work.height = SIZE; const w = work.getContext("2d");
-  const [cx, cy, cw, ch] = A.crop || [0, 0, 1, 1];
+  const [cx, cy, cw, ch] = A0.crop || [0, 0, 1, 1];
   w.drawImage(img, cx * img.naturalWidth, cy * img.naturalHeight, cw * img.naturalWidth, ch * img.naturalHeight, 0, 0, SIZE, SIZE);
-  const logoArea = A.logoKind === "dark" && A.logo ? null : [0.03, 0.035, 0.31, 0.13, "fill"];   // the picture's own logo is replaced by the official file
-  if (A.erase && A.erase.length) clear(w, [...(logoArea && o.logos ? [logoArea] : []), ...A.erase]); else if (logoArea && o.logos) clear(w, [logoArea]);
-  tint(w, ver.hue, ver.sat, ver.light);
+  const logoArea = A0.logoKind === "dark" && A0.logo ? null : [0.03, 0.035, 0.31, 0.13, "fill"];   // the picture's own logo is replaced by the official file
+  if (A0.erase && A0.erase.length) clear(w, [...(logoArea && o.logos ? [logoArea] : []), ...A0.erase]); else if (logoArea && o.logos) clear(w, [logoArea]);
+  pastel(w, ver.tint);
+  const light = lightness(w) > 135;   // a light page takes dark words
+  if (light) A = { ...A0, msg: { ...A0.msg, color: INK }, head: { color: INK }, wish: { ...A0.wish, color: INK }, rule: "#b0397a", emphGrad: A0.emphGrad || (A0.emph2 ? null : PLUM), emphColor: A0.emph2 ? "#7a1530" : null, signInk: "#8a2d5a" };
   const canvas = document.createElement("canvas"); canvas.width = canvas.height = Math.round(SIZE * scale);
   const ctx = canvas.getContext("2d"); ctx.scale(scale, scale); ctx.drawImage(work, 0, 0); ctx.textBaseline = "alphabetic"; ctx.textAlign = "left";
 
   const X = A.x * SIZE, px = (f) => f * SIZE, hasPhoto = !!o.photo;
-  const lg = o.logos && (A.logoKind === "light" ? o.logos.light : o.logos.dark);
+  const lg = o.logos && (light ? o.logos.light : A.logoKind === "light" ? o.logos.light : o.logos.dark);
   if (lg) ctx.drawImage(lg, 70, 58, 230, 230 * lg.height / lg.width);
   let my = px(A.msgY);
   const dear = String(o.recipient || "").trim();
@@ -140,7 +151,7 @@ export async function renderArt(o) {
   const from = String(o.sender || "").trim();
   if (from && (A.sign || from !== "Team Wohlig")) {
     const fy = px(A.sign ? 0.945 : 0.93), sx = X + (hasPhoto ? px(0.12) : 0); ctx.fillStyle = "#f7781d"; ctx.fillRect(X, fy - px(0.05), 4, px(0.065));
-    ctx.fillStyle = A.msg.color; ctx.font = SANS(px(0.026)); ctx.fillText("With warm wishes,", sx + 18, fy - px(0.016)); ctx.fillStyle = A.sign ? GOLD[1] : A.head.color; ctx.font = SANS(px(0.034), true); ctx.fillText(from, sx + 18, fy + px(0.02));
+    ctx.fillStyle = A.msg.color; ctx.font = SANS(px(0.026)); ctx.fillText("With warm wishes,", sx + 18, fy - px(0.016)); ctx.fillStyle = A.signInk || (A.sign ? GOLD[1] : A.head.color); ctx.font = SANS(px(0.034), true); ctx.fillText(from, sx + 18, fy + px(0.02));
   }
   if (hasPhoto) {
     const r = px(0.075), pcx = X + r + 4, pcy = px(0.9);

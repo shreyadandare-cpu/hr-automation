@@ -30,7 +30,7 @@ const moduleRoutes = Object.values(modules).flatMap((m) => m.routes || []);
 /* Pages that need a company-wide permission: anyone without it who opens one by its address goes back to the dashboard.
    (The server refuses the data anyway; this only avoids an empty page.) */
 const NEEDS = { "/app/onboarding": "onboarding.manage", "/app/onboarding/progress": "onboarding.manage", "/app/offboarding": "offboarding.manage",
-  "/app/offboarding/leavers": "offboarding.manage", "/app/celebrations": "celebrations.manage", "/app/access": null };
+  "/app/offboarding/leavers": "offboarding.manage", "/app/celebrations": "celebrations.manage", "/app/rewards": "rewards.give", "/app/access": null };
 const guard = (path, element, auth) => {
   if (!(path in NEEDS)) return element;
   const ok = NEEDS[path] === null ? auth.superAdmin : auth.canAll(NEEDS[path]);

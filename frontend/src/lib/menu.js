@@ -70,6 +70,7 @@ export function menuFor({ user, isManager, superAdmin, can = () => false, canAll
       canAll("assets.manage") && ["/app/assets", "Assets", "laptop"],
       (canAll("tools.manage") || canAll("finance.view")) && ["/app/tools", "Tools & cost", "grid"],
       canAll("tools.manage") && ["/app/claude-requests", "Claude access", "key"],
+      canAll("rewards.give") && ["/app/rewards", "Rewards", "medal"],
       canAll("users.manage") && ["/app/users", "Users", "settings"],
       superAdmin && ["/app/access", "Access", "shield"],
       canAll("audit.view") && ["/app/audit", "Audit log", "history"],

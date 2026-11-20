@@ -352,6 +352,7 @@ Routes are in [frontend/src/App.jsx](frontend/src/App.jsx). Page routes are list
 | `/app/payslips` | `pages/Payslips.jsx` |
 | `/app/profile` | `pages/Profile.jsx` |
 | `/app/account` | `pages/Account.jsx` |
+| `/app/rewards` | `modules/rewards/` (Manage > Rewards: give a reward and see those given; needs `rewards.give`) |
 | `/app/id-card` | `modules/idcard/` (ID card preview and PDF download; HR can pick anyone or download everyone's) |
 | `/app/users` | `pages/Users.jsx` |
 | `/app/audit` | `pages/Audit.jsx` |
@@ -388,7 +389,7 @@ The "HR only" marks come from the `HR_ONLY` list in `App.jsx`. Every other page 
 - [src/components/FestivalLook.jsx](frontend/src/components/FestivalLook.jsx): `useFestivalLook()` (asks `/api/festival-look`; `?festival=<slug>` in any address previews one), `festivalTheme` (each festival's three colours, celebration and greeting from `festivalLook.festivals` in `brand.config.json`), `festivalGreeting`, `festivalFrom`, `festivalWhen`, `FestivalArt` (the festival's scene drawn once into a canvas), `FestiveFrame` (sets `data-festival` and `--fest-a/b/c` on `<html>`, draws the colour ribbon along the top of every page and plays the celebration: about four seconds of the festival's own motion (`burst`: lanterns, colours, snow, crescents, gulal, dandiya, sparks or confetti), once a day per festival, never under reduced motion) and `FestivalChip` (the top bar's "Diwali in 2 days" chip, linking to Festival wishes). Used by `Shell.jsx`, the sign-in layout (festival headline) and the dashboard banner (festival greeting, no buttons inside the banner).
 - [src/lib/](frontend/src/lib/): `leave.js` (re-exports `window.LeaveRules`), `useLeave.js`, `people.js`, `menu.js` (the menu for each role,
   shared by the sidebar and quick search).
-- [src/modules/](frontend/src/modules/): `access` (Company > Access, super admins only), `tools` (Manage > Tools & cost), `budgets`, `celebrations`, `digitalkit`, `employee`, `idcard`, `engage`, `festivals`, `finance`, `hrtools`, `offboarding`, `onboarding`, `payroll`, `posts`, `projectreport`, `reimbursements`, `workforce`.
+- [src/modules/](frontend/src/modules/): `access` (Company > Access, super admins only), `tools` (Manage > Tools & cost), `budgets`, `celebrations`, `digitalkit`, `employee`, `idcard`, `rewards`, `engage`, `festivals`, `finance`, `hrtools`, `offboarding`, `onboarding`, `payroll`, `posts`, `projectreport`, `reimbursements`, `workforce`.
 
 ### Styling and theme
 

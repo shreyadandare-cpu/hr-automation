@@ -26,7 +26,7 @@ function WhoCell({ name, title, email, flag }) {
 }
 
 /* The three dots at the end of a login row: every action for that person in one drop-down. */
-function RowMenu({ u, canExit, canCard, self, onCard, onInvite, onReset, onExit, onDisable, onDelete }) {
+function RowMenu({ u, canExit, canCard, canReward, nav, self, onCard, onInvite, onReset, onExit, onDisable, onDelete }) {
   const item = "row-menu-i flex w-full items-center gap-3";
   const row = (icon, label, fn, disabled) => <DropdownMenu.Item className={item} disabled={disabled} onSelect={() => fn(u)}><span className="size-5 shrink-0 text-ink-dim"><Icon name={icon} /></span>{label}</DropdownMenu.Item>;
   return (
@@ -36,6 +36,7 @@ function RowMenu({ u, canExit, canCard, self, onCard, onInvite, onReset, onExit,
         <DropdownMenu.Content className="row-menu" align="end" sideOffset={6} collisionPadding={8}>
           {row("mail", u.inviteExpires ? "Resend invite" : "Send invite", onInvite)}
           {row("key", "Reset password", onReset)}
+          {canReward && row("medal", "Give a reward", (x) => nav(`/app/rewards?to=${encodeURIComponent(x.email)}`))}
           {canCard && row("idcard", "View ID card", onCard)}
           {canExit && row("offboard", "Initiate exit", onExit)}
           {row("lock", u.blocked ? "Enable login" : "Disable login", onDisable, self)}
@@ -125,7 +126,7 @@ export default function Users() {
                     <td><select className="input" aria-label={`Role for ${u.email}`} value={u.role} disabled={!superAdmin} title={superAdmin ? undefined : "Only a super admin can change this."} onChange={(e) => changeRole(u, e.target.value)}><option value="employee">Employee</option><option value="hr">HR</option></select></td>
                     <td><label className="row" style={{ gap: 8 }}><input type="checkbox" aria-label={`IT admin: ${u.email}`} checked={!!u.itAdmin} disabled={!superAdmin} title={superAdmin ? undefined : "Only a super admin can change this."} onChange={(e) => act(api("PUT", `/api/users/${encodeURIComponent(u.email)}/it-admin`, { value: e.target.checked }), e.target.checked ? "Made IT admin. They can now see and manage Assets." : "IT admin removed.")} /><span className="muted">Assets</span></label></td>
                     <td className="hide-sm u-last">{u.lastLogin ? new Date(u.lastLogin).toLocaleString("en-IN", { day: "numeric", month: "short", year: "numeric", hour: "numeric", minute: "2-digit" }) : "Never"}</td>
-                    <td className="dots-cell"><RowMenu u={u} self={u.email.toLowerCase() === user.email.toLowerCase()} canExit={canAll("offboarding.manage")} canCard={can("people.view")} onCard={setCardFor}
+                    <td className="dots-cell"><RowMenu u={u} self={u.email.toLowerCase() === user.email.toLowerCase()} canExit={canAll("offboarding.manage")} canCard={can("people.view")} canReward={canAll("rewards.give")} nav={nav} onCard={setCardFor}
                       onInvite={resend} onDisable={toggleLogin}
                       onReset={(x) => confirm(`Reset ${x.email} to the default password? They will be signed out.`) && act(api("POST", `/api/users/${encodeURIComponent(x.email)}/reset`), `${x.email} was reset to the default password.`, () => {})}
                       onDelete={(x) => confirm(`Delete the account for ${x.email}? They will no longer be able to sign in.`) && act(api("DELETE", `/api/users/${encodeURIComponent(x.email)}`), "Account deleted.")}

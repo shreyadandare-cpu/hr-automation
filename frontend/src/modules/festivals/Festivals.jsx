@@ -11,7 +11,7 @@ import { FESTIVALS, THEMES, loadImage, renderGreeting, templateName, toBlob } fr
 import { BRAND } from "../../brand.js";
 import { festivalTheme } from "../../components/FestivalLook.jsx";
 
-const MAX_PHOTO = 5 * 1024 * 1024, MAX_TO = 10;
+const MAX_PHOTO = 5 * 1024 * 1024, MAX_TO = 10, UPCOMING_DAYS = 45;   // a festival is listed from this many days before its date
 const dateText = (iso) => { const [y, m, d] = String(iso).split("-").map(Number); return new Date(Date.UTC(y, m - 1, d)).toLocaleDateString("en-IN", { day: "numeric", month: "long", year: "numeric", timeZone: "UTC" }); };
 const when = (f) => (f.next ? `${dateText(f.next)} · ${f.inDays === 0 ? "today" : f.inDays === 1 ? "tomorrow" : `in ${f.inDays} days`}` : "Date to be announced");
 const fileName = (slug, theme) => `wohlig-${slug}-${theme}-greeting.png`;
@@ -41,20 +41,20 @@ export default function Festivals() {
   if (!list) return <div className="fw"><CardSkeleton lines={4} /></div>;
   if (fest) return <Studio key={fest.slug} fest={fest} onBack={() => setFest(null)} />;
 
-  const shown = list.filter((f) => `${f.name} ${f.description}`.toLowerCase().includes(q.trim().toLowerCase()));
-  const soon = q.trim() ? [] : shown.filter((f) => f.next).slice(0, 2);
+  const term = q.trim().toLowerCase();
+  const dated = list.filter((f) => f.next).sort((a, b) => a.inDays - b.inDays);
+  const near = dated.filter((f) => f.inDays <= UPCOMING_DAYS);
+  const upcoming = near.length ? near : dated.slice(0, 1);   // what is coming up; the nearest one when nothing falls in the window
+  const shown = term ? list.filter((f) => `${f.name} ${f.description}`.toLowerCase().includes(term)) : upcoming;
   return (
     <div className="fw">
-      <SectionHead eyebrow="For everyone" title="Festival wishes" sub="Pick a festival, choose a Wohlig-branded template, add your message and share the greeting with anyone."
-        actions={<input className="input" style={{ minWidth: 240 }} type="search" placeholder="Search festivals…" aria-label="Search festivals" value={q} onChange={(e) => setQ(e.target.value)} />} />
+      <SectionHead eyebrow="For everyone" title="Festival wishes" sub="Pick an upcoming festival, choose a Wohlig-branded template, add your message and share the greeting with anyone."
+        actions={<input className="input" style={{ minWidth: 240 }} type="search" placeholder="Search all festivals…" aria-label="Search all festivals" value={q} onChange={(e) => setQ(e.target.value)} />} />
       <LookSwitch list={list} reload={load} />
-      {!!soon.length && <>
-        <h3 className="fw-h">Coming up</h3>
-        <div className="fw-grid fw-soon">{soon.map((f) => <FestivalCard key={f.slug} f={f} onOpen={() => setFest(f)} big />)}</div>
-      </>}
-      <h3 className="fw-h">{q.trim() ? `Results for "${q.trim()}"` : "All festivals"}</h3>
+      <h3 className="fw-h">{term ? `Results for "${q.trim()}"` : near.length ? "Coming up" : "Next festival"}</h3>
       {shown.length ? <div className="fw-grid">{shown.map((f) => <FestivalCard key={f.slug} f={f} onOpen={() => setFest(f)} />)}</div>
-        : <div className="card"><div className="empty">No festival matches your search.</div></div>}
+        : <div className="card"><div className="empty">{term ? "No festival matches your search." : "No festival date is set yet. HR can add dates under Festival dates."}</div></div>}
+      {!term && list.length > shown.length && <p className="muted">Other festivals appear here {UPCOMING_DAYS} days before their date. You can find any festival with the search box.</p>}
     </div>
   );
 }

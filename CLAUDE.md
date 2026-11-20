@@ -82,7 +82,7 @@ one short celebration a day, its own for each festival (Diwali lanterns and spar
 crescent moons, Ganesh Chaturthi gulal, Navratri dandiya sticks; set by `burst` in the brand file; about four seconds, then it
 stops; off under reduced motion). A festival needs a date ahead, or its look never appears: HR adds dates on Festival wishes > Festival dates, and the
 page warns when one is missing. A brand-new festival needs a developer: a row in `festivals` (schema.sql), its greeting
-templates in `modules/festivals/designs.js` and `scenes.js`, and its colours and celebration in the brand file. Keep it to that: no looping effects, no buttons in the dashboard banner, and the scene itself is drawn once.
+templates in `modules/festivals/designs.js` (words and layout) and `heroes.js` (the picture), and its colours and celebration in the brand file. Keep it to that: no looping effects, no buttons in the dashboard banner, and the scene itself is drawn once.
 
 ## Access: one engine (always)
 

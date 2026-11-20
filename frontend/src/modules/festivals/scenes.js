@@ -24,7 +24,7 @@ function twinkle(ctx, x, y, r, color) {   // a four-point star with a soft halo
   ctx.save(); ctx.translate(x, y); ctx.fillStyle = color.replace("A)", "0.95)");
   ctx.beginPath(); ctx.moveTo(0, -r); ctx.quadraticCurveTo(0, 0, r, 0); ctx.quadraticCurveTo(0, 0, 0, r); ctx.quadraticCurveTo(0, 0, -r, 0); ctx.quadraticCurveTo(0, 0, 0, -r); ctx.fill(); ctx.restore();
 }
-function sphere(ctx, x, y, r, base, light, dark) {   // a glossy bauble / ball with a cap
+export function sphere(ctx, x, y, r, base, light, dark) {   // a glossy bauble / ball with a cap
   ctx.save(); ctx.shadowColor = "rgba(0,0,0,.35)"; ctx.shadowBlur = r * 0.6; ctx.shadowOffsetY = r * 0.25;
   ctx.fillStyle = rad(ctx, x - r * 0.35, y - r * 0.4, r * 0.1, r * 1.1, [[0, light], [0.45, base], [1, dark]]);
   ctx.beginPath(); ctx.arc(x, y, r, 0, TAU); ctx.fill(); ctx.restore();
@@ -127,13 +127,13 @@ function christmasScene(ctx, r) {
 }
 
 /* ---------- Diwali ---------- */
-function flame(ctx, x, y, s) {
+export function flame(ctx, x, y, s) {
   glow(ctx, x, y - s * 0.7, s * 4.2, WARM, 0.55);
   ctx.beginPath(); ctx.moveTo(x, y - s * 2.2); ctx.bezierCurveTo(x + s * 0.95, y - s * 1.2, x + s * 0.8, y - s * 0.2, x, y); ctx.bezierCurveTo(x - s * 0.8, y - s * 0.2, x - s * 0.95, y - s * 1.2, x, y - s * 2.2);
   ctx.fillStyle = lin(ctx, x, y - s * 2.2, x, y, [[0, "#fff6b8"], [0.5, "#ffb52e"], [1, "#e8541a"]]); ctx.fill();
   ctx.beginPath(); ctx.ellipse(x, y - s * 0.7, s * 0.28, s * 0.62, 0, 0, TAU); ctx.fillStyle = "rgba(255,255,255,.9)"; ctx.fill();
 }
-function diya(ctx, x, y, w, lit = true) {   // x,y = rim centre
+export function diya(ctx, x, y, w, lit = true) {   // x,y = rim centre
   ctx.save(); ctx.shadowColor = "rgba(0,0,0,.45)"; ctx.shadowBlur = 16; ctx.shadowOffsetY = 8;
   ctx.beginPath(); ctx.moveTo(x - w, y); ctx.bezierCurveTo(x - w * 0.95, y + w * 0.72, x + w * 0.95, y + w * 0.72, x + w, y); ctx.quadraticCurveTo(x, y - w * 0.22, x - w, y);
   ctx.fillStyle = lin(ctx, x - w, y, x + w, y + w * 0.7, [[0, "#f0883a"], [0.55, "#c4561c"], [1, "#7a2a0c"]]); ctx.fill(); ctx.restore();
@@ -142,12 +142,12 @@ function diya(ctx, x, y, w, lit = true) {   // x,y = rim centre
   ctx.strokeStyle = "rgba(255,215,140,.55)"; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(x - w * 0.72, y + w * 0.28); ctx.quadraticCurveTo(x, y + w * 0.5, x + w * 0.72, y + w * 0.28); ctx.stroke();
   if (lit) flame(ctx, x + w * 0.62, y - w * 0.05, w * 0.34);
 }
-function marigold(ctx, x, y, s, a = 0) {
+export function marigold(ctx, x, y, s, a = 0) {
   ctx.save(); ctx.translate(x, y); ctx.rotate(a);
   for (let ring = 0; ring < 3; ring++) for (let i = 0; i < 12; i++) { ctx.save(); ctx.rotate((i / 12) * TAU + ring * 0.26); ctx.fillStyle = ["#f59a0c", "#ffb82e", "#ffd25a"][ring]; ctx.beginPath(); ctx.ellipse(0, -s * (0.82 - ring * 0.22), s * 0.2, s * (0.38 - ring * 0.06), 0, 0, TAU); ctx.fill(); ctx.restore(); }
   ctx.fillStyle = "#c2610a"; ctx.beginPath(); ctx.arc(0, 0, s * 0.16, 0, TAU); ctx.fill(); ctx.restore();
 }
-function lantern(ctx, x, y, w, h, c0, c1) {   // a hanging paper lantern; y = top of the cord
+export function lantern(ctx, x, y, w, h, c0, c1) {   // a hanging paper lantern; y = top of the cord
   ctx.strokeStyle = "rgba(255,225,160,.8)"; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x, y + h * 0.18); ctx.stroke();
   glow(ctx, x, y + h * 0.6, h * 1.1, WARM, 0.4);
   ctx.fillStyle = "#b8822a"; ctx.fillRect(x - w * 0.28, y + h * 0.16, w * 0.56, h * 0.07);
@@ -204,7 +204,7 @@ function holiScene(ctx, r) {
 }
 
 /* ---------- Eid-ul-Fitr and Eid-ul-Adha ---------- */
-function fanoos(ctx, x, y, s) {   // a hanging Arabic lantern; y = top of the cord
+export function fanoos(ctx, x, y, s) {   // a hanging Arabic lantern; y = top of the cord
   ctx.strokeStyle = "rgba(255,225,160,.8)"; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x, y + s * 0.5); ctx.stroke();
   glow(ctx, x, y + s * 1.5, s * 2.3, WARM, 0.45);
   const gold = lin(ctx, x - s * 0.5, 0, x + s * 0.5, 0, [[0, "#8a6414"], [0.5, "#f6d46c"], [1, "#8a6414"]]);
@@ -216,7 +216,7 @@ function fanoos(ctx, x, y, s) {   // a hanging Arabic lantern; y = top of the co
   ctx.beginPath(); ctx.moveTo(x - s * 0.58, y + s * 1.75); ctx.lineTo(x + s * 0.58, y + s * 1.75); ctx.stroke();
   ctx.fillStyle = gold; ctx.beginPath(); ctx.moveTo(x, y + s * 2.65); ctx.lineTo(x - 7, y + s * 2.9); ctx.lineTo(x + 7, y + s * 2.9); ctx.fill(); ctx.beginPath(); ctx.arc(x, y + s * 3.0, 5, 0, TAU); ctx.fill();
 }
-function crescentMoon(ctx, x, y, R) {
+export function crescentMoon(ctx, x, y, R) {
   glow(ctx, x, y, R * 2.4, WARM, 0.5);
   ctx.save();
   ctx.beginPath(); ctx.arc(x, y, R, 0, TAU); ctx.clip();   // the cut-out circle can't leave a sliver outside the moon
@@ -255,7 +255,7 @@ function eidScene(ctx, r, kind) {
 }
 
 /* ---------- Ganesh Chaturthi ---------- */
-function lotus(ctx, x, y, R) {   // a layered lotus seen from the front; x,y = centre of the flower
+export function lotus(ctx, x, y, R) {   // a layered lotus seen from the front; x,y = centre of the flower
   glow(ctx, x, y, R * 2, rgba(255, 190, 120), 0.35);
   const layer = (n, spread, len, wid, c0, c1, dy) => {
     for (let i = 0; i < n; i++) {
@@ -270,7 +270,7 @@ function lotus(ctx, x, y, R) {   // a layered lotus seen from the front; x,y = c
   layer(5, 0.7, R * 0.88, R * 0.32, "#ee6aa0", "#ffd0e4", R * 0.34); layer(3, 0.34, R * 0.72, R * 0.28, "#e8508c", "#ffc2dc", R * 0.28);
   ctx.fillStyle = "#f7c948"; ctx.beginPath(); ctx.arc(x, y - R * 0.3, R * 0.16, 0, TAU); ctx.fill();
 }
-function modak(ctx, x, y, s) {
+export function modak(ctx, x, y, s) {
   ctx.save(); ctx.shadowColor = "rgba(0,0,0,.35)"; ctx.shadowBlur = 10; ctx.shadowOffsetY = 5;
   ctx.beginPath(); ctx.moveTo(x, y - s * 1.3); ctx.bezierCurveTo(x + s * 0.3, y - s * 0.9, x + s * 1.1, y - s * 0.3, x + s * 0.95, y + s * 0.3); ctx.quadraticCurveTo(x, y + s * 0.85, x - s * 0.95, y + s * 0.3); ctx.bezierCurveTo(x - s * 1.1, y - s * 0.3, x - s * 0.3, y - s * 0.9, x, y - s * 1.3);
   ctx.fillStyle = lin(ctx, x - s, y - s, x + s, y + s, [[0, "#fff0b0"], [0.6, "#f2b83a"], [1, "#b97812"]]); ctx.fill(); ctx.restore();

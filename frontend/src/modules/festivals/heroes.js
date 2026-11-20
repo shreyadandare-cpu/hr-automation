@@ -3,7 +3,7 @@
    designs.js puts the cream page, the words and the logo around it. `mode` is "light" (cream page, colours press into it) or
    "dark" (maroon or coloured page, colours glow). */
 import { rng } from "./art.js";
-import { diya, marigold, crescentMoon, lotus, modak, sphere } from "./scenes.js";
+import { christmasScene, diya, marigold, crescentMoon, lotus, modak } from "./scenes.js";
 
 const TAU = Math.PI * 2;
 const hex = (h) => [parseInt(h.slice(1, 3), 16), parseInt(h.slice(3, 5), 16), parseInt(h.slice(5, 7), 16)];
@@ -78,10 +78,7 @@ const PROPS = {
     stick(880, 870, -0.42, "#d6246e"); stick(960, 880, 0.38, "#7a35d6");
     for (let i = 0; i < 12; i++) marigold(ctx, 700 + r() * 380, 990 + r() * 20, 12 + r() * 6, r() * 6);
   },
-  christmas: (ctx, r) => {
-    const pine = (x, y, a) => { ctx.save(); ctx.translate(x, y); ctx.rotate(a); for (let k = 0; k < 90; k++) { const t = r(), ang = (r() - 0.5) * 1.5, L = 40 + t * 150; ctx.strokeStyle = ["#1b5e3b", "#237a4b", "#2f8f59"][k % 3]; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(0, -t * 120); ctx.lineTo(Math.sin(ang) * L, -t * 120 + Math.cos(ang) * L * 0.5 - L * 0.5); ctx.stroke(); } ctx.restore(); };
-    sphere(ctx, 930, 905, 52, "#c8302d", "#ff8f8a", "#7a0f12"); sphere(ctx, 1030, 940, 38, "#d9a73a", "#fff0b0", "#8a6514"); sphere(ctx, 820, 960, 34, "#2f6fb3", "#9fd0ff", "#12365e");
-  },
+  christmas: (ctx, r) => { ctx.save(); ctx.translate(940, 1036); ctx.scale(0.52, 0.52); ctx.translate(-800, -800); christmasScene(ctx, r); ctx.restore(); },   // the tree with its star, lights, baubles and gifts, set in the corner
 };
 
 /** Draws the picture. box = { x, y, s } places the plume's root; s scales the whole picture (1 = full page). */

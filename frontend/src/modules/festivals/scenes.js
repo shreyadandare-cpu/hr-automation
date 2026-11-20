@@ -103,7 +103,7 @@ function christmasTree(ctx, r, cx, top, base) {
     ctx.restore();
   }
 }
-function christmasScene(ctx, r) {
+export function christmasScene(ctx, r) {
   const cx = 800, top = 150, base = 800;
   glow(ctx, cx, top - 10, 190, WARM, 0.6);
   ctx.fillStyle = lin(ctx, cx - 26, 0, cx + 26, 0, [[0, "#5b3418"], [1, "#2d1808"]]); ctx.fillRect(cx - 26, base - 20, 52, 54);

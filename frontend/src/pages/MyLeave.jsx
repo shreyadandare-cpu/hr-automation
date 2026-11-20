@@ -16,7 +16,7 @@ const VIEWS = [["summary", "Summary"], ["history", "Leave history"], ["compoff",
 /* The employee's own leave, laid out like a standard HR leave screen: a summary (waiting requests, stats, balances),
    the full history with filters and pages, and the holiday list, each on its own tab. */
 export default function MyLeave() {
-  const { user } = useAuth();
+  const { user, canAll } = useAuth();
   const { people, reloadLeave } = useData();
   const lv = useLeave(), toast = useToast();
   const [modal, setModal] = useState(null);
@@ -92,7 +92,7 @@ export default function MyLeave() {
 
       {view === "history" && <LeaveHistory list={mine} onCancel={cancel} title={`Leave history ${year}`} />}
       {view === "compoff" && <CompOffHistory list={lv.compsOf(me.email)} onRequest={() => setModal("comp")} />}
-      {view === "holidays" && <HolidayCalendar editable={false} />}
+      {view === "holidays" && <HolidayCalendar editable={canAll("leave.manage")} />}   {/* HR (leave management) can upload and edit the list here too */}
 
       {modal === "comp" && <CompRequestModal email={me.email} onClose={() => setModal(null)} />}
       {modal === "policy" && <PolicyExplain email={me.email} year={year} onClose={() => setModal(null)} />}

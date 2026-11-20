@@ -8,6 +8,7 @@ import { Icon, SectionHead, CardSkeleton, Skeleton } from "../../components/ui.j
 import { useToast } from "../../components/toast.jsx";
 import PhotoEditor from "../../components/PhotoEditor.jsx";
 import { FESTIVALS, THEMES, loadImage, renderGreeting, templateName, toBlob } from "./designs.js";
+import { artBlob, artFor } from "./images.js";
 import { BRAND } from "../../brand.js";
 import { festivalTheme } from "../../components/FestivalLook.jsx";
 
@@ -49,7 +50,7 @@ export default function Festivals() {
   const shown = term || all ? list.filter((f) => `${f.name} ${f.description}`.toLowerCase().includes(term)) : upcoming;
   return (
     <div className="fw">
-      <SectionHead eyebrow="For everyone" title="Festival wishes" sub="Pick an upcoming festival, choose a Wohlig-branded template, add your message and share the greeting with anyone."
+      <SectionHead eyebrow="For everyone" title="Festival wishes" sub="Pick an upcoming festival and share its Wohlig greeting with anyone, by email or as a picture."
         actions={<input className="input" style={{ minWidth: 240 }} type="search" placeholder="Search all festivals…" aria-label="Search all festivals" value={q} onChange={(e) => setQ(e.target.value)} />} />
       <LookSwitch list={list} reload={load} />
       <h3 className="fw-h">{term ? `Results for "${q.trim()}"` : all ? "All festivals" : near.length ? "Coming up" : "Next festival"}</h3>
@@ -62,7 +63,7 @@ export default function Festivals() {
 
 function FestivalCard({ f, onOpen, big }) {
   const [src, setSrc] = useState("");
-  useEffect(() => { let on = true; thumb(f.slug, "creative").then((u) => on && setSrc(u)).catch(() => {}); return () => { on = false; }; }, [f.slug]);
+  useEffect(() => { const art = artFor(f.slug); if (art) { setSrc(art); return; } let on = true; thumb(f.slug, "creative").then((u) => on && setSrc(u)).catch(() => {}); return () => { on = false; }; }, [f.slug]);
   return (
     <article className={`card fw-card${big ? " big" : ""}`}>
       <button type="button" className="fw-pic" onClick={onOpen} aria-label={`Explore ${f.name} templates`}>{src ? <img src={src} alt="" /> : <span className="fw-ph">{FESTIVALS[f.slug].emoji}</span>}</button>
@@ -76,8 +77,81 @@ function FestivalCard({ f, onOpen, big }) {
   );
 }
 
-/* ---------- one page: the looks, the words, the photo, and sharing ---------- */
-function Studio({ fest, onBack }) {
+/* A festival with a ready-made picture (images.js) opens as that picture; any other is drawn and can be written in. */
+function Studio(props) { const art = artFor(props.fest.slug); return art ? <ArtStudio {...props} art={art} /> : <DrawnStudio {...props} />; }
+
+/* ---------- a ready-made picture: shown as it is, shared without changes ---------- */
+function ArtStudio({ fest, art, onBack }) {
+  const { user } = useAuth();
+  const { people } = useData();
+  const toast = useToast();
+  const [final, setFinal] = useState(null);
+  const [err, setErr] = useState("");
+  const [to, setTo] = useState([]);
+  const [note, setNote] = useState("");
+  const [busy, setBusy] = useState("");
+  const [result, setResult] = useState(null);
+  const others = (people || []).filter((p) => p.email.toLowerCase() !== user.email.toLowerCase());
+  useEffect(() => { artBlob(art).then(setFinal).catch((e) => setErr(e.message)); }, [art]);
+  const name = `wohlig-${fest.slug}-greeting.png`, ready = !!final;
+  const canShare = typeof navigator !== "undefined" && !!navigator.canShare && ready && navigator.canShare({ files: [new File([final], name, { type: "image/png" })] });
+  const download = () => { const url = URL.createObjectURL(final); const a = document.createElement("a"); a.href = url; a.download = name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(url), 2000); };
+  const copy = async () => {
+    try { if (!navigator.clipboard || !window.ClipboardItem) throw new Error("unsupported"); await navigator.clipboard.write([new ClipboardItem({ "image/png": final })]); toast("Image copied. Paste it into WhatsApp, email or any chat."); }
+    catch { download(); toast("Copying images is not available here, so the image was downloaded instead."); }
+  };
+  const deviceShare = async () => {
+    try { await navigator.share({ files: [new File([final], name, { type: "image/png" })], title: `${fest.name} greeting`, text: `${fest.name} wishes from Wohlig` }); }
+    catch (e) { if (e && e.name !== "AbortError") toast("Sharing did not work on this device. Use Send by email or Copy image."); }
+  };
+  const email = async () => {
+    setBusy("email"); setResult(null); setErr("");
+    try {
+      const r = await fetch(`/api/festivals/share?slug=${encodeURIComponent(fest.slug)}&to=${encodeURIComponent(to.join(","))}&note=${encodeURIComponent(note)}`, { method: "POST", headers: { "Content-Type": "image/png" }, body: final });
+      const data = await r.json().catch(() => null);
+      if (r.status === 401) { location.href = "/login"; return; }
+      if (!r.ok) throw new Error((data && data.error) || "The email could not be sent.");
+      setResult(data); toast(data.sent.length ? `Sent to ${data.sent.length} ${data.sent.length === 1 ? "person" : "people"}.` : "Nothing was sent.");
+      if (data.sent.length && !data.failed.length) { setTo([]); setNote(""); }
+    } catch (e) { setErr(e.message); }
+    setBusy("");
+  };
+  const name1 = (e) => (people.find((p) => p.email === e) || {}).name || e;
+  return (
+    <div className="fw">
+      <button type="button" className="back" onClick={onBack}><span className="back-ar" aria-hidden="true">←</span>All festivals</button>
+      <SectionHead eyebrow={when(fest)} title={fest.name} accent="greeting" sub="This greeting is ready to use as it is. Download it, copy it or send it by email." />
+      {err && <div className="err" role="alert" style={{ background: "var(--bad-soft)", color: "var(--bad)", padding: "10px 14px", borderRadius: 12 }}>{err}</div>}
+      <div className="fw-edit">
+        <div className="fw-prev"><img src={art} alt={`${fest.name} greeting`} /></div>
+        <div className="card fw-sharebox"><div className="card-b" style={{ paddingTop: 18, display: "grid", gap: 14 }}>
+          <div className="field">
+            <label htmlFor="fw-to">Share with a colleague</label>
+            <PeoplePicker id="fw-to" people={others} value={to} onChange={(v) => setTo(v.slice(0, MAX_TO))} multi placeholder="Search by name…" />
+            <span className="hint">Up to {MAX_TO} people. They get the greeting by email.</span>
+          </div>
+          {to.length > 0 && <input className="input" maxLength={300} placeholder="Add a short note (optional)" aria-label="Note" value={note} onChange={(e) => setNote(e.target.value)} />}
+          <div className="fw-btns"><button type="button" className="btn primary" disabled={!to.length || !ready || busy === "email"} onClick={email}>{busy === "email" ? "Sending…" : "Send by email"}</button></div>
+          {result && (
+            <div className="muted" role="status">
+              {result.sent.length > 0 && <div>Emailed to {result.sent.map(name1).join(", ")}.</div>}
+              {result.skipped.length > 0 && <div>No email is sent to {result.skipped.map(name1).join(", ")}. Use Download or Copy image instead.</div>}
+              {result.failed.length > 0 && <div style={{ color: "var(--bad)" }}>Could not reach {result.failed.map((x) => name1(x.email)).join(", ")}.</div>}
+            </div>)}
+          <hr />
+          <div className="fw-btns">
+            <button type="button" className="btn glass" disabled={!ready} onClick={download}>Download</button>
+            <button type="button" className="btn glass" disabled={!ready} onClick={copy}>Copy image</button>
+            {canShare && <button type="button" className="btn glass" onClick={deviceShare}>Share…</button>}
+          </div>
+        </div></div>
+      </div>
+    </div>
+  );
+}
+
+/* ---------- a drawn greeting: the looks, the words, the photo, and sharing ---------- */
+function DrawnStudio({ fest, onBack }) {
   const { user } = useAuth();
   const { people } = useData();
   const toast = useToast();

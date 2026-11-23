@@ -2,9 +2,10 @@ import express from "express";
 import L from "../../frontend/leave-rules.cjs";
 import { pool } from "./db.js";
 import { requireAuth } from "./auth.js";
-import { can, isSuper, mayDecide, need, needAll, scopeOf, treeOf } from "./access.js";
+import { can, canAll, isSuper, mayDecide, need, needAll, scopeOf, treeOf } from "./access.js";
 import { approverOf, approverMap, coveredBy, hrLeaveApprovers, reportsOf } from "./teams.js";
 import { tellLeave } from "./leave-mail.js";
+import { buildLeaveWorkbook } from "./leave-export.js";
 import { compare, parseHolidays, readTable, templateXlsx } from "./holiday-import.js";
 
 const num = (v) => (v === null || v === undefined ? null : Number(v));
@@ -490,6 +491,28 @@ export function leaveRouter(wrap) {
       const gross = num(e.monthly_gross);
       return { email: e.work_email || email, name: e.name || email, lopDays: lop, monthlyGross: gross, cut: gross ? L.salaryCut(gross, lop) : null };
     }));
+  }));
+
+  // The whole company's leave as an Excel workbook: balances, pending, every request, comp offs and holidays (leave-export.js).
+  // Whole-company leave.manage or leave.approve only. One query per table, read once; nothing is read per person.
+  r.get("/api/leave/export", (req, res, next) => (canAll(req, "leave.manage") || canAll(req, "leave.approve") ? next() : res.status(403).json({ error: "You are not authorised to download leave for everyone." })), wrap(async (req, res) => {
+    const year = req.query.year === undefined ? Number(todayIso().slice(0, 4)) : Number(req.query.year);
+    if (!Number.isInteger(year) || year < 2000 || year > 2100) return res.status(400).json({ error: "Year must look like 2026." });
+    const [emps, reqs, comps, hols] = await Promise.all([
+      pool.query("SELECT work_email, name, emp_no, dept, title, status, start_date, manager, casual_opening, leave_opening FROM employees ORDER BY name LIMIT 5000"),
+      pool.query("SELECT * FROM leave_requests ORDER BY from_date DESC, id DESC LIMIT 20000"),
+      pool.query("SELECT * FROM comp_off_credits ORDER BY worked_on DESC LIMIT 20000"),
+      pool.query("SELECT day, name FROM holidays ORDER BY day"),
+    ]);
+    const approvers = await approverMap(pool, null);
+    const buffer = await buildLeaveWorkbook({
+      year, today: todayIso(), approvers,
+      employees: emps.rows.map((e) => ({ email: e.work_email, name: e.name, empNo: e.emp_no, dept: e.dept, title: e.title, status: e.status, start: e.start_date,
+        manager: e.manager, casualOpening: num(e.casual_opening), openings: e.leave_opening || null })),
+      requests: reqs.rows.map(toRequest), compOffs: comps.rows.map(toCompOff), holidays: hols.rows,
+    }, { generatedBy: req.user.email });
+    res.set({ "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "Content-Disposition": `attachment; filename="Leave-${year}.xlsx"`, "Cache-Control": "no-store" });
+    res.send(Buffer.from(buffer));
   }));
 
   return r;

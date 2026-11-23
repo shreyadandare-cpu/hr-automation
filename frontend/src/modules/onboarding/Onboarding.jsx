@@ -341,7 +341,7 @@ export default function Onboarding() {
                 <div className="card-b" style={{ display: "flex", flexDirection: "column", gap: 14 }}>
                   <div className="grid" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))" }}>
                     <Fld label="Annual CTC (₹)" id="salCtc" type="number" value={sal.ctc} onChange={(v) => { const g = Math.round(Number(v) / 12); put({ ctc: v, gross: g > 0 ? String(g) : "" }); }} hint="The monthly gross is filled as this divided by 12." />
-                    <Fld label="Monthly gross (₹)" id="salGross" type="number" value={sal.gross} onChange={(v) => put({ gross: v })} hint="Basic 50% of gross, HRA 50% of Basic, Medical ₹1,250, Conveyance ₹1,600, Special Allowance the rest." />
+                    <Fld label="Monthly gross (₹)" id="salGross" type="number" value={sal.gross} onChange={(v) => put({ gross: v })} hint="Basic 50% of gross, HRA 50% of Basic, the other lines follow HR's salary breakup format for the size of the salary." />
                   </div>
                   <p className="muted" style={{ margin: 0 }}>{sal.gross ? `On submitting, this becomes ${(d.first + " " + d.last).trim() || "their"} first salary structure in Payroll, from ${fdate(d.start) || "the joining month"}. HR can review and change every line there.` : "Leave this empty to add the salary later in Payroll. Until then their payroll profile shows as incomplete."}</p>
                 </div></div>);

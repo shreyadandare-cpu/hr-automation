@@ -99,6 +99,8 @@ export function PayProvider({ children }) {
     ...s, inPay, lock, refresh,
     unlock: (pin) => answer(api("POST", "/api/pay/unlock", { pin })),
     create: (pin, confirm) => answer(api("POST", "/api/pay/pin", { pin, confirm })),
+    sendCode: () => api("POST", "/api/pay/recover/email/send"),
+    verifyCode: (code) => answer(api("POST", "/api/pay/recover/email/verify", { code })),
     reset: (pin, confirm) => answer(api("POST", "/api/pay/recover/reset", { pin, confirm })),
   };
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
@@ -165,7 +167,7 @@ function Setup({ pay, recover = false }) {
 
 /* Pay is locked: enter the PIN. After an automatic or manual lock a short message comes first, with a button to unlock again. */
 function Verify({ pay }) {
-  const [pin, setPin] = useState(""), [err, setErr] = useState(""), [busy, setBusy] = useState(false), [ask, setAsk] = useState(!pay.reason);
+  const [pin, setPin] = useState(""), [err, setErr] = useState(""), [busy, setBusy] = useState(false), [ask, setAsk] = useState(!pay.reason), [forgot, setForgot] = useState(false);
   const out = pay.out;
   const go = async () => {
     if (pin.length !== 6) return setErr("Enter your 6-digit PIN.");
@@ -174,6 +176,7 @@ function Verify({ pay }) {
     setBusy(false);
     if (!r.ok) { setErr(r.message); setPin(""); }
   };
+  if (forgot) return <Forgot pay={pay} back={() => setForgot(false)} />;
   if (!ask) return (
     <Panel icon="lock" title="Pay is locked" text={WHY[pay.reason] || "Pay is locked to keep your salary information private."}>
       <button type="button" className="btn primary lg flex w-full" onClick={() => setAsk(true)}>Unlock Pay</button>
@@ -184,8 +187,45 @@ function Verify({ pay }) {
       <PinInput id="pay-pin" label="6-digit PIN" value={pin} onChange={(v) => { setPin(v); setErr(""); }} onEnter={go} autoFocus disabled={busy || out > 0} invalid={!!err} />
       <Problem>{out > 0 && !err ? `Too many wrong PINs. Please try again in ${out} minute${out === 1 ? "" : "s"}, or use Forgot PIN.` : err}</Problem>
       <button type="button" className="btn primary lg flex w-full" disabled={busy || pin.length !== 6 || out > 0} onClick={go}>{busy ? "Verifying…" : "Verify"}</button>
-      <a className="text-[14px] font-bold text-accent underline underline-offset-2" href="/auth/google/pay-recover">Forgot PIN?</a>
-      <p className="m-0 text-[13px] text-ink-faint">To reset your PIN you will sign in with Google again to confirm it is you.</p>
+      <button type="button" className="mx-auto w-fit border-0 bg-transparent p-0 text-[14px] font-bold text-accent underline underline-offset-2" onClick={() => setForgot(true)}>Forgot PIN?</button>
+      <p className="m-0 text-[13px] text-ink-faint">To reset your PIN we email a 6-digit code to your work email address.</p>
     </Panel>
   );
+}
+
+/* Forgot PIN: a 6-digit code goes to the person's own work email; the right code opens the "Create a New PIN" step.
+   Google confirmation stays as the other way in, for when the email does not arrive. */
+function Forgot({ pay, back }) {
+  const [step, setStep] = useState("ask"), [to, setTo] = useState(""), [code, setCode] = useState(""), [err, setErr] = useState(""), [busy, setBusy] = useState(false), [wait, setWait] = useState(0), [noMail, setNoMail] = useState(false);
+  useEffect(() => { if (wait <= 0) return undefined; const t = setTimeout(() => setWait(wait - 1), 1000); return () => clearTimeout(t); }, [wait]);
+  const send = async () => {
+    setBusy(true); setErr("");
+    const r = await pay.sendCode();
+    setBusy(false);
+    if (!r.ok) { setErr(apiMsg(r)); if (r.data && r.data.waitSeconds) setWait(r.data.waitSeconds); if (r.data && r.data.code === "PAY_NO_EMAIL") setNoMail(true); return; }
+    setTo(r.data.to); setWait(r.data.resendSeconds); setCode(""); setStep("code");
+  };
+  const check = async () => {
+    if (code.length !== 6) return setErr("Enter the 6-digit code from the email.");
+    setBusy(true); setErr("");
+    const r = await pay.verifyCode(code);
+    setBusy(false);
+    if (!r.ok) { setErr(r.message); setCode(""); }
+  };
+  const google = <a className="text-[14px] font-bold text-accent underline underline-offset-2" href="/auth/google/pay-recover">{noMail ? "Confirm with Google instead" : "No email? Confirm with Google instead"}</a>;
+  const backBtn = <button type="button" className="mx-auto w-fit border-0 bg-transparent p-0 text-[14px] text-ink-dim underline underline-offset-2" onClick={back}>Back to PIN</button>;
+  if (step === "ask") return (
+    <Panel icon="shield" title="Reset your PIN" text="We will email a 6-digit code to your work email address. Enter it here to choose a new PIN.">
+      <Problem>{err}</Problem>
+      <button type="button" className="btn primary lg flex w-full" disabled={busy || wait > 0} onClick={send}>{busy ? "Sending…" : wait > 0 ? `Wait ${wait}s` : "Email me a code"}</button>
+      {google}{backBtn}
+    </Panel>);
+  return (
+    <Panel icon="shield" title="Enter the code" text={`We emailed a 6-digit code to ${to}. It works for 10 minutes. Check your spam folder if you cannot see it.`}>
+      <PinInput id="pay-otp" label="6-digit code" plain value={code} onChange={(v) => { setCode(v); setErr(""); }} onEnter={check} autoFocus disabled={busy} invalid={!!err} />
+      <Problem>{err}</Problem>
+      <button type="button" className="btn primary lg flex w-full" disabled={busy || code.length !== 6} onClick={check}>{busy ? "Checking…" : "Continue"}</button>
+      <button type="button" className="mx-auto w-fit border-0 bg-transparent p-0 text-[14px] font-bold text-accent underline underline-offset-2 disabled:opacity-60 disabled:no-underline" disabled={busy || wait > 0} onClick={send}>{wait > 0 ? `Send a new code in ${wait}s` : "Send a new code"}</button>
+      {google}{backBtn}
+    </Panel>);
 }

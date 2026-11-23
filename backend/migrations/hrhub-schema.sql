@@ -1170,6 +1170,16 @@ CREATE TABLE IF NOT EXISTS pay_pins (
   created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at      TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+-- The 6-digit code emailed for Forgot PIN: only its HMAC, one live code per person, with its try count and a send limit (5 an hour).
+CREATE TABLE IF NOT EXISTS pay_pin_otps (
+  email        TEXT PRIMARY KEY,                         -- lower case, same as users.email
+  code_hash    TEXT NOT NULL,
+  expires_at   TIMESTAMPTZ NOT NULL,
+  attempts     INT NOT NULL DEFAULT 0,
+  sent_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+  send_count   INT NOT NULL DEFAULT 1,
+  window_start TIMESTAMPTZ NOT NULL DEFAULT now()
+);
 -- Whether this browser session may open Pay, and until when. Cleared by locking, by a PIN reset, and when the session ends.
 ALTER TABLE sessions ADD COLUMN IF NOT EXISTS pay_unlocked_until TIMESTAMPTZ;
 ALTER TABLE sessions ADD COLUMN IF NOT EXISTS pay_unlocked_at    TIMESTAMPTZ;

@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { hashPin, verifyPin, weakPin } from "../src/pay-pin.js";
+import { hashPin, newOtp, otpKey, verifyPin, weakPin } from "../src/pay-pin.js";
 
 test("a PIN must be exactly six digits", () => {
   for (const p of ["", "12345", "1234567", "12345a", "12 456", "٣٤٥٦٧٨", null, undefined, "483920 "]) assert.ok(weakPin(p), `${JSON.stringify(p)} should be refused`);
@@ -36,4 +36,13 @@ test("a different server secret gives a different hash (a copied database is no 
   process.env.PAY_PIN_PEPPER = "secret-one";
   assert.equal(await verifyPin("483920", h), true);
   if (keep === undefined) delete process.env.PAY_PIN_PEPPER; else process.env.PAY_PIN_PEPPER = keep;
+});
+
+test("the emailed code is six digits, and only its keyed hash (tied to the address) is kept", () => {
+  for (let i = 0; i < 200; i++) assert.match(newOtp(), /^\d{6}$/);
+  const k = otpKey("a@wohlig.com", "271828");
+  assert.equal(k, otpKey("A@wohlig.com", "271828"));
+  assert.notEqual(k, otpKey("b@wohlig.com", "271828"));
+  assert.notEqual(k, otpKey("a@wohlig.com", "271829"));
+  assert.ok(!k.includes("271828"));
 });

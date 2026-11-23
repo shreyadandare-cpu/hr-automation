@@ -3,6 +3,8 @@ import { promisify } from "node:util";
 import express from "express";
 import { pool } from "./db.js";
 import { sessionKeyOf } from "./auth.js";
+import { mailConfigured, mailSkipped, maskEmail, sendMail } from "./mail.js";
+import { MAROON, PRODUCT } from "./brand.js";
 
 /* Pay section PIN: a second lock, on top of Google sign-in, in front of everything that shows pay.
    - Each person sets a 6-digit PIN once. Only a salted hash is stored (HMAC with a server secret, then scrypt), never the PIN.
@@ -11,13 +13,16 @@ import { sessionKeyOf } from "./auth.js";
    - requirePayUnlock guards every pay endpoint (payslips, payroll, finance reports, tax declarations): a direct call without a live
      unlock gets 423. The browser's lock screen is only a convenience; this is the lock.
    - 5 wrong PINs lock PIN checks for 15 minutes. Locking, signing out, a reset or the session ending all end the unlock.
-   - "Forgot PIN" needs a fresh Google sign-in as the same person (google-signin.js sets sessions.pay_recover_until).
+   - "Forgot PIN": a 6-digit code is emailed to the person's own work address (valid 10 minutes, 5 tries, one resend a minute, 5 emails an
+     hour; only its hash is stored). The other way is a fresh Google sign-in as the same person. Either one sets sessions.pay_recover_until,
+     which lets that browser session choose a new PIN.
    - Every step is written to audit_log in words; neither the PIN nor any salary figure is ever logged. */
 const scrypt = promisify(crypto.scrypt);
 export const IDLE_SECONDS = 120;          // unlocked for this long after the last activity
 const MAX_UNLOCK_MINUTES = 60;            // and never longer than this in one go
 const MAX_FAILS = 5, LOCK_MINUTES = 15;   // wrong PINs, and how long checking stops
 const RECOVER_MINUTES = 10;               // how long a fresh Google sign-in lets someone choose a new PIN
+const OTP_MINUTES = 10, OTP_TRIES = 5, OTP_RESEND_SECONDS = 60, OTP_PER_HOUR = 5;   // the emailed Forgot PIN code
 const PIN = /^\d{6}$/;
 
 /* ---------- the PIN itself ---------- */
@@ -28,6 +33,11 @@ const pepper = () => {
 };
 const keyOf = (pin) => crypto.createHmac("sha256", pepper()).update(pin).digest("hex");
 const SCRYPT = { N: 1 << 15, r: 8, p: 1, maxmem: 128 * 1024 * 1024 };
+
+/* The emailed code: 6 random digits, stored only as an HMAC (with the same server secret) tied to the person's address. */
+export const newOtp = () => String(crypto.randomInt(0, 1000000)).padStart(6, "0");
+export const otpKey = (email, code) => crypto.createHmac("sha256", pepper()).update(`otp:${String(email).toLowerCase()}:${code}`).digest("hex");
+const sameKey = (a, b) => { const x = Buffer.from(a, "hex"), y = Buffer.from(b, "hex"); return x.length === y.length && crypto.timingSafeEqual(x, y); };
 
 export async function hashPin(pin) {
   const salt = crypto.randomBytes(16), hash = await scrypt(keyOf(pin), salt, 64, SCRYPT);
@@ -161,10 +171,62 @@ payPinRouter.post("/lock", guard(async (req, res) => {
   res.json({ unlocked: false });
 }));
 
-// "Forgot PIN", second half: after a fresh Google sign-in as this same person (see google-signin.js) they may choose a new PIN.
+// "Forgot PIN", first half (by email): a 6-digit code goes to the person's own work address. They never type the address, so it cannot be redirected.
+payPinRouter.post("/recover/email/send", guard(async (req, res) => {
+  const st = await stateOf(req);
+  if (!st.pinSet) return res.status(409).json({ error: "You have not set a Pay PIN yet.", code: "PAY_SETUP" });
+  if (!mailConfigured() || mailSkipped().includes(st.email)) return res.status(409).json({ error: "We cannot email a code to your address. Please confirm with Google instead.", code: "PAY_NO_EMAIL" });
+  const { rows: [o] } = await pool.query(
+    `SELECT EXTRACT(EPOCH FROM (now() - sent_at))::int AS since, send_count, (window_start > now() - interval '1 hour') AS in_window FROM pay_pin_otps WHERE email=$1`, [st.email]);
+  if (o && o.since < OTP_RESEND_SECONDS) return res.status(429).json({ error: `Please wait ${OTP_RESEND_SECONDS - o.since} seconds before asking for another code.`, waitSeconds: OTP_RESEND_SECONDS - o.since });
+  if (o && o.in_window && o.send_count >= OTP_PER_HOUR) return res.status(429).json({ error: "Too many codes were requested. Please try again in an hour, or confirm with Google.", code: "PAY_OTP_LIMIT" });
+  const code = newOtp();
+  await pool.query(
+    `INSERT INTO pay_pin_otps (email, code_hash, expires_at, attempts, sent_at, send_count, window_start)
+     VALUES ($1,$2, now() + $3 * interval '1 minute', 0, now(), 1, now())
+     ON CONFLICT (email) DO UPDATE SET code_hash=$2, expires_at=now() + $3 * interval '1 minute', attempts=0, sent_at=now(),
+       send_count = CASE WHEN pay_pin_otps.window_start > now() - interval '1 hour' THEN pay_pin_otps.send_count + 1 ELSE 1 END,
+       window_start = CASE WHEN pay_pin_otps.window_start > now() - interval '1 hour' THEN pay_pin_otps.window_start ELSE now() END`, [st.email, otpKey(st.email, code), OTP_MINUTES]);
+  try {
+    await sendMail({
+      to: st.email, subject: `${code} is your ${PRODUCT} Pay PIN reset code`,
+      text: `Your code to reset your Pay PIN is ${code}.\n\nIt works for ${OTP_MINUTES} minutes and only once. If you did not ask for it, ignore this email and your PIN stays as it is. Never share this code with anyone.\n`,
+      html: `<div style="font:15px/1.6 Arial,Helvetica,sans-serif;color:#2a1016;max-width:520px;border:1px solid #e9d9c3;padding:28px 32px">`
+        + `<p style="margin:0 0 6px;font-weight:700;font-size:18px">Reset your Pay PIN</p><div style="width:48px;height:3px;background:${MAROON};margin:0 0 18px"></div>`
+        + `<p style="margin:0 0 10px">Use this code to choose a new Pay PIN:</p>`
+        + `<p style="margin:0 0 14px;font:700 30px Menlo,Consolas,monospace;letter-spacing:8px">${code}</p>`
+        + `<p style="margin:0 0 8px;color:#6b5654;font-size:13px">It works for ${OTP_MINUTES} minutes and only once. If you did not ask for it, ignore this email and your PIN stays as it is. Never share this code with anyone.</p></div>`,
+    });
+  } catch (e) {
+    console.error("Pay PIN code email failed:", e.message);
+    await pool.query("DELETE FROM pay_pin_otps WHERE email=$1", [st.email]);
+    return res.status(502).json({ error: "The code could not be emailed right now. Please try again, or confirm with Google.", code: "PAY_NO_EMAIL" });
+  }
+  await audit(st.email, "Pay PIN reset code emailed");
+  res.json({ sent: true, to: maskEmail(st.email), expiresMinutes: OTP_MINUTES, resendSeconds: OTP_RESEND_SECONDS });
+}));
+
+// "Forgot PIN", first half (by email): the right code lets this browser session choose a new PIN (the same step Google confirmation leads to).
+payPinRouter.post("/recover/email/verify", guard(async (req, res) => {
+  const st = await stateOf(req), code = String(body(req).code || "").trim();
+  const { rows: [o] } = await pool.query("SELECT code_hash, attempts, (expires_at > now()) AS live FROM pay_pin_otps WHERE email=$1", [st.email]);
+  if (!o || !o.live || o.attempts >= OTP_TRIES) return res.status(400).json({ error: "That code has expired. Please ask for a new one.", code: "PAY_OTP_EXPIRED" });
+  if (!PIN.test(code) || !sameKey(otpKey(st.email, code), o.code_hash)) {
+    const { rows: [n] } = await pool.query("UPDATE pay_pin_otps SET attempts = attempts + 1 WHERE email=$1 RETURNING attempts", [st.email]);
+    await audit(st.email, `Wrong Pay PIN reset code entered (attempt ${n.attempts} of ${OTP_TRIES})`);
+    if (n.attempts >= OTP_TRIES) return res.status(400).json({ error: "Too many wrong codes. Please ask for a new one.", code: "PAY_OTP_EXPIRED" });
+    return res.status(403).json({ error: `That code is not correct. ${OTP_TRIES - n.attempts} ${OTP_TRIES - n.attempts === 1 ? "try" : "tries"} left.` });
+  }
+  await pool.query("DELETE FROM pay_pin_otps WHERE email=$1", [st.email]);   // a code works once
+  await allowPinReset(st.key);
+  await audit(st.email, "Pay PIN reset code confirmed");
+  res.json(publicState(await stateOf(req)));
+}));
+
+// "Forgot PIN", second half: after the emailed code, or a fresh Google sign-in as this same person (see google-signin.js), they may choose a new PIN.
 payPinRouter.post("/recover/reset", guard(async (req, res) => {
   const { pin, confirm } = body(req), st = await stateOf(req);
-  if (!st.recoverOk) return res.status(403).json({ error: "Please confirm it is you with Google first.", code: "PAY_RECOVER_NEEDED" });
+  if (!st.recoverOk) return res.status(403).json({ error: "Please confirm it is you first (emailed code or Google).", code: "PAY_RECOVER_NEEDED" });
   if (pin !== confirm) return res.status(400).json({ error: "The two PINs do not match." });
   const bad = weakPin(pin); if (bad) return res.status(400).json({ error: bad });
   await pool.query(
@@ -173,7 +235,7 @@ payPinRouter.post("/recover/reset", guard(async (req, res) => {
   // Every earlier unlock, in every browser, ends now; this browser then unlocks with the new PIN.
   await pool.query("UPDATE sessions SET pay_unlocked_until=NULL, pay_unlocked_at=NULL WHERE lower(email)=$1", [st.email]);
   await pool.query("UPDATE sessions SET pay_recover_until=NULL WHERE token_hash=$1", [st.key]);
-  await audit(st.email, "Pay PIN reset after confirming with Google");
+  await audit(st.email, "Pay PIN reset after confirming identity");
   await openUnlock(st.key, true);
   res.json(publicState(await stateOf(req)));
 }));

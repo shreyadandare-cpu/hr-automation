@@ -9,6 +9,7 @@
  */
 import crypto from "node:crypto";
 import pg from "pg";
+import { otpKey } from "../src/pay-pin.js";
 
 const DB = process.env.DATABASE_URL || "", BASE = process.env.BASE || "http://localhost:3188";
 if (!/@?(localhost|127\.0\.0\.1)[:/]/.test(DB)) { console.error("Refusing: DATABASE_URL must be a local database."); process.exit(2); }
@@ -21,6 +22,7 @@ const ok = (name, cond, extra = "") => { cond ? pass++ : fail++; console.log(`${
 
 async function login(email, role = "employee") {
   await db.query("INSERT INTO users (email, password_hash, role) VALUES ($1,'x',$2) ON CONFLICT DO NOTHING", [email, role]);
+  if (role === "hr") await db.query("UPDATE users SET is_super_admin=true WHERE email=$1", [email]);   // access is by grants now; a super admin may open payroll, finance and tax pages
   const token = crypto.randomBytes(32).toString("hex");
   await db.query("INSERT INTO sessions (token_hash, email, expires_at) VALUES ($1,$2, now() + interval '1 hour')", [sha(token), email]);
   return token;
@@ -107,18 +109,48 @@ try {
   ok("another person's PIN is untouched", (await call(b1, "GET", "/api/pay/status")).data.pinSet === false);
   ok("the confirmation is single use", (await call(a3, "POST", "/api/pay/recover/reset", { pin: "573920", confirm: "573920" })).status === 403);
 
+
+  // 6b. Forgot PIN by email: a 6-digit code for the signed-in person only; 5 tries, 10 minutes, once, one resend a minute, 5 an hour.
+  const seed = (email, code, { mins = 10, attempts = 0, sentAgo = 120, count = 1, windowAgo = 0 } = {}) => db.query(
+    `INSERT INTO pay_pin_otps (email, code_hash, expires_at, attempts, sent_at, send_count, window_start)
+     VALUES ($1,$2, now() + $3 * interval '1 minute', $4, now() - $5 * interval '1 second', $6, now() - $7 * interval '1 second')
+     ON CONFLICT (email) DO UPDATE SET code_hash=$2, expires_at=now() + $3 * interval '1 minute', attempts=$4, sent_at=now() - $5 * interval '1 second', send_count=$6, window_start=now() - $7 * interval '1 second'`,
+    [email, otpKey(email, code), mins, attempts, sentAgo, count, windowAgo]);
+  const e1 = await login(A), e2 = await login(A);
+  ok("without email set up, the code cannot be sent and Google is offered (409)", (r = await call(e1, "POST", "/api/pay/recover/email/send")).status === 409 && r.data.code === "PAY_NO_EMAIL", JSON.stringify(r.data));
+  ok("no code has been asked for: verify is refused (400)", (r = await call(e1, "POST", "/api/pay/recover/email/verify", { code: "123456" })).status === 400 && r.data.code === "PAY_OTP_EXPIRED");
+  await seed(A, "271828");
+  r = await call(e1, "POST", "/api/pay/recover/email/verify", { code: "314159" });
+  ok("a wrong code is refused with the tries left (403, not 401)", r.status === 403 && /4 tries left/.test(r.data.error), JSON.stringify(r.data));
+  ok("a wrong code does not open the reset step", (await call(e1, "POST", "/api/pay/recover/reset", { pin: "902716", confirm: "902716" })).status === 403);
+  ok("a code that is not six digits is just a wrong code", (await call(e1, "POST", "/api/pay/recover/email/verify", { code: "27" })).status === 403);
+  r = await call(e2, "POST", "/api/pay/recover/email/verify", { code: "271828" });
+  ok("the right code opens the reset step", r.status === 200 && r.data.recoverOk === true, JSON.stringify(r.data));
+  ok("the other browser session of that person did not get the reset step", (await call(e1, "GET", "/api/pay/status")).data.recoverOk === false);
+  ok("a code works once", (await call(e1, "POST", "/api/pay/recover/email/verify", { code: "271828" })).status === 400);
+  await db.query("UPDATE sessions SET pay_recover_until=NULL WHERE token_hash=$1", [sha(e2)]);
+  await seed(A, "271828", { mins: -1 });
+  ok("an expired code is refused even when right (400)", (await call(e1, "POST", "/api/pay/recover/email/verify", { code: "271828" })).status === 400);
+  await seed(A, "271828");
+  for (let i = 0; i < 5; i++) r = await call(e1, "POST", "/api/pay/recover/email/verify", { code: "000001" });
+  ok("the fifth wrong code kills the code (400)", r.status === 400 && r.data.code === "PAY_OTP_EXPIRED", JSON.stringify(r.data));
+  ok("then even the right code is refused", (await call(e1, "POST", "/api/pay/recover/email/verify", { code: "271828" })).status === 400);
+  ok("a person with no PIN yet cannot ask (409)", (r = await call(b1, "POST", "/api/pay/recover/email/send")).status === 409);
+  await db.query("DELETE FROM pay_pin_otps WHERE email IN ($1,$2)", [A, B]);
+
   // 7. HR / payroll features still work once HR has unlocked.
   await call(hr1, "POST", "/api/pay/pin", { pin: "358024", confirm: "358024" });
   for (const p of ["/api/payroll/overview", "/api/finance/periods", "/api/tax-declarations"]) { const x = await call(hr1, "GET", p); ok(`HR after unlocking: ${p} opens`, x.status === 200, String(x.status)); }
 
   // 8. The log tells the story and never holds a PIN.
   const log = (await db.query("SELECT action FROM audit_log WHERE work_email IN ($1,$2,$3) AND action ILIKE '%pay%' ORDER BY id", [A, B, HR])).rows.map((x) => x.action).join("\n");
-  for (const want of ["Pay PIN created", "Pay PIN verified", "Wrong Pay PIN entered (attempt 1 of 5)", "PIN checks locked for 15 minutes", "Pay locked manually", "Pay locked automatically after inactivity", "Pay PIN reset after confirming with Google"]) ok(`audit log has: ${want}`, log.includes(want));
+  for (const want of ["Pay PIN created", "Pay PIN verified", "Wrong Pay PIN entered (attempt 1 of 5)", "PIN checks locked for 15 minutes", "Pay locked manually", "Pay locked automatically after inactivity", "Pay PIN reset after confirming identity", "Pay PIN reset code confirmed", "Wrong Pay PIN reset code entered (attempt 1 of 5)"]) ok(`audit log has: ${want}`, log.includes(want));
   ok("the log never holds a PIN", !/483920|902716|358024|111222/.test(log));
 } catch (e) { fail++; console.log("ERROR  " + e.stack); }
 finally {
   await db.query("DELETE FROM sessions WHERE lower(email) IN ($1,$2,$3)", [A, B, HR]);
   await db.query("DELETE FROM pay_pins WHERE email IN ($1,$2,$3)", [A, B, HR]);
+  await db.query("DELETE FROM pay_pin_otps WHERE email IN ($1,$2,$3)", [A, B, HR]);
   await db.query("DELETE FROM users WHERE email IN ($1,$2)", [A, B]);
   await db.query("DELETE FROM audit_log WHERE work_email IN ($1,$2,$3) AND action ILIKE '%pay%'", [A, B, HR]);
   await db.end();

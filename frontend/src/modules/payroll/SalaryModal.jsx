@@ -134,8 +134,8 @@ export default function SalaryModal({ email, onClose }) {
         <div className="sal-grid">
           <Field id="sal-from" label="Applies from" hint="This month and later use it. For someone already working here, pick the first month payroll should use it (April covers this financial year). For a raise, pick the first month of the new salary: earlier months keep theirs." error={er.effectiveFrom}>
             <input className="input" id="sal-from" type="month" value={f.effectiveFrom} onChange={set("effectiveFrom")} /></Field>
-          <Field id="sal-ctc" label="Annual CTC (₹)" hint="For records; payroll uses the monthly lines below." error={er.annualCtc}>
-            <input className="input" id="sal-ctc" type="number" min="0" step="1" value={f.annualCtc} onChange={set("annualCtc")} /></Field>
+          <Field id="sal-ctc" label="Annual CTC (₹)" hint="The monthly gross below is filled as this divided by 12. Payroll uses the monthly lines." error={er.annualCtc}>
+            <input className="input" id="sal-ctc" type="number" min="0" step="1" value={f.annualCtc} onChange={(e) => { set("annualCtc")(e); const c = Math.round(Number(e.target.value) / 12); setGross(c > 0 ? String(c) : ""); }} /></Field>
         </div>
         {(revision || (latest && f.effectiveFrom === latest.effectiveFrom)) && <Field id="sal-why" label={revision ? "Reason for the revision (required)" : "Reason for the change"} error={er.reason}>
           <input className="input" id="sal-why" maxLength={300} value={f.reason} onChange={set("reason")} placeholder="Annual increment, promotion, correction…" /></Field>}

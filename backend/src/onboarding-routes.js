@@ -5,6 +5,7 @@ import { pool } from "./db.js";
 import { createGoogleUser as createLogin } from "./auth.js";
 import { invalidateTree, mayActOnLogin, needAll, canAll } from "./access.js";
 import { saveOnboardingSalary } from "./payroll.js";
+import { payrollChanged } from "./payroll/preview-cache.js";
 import { checkManager } from "./people.js";
 import { createInvite, INVITE_MINUTES } from "./invites.js";
 import { linkDeviceUserByEmployeeNo } from "./device.js";
@@ -268,6 +269,7 @@ export function onboardingRouter(wrap) {
           catch (err) { salary = { saved: false, error: "The salary could not be saved. HR can add it in Payroll." }; console.error("Onboarding salary:", err.message); }
         }
       }
+      payrollChanged();   // the new person is on the Payroll list from this moment, with or without a salary
       // The employee record is the payroll record (one employees table), so they are already on the payroll list from their joining month. Tell the people who prepare payroll
       // what is still needed (the salary structure unless one was just entered, and the bank account), so they are paid correctly from the first month.
       const joins = new Date(`${d.start}T00:00:00`).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" });

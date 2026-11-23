@@ -5,7 +5,7 @@ import Modal, { Field } from "../../components/Modal.jsx";
 import { Callout, Pill } from "../../components/ui.jsx";
 import { useToast } from "../../components/toast.jsx";
 import { fyOf, money, monthLabel, thisMonth } from "./util.jsx";
-
+import { splitGross } from "../../lib/salarySplit.js";
 const STANDARD = ["Basic", "HRA", "Medical Allowance", "Conveyance Allowance", "Special Allowance", "Statutory Bonus"];
 const blank = () => ({ effectiveFrom: thisMonth(), earnings: STANDARD.map((name) => ({ name, amount: "" })), otherDeductions: [], annualCtc: "",
   pfApplicable: true, pfEmployee: "", employerPf: "", esicEmployee: "", ptApplicable: true, professionalTax: "200", ptFebruary: "300", tdsApplicable: true, tdsMode: "auto", tdsMonthly: "", pfNumber: "", reason: "" });
@@ -42,6 +42,7 @@ export default function SalaryModal({ email, onClose }) {
   const [f, setF] = useState(null);
   const [er, setEr] = useState({});
   const [gross, setGross] = useState("");
+  const [auto, setAuto] = useState(false);   // the lines were filled by the format and not edited since, so a new CTC may refill them
   const [busy, setBusy] = useState(false);
   const [read, setRead] = useState(null);   // what was read from an uploaded payslip, shown for HR to check
   const [reading, setReading] = useState(false);
@@ -67,13 +68,13 @@ export default function SalaryModal({ email, onClose }) {
   const latest = info.structures[0];
   const revision = latest && f.effectiveFrom > latest.effectiveFrom;
 
-  // Fills the usual Wohlig split seen on the company payslips. HR checks it before saving; nothing is saved until then.
+  // Fills the lines by HR's salary breakup format for this size of salary (lib/salarySplit.js). HR checks it before saving; nothing is saved until then.
+  const filled = (base, g) => ({ ...base, pfEmployee: base.pfEmployee === "" ? "3000" : base.pfEmployee, professionalTax: base.professionalTax === "" ? "200" : base.professionalTax, earnings: splitGross(g) });
   const split = () => {
     const g = Math.round(Number(gross));
     if (!(g > 0)) return setEr({ ...er, gross: "Enter the monthly gross first." });
-    const basic = Math.round(g / 2), hra = Math.round(basic / 2), med = 1250, conv = 1600;
-    setEr({});
-    setF({ ...f, earnings: [{ name: "Basic", amount: basic }, { name: "HRA", amount: hra }, { name: "Medical Allowance", amount: med }, { name: "Conveyance Allowance", amount: conv }, { name: "Special Allowance", amount: Math.max(0, g - basic - hra - med - conv) }] });
+    setEr({}); setAuto(true);
+    setF(filled(f, g));
   };
 
  // Reads a payslip PDF on the server and fills the form with what it found. Nothing is saved until HR presses Save.
@@ -134,19 +135,20 @@ export default function SalaryModal({ email, onClose }) {
         <div className="sal-grid">
           <Field id="sal-from" label="Applies from" hint="This month and later use it. For someone already working here, pick the first month payroll should use it (April covers this financial year). For a raise, pick the first month of the new salary: earlier months keep theirs." error={er.effectiveFrom}>
             <input className="input" id="sal-from" type="month" value={f.effectiveFrom} onChange={set("effectiveFrom")} /></Field>
-          <Field id="sal-ctc" label="Annual CTC (₹)" hint="The monthly gross below is filled as this divided by 12. Payroll uses the monthly lines." error={er.annualCtc}>
-            <input className="input" id="sal-ctc" type="number" min="0" step="1" value={f.annualCtc} onChange={(e) => { set("annualCtc")(e); const c = Math.round(Number(e.target.value) / 12); setGross(c > 0 ? String(c) : ""); }} /></Field>
+          <Field id="sal-ctc" label="Annual CTC (₹)" hint="The monthly gross is filled as this divided by 12, and the salary lines follow the salary breakup format for this size of salary until you change a line." error={er.annualCtc}>
+            <input className="input" id="sal-ctc" type="number" min="0" step="1" value={f.annualCtc} onChange={(e) => { const c = Math.round(Number(e.target.value) / 12); setGross(c > 0 ? String(c) : ""); const next = { ...f, annualCtc: e.target.value };
+              const untouched = auto || f.earnings.every((x) => !Number(x.amount)); if (c > 0 && untouched) { setAuto(true); setF(filled(next, c)); } else setF(next); }} /></Field>
         </div>
         {(revision || (latest && f.effectiveFrom === latest.effectiveFrom)) && <Field id="sal-why" label={revision ? "Reason for the revision (required)" : "Reason for the change"} error={er.reason}>
           <input className="input" id="sal-why" maxLength={300} value={f.reason} onChange={set("reason")} placeholder="Annual increment, promotion, correction…" /></Field>}
 
-        <Field id="sal-gross" label="Quick fill from a monthly gross (optional)" hint="Basic 50% of gross, HRA 50% of Basic, Medical ₹1,250, Conveyance ₹1,600, Special Allowance the rest. Check every line before saving." error={er.gross}>
+        <Field id="sal-gross" label="Quick fill from a monthly gross (optional)" hint="Basic 50% of gross, HRA 50% of Basic, Basic 50%, HRA 50% of Basic and Statutory Bonus 8.33% of Basic. From ₹7.01 lakh a year it adds Medical and Conveyance; above ₹12 lakh it also adds Fuel, LTA, Driver, Books and Mobile/Data. Special Allowance is the rest. Check every line before saving." error={er.gross}>
           <div className="row" style={{ gap: 8 }}><input className="input" id="sal-gross" type="number" min="1" step="1" value={gross} onChange={(e) => setGross(e.target.value)} style={{ maxWidth: 200 }} />
             <button type="button" className="btn glass" onClick={split}>Fill the lines</button></div></Field>
 
         <h4 className="lv-h" style={{ margin: "6px 0 8px" }}>Earnings (a month)</h4>
         {er.earnings && <div className="ferr" role="alert">{er.earnings}</div>}
-        <Lines list={f.earnings} onChange={set("earnings")} kind="earnings" errors={er} addLabel="+ Add an earning (LTA, fuel, mobile…)" />
+        <Lines list={f.earnings} onChange={(v) => { setAuto(false); set("earnings")(v); }} kind="earnings" errors={er} addLabel="+ Add an earning (LTA, fuel, mobile…)" />
 
         <h4 className="lv-h" style={{ margin: "18px 0 8px" }}>Statutory deductions</h4>
         <Toggle id="sal-pfon" label="PF applies" checked={f.pfApplicable} onChange={set("pfApplicable")} />
@@ -174,7 +176,7 @@ export default function SalaryModal({ email, onClose }) {
         <Lines list={f.otherDeductions} onChange={set("otherDeductions")} kind="otherDeductions" errors={er} addLabel="+ Add a deduction" />
 
         <div className="sal-sum" style={{ marginTop: 16 }}>
-          <span>Gross <b>{money(monthly)}</b> a month · <b>{money(monthly * 12)}</b> a year</span>
+          <span>Gross <b>{money(monthly)}</b> a month · <b>{money(Number(f.annualCtc) > 0 && Math.abs(Number(f.annualCtc) - monthly * 12) <= 12 ? Number(f.annualCtc) : monthly * 12)}</b> a year</span>
           {f.annualCtc && Number(f.annualCtc) < monthly * 12 - 6 && <Pill tone="warn">CTC is less than 12 × gross</Pill>}
         </div>
         {revision && <Callout>Saved as a revision from {monthLabel(f.effectiveFrom)}. {monthLabel(latest.effectiveFrom)} onwards until then keeps the current structure.</Callout>}

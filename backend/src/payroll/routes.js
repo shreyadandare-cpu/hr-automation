@@ -15,6 +15,7 @@ import { readPayslipPdf } from "./payslip-read.js";
 import { previewFromFile, templateCsv, templateXlsx } from "./tax-import.js";
 import { DEFAULT_TAX_RULES } from "./tax-defaults.js";
 import { PRODUCT } from "../brand.js";
+import { onPayrollChange } from "./preview-cache.js";
 
 /*
  * Payroll processing, review and disbursement. Mounted at /api/payroll behind requirePayrollAccess (payroll.prepare, payroll.approve,
@@ -132,9 +133,13 @@ const R = payrollWorkflowRouter;
 /* The preview totals of a month with no payroll run yet: the whole company's payroll worked out from scratch, so it is kept for a
    minute instead of being recalculated on every visit. It is only a preview; starting the run calculates everything afresh. */
 const previews = new Map(), refreshing = new Map();
+// A salary saved or someone onboarded shows in the totals at once: the kept preview is dropped and the next visit works it out afresh.
+onPayrollChange(() => { previewGen++; previews.clear(); refreshing.clear(); });
+let previewGen = 0;   // bumped when figures change, so a calculation already under way cannot store the old answer
 const refreshPreview = (period) => {
+  const gen = previewGen;
   if (!refreshing.has(period)) refreshing.set(period, buildLines(pool, period).then((lines) => {
-    const totals = totalsOfLines(lines); previews.set(period, { at: Date.now(), totals }); return totals;
+    const totals = totalsOfLines(lines); if (gen === previewGen) previews.set(period, { at: Date.now(), totals }); return totals;
   }).finally(() => refreshing.delete(period)));
   return refreshing.get(period);
 };

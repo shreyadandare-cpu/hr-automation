@@ -53,7 +53,7 @@ export default function LeaveHr() {
     <section className="section">
       <SectionHead eyebrow="Time off" title="Leave management"
         sub="Days beyond someone's balance, and all unpaid leave, are loss of pay. The salary cut is monthly gross ÷ 30 for each loss-of-pay day. Saturdays, Sundays and holidays are never counted."
-        actions={decides && <><button type="button" className="btn glass" onClick={() => setModal("comp")}>Record comp off</button><Link className="btn primary" to="/app/leave/apply">Add leave for someone</Link></>} />
+        actions={<>{(canAll("leave.manage") || canAll("leave.approve")) && <a className="btn glass" href={`/api/leave/export?year=${String(lv.today || "").slice(0, 4) || new Date().getFullYear()}`} download>Download Excel</a>}{decides && <><button type="button" className="btn glass" onClick={() => setModal("comp")}>Record comp off</button><Link className="btn primary" to="/app/leave/apply">Add leave for someone</Link></>}</>} />
       <div className="grid g4">
         <Stat value={waitingForMe} label="Waiting for you" />
         <Stat value={away.filter((r) => r.from <= today).length} label="Away today" />

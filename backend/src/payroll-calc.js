@@ -181,3 +181,21 @@ export function structureFromRow(row = {}) {
   }
   return { email, body };
 }
+
+/* HR's "Salary breakup format": how a monthly gross is split into salary lines by the size of the yearly salary. Same rules as
+   frontend/src/lib/salarySplit.js (used by "Fill the lines"); keep the two in step. PF ₹3,000 and Professional Tax ₹200 in every band. */
+export const BAND_LIMITS = { low: 700000, mid: 1200000 };
+export function splitGross(monthlyGross) {
+  const g = Math.round(Number(monthlyGross));
+  if (!(g > 0)) return [];
+  const annual = g * 12, band = annual <= BAND_LIMITS.low ? "low" : annual <= BAND_LIMITS.mid ? "mid" : "high";
+  const basic = Math.round(g / 2), hra = Math.round(basic / 2), bonus = Math.ceil(basic * 0.0833);
+  const fixed = [["Basic", basic], ["HRA", hra]];
+  if (band !== "low") fixed.push(["Medical Allowance", 1250], ["Conveyance Allowance", 1600]);
+  if (band === "high") fixed.push(["Fuel Reimbursement", 1800], ["LTA", bonus], ["Driver Salary Reimbursement", 900], ["Books & Periodicals", 1200]);
+  fixed.push(["Statutory Bonus", bonus]);
+  if (band === "high") fixed.push(["Mobile/Data Reimbursement", 500]);
+  const used = fixed.reduce((n, [, a]) => n + a, 0);
+  fixed.push(["Special Allowance", Math.max(0, g - used)]);
+  return fixed.map(([name, amount]) => ({ name, amount }));
+}

@@ -166,6 +166,9 @@ export function computeLine({ period, employee = {}, structure, inputs = {}, lea
       tds = { ...tds, applicable: m.applicable, calculated: P(m.amount) };
       if (m.missing) incomplete.push("Income above ₹12,00,000 a year, but the monthly TDS has not been entered.");
       calc.push(m.applicable ? `TDS: monthly amount entered on the salary structure, ${inr(P(m.amount))}.` : `TDS: annual income ${inr(fullGrossP * 12)} is not above ${inr(P(TDS_THRESHOLD))}, so none.`);
+    } else if (R(fullGrossP) * 12 <= TDS_THRESHOLD) {
+      // Company rule: a yearly income of ₹12,00,000 or less pays no TDS. Above it, the tax is worked out under the employee's regime below.
+      calc.push(`TDS: annual income ${inr(fullGrossP * 12)} is not above ${inr(P(TDS_THRESHOLD))}, so none.`);
     } else if (!tax.rules) {
       incomplete.push(`Tax rules for FY ${fy} (${tax.regime || "new"} regime) are not configured.`);
     } else {

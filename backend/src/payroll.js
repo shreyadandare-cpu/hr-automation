@@ -1,10 +1,11 @@
+import { payrollChanged } from "./payroll/preview-cache.js";
 import express from "express";
 import { payPool as pool, PAYROLL_SEPARATE } from "./db.js";   // payroll may use its own database (PAYROLL_DATABASE_URL)
 import { event } from "./reimbursements.js";
 import { notify as notifyAll } from "./notify.js";
 const notify = (to, n) => (PAYROLL_SEPARATE ? Promise.resolve(console.log(`Payroll on its own database, notice not sent to ${to}: ${n.title}`)) : notifyAll(to, n));
-import { cleanStructure, grossOf, structureFromRow } from "./payroll-calc.js";
-import { structuresFor, toStructure, monthName } from "./payroll/store.js";
+import { cleanStructure, grossOf, splitGross, structureFromRow } from "./payroll-calc.js";
+import { structuresFor, toStructure, monthName, recalcRun } from "./payroll/store.js";
 import { audit } from "./payroll/routes.js";
 import { hrOnly } from "./payroll/access.js";
 
@@ -56,10 +57,14 @@ async function saveStructure(client, emp, email, v, actor) {
   await client.query("UPDATE employees SET pf_number=CASE WHEN $4 THEN $2 ELSE pf_number END, monthly_gross=coalesce($3, monthly_gross) WHERE id=$1",
     [emp.id, v.pfNumber ?? null, current ? grossOf(current.earnings) : null, v.pfNumber !== undefined]);
   await client.query("INSERT INTO audit_log (action, work_email) VALUES ($1,$2)", [`Salary breakdown from ${monthName(v.effectiveFrom)} saved by ${actor}`, email]);
-  const { rows: [prev] } = old ? [{ rows: [] }] : await client.query(
+  const { rows: [prev] } = old ? { rows: [] } : await client.query(
     "SELECT * FROM salary_structures WHERE lower(work_email)=$1 AND effective_from < $2 ORDER BY effective_from DESC LIMIT 1", [email, v.effectiveFrom]);
   await audit(client, actor, old ? "Salary structure changed" : prev ? "Salary revised" : "Salary structure added", { work_email: email, period: v.effectiveFrom,
     detail: { before: old ? toStructure(old) : prev ? toStructure(prev) : null, after: { ...v, pfNumber: undefined }, monthlyGross: grossOf(v.earnings) } });
+  // A month still in draft shows the new salary at once: its lines are worked out again (everyone's inputs are kept). Months sent for
+  // review or approved are never touched here; HR sends those back to draft first, as before.
+  const { rows: drafts } = await client.query("SELECT * FROM payroll_runs WHERE status='draft' AND period >= $1 ORDER BY period FOR UPDATE", [String(v.effectiveFrom).slice(0, 7)]);
+  for (const run of drafts) await recalcRun(client, run, actor);
 }
 
 export const payrollRouter = express.Router();
@@ -79,6 +84,7 @@ const saving = async (fn) => {
     await client.query("BEGIN");
     const out = await fn(client);
     await client.query(out && out.rollback ? "ROLLBACK" : "COMMIT");
+    if (!(out && out.rollback)) payrollChanged();   // the month preview on the Payroll overview must not show the old figures
     return out;
   } catch (err) {
     await client.query("ROLLBACK");
@@ -91,7 +97,7 @@ const saving = async (fn) => {
 /**
  * Onboarding to Payroll: when onboarding is completed with a salary, this creates the person's first salary structure on the
  * existing employee record (no separate payroll employee list), effective from the month they join. The same split as the
- * "Fill the lines" button on the salary screen: Basic 50% of gross, HRA 50% of Basic, Medical 1,250, Conveyance 1,600, Special Allowance the rest.
+ * "Fill the lines" button on the salary screen: Basic 50% of gross, HRA 50% of Basic, the lines follow HR's salary breakup format for the size of the salary (splitGross in payroll-calc.js).
  * A structure that already exists for that month is left as it is, so running it twice never overwrites HR's edits. Returns { saved } or { error }.
  */
 export async function saveOnboardingSalary(email, { annualCtc, monthlyGross, startDate }, actor) {
@@ -100,10 +106,7 @@ export async function saveOnboardingSalary(email, { annualCtc, monthlyGross, sta
   if (ctc !== null && !(ctc >= 0 && ctc < 1e9)) return { error: "Enter the annual CTC in rupees." };
   const month = /^\d{4}-\d{2}/.test(String(startDate || "")) ? String(startDate).slice(0, 7) : null;
   if (!month) return { error: "The joining date is needed to say which month the salary starts." };
-  const basic = Math.round(gross / 2), hra = Math.round(basic / 2), med = 1250, conv = 1600;
-  const { errors, value } = cleanStructure({ effectiveFrom: month, annualCtc: ctc, reason: "Entered at onboarding",
-    earnings: [{ name: "Basic", amount: basic }, { name: "HRA", amount: hra }, { name: "Medical Allowance", amount: med }, { name: "Conveyance Allowance", amount: conv },
-      { name: "Special Allowance", amount: Math.max(0, gross - basic - hra - med - conv) }] });
+  const { errors, value } = cleanStructure({ effectiveFrom: month, annualCtc: ctc, reason: "Entered at onboarding", pfEmployee: 3000, professionalTax: 200, earnings: splitGross(gross) });
   if (errors) return { error: Object.values(errors)[0] };
   return saving(async (client) => {
     const { rows: [emp] } = await client.query("SELECT id, name FROM employees WHERE lower(work_email)=$1 FOR UPDATE", [email.toLowerCase()]);

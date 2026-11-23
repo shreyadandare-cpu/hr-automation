@@ -16,6 +16,7 @@ import { AppLoginCard } from "./access.jsx";
 import { HistoryCard, LaptopReturnModal, LeaveCard, ProjectsCard, TeamCard, OffCard, RecordCard, ReimbCard, fdate } from "./cards.jsx";
 import { AdvancesCard } from "./advances.jsx";
 import { PayslipsCard } from "./payslips.jsx";
+import { PayrollProfileCard } from "./payrollProfile.jsx";
 import { ClearanceCard, ClearanceConfirm } from "../offboarding/FinancialClearance.jsx";
 import { getLocal, patchLocal, useLocal } from "./local.js";
 
@@ -286,6 +287,7 @@ function EmployeeView({ p }) {
       <TeamCard e={e} isMe={isMe} />
       <ProjectsCard e={e} />
       <LeaveCard e={e} maySetPay={setsPay} />
+      {canAll("payroll.prepare") && !isMe && <PayrollProfileCard email={p.email} name={e.name} />}
       {can("payroll.view") && !isMe && <PayslipsCard email={p.email} name={e.name} />}
       {can("expenses.approve") && <ReimbCard e={e} />}
       {can("advances.approve") && !isMe && <AdvancesCard email={p.email} name={e.name} />}

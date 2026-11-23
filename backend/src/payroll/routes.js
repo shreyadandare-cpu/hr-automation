@@ -8,7 +8,7 @@ import { cleanInputs, INPUT_FIELDS } from "./engine.js";
 import { fyOf, rulesProblems, annualTax } from "./tax.js";
 import { STATUS, EDITABLE, FINAL, check, nextActions } from "./workflow.js";
 import { actorOf, approvers, bankOnly, hrOnly, seal, open, sha256, encryptionReady } from "./access.js";
-import { buildLines, recalcRun, loadRun, totalsOfLines, staffFor, joiningLater, structuresFor, seedTaxRules, deptOf, monthName } from "./store.js";
+import { buildLines, recalcRun, loadRun, totalsOfLines, staffFor, joiningLater, payrollProfile, toStructure, structuresFor, seedTaxRules, deptOf, monthName } from "./store.js";
 import { buildWorkbook } from "./excel.js";
 import { buildBankFile } from "./bank.js";
 import { readPayslipPdf } from "./payslip-read.js";
@@ -422,16 +422,42 @@ R.get("/employees", hrOnly, wrap(async (req, res) => {
     pool.query("SELECT work_email, holder_name, bank_name, ifsc, acct_last4, updated_by, updated_at FROM payroll_bank_accounts"),
     pool.query("SELECT work_email, regime, updated_at FROM tax_declarations WHERE fy=$1", [fy]),
   ]);
-  const sOf = new Map(structures.map((s) => [lc(s.work_email), s])), bOf = new Map(banks.map((b) => [lc(b.work_email), b])), dOf = new Map(decls.map((d) => [lc(d.work_email), d]));
+  // Someone who joins later has no salary structure in force this month; the one HR set from their joining month is theirs.
+  const { rows: ahead } = later.length ? await pool.query(
+    "SELECT DISTINCT ON (lower(work_email)) * FROM salary_structures WHERE lower(work_email) = ANY($1) ORDER BY lower(work_email), effective_from", [later.map((e) => lc(e.work_email))]) : { rows: [] };
+  const sOf = new Map([...ahead, ...structures].map((s) => [lc(s.work_email), s])), bOf = new Map(banks.map((b) => [lc(b.work_email), b])), dOf = new Map(decls.map((d) => [lc(d.work_email), d]));
   const emps = [...onPayroll, ...later], laterSet = new Set(later.map((e) => lc(e.work_email)));
   res.json({ period, fy, employees: emps.map((e) => {
     const s = sOf.get(lc(e.work_email)), b = bOf.get(lc(e.work_email)), d = dOf.get(lc(e.work_email));
     const gross = s ? s.earnings.reduce((n, x) => n + Number(x.amount || 0), 0) : null;
-    return { email: e.work_email, name: e.name, empNo: e.emp_no, dept: deptOf(e.dept, e.title), title: e.title, start: e.start_date, lastDay: e.last_day, status: e.status, joinsLater: laterSet.has(lc(e.work_email)),
+    return { email: e.work_email, name: e.name, empNo: e.emp_no, dept: deptOf(e.dept, e.title), title: e.title, start: e.start_date, lastDay: e.last_day, status: e.status, employmentType: e.employment_type || "Employee", joinsLater: laterSet.has(lc(e.work_email)),
+      profile: payrollProfile({ hasSalary: !!s, hasBank: !!b, pan: e.pan_masked }),
       salary: s ? { effectiveFrom: s.effective_from, monthlyGross: gross, annualCtc: s.annual_ctc === null ? null : Number(s.annual_ctc), tdsMode: s.tds_mode || (s.tds_monthly !== null ? "manual" : "auto") } : null,
       bank: b ? { holder: b.holder_name, bankName: b.bank_name, ifsc: b.ifsc, last4: b.acct_last4, updatedAt: b.updated_at } : null,
       onboardingIfsc: e.ifsc || null, regime: d ? d.regime : "new", declared: !!d };
   }) });
+}));
+
+// One person's payroll profile at a glance: whether it is ready, what is missing, and when they join the payroll. No bank number, no tax figures.
+R.get("/profile/:email", hrOnly, wrap(async (req, res) => {
+  const email = lc(req.params.email), month = istMonth();
+  const { rows: [e] } = await pool.query(
+    "SELECT name, emp_no, title, dept, start_date, last_day, status, pan_masked, employment_type FROM employees WHERE lower(work_email)=$1", [email]);
+  if (!e) return res.status(404).json({ error: "Employee not found." });
+  const [{ rows: all }, { rows: [b] }] = await Promise.all([
+    pool.query("SELECT * FROM salary_structures WHERE lower(work_email)=$1 ORDER BY effective_from", [email]),
+    pool.query("SELECT bank_name, acct_last4, updated_at FROM payroll_bank_accounts WHERE lower(work_email)=$1", [email]),
+  ]);
+  const inForce = [...all].reverse().find((x) => x.effective_from <= month) || all[0] || null, st = inForce ? toStructure(inForce) : null;
+  const joinMonth = e.start_date ? String(e.start_date).slice(0, 7) : null;
+  res.json({
+    name: e.name, empNo: e.emp_no, title: e.title, dept: deptOf(e.dept, e.title), employmentType: e.employment_type || "Employee", start: e.start_date, lastDay: e.last_day, status: e.status,
+    paidFrom: joinMonth, joinsLater: !!joinMonth && joinMonth > month, leaving: !!e.last_day,
+    profile: payrollProfile({ hasSalary: !!st, hasBank: !!b, pan: e.pan_masked }),
+    salary: st ? { effectiveFrom: st.effectiveFrom, monthlyGross: st.earnings.reduce((n, x) => n + Number(x.amount || 0), 0), annualCtc: st.annualCtc, revisions: all.length } : null,
+    bank: b ? { bankName: b.bank_name, last4: b.acct_last4, updatedAt: b.updated_at } : null,
+    pan: e.pan_masked || null,
+  });
 }));
 
 // "Bank details" holders who do not prepare payroll: everyone's bank-account status, without any salary figures.

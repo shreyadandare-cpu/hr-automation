@@ -13,6 +13,7 @@ import { createGoogleUser, generatePassword, googleMode, assignLicense } from ".
 import { mailPlanOf } from "./mail-plan.js";
 import { employeeNoOwner, nextEmployeeNoFrom } from "./employee-no.js";
 import { mailConfigured, sendWorkAccountEmail } from "./mail.js";
+import { notify } from "./notify.js";
 
 const DOMAIN = "wohlig.com";
 const clean = (s) =>
@@ -255,6 +256,10 @@ export function onboardingRouter(wrap) {
       if (idNow) await ensureKit(client, idNow.id, "onboarding");   // the Digital Kit is ready when they first sign in
       await client.query("COMMIT");
       invalidateTree();   // a manager or new joiner may have changed the reporting tree
+      // The employee record is the payroll record (one employees table), so they are already on the payroll list from their joining month. Tell the people who prepare payroll
+      // that the salary structure and bank account are still needed, so they are paid correctly from the first month.
+      const joins = new Date(`${d.start}T00:00:00`).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" });
+      await notify("perm:payroll.prepare", { title: `New joiner ${full}: set up their payroll profile`, body: `Joins ${joins}. Add their salary structure and bank account so they are paid correctly from the first month.`, link: `/app/employees/${encodeURIComponent(row.work_email)}` });
       res.status(201).json({ ...toApi(await loadRecord(row.work_email)), deviceLink: device });
     } catch (err) {
       await client.query("ROLLBACK");

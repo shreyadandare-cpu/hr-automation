@@ -36,6 +36,14 @@ export const structuresFor = (db, period, email = null) => db.query(
   `SELECT DISTINCT ON (lower(work_email)) * FROM salary_structures WHERE effective_from <= $1 ${email ? "AND lower(work_email)=$2" : ""}
    ORDER BY lower(work_email), effective_from DESC`, email ? [period, email] : [period]).then((r) => r.rows);
 
+/** Whether a person's payroll profile is ready: a salary structure and a salary bank account are needed to pay them correctly; a PAN is advisory (TDS can be higher without one). */
+export function payrollProfile({ hasSalary, hasBank, pan }) {
+  const missing = [];
+  if (!hasSalary) missing.push("Salary structure");
+  if (!hasBank) missing.push("Bank account");
+  return { complete: !missing.length, missing, advisory: pan ? [] : ["PAN not on file"] };
+}
+
 export const toStructure = (x) => ({
   id: x.id, effectiveFrom: x.effective_from, earnings: x.earnings, otherDeductions: x.other_deductions,
   annualCtc: num(x.annual_ctc), pfApplicable: x.pf_applicable, pfEmployee: num(x.pf_employee), employerPf: num(x.employer_pf), esicEmployee: num(x.esic_employee),
@@ -77,7 +85,7 @@ function withOpening(paid = { taxable: 0, tds: 0, pt: 0 }, d = {}) {
 /** People on the payroll for a month: joined by its last day, and not gone before its first day. */
 export async function staffFor(db, period) {
   const { rows } = await db.query(
-    `SELECT id, work_email, name, emp_no, title, dept, start_date, last_day, status, pan_masked, acct_masked, ifsc, pf_number FROM employees
+    `SELECT id, work_email, name, emp_no, title, dept, start_date, last_day, status, pan_masked, acct_masked, ifsc, pf_number, employment_type FROM employees
      WHERE start_date IS NOT NULL AND start_date <= $2::date
        AND ((last_day IS NULL AND status <> 'offboarded') OR last_day >= $1::date)
      ORDER BY name`, [period + "-01", monthEnd(period)]);
@@ -87,7 +95,7 @@ export async function staffFor(db, period) {
 /** People who are onboarded but join after this month: not on its payroll run, but HR can set their salary, bank and tax details ahead of time. */
 export async function joiningLater(db, period) {
   const { rows } = await db.query(
-    `SELECT id, work_email, name, emp_no, title, dept, start_date, last_day, status, pan_masked, acct_masked, ifsc, pf_number FROM employees
+    `SELECT id, work_email, name, emp_no, title, dept, start_date, last_day, status, pan_masked, acct_masked, ifsc, pf_number, employment_type FROM employees
      WHERE start_date > $1::date AND last_day IS NULL AND status <> 'offboarded'
      ORDER BY start_date, name`, [monthEnd(period)]);
   return rows;

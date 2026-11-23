@@ -139,9 +139,9 @@ function EmployeeDashboard() {
       const cT = b.casual.carried + b.casual.quota;
       bal = (
         <div className="db-bal">
-          <div><Ring pct={cT ? b.casual.left / cT * 100 : 0} color="var(--purple-soft)" label={String(b.casual.left)} sub="days left" /><small>{R.TYPES.casual.name}</small></div>
-          <div><Ring pct={b.sick.quota ? b.sick.left / b.sick.quota * 100 : 0} color="#8fae3e" label={String(b.sick.left)} sub="days left" /><small>{R.TYPES.sick.name}</small></div>
-          <div><Ring pct={b.compoff.earned ? b.compoff.left / b.compoff.earned * 100 : 0} color="#76775a" label={String(b.compoff.left)} sub="days left" /><small>{R.TYPES.compoff.name}</small></div>
+          <div><Ring pct={cT ? b.casual.left / cT * 100 : 0} color="var(--purple-soft)" label={String(b.casual.left)} sub="days left" /><small>{R.TYPES.casual.name}<br />{b.casual.used} taken</small></div>
+          <div><Ring pct={b.sick.quota ? b.sick.left / b.sick.quota * 100 : 0} color="#8fae3e" label={String(b.sick.left)} sub="days left" /><small>{R.TYPES.sick.name}<br />{b.sick.used} taken</small></div>
+          <div><Ring pct={b.compoff.earned ? b.compoff.left / b.compoff.earned * 100 : 0} color="#76775a" label={String(b.compoff.left)} sub="days left" /><small>{R.TYPES.compoff.name}<br />{b.compoff.used} taken</small></div>
         </div>);
     } catch (e) { bal = null; }
   }

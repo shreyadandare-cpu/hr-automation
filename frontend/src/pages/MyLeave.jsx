@@ -5,8 +5,9 @@ import { useAuth } from "../auth.jsx";
 import { useData } from "../data.jsx";
 import { Pill, SectionHead, shortDate, PageSkeleton } from "../components/ui.jsx";
 import { CompRequestModal, HolidayCalendar } from "../components/leaveParts.jsx";
-import { CompOffHistory, LeaveHistory, LeaveStats, PolicyExplain, Ring, ViewTabs } from "../components/leaveSummary.jsx";
+import { CompOffHistory, LeaveHistory, LeaveStats, PolicyExplain, ViewTabs } from "../components/leaveSummary.jsx";
 import TodayCards from "../components/TodayCards.jsx";
+import LeaveBalanceCards from "../components/LeaveBalanceCards.jsx";
 import { useToast } from "../components/toast.jsx";
 import { R } from "../lib/leave.js";
 import { LTYPE, dd, rangeText, useLeave } from "../lib/useLeave.js";
@@ -30,26 +31,19 @@ export default function MyLeave() {
   const top = <SectionHead title="My leave" sub="Your requests, balances and history." />;
   if (!me) return <section className="section">{top}<div className="card"><div className="empty">Your employee record wasn't found, so leave can't be shown. Ask HR to check your work email.</div></div></section>;
 
-  const b = lv.bal(me, year), future = year > thisYear;
+  const future = year > thisYear;
   const inYear = (r) => Number(r.from.slice(0, 4)) === year;
   const mine = lv.reqsOf(me.email).filter(inYear);
   const pend = mine.filter((r) => r.status === "pending").sort((a, c) => (a.from < c.from ? -1 : 1));
   const compPend = lv.compsOf(me.email).filter((c) => c.status === "pending" && Number(c.workedOn.slice(0, 4)) === year);
-  const pendOf = (t) => pend.filter((r) => r.type === t).reduce((n, r) => n + Number(r.days || 0), 0);
   const years = []; for (let y = R.POLICY.startYear; y <= thisYear + 1; y++) years.push(y);
   const waitingFor = `Waiting for ${lv.approverName(me.email)}`;
-  const cTot = b.casual.carried + b.casual.quota;
 
   const cancel = async (r) => {
     const res = await api("POST", `/api/leave/requests/${r.id}/cancel`, {});
     if (!res.ok) { toast(apiMsg(res)); return; }
     toast("Leave request cancelled."); reloadLeave();
   };
-  const card = (title, pct, color, label, cells, sub) => (
-    <div className="card lv-bal"><div className="card-h"><h3>{title}</h3><button type="button" className="btn link" onClick={() => setModal("policy")}>View details</button></div>
-      <div className="card-b"><Ring pct={pct} color={color} label={label} sub={sub} />
-        <dl className="lv-cells">{cells.map(([k, v]) => <div key={k}><dt>{k}</dt><dd>{v}</dd></div>)}</dl></div></div>
-  );
   const yearPicker = <select className="input" aria-label="Year" style={{ width: "auto" }} value={year} onChange={(e) => setYearPick(Number(e.target.value))}>{years.map((y) => <option key={y} value={y}>Jan {y} - Dec {y}</option>)}</select>;
 
   return (
@@ -81,12 +75,7 @@ export default function MyLeave() {
         <h2 className="lv-h">My leave stats</h2>
         <LeaveStats email={me.email} year={year} />
         <h2 className="lv-h">Leave balances {year}{future ? " (projected)" : ""}</h2>
-        <div className="grid g4 lv-bals">
-          {card(LTYPE.casual, cTot ? b.casual.left / cTot * 100 : 0, "var(--lv-casual)", dd(b.casual.left), [["Available", dd(b.casual.left)], ["Consumed", dd(b.consumed.casual)], ["Pending approval", dd(pendOf("casual"))], ["Annual quota", dd(b.casual.quota)], ["Carried over", dd(b.casual.carried)]])}
-          {card(LTYPE.compoff, b.compoff.earned ? b.compoff.left / b.compoff.earned * 100 : 0, "var(--lv-comp)", b.compoff.earned ? dd(b.compoff.left) : "None", [["Available", dd(b.compoff.left)], ["Consumed", dd(b.consumed.compoff)], ["Pending approval", dd(pendOf("compoff"))], ["Earned", dd(b.compoff.earned)], ["Lapses", "31 Dec"]])}
-          {card(LTYPE.sick, b.sick.quota ? b.sick.left / b.sick.quota * 100 : 0, "var(--lv-sick)", dd(b.sick.left), [["Available", dd(b.sick.left)], ["Consumed", dd(b.consumed.sick)], ["Pending approval", dd(pendOf("sick"))], ["Annual quota", dd(b.sick.quota)], ["Lapses", "31 Dec"]])}
-          {card(LTYPE.unpaid, b.lopDays ? 100 : 0, "var(--lv-unpaid)", dd(b.lopDays), [["Loss-of-pay days", dd(b.lopDays)], ["Unpaid leave taken", dd(b.consumed.unpaid)], ["Pending approval", dd(pendOf("unpaid"))], ["Annual quota", "No limit"]], future ? `Loss of pay in ${year}` : "Loss of pay")}
-        </div>
+        <LeaveBalanceCards email={me.email} year={year} />
         {year === thisYear && <TodayCards />}
       </>}
 

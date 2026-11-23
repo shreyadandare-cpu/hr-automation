@@ -47,9 +47,9 @@ export default function TeamLeave() {
       <div className="card"><div className="card-h"><h3>Team balances {year}</h3></div>
         <Paged items={team}>{(rows, pager) => (<>
         <div className="tbl-wrap"><table>
-        <thead><tr><th>Employee</th><th>Casual left</th><th>Sick left</th><th>Comp off left</th><th>Waiting</th></tr></thead>
+        <thead><tr><th>Employee</th><th>Casual</th><th>Sick</th><th>Comp off</th><th>Waiting</th></tr></thead>
         <tbody>{rows.length ? rows.map((e) => { const b = lv.bal(e, year);
-          return <tr key={e.id}><td><PersonCell person={e} sub={e.title} /></td><td className="num-cell">{b.casual.left}</td><td className="num-cell">{b.sick.left}</td><td className="num-cell">{b.compoff.left}</td><td className="num-cell">{pendDays(e) ? dd(pendDays(e)) : "—"}</td></tr>; })
+          return <tr key={e.id}><td><PersonCell person={e} sub={e.title} /></td><td className="num-cell"><b>{b.casual.left}</b> left<small className="muted" style={{ display: "block" }}>{b.casual.used} taken</small></td><td className="num-cell"><b>{b.sick.left}</b> left<small className="muted" style={{ display: "block" }}>{b.sick.used} taken</small></td><td className="num-cell"><b>{b.compoff.left}</b> left<small className="muted" style={{ display: "block" }}>{b.compoff.used} taken</small></td><td className="num-cell">{pendDays(e) ? dd(pendDays(e)) : "—"}</td></tr>; })
           : <tr><td colSpan="5"><div className="empty">No one reports to you yet.</div></td></tr>}</tbody>
       </table></div>
         {pager.total > 10 && <Pager {...pager} />}</>)}</Paged></div>

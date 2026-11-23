@@ -385,7 +385,7 @@ The "HR only" marks come from the `HR_ONLY` list in `App.jsx`. Every other page 
   `Modal` (the one dialog, on Radix UI Dialog: focus kept inside and returned, Escape, page scroll locked, close button, a bottom sheet on phones; the
   reimbursement `Dlg` is the same component), `ConfirmDialog`, `DatePicker`, `Pager`,
   `PeoplePicker`, `PersonAvatar`, `PhotoEditor`, `OrgChart`, `NotificationBell`, `TodayCards`, `TimeToday` (Home: time worked today, and the punch button when `WEB_CLOCK_IN` is on), `RemoteToday` (Home: who is working from home today), `RemoteToday` (Home: who has an approved work-from-home request for today, from `/api/remote-today`), `toast.jsx`, `ui.jsx`,
-  `charts.jsx`, `leaveParts.jsx`, `leaveSummary.jsx`, `attendance.jsx`, `BackButton`, `BirthdayPopup`, `CelebrateCard`, `NextHolidayPopup`, `HolidayImport` (HR's holiday list upload dialog).
+  `charts.jsx`, `leaveParts.jsx`, `leaveSummary.jsx`, `LeaveBalanceCards` (the four balance cards, shared by My leave and an employee's profile), `attendance.jsx`, `BackButton`, `BirthdayPopup`, `CelebrateCard`, `NextHolidayPopup`, `HolidayImport` (HR's holiday list upload dialog).
   Every page opens with `SectionHead` from `ui.jsx`: the page name, one line, the page's actions on the right and, for a
   page with several views (Employees, Onboarding, Reimbursements), `PageTabs` under it. My leave, Team leave and Leave management are
   separate menu items. Onboarding and Offboarding open on their lists; adding a joiner and offboarding someone are buttons there.

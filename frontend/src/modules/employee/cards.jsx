@@ -10,6 +10,7 @@ import { useData } from "../../data.jsx";
 import { R } from "../../lib/leave.js";
 import { LSTAT, LTYPE, dd, inr, lc, rangeText, useLeave } from "../../lib/useLeave.js";
 import { isTop } from "../../lib/people.js";
+import LeaveBalanceCards from "../../components/LeaveBalanceCards.jsx";
 
 export const fdate = (s) => (s ? shortDate(s) : "—");
 const InfoIcon = () => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="9" /><path d="M12 8v5M12 16h.01" /></svg>;
@@ -144,15 +145,12 @@ export function LeaveCard({ e, maySetPay }) {
   const { leave } = useData();
   const [pay, setPay] = useState(false);
   if (!R || !leave) return null;
-  const year = Number(lv.today.slice(0, 4)), b = lv.bal(e, year), p = lv.payOf(e.baseEmail);
+  const year = Number(lv.today.slice(0, 4)), p = lv.payOf(e.baseEmail);
   const mine = [...lv.reqsOf(e.baseEmail)].sort((a, c) => (a.from < c.from ? 1 : -1)).slice(0, 5);
   return (
     <div className="card"><div className="card-h"><h3>Leave {year}</h3>{maySetPay && <button className="btn glass sm" onClick={() => setPay(true)}>Pay &amp; balance</button>}</div>
+      <div className="card-b" style={{ paddingTop: 0 }}><LeaveBalanceCards email={e.baseEmail} year={year} /></div>
       <dl className="facts" style={{ borderTop: 0, paddingTop: 0 }}>
-        <div><dt>Casual left</dt><dd>{b.casual.left} <span className="muted">({b.casual.carried} carried + {b.casual.quota} − {b.casual.used})</span></dd></div>
-        <div><dt>Sick left</dt><dd>{b.sick.left} <span className="muted">of {b.sick.quota}</span></dd></div>
-        <div><dt>Comp off left</dt><dd>{b.compoff.left}</dd></div>
-        <div><dt>Loss of pay</dt><dd>{dd(b.lopDays)}</dd></div>
         <div><dt>Monthly gross</dt><dd>{p.monthlyGross ? inr(p.monthlyGross) : "Not set"}</dd></div>
       </dl>
       {mine.map((r) => (

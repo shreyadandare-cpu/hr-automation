@@ -87,11 +87,11 @@ export default function LeaveHr() {
         <input className="input" placeholder="Search people" aria-label="Search balances" value={q} onChange={(e) => setQ(e.target.value)} style={{ width: 220, borderRadius: 999, padding: "8px 14px" }} /></div>
         <div style={{ padding: "0 24px 12px" }}><span className="muted">{LTYPE.casual} {R.POLICY.casualPerYear} days a year, unused days carry over · {LTYPE.sick} {R.POLICY.sickPerYear} days a year, lapses on 31 Dec · {LTYPE.compoff} earned by working a weekend or holiday, lapses on 31 Dec · {LTYPE.unpaid} is always a salary cut · Half days count as 0.5</span></div>
         <PagedTable items={here} reset={q} cols={manages ? 7 : 6} empty={`No one matches “${q}”.`}
-          head={<tr><th>Employee</th><th>Casual left</th><th className="hide-sm" title="Carried over + quota − used">Breakdown</th><th>Sick left</th><th>Comp off</th><th>Loss of pay</th>{manages && <th />}</tr>}
+          head={<tr><th>Employee</th><th>Casual</th><th className="hide-sm" title="Carried over + quota − used">Breakdown</th><th>Sick</th><th>Comp off</th><th>Loss of pay</th>{manages && <th />}</tr>}
           row={(e) => { const b = lv.bal(e, year);
             return (
-              <tr key={e.id}><td><PersonCell person={e} sub={e.title} /></td><td className="num-cell"><b>{b.casual.left}</b></td>
-                <td className="num-cell hide-sm muted">{b.casual.carried} + {b.casual.quota} − {b.casual.used}</td><td className="num-cell">{b.sick.left}</td><td className="num-cell">{b.compoff.left}</td><td className="num-cell">{b.lopDays || "—"}</td>{manages && <td className="num"><button type="button" className="btn glass sm" onClick={() => setModal({ balance: e.email })}>Correct</button></td>}</tr>); }} /></div>}
+              <tr key={e.id}><td><PersonCell person={e} sub={e.title} /></td><td className="num-cell"><b>{b.casual.left}</b> left<small className="muted" style={{ display: "block" }}>{b.casual.used} taken</small></td>
+                <td className="num-cell hide-sm muted">{b.casual.carried} + {b.casual.quota} − {b.casual.used}</td><td className="num-cell"><b>{b.sick.left}</b> left<small className="muted" style={{ display: "block" }}>{b.sick.used} taken</small></td><td className="num-cell"><b>{b.compoff.left}</b> left<small className="muted" style={{ display: "block" }}>{b.compoff.used} taken</small></td><td className="num-cell">{b.lopDays || "—"}</td>{manages && <td className="num"><button type="button" className="btn glass sm" onClick={() => setModal({ balance: e.email })}>Correct</button></td>}</tr>); }} /></div>}
 
       {view === "history" && <LeaveHistory list={all} who title="All leave" />}
       {view === "compoff" && <CompOffHistory list={lv.compOffs} who />}

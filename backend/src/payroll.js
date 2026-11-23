@@ -88,6 +88,33 @@ const saving = async (fn) => {
   }
 };
 
+/**
+ * Onboarding to Payroll: when onboarding is completed with a salary, this creates the person's first salary structure on the
+ * existing employee record (no separate payroll employee list), effective from the month they join. The same split as the
+ * "Fill the lines" button on the salary screen: Basic 50% of gross, HRA 50% of Basic, Medical 1,250, Conveyance 1,600, Special Allowance the rest.
+ * A structure that already exists for that month is left as it is, so running it twice never overwrites HR's edits. Returns { saved } or { error }.
+ */
+export async function saveOnboardingSalary(email, { annualCtc, monthlyGross, startDate }, actor) {
+  const gross = Math.round(Number(monthlyGross)), ctc = annualCtc === "" || annualCtc === null || annualCtc === undefined ? null : Number(annualCtc);
+  if (!(gross > 0) || gross >= 1e8) return { error: "Enter the monthly gross in rupees." };
+  if (ctc !== null && !(ctc >= 0 && ctc < 1e9)) return { error: "Enter the annual CTC in rupees." };
+  const month = /^\d{4}-\d{2}/.test(String(startDate || "")) ? String(startDate).slice(0, 7) : null;
+  if (!month) return { error: "The joining date is needed to say which month the salary starts." };
+  const basic = Math.round(gross / 2), hra = Math.round(basic / 2), med = 1250, conv = 1600;
+  const { errors, value } = cleanStructure({ effectiveFrom: month, annualCtc: ctc, reason: "Entered at onboarding",
+    earnings: [{ name: "Basic", amount: basic }, { name: "HRA", amount: hra }, { name: "Medical Allowance", amount: med }, { name: "Conveyance Allowance", amount: conv },
+      { name: "Special Allowance", amount: Math.max(0, gross - basic - hra - med - conv) }] });
+  if (errors) return { error: Object.values(errors)[0] };
+  return saving(async (client) => {
+    const { rows: [emp] } = await client.query("SELECT id, name FROM employees WHERE lower(work_email)=$1 FOR UPDATE", [email.toLowerCase()]);
+    if (!emp) return { rollback: true, error: "Employee not found." };
+    const { rows: [has] } = await client.query("SELECT 1 FROM salary_structures WHERE lower(work_email)=$1 AND effective_from=$2", [email.toLowerCase(), month]);
+    if (has) return { rollback: true, saved: false, error: "A salary structure already exists for that month. Open the person's Salary in Payroll to change it." };
+    await saveStructure(client, emp, email.toLowerCase(), value, actor);
+    return { saved: true, from: month, monthlyGross: gross };
+  });
+}
+
 // Save the breakdown that applies from a month on. Months already calculated keep their payslips.
 payrollRouter.put("/structures/:email", hrOnly, wrap(async (req, res) => {
   const email = String(req.params.email).toLowerCase();

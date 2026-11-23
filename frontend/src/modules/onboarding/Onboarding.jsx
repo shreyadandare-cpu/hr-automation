@@ -242,12 +242,13 @@ export default function Onboarding() {
     if (!ob.reviewed) { toast("Tick the review box before submitting."); return; }
     if (!ob.work || !ob.login) { toast("Create the work email and the login first."); return; }
     const apps = (ob.apps || ON_TOOLS).filter((a) => ON_TOOLS.includes(a));   // empty = this person does not need Claude for now
-    const r = await api("POST", "/api/onboarding", { d, apps, existingEmail: ob.work.email });
+    const r = await api("POST", "/api/onboarding", { d, apps, existingEmail: ob.work.email, salary: ob.salary && ob.salary.gross ? { annualCtc: ob.salary.ctc, monthlyGross: ob.salary.gross } : undefined });
     if (r.status === 400) { const errors = (r.data && r.data.errors) || {}; patch({ errors }); toast(Object.values(errors)[0] || (r.data && r.data.error) || "The server rejected the details."); return; }
     if (!r.ok) { toast("The server could not save this onboarding. Try again."); return; }
     const email = r.data.email, name = (d.first + " " + d.last).trim();
     clearDraft();
     toast(`HR notified: ${name} was submitted for onboarding.`);
+    if (r.data.salary) toast(r.data.salary.saved ? `Salary added to Payroll from ${r.data.salary.from}.` : `Salary not added to Payroll: ${r.data.salary.error}`);
     const dl = r.data.deviceLink;
     if (dl && dl.id) toast(`${name} is linked to attendance with device ID ${dl.id}.`);
     else if (dl && dl.skipped) toast(`Attendance was not linked: ${dl.skipped}. Link it by hand in Attendance.`);
@@ -332,6 +333,19 @@ export default function Onboarding() {
             <div><dt>Google</dt><dd>{{ active: "Active in Google Workspace", simulated: "Active (simulated)", existing: "Already in the employee list" }[w.google] || w.google}</dd></div>
             <div><dt>App login</dt><dd>{l && l.role === "hr" ? "Created with HR rights" : `Created, ${(ACCESS_LABEL[l && l.role] || "employee").toLowerCase()} role`}</dd></div></dl></div></div>
           <DocsCard person={picked} docs={docs} />
+          {canAll("payroll.prepare") && (() => {
+            const sal = ob.salary || { ctc: "", gross: "" };
+            const put = (o) => patch({ salary: { ...sal, ...o } });
+            return (
+              <div className="card"><div className="card-h"><h3>Salary for Payroll</h3><span className="muted">Optional</span></div>
+                <div className="card-b" style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+                  <div className="grid" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))" }}>
+                    <Fld label="Annual CTC (₹)" id="salCtc" type="number" value={sal.ctc} onChange={(v) => { const g = Math.round(Number(v) / 12); put({ ctc: v, gross: g > 0 ? String(g) : "" }); }} hint="The monthly gross is filled as this divided by 12." />
+                    <Fld label="Monthly gross (₹)" id="salGross" type="number" value={sal.gross} onChange={(v) => put({ gross: v })} hint="Basic 50% of gross, HRA 50% of Basic, Medical ₹1,250, Conveyance ₹1,600, Special Allowance the rest." />
+                  </div>
+                  <p className="muted" style={{ margin: 0 }}>{sal.gross ? `On submitting, this becomes ${(d.first + " " + d.last).trim() || "their"} first salary structure in Payroll, from ${fdate(d.start) || "the joining month"}. HR can review and change every line there.` : "Leave this empty to add the salary later in Payroll. Until then their payroll profile shows as incomplete."}</p>
+                </div></div>);
+          })()}
           <div className="card"><div className="card-h"><h3>Claude access</h3></div>
             <div className="card-b" style={{ display: "flex", flexDirection: "column", gap: 12 }}>
               <label className="check" style={{ border: 0, padding: 0 }}><input type="checkbox" checked={sel.includes("claude")} onChange={(e) => patch({ apps: e.target.checked ? ["claude"] : [] })} />

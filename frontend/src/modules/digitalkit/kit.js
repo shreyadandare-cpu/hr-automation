@@ -173,8 +173,7 @@ export async function drawBanner({ theme = "light", headline = "", emphasis = ""
   x.font = `600 ${size}px ${SERIF}`; x.fillStyle = ink; x.fillText(h, X, 170);
   const hw = x.measureText(h).width;
   x.font = `italic 400 ${size}px ${SERIF}`; x.fillStyle = dark ? C.orange : "rgba(128,13,53,.78)"; x.fillText(em, X + hw + gap, 170);
-  x.fillStyle = dark ? C.ivory : C.ink; x.font = `800 33px ${SANS}`; x.fillText(String(name || "").slice(0, 60), X, 217);
-  x.fillStyle = dark ? C.beige : C.inkDim; x.font = `400 23px ${SANS}`; x.fillText(`AI agents  ·  Agentic workflows  ·  Gemini Enterprise  ·  ${SITE}`, X, 258);
+  x.fillStyle = dark ? C.beige : C.inkDim; x.font = `400 23px ${SANS}`; x.fillText(`AI agents  ·  Agentic workflows  ·  Gemini Enterprise  ·  ${SITE}`, X, 226);
   // logo and badge
   const lh = 62, lw = lh * (logoImg.naturalWidth / logoImg.naturalHeight || 2.715);
   x.drawImage(logoImg, X, 296, lw, lh);

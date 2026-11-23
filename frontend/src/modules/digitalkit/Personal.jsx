@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { api, apiMsg } from "../../api.js";
 import { Field } from "../../components/Modal.jsx";
-import { Callout, DownloadIcon, Skeleton } from "../../components/ui.jsx";
+import { Callout, DownloadIcon, Skeleton, ButtonTabs } from "../../components/ui.jsx";
 import { useToast } from "../../components/toast.jsx";
 import { BANNER_PRESETS, BANNER_THEMES, CELEBRATIONS, ICON_PROD, SIG_DEFAULT_OPTS, SIG_STYLES, aboutText, copyHtml, copyText, captionFor, drawBackground, drawBanner, drawCard, drawCelebrate, fileSafe, hashtags, headlines, jpegOf,
   pdfFromJpegs, saveBlob, saveText, signatureHtml, signaturePlain, toBlob, webLink } from "./kit.js";
@@ -20,10 +20,6 @@ function Drawn({ draw, deps, alt, className = "" }) {
   if (bad) return <div className="empty">Could not draw this. Reload the page and try again.</div>;
   return url ? <img className={`dk-img ${className}`} src={url} alt={alt} /> : <div className="dk-img dk-loading" role="status" aria-label="Drawing"><Skeleton className="size-full rounded-[inherit]" /></div>;
 }
-/** A row of tabs to switch between the parts of one screen, so each part fits on screen. The other parts stay mounted (hidden), so nothing typed is lost. */
-const SubTabs = ({ value, onChange, items }) => (
-  <div className="subtabs dk-subtabs" role="tablist">{items.map(([k, l]) => <button key={k} type="button" role="tab" className={value === k ? "on" : ""} aria-selected={value === k} onClick={() => onChange(k)}>{l}</button>)}</div>
-);
 const Btn = ({ children, ...p }) => <button type="button" className="btn glass sm" {...p}>{children}</button>;
 
 /** Tells the person what is missing, and who can add it. Nothing is made up to fill a gap. */
@@ -157,7 +153,7 @@ export function Celebrate({ p }) {
   const copy = async () => toast((await copyText(caption)) ? "Caption copied." : "Could not copy. Select it and copy by hand.");
   return (
     <div className="dk-stack">
-      <SubTabs value={sub} onChange={setSub} items={[["card", "Card"], ["caption", "Caption & hashtags"]]} />
+      <ButtonTabs view={sub} onView={setSub} label="Welcome & celebrations views" views={[["card", "Card"], ["caption", "Caption & hashtags"]]} />
       <div className="card" style={sub === "card" ? undefined : { display: "none" }}><div className="card-h"><h3>Welcome &amp; celebrations</h3><span className="muted">1080 × 1080, for LinkedIn</span></div>
         <div className="card-b dk-celebrate">
           <div className="dk-cel-form">
@@ -307,7 +303,7 @@ export function LinkedIn({ p }) {
   const banner = async () => { try { saveBlob(await toBlob(await drawBanner(bopts(false))), `${fileSafe(p.name)}-linkedin-banner.png`); } catch { toast("Could not make the file."); } };
   return (
     <div className="dk-stack">
-      <SubTabs value={sub} onChange={setSub} items={[["headline", "Headline"], ["banner", "Profile banner"], ["about", "Hashtags & About"]]} />
+      <ButtonTabs view={sub} onView={setSub} label="Digital kit LinkedIn views" views={[["headline", "Headline"], ["banner", "Profile banner"], ["about", "Hashtags & About"]]} />
       <div className="card" style={sub === "headline" ? undefined : { display: "none" }}><div className="card-h"><h3>Headline</h3><button type="button" className="btn glass sm" disabled={aiBusy} onClick={() => suggest(false)}>Suggest with Gemini AI</button></div>
         <div className="card-b dk-list">
           {hs.map((h, i) => (

@@ -15,6 +15,7 @@ import { BankModal } from "../payroll/EmployeesTab.jsx";
 import { AppLoginCard } from "./access.jsx";
 import { HistoryCard, LaptopReturnModal, LeaveCard, ProjectsCard, TeamCard, OffCard, RecordCard, ReimbCard, fdate } from "./cards.jsx";
 import { AdvancesCard } from "./advances.jsx";
+import { PayslipsCard } from "./payslips.jsx";
 import { ClearanceCard, ClearanceConfirm } from "../offboarding/FinancialClearance.jsx";
 import { getLocal, patchLocal, useLocal } from "./local.js";
 
@@ -24,7 +25,7 @@ const GRANT = {
   none: ["Not started", "p-mute"], provisioning: ["Giving access", "p-info p-busy"], active: ["Active", "p-ok"], created: ["Created, waiting for joining date", "p-warn"],
   requested: ["Waiting for the Claude admin", "p-warn"], invited: ["Invite sent", "p-info"], failed: ["Failed", "p-bad"], revoking: ["Removing", "p-warn p-busy"], revoked: ["Removed", "p-mute"],
 };
-const EMP = { onboarding: ["Onboarding", "p-info"], active: ["Active", "p-ok"], offboarding: ["Offboarding", "p-warn"], offboarded: ["Offboarded", "p-mute"] };
+const EMP = { onboarding: ["Onboarding", "p-info"], active: ["Active", "p-ok"], offboarding: ["Offboarding", "p-warn"], offboarded: ["Exited", "p-mute"] };
 
 function EmpPill({ e }) {
   if (e.status === "active" && e.lastDay) { const [w, tone] = leaving(e); return <span className={pill(tone)}>{w} {fdate(e.lastDay)}</span>; }
@@ -285,6 +286,7 @@ function EmployeeView({ p }) {
       <TeamCard e={e} isMe={isMe} />
       <ProjectsCard e={e} />
       <LeaveCard e={e} maySetPay={setsPay} />
+      {can("payroll.view") && !isMe && <PayslipsCard email={p.email} name={e.name} />}
       {can("expenses.approve") && <ReimbCard e={e} />}
       {can("advances.approve") && !isMe && <AdvancesCard email={p.email} name={e.name} />}
       {canAll("audit.view") && <HistoryCard email={p.email} />}

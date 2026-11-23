@@ -11,14 +11,14 @@ import { browserSupportsWebAuthn, startAuthentication, startRegistration } from 
    unlock); this part shows the right screen and keeps the unlock honest:
    - Pay opens only with the fingerprint (Touch ID, Face ID, device unlock), the 6-digit code from an authenticator app, or, on a device
      with no fingerprint reader, a 6-digit PIN, set up the first time after an emailed code proves who it is. Loading the page again always asks again.
-   - It locks by itself after 2 idle minutes, when the browser tab is hidden, and the moment the person leaves the Pay pages.
+   - It locks by itself after the idle time the server sets (15 minutes), and the moment the person leaves their own Pay pages. Switching browser tabs does not lock it.
    - While the person is active the page sends a quiet heartbeat so the server's own 2-minute limit does not run out under them.
    Nothing about the unlock is kept in the browser's storage. */
-export const PAY_PATHS = ["/app/my-finances", "/app/payslips", "/app/tax", "/app/payroll", "/app/finance-reports"];
+export const PAY_PATHS = ["/app/my-finances", "/app/payslips", "/app/tax"];   // a person's own pay pages; payroll and finance reports are guarded by their permissions
 export const inPaySection = (path) => PAY_PATHS.some((p) => path === p || path.startsWith(`${p}/`));
 
-const IDLE_MS = 2 * 60 * 1000, BEAT_MS = 25 * 1000, WATCH = ["pointerdown", "pointermove", "keydown", "scroll", "wheel", "touchstart"];
-const WHY = { idle: "Pay was locked after 2 minutes without activity.", hidden: "Pay was locked because this browser tab was hidden.", manual: "You locked Pay." };
+const BEAT_MS = 25 * 1000, WATCH = ["pointerdown", "pointermove", "keydown", "scroll", "wheel", "touchstart"];
+const WHY = { idle: "Pay was locked after a while without activity.", hidden: "Pay was locked because this browser tab was hidden.", manual: "You locked Pay." };
 const NOTICE = {
   mismatch: "That Google account is not the one you are signed in with, so nothing was changed. Please try again with your own account.",
   stale: "Please sign in with Google again to confirm it is you, then try once more.",
@@ -40,7 +40,7 @@ export function PayProvider({ children }) {
     const r = await api("GET", "/api/pay/status");
     if (!r.ok) return setS((p) => ({ ...p, ...extra, phase: "error" }));
     const d = r.data;
-    setS((p) => ({ ...p, ...extra, out: d.lockedOutMinutes || 0, pinOut: d.pinLockedOutMinutes || 0, factors: { totp: !!d.totp, passkeys: d.passkeys || 0, pin: !!d.pin }, phase: d.unlocked ? "open" : d.recoverOk ? "enrol" : !d.enrolled ? "setup" : "locked" }));
+    setS((p) => ({ ...p, ...extra, idleSeconds: d.idleSeconds || 900, out: d.lockedOutMinutes || 0, pinOut: d.pinLockedOutMinutes || 0, factors: { totp: !!d.totp, passkeys: d.passkeys || 0, pin: !!d.pin }, phase: d.unlocked ? "open" : d.recoverOk ? "enrol" : !d.enrolled ? "setup" : "locked" }));
   }, []);
 
   const lock = useCallback((reason = "manual") => {
@@ -70,7 +70,7 @@ export function PayProvider({ children }) {
     return () => window.removeEventListener("pay-locked", onLocked);
   }, [inPay]);
 
-  /* While Pay is open: watch for activity, send the heartbeat, lock after idle time or when the tab is hidden or closed. */
+  /* While Pay is open: watch for activity, send the heartbeat, lock after the idle time or when the page is closed. */
   useEffect(() => {
     if (!(inPay && s.phase === "open")) return undefined;
     last.current = Date.now();
@@ -81,15 +81,14 @@ export function PayProvider({ children }) {
       const r = await api("POST", "/api/pay/touch");
       if (r.status === 423) setS((p) => ({ ...p, phase: "locked", reason: "idle" }));
     }, BEAT_MS);
-    const watch = setInterval(() => { if (Date.now() - last.current > IDLE_MS) lock("idle"); }, 5000);
-    const hide = () => { if (document.hidden) lock("hidden"); };
+    const idleMs = (s.idleSeconds || 900) * 1000;
+    const watch = setInterval(() => { if (Date.now() - last.current > idleMs) lock("idle"); }, 5000);
     const gone = () => { navigator.sendBeacon && navigator.sendBeacon("/api/pay/lock", new Blob([JSON.stringify({ reason: "navigated" })], { type: "application/json" })); };
-    document.addEventListener("visibilitychange", hide);
     window.addEventListener("pagehide", gone);
     return () => {
       WATCH.forEach((e) => window.removeEventListener(e, bump));
       clearInterval(beat); clearInterval(watch);
-      document.removeEventListener("visibilitychange", hide); window.removeEventListener("pagehide", gone);
+      window.removeEventListener("pagehide", gone);
     };
   }, [inPay, s.phase, lock]);
 
@@ -151,7 +150,7 @@ function PayBar() {
             <button type="button" className="btn glass sm" disabled={busy} onClick={later}>Not now</button></span>
         </div>)}
       <div className="mb-3 flex flex-wrap items-center justify-end gap-3 print:hidden">
-        <span className="inline-flex items-center gap-1.5 text-[13px] text-ink-dim"><span className="grid size-4 place-items-center text-ok [&_svg]:size-4"><Icon name="unlock" /></span>Pay is unlocked. It locks after 2 minutes without activity.</span>
+        <span className="inline-flex items-center gap-1.5 text-[13px] text-ink-dim"><span className="grid size-4 place-items-center text-ok [&_svg]:size-4"><Icon name="unlock" /></span>Pay is unlocked. It locks after a while without activity.</span>
         <button type="button" className="btn glass sm" onClick={() => setSettings(true)}>Security</button>
         <button type="button" className="btn glass sm" onClick={() => pay.lock("manual")}>Lock Pay</button>
         {settings && <Settings pay={pay} onClose={() => setSettings(false)} />}

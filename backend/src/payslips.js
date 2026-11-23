@@ -157,7 +157,9 @@ export function drawPdf(doc, p) {
 
 export function payslipsRouter(wrap) {
   const r = express.Router();
-  r.use("/api/payslips", requireAuth, requirePayUnlock);   // pay is behind Pay security as well (pay-security.js)
+  // A person's own payslips are behind Pay security (pay-security.js). Someone else's (?email=, for payroll.view holders, from the employee's profile) is guarded by that permission instead.
+  const forOther = (req) => { const a = String(req.query.email || "").toLowerCase(); return !!a && !!req.user && a !== req.user.email.toLowerCase(); };
+  r.use("/api/payslips", requireAuth, (req, res, next) => (forOther(req) ? next() : requirePayUnlock(req, res, next)));
   r.use("/api/payslips", (_req, res, next) => { res.setHeader("Cache-Control", "private, no-store"); next(); });
 
   // Months with a payslip, newest first.
@@ -197,7 +199,7 @@ export function payslipsRouter(wrap) {
     if (!p.slip) return res.status(p.status).json({ error: p.error });
     const s = p.slip;
     res.setHeader("Content-Type", "application/pdf");
-    res.setHeader("Content-Disposition", `attachment; filename="Payslip-${period}-${String(s.employee.name).replace(/[^A-Za-z0-9]+/g, "-")}.pdf"`);
+    res.setHeader("Content-Disposition", `${req.query.view === "1" ? "inline" : "attachment"}; filename="Payslip-${period}-${String(s.employee.name).replace(/[^A-Za-z0-9]+/g, "-")}.pdf"`);
     const doc = new PDFDocument({ size: "A4", margin: 45, info: { Title: `Payslip ${monthName(period)}`, Author: "Wohlig Transformations Pvt Ltd" } });
     doc.pipe(res);
     drawPdf(doc, s);

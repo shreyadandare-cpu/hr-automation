@@ -84,6 +84,15 @@ export async function staffFor(db, period) {
   return rows;
 }
 
+/** People who are onboarded but join after this month: not on its payroll run, but HR can set their salary, bank and tax details ahead of time. */
+export async function joiningLater(db, period) {
+  const { rows } = await db.query(
+    `SELECT id, work_email, name, emp_no, title, dept, start_date, last_day, status, pan_masked, acct_masked, ifsc, pf_number FROM employees
+     WHERE start_date > $1::date AND last_day IS NULL AND status <> 'offboarded'
+     ORDER BY start_date, name`, [monthEnd(period)]);
+  return rows;
+}
+
 /**
  * Works out every line of a month. `existing` is the run's current lines (their inputs are kept).
  * Returns [{ email, name, empNo, dept, title, inputs, slip, status, claims, adjustments }].

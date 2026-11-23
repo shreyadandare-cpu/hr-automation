@@ -8,7 +8,7 @@ import { cleanInputs, INPUT_FIELDS } from "./engine.js";
 import { fyOf, rulesProblems, annualTax } from "./tax.js";
 import { STATUS, EDITABLE, FINAL, check, nextActions } from "./workflow.js";
 import { actorOf, approvers, bankOnly, hrOnly, seal, open, sha256, encryptionReady } from "./access.js";
-import { buildLines, recalcRun, loadRun, totalsOfLines, staffFor, structuresFor, seedTaxRules, deptOf, monthName } from "./store.js";
+import { buildLines, recalcRun, loadRun, totalsOfLines, staffFor, joiningLater, structuresFor, seedTaxRules, deptOf, monthName } from "./store.js";
 import { buildWorkbook } from "./excel.js";
 import { buildBankFile } from "./bank.js";
 import { readPayslipPdf } from "./payslip-read.js";
@@ -30,7 +30,7 @@ import { PRODUCT } from "../brand.js";
  *   POST /runs/:id/recalculate       re-read salaries, leave, claims and tax and recalculate every line
  *   POST /runs/:id/actions/:action   calculate | generate | submit | approve | reject | request_changes | bank_file | mark_paid
  *   GET  /runs/:id/files/:fileId     download a stored Excel report (everyone who sees every line) or bank file (payroll.bank)
- *   GET  /employees                  who is on the payroll and whether their salary, bank and tax details are set (HR)
+ *   GET  /employees                  who is on the payroll, and who joins later (onboarded, so set up ahead), and whether their salary, bank and tax details are set (HR)
  *   GET/PUT /bank/:email             salary bank account (the number is write-only; only the last four digits come back) (payroll.bank)
  *   GET/PUT /declarations/:email     tax regime and declarations for a financial year (HR)
  *   GET/PUT /tax-rules[/:fy/:regime] slabs, rebate, surcharge, cess by financial year (HR)
@@ -417,16 +417,17 @@ R.post("/payslip-read", hrOnly, express.raw({ type: () => true, limit: 5 * 1024 
 R.get("/employees", hrOnly, wrap(async (req, res) => {
   const period = PERIOD.test(String(req.query.period || "")) ? String(req.query.period) : istMonth();
   const fy = fyOf(period);
-  const [emps, structures, { rows: banks }, { rows: decls }] = await Promise.all([
-    staffFor(pool, period), structuresFor(pool, period),
+  const [onPayroll, later, structures, { rows: banks }, { rows: decls }] = await Promise.all([
+    staffFor(pool, period), joiningLater(pool, period), structuresFor(pool, period),
     pool.query("SELECT work_email, holder_name, bank_name, ifsc, acct_last4, updated_by, updated_at FROM payroll_bank_accounts"),
     pool.query("SELECT work_email, regime, updated_at FROM tax_declarations WHERE fy=$1", [fy]),
   ]);
   const sOf = new Map(structures.map((s) => [lc(s.work_email), s])), bOf = new Map(banks.map((b) => [lc(b.work_email), b])), dOf = new Map(decls.map((d) => [lc(d.work_email), d]));
+  const emps = [...onPayroll, ...later], laterSet = new Set(later.map((e) => lc(e.work_email)));
   res.json({ period, fy, employees: emps.map((e) => {
     const s = sOf.get(lc(e.work_email)), b = bOf.get(lc(e.work_email)), d = dOf.get(lc(e.work_email));
     const gross = s ? s.earnings.reduce((n, x) => n + Number(x.amount || 0), 0) : null;
-    return { email: e.work_email, name: e.name, empNo: e.emp_no, dept: deptOf(e.dept, e.title), title: e.title, start: e.start_date, lastDay: e.last_day, status: e.status,
+    return { email: e.work_email, name: e.name, empNo: e.emp_no, dept: deptOf(e.dept, e.title), title: e.title, start: e.start_date, lastDay: e.last_day, status: e.status, joinsLater: laterSet.has(lc(e.work_email)),
       salary: s ? { effectiveFrom: s.effective_from, monthlyGross: gross, annualCtc: s.annual_ctc === null ? null : Number(s.annual_ctc), tdsMode: s.tds_mode || (s.tds_monthly !== null ? "manual" : "auto") } : null,
       bank: b ? { holder: b.holder_name, bankName: b.bank_name, ifsc: b.ifsc, last4: b.acct_last4, updatedAt: b.updated_at } : null,
       onboardingIfsc: e.ifsc || null, regime: d ? d.regime : "new", declared: !!d };

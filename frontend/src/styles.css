@@ -1206,6 +1206,7 @@ td .apps-row{flex-wrap:nowrap}
 .former-toggle{display:inline-flex;align-items:center;gap:8px;font-size:13px;color:var(--ink-dim);cursor:pointer;white-space:nowrap}
 .former-toggle input{accent-color:var(--purple);width:16px;height:16px}
 tr.former td{opacity:.6}
+.dir-card.former{opacity:.7}
 /* Reporting manager picker in the Employees list */
 
 /* Pagination */

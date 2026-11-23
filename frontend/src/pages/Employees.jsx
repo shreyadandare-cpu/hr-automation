@@ -65,7 +65,7 @@ export default function Employees() {
   const [refreshing, setRefreshing] = useState(false);
   const nav = useNavigate();
   const [q, setQ] = useState("");
-  const [former, setFormer] = useState(false);
+  const [former, setFormer] = useState(true);   // people who have left stay in the list, marked Exited; HR can hide them
   const [size, setSize] = useState(10);
   const [page, setPage] = useState(1);
   const [params, setParams] = useSearchParams();
@@ -119,16 +119,18 @@ export default function Employees() {
           <div className="filters">
             <select className="input" aria-label="Department" value={dept} onChange={(e) => setDept(e.target.value)}><option value="">All departments</option>{depts.map((d) => <option key={d}>{d}</option>)}</select>
             <input className="input grow" placeholder="Search by name, ID, project, location or email" aria-label="Search employees" value={q} onChange={(e) => setQ(e.target.value)} />
-            <span className="muted">Showing {shown.length} of {(people || []).filter((p) => p.status !== "offboarded").length}</span>
+            {seesFormer && formerCount > 0 && <label className="former-toggle"><input type="checkbox" checked={former} onChange={(e) => { setFormer(e.target.checked); setPage(1); }} />Show exited ({formerCount})</label>}
+            <span className="muted">Showing {shown.length} of {(people || []).filter((p) => showFormer || p.status !== "offboarded").length}</span>
           </div>
         </div>
         {shown.length ? (
           <div className="dir-grid">
             {shown.map((p) => (
-              <Link key={p.email} className="card dir-card" to={`/app/employees/${encodeURIComponent(p.email)}`}>
+              <Link key={p.email} className={`card dir-card${p.status === "offboarded" ? " former" : ""}`} to={`/app/employees/${encodeURIComponent(p.email)}`}>
                 <span className="avatar dir-av" style={{ background: p.color }}>{p.name.split(/\s+/).map((x) => x[0]).slice(0, 2).join("").toUpperCase()}</span>
                 <span className="dir-t">
                   <b>{p.name}</b>
+                  {(p.status === "offboarded" || p.status === "offboarding") && <span><Pill tone={STATUS[p.status][1]}>{STATUS[p.status][0]}{p.status === "offboarded" && p.lastDay ? ` · ${shortDate(p.lastDay)}` : ""}</Pill></span>}
                   {(() => { const l = presenceLabel(presence[String(p.email).toLowerCase()]); return l ? <span><Pill tone={l[1]}>{l[0]}</Pill></span> : null; })()}
                   <span className="dir-role">{p.title && p.title !== "—" ? p.title : "Wohlig"}</span>
                   <span><i>Department</i>{p.dept && p.dept !== "—" ? p.dept : "Not set"}</span>
@@ -145,7 +147,7 @@ export default function Employees() {
       <SectionHead title="Employees" sub="Everyone with a record here, and which tools they can use right now." tabs={views}
         actions={<>
           {managesTools && claudeMode !== "simulated" && <button type="button" className="btn glass sm" disabled={refreshing} onClick={refreshClaude}>{refreshing ? "Checking…" : "Refresh Claude status"}</button>}
-          {seesFormer && formerCount > 0 && <label className="former-toggle"><input type="checkbox" checked={former} onChange={(e) => { setFormer(e.target.checked); setPage(1); }} />Show former employees ({formerCount})</label>}
+          {seesFormer && formerCount > 0 && <label className="former-toggle"><input type="checkbox" checked={former} onChange={(e) => { setFormer(e.target.checked); setPage(1); }} />Show exited employees ({formerCount})</label>}
           <input className="input" placeholder="Search by name, ID, project, location or email" aria-label="Search employees" value={q} onChange={(e) => { setQ(e.target.value); setPage(1); }} />
         </>} />
       {team.length > 0 && (

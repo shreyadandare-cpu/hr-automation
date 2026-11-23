@@ -33,7 +33,7 @@ const call = async (token, method, path, body) => {
   const r = await fetch(BASE + path, { method, headers: { cookie: `sid=${token}`, ...(body ? { "content-type": "application/json" } : {}) }, body: body ? JSON.stringify(body) : undefined });
   return { status: r.status, data: await r.json().catch(() => null) };
 };
-const PAY = ["/api/payslips", "/api/payslips/2026-01", "/api/payslips/2026-01/pdf", "/api/payroll/overview", "/api/finance/periods", "/api/tax-declaration", "/api/tax-declarations"];
+const PAY = ["/api/payslips", "/api/payslips/2026-01", "/api/payslips/2026-01/pdf", "/api/tax-declaration"];   // a person's own pay; payroll and finance are guarded by their permissions instead
 const now = () => Math.floor(Date.now() / 1000 / 30);
 /** A right code for this moment; the stored "last code used" is moved back first, standing in for a new 30 seconds having passed. */
 const code = async (email, secret) => { await db.query("UPDATE pay_totp SET last_step=$2 WHERE email=$1", [email, now() - 3]); return totp(secret, now()); };
@@ -60,9 +60,17 @@ try {
   const a1 = await login(A), a2 = await login(A), b1 = await login(B), hr1 = await login(HR, "hr");
 
   // 1. Nothing opens without Pay security, even for HR, and a person with nothing set up is told to set it up.
-  for (const p of PAY) { r = await call(a1, "GET", p); ok(`nothing set up yet: ${p} is refused (423; payroll answers 403 first to someone without payroll access)`, (r.status === 423 && r.data.code === "PAY_SETUP") || (p === "/api/payroll/overview" && r.status === 403), `${r.status} ${JSON.stringify(r.data)}`); }
-  for (const p of ["/api/payroll/overview", "/api/finance/periods"]) { r = await call(hr1, "GET", p); ok(`HR before unlocking: ${p} is refused (423)`, r.status === 423, String(r.status)); }
-  ok("status: nothing set up, not unlocked", JSON.stringify((await call(a1, "GET", "/api/pay/status")).data) === JSON.stringify({ enrolled: false, totp: false, passkeys: 0, pin: false, unlocked: false, idleSeconds: 120, recoverOk: false, lockedOutMinutes: 0, pinLockedOutMinutes: 0 }));
+  for (const p of PAY) { r = await call(a1, "GET", p); ok(`nothing set up yet: ${p} is refused (423)`, r.status === 423 && r.data.code === "PAY_SETUP", `${r.status} ${JSON.stringify(r.data)}`); }
+  for (const p of ["/api/payroll/overview", "/api/finance/periods", "/api/tax-declarations"]) { r = await call(hr1, "GET", p); ok(`HR with nothing unlocked: ${p} opens (its own permission guards it, not the Pay lock)`, r.status === 200, String(r.status)); }
+  for (const p of ["/api/payroll/overview", "/api/finance/periods", "/api/tax-declarations"]) { r = await call(a1, "GET", p); ok(`an employee without the permission is still refused: ${p} (403, not 423)`, r.status === 403, String(r.status)); }
+  // Someone else's payslips (from their profile) are guarded by payroll.view, not by the Pay lock; a person's own are behind the lock.
+  await db.query("INSERT INTO employees (name, work_email, status, start_date) VALUES ('Sec Aye', $1, 'active', '2026-01-01') ON CONFLICT DO NOTHING", [A]);
+  r = await call(hr1, "GET", `/api/payslips?email=${A}`);
+  ok("HR opens another person's payslip list from their profile without the Pay lock (200)", r.status === 200 && Array.isArray(r.data.payslips), `${r.status} ${JSON.stringify(r.data)}`);
+  ok("the same list asked for one's own pay is behind the lock (423)", (await call(hr1, "GET", `/api/payslips?email=${HR}`)).status === 423);
+  ok("an employee asking for someone else's payslips is refused by permission (403, not 423)", (await call(a1, "GET", `/api/payslips?email=${HR}`)).status === 403);
+  ok("the payslip PDF can be asked to open in the browser (inline) for another person: no payslip yet, so 404 not 423", [404].includes((await call(hr1, "GET", `/api/payslips/2026-01/pdf?email=${A}&view=1`)).status));
+  ok("status: nothing set up, not unlocked", JSON.stringify((await call(a1, "GET", "/api/pay/status")).data) === JSON.stringify({ enrolled: false, totp: false, passkeys: 0, pin: false, unlocked: false, idleSeconds: 900, recoverOk: false, lockedOutMinutes: 0, pinLockedOutMinutes: 0 }));
   ok("signed out: the endpoints answer 401", (await fetch(BASE + "/api/pay/status")).status === 401);
 
   // 2. Setting up needs proof of identity first.
@@ -120,11 +128,11 @@ try {
   // 6. The unlock runs out, can be extended by the heartbeat, ends on sign-out.
   ok("the heartbeat keeps an open Pay open", (await call(a2, "POST", "/api/pay/touch")).status === 200);
   await db.query("UPDATE sessions SET pay_unlocked_until = now() - interval '1 second' WHERE token_hash=$1", [sha(a2)]);
-  ok("after 2 idle minutes pay endpoints refuse again (423)", (await call(a2, "GET", "/api/payslips")).status === 423);
+  ok("after the idle time pay endpoints refuse again (423)", (await call(a2, "GET", "/api/payslips")).status === 423);
   ok("and the heartbeat cannot bring it back (423)", (await call(a2, "POST", "/api/pay/touch")).status === 423);
   await call(a2, "POST", "/api/pay/totp/unlock", { code: await code(A, secret) });
-  await db.query("UPDATE sessions SET pay_unlocked_at = now() - interval '61 minutes' WHERE token_hash=$1", [sha(a2)]);
-  ok("never more than an hour in one go (423)", (await call(a2, "GET", "/api/payslips")).status === 423);
+  await db.query("UPDATE sessions SET pay_unlocked_at = now() - interval '481 minutes' WHERE token_hash=$1", [sha(a2)]);
+  ok("never more than 8 hours in one go (423)", (await call(a2, "GET", "/api/payslips")).status === 423);
   await db.query("DELETE FROM sessions WHERE token_hash=$1", [sha(a2)]);
   ok("signing out ends everything (session gone: 401)", (await call(a2, "GET", "/api/payslips")).status === 401);
 
@@ -217,6 +225,7 @@ finally {
   await db.query("DELETE FROM sessions WHERE lower(email) IN ($1,$2,$3,$4)", [A, B, HR, P]);
   for (const t of ["pay_totp", "pay_passkeys", "pay_pin_otps", "pay_pins"]) await db.query(`DELETE FROM ${t} WHERE email IN ($1,$2,$3,$4)`, [A, B, HR, P]);
   await db.query("DELETE FROM pay_challenges WHERE token_hash NOT IN (SELECT token_hash FROM sessions)");
+  await db.query("DELETE FROM employees WHERE work_email=$1", [A]);
   await db.query("DELETE FROM users WHERE email IN ($1,$2,$3,$4)", [A, B, HR, P]);
   await db.query("DELETE FROM audit_log WHERE work_email IN ($1,$2,$3,$4) AND action ILIKE '%pay%'", [A, B, HR, P]);
   await db.end();

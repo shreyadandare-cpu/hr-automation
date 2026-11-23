@@ -25,7 +25,7 @@ export function leaving(p) {
   const d = new Date(), today = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
   return p.lastDay < today ? ["Left", "bad"] : ["Leaving", "warn"];
 }
-export const STATUS = { onboarding: ["Onboarding", "info"], active: ["Active", "ok"], offboarding: ["Offboarding", "warn"], offboarded: ["Offboarded", "mute"] };
+export const STATUS = { onboarding: ["Onboarding", "info"], active: ["Active", "ok"], offboarding: ["Offboarding", "warn"], offboarded: ["Exited", "mute"] };
 
 /** One person, built from the server's roster row, their tool access and any offboarding in progress. */
 export function buildPerson(r, i, toolRows, offs) {

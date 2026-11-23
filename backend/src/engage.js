@@ -36,7 +36,8 @@ async function namesFor(emails) {
 
 export function engageRouter(wrap) {
   const r = express.Router();
-  r.use(["/api/tax-declaration", "/api/tax-declarations"], requireAuth, requirePayUnlock);   // tax declarations are pay: behind Pay security (pay-security.js)
+  r.use("/api/tax-declaration", requireAuth, requirePayUnlock);   // a person's own tax declaration is personal pay: behind Pay security (pay-security.js). The HR list of everyone's (/api/tax-declarations) is not: it is guarded by its permission.
+  r.use("/api/tax-declarations", requireAuth);
   r.use(["/api/polls", "/api/praise", "/api/rewards", "/api/articles", "/api/apps", "/api/requests", "/api/remote-today", "/api/tax-declaration", "/api/goals"], requireAuth);
 
   r.use("/api/polls", unlessHidden("polls"));

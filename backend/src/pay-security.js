@@ -11,10 +11,10 @@ import { MAROON, PRODUCT } from "./brand.js";
    - Opening Pay needs one of the things the person set up: the fingerprint (Touch ID, Face ID or the device's own unlock, through a passkey),
      the 6-digit code from an authenticator app (Google Authenticator, Microsoft Authenticator, Authy...), or, for a device with no
      fingerprint reader, a 6-digit PIN (only a salted hash is stored: HMAC with the server secret, then scrypt).
-   - A correct check unlocks THIS browser session only (sessions.pay_unlocked_until), for 2 minutes after the last sign of activity
-     (the page sends a quiet heartbeat while the person is active), and never longer than an hour in one go.
-   - requirePayUnlock guards every pay endpoint (payslips, payroll, finance reports, tax declarations): a direct call without a live
-     unlock gets 423. The browser's lock screen is only a convenience; this is the lock.
+   - A correct check unlocks THIS browser session only (sessions.pay_unlocked_until), for 15 minutes after the last sign of activity
+     (the page sends a quiet heartbeat while the person is active), and never longer than 8 hours in one go. Both are settings.
+   - requirePayUnlock guards the personal pay endpoints (a person's own payslips and tax declaration): a direct call without a live
+     unlock gets 423. Payroll and finance reports are not behind it; their own permissions guard them. The browser's lock screen is only a convenience; this is the lock.
    - 5 wrong authenticator codes (or 5 wrong PINs) lock those checks for 15 minutes. An authenticator code is accepted once only. Locking, signing out, a reset or the
      session ending all end the unlock.
    - Setting up (the first time, or after a lost phone) first needs proof it is the person: a 6-digit code emailed to their own work
@@ -22,8 +22,8 @@ import { MAROON, PRODUCT } from "./brand.js";
      the same person. Either sets sessions.pay_recover_until and clears the old fingerprints, authenticator and PIN, so a lost device stops working.
    - Authenticator secrets are stored encrypted (AES-256-GCM, keyed from PAY_PIN_PEPPER); passkeys hold only a public key.
    - Every step is written to audit_log in words; neither a code nor any salary figure is ever logged. */
-export const IDLE_SECONDS = 120;          // unlocked for this long after the last activity
-const MAX_UNLOCK_MINUTES = 60;            // and never longer than this in one go
+export const IDLE_SECONDS = (Number(process.env.PAY_IDLE_MINUTES) || 15) * 60;   // unlocked for this long after the last activity (PAY_IDLE_MINUTES, default 15)
+const MAX_UNLOCK_MINUTES = (Number(process.env.PAY_MAX_HOURS) || 8) * 60;          // and never longer than this in one go (PAY_MAX_HOURS, default 8)
 const MAX_FAILS = 5, LOCK_MINUTES = 15;   // wrong authenticator codes, and how long checking stops
 const RECOVER_MINUTES = 10;               // how long proof of identity lets someone set up their security
 const OTP_MINUTES = 10, OTP_TRIES = 5, OTP_RESEND_SECONDS = 60, OTP_PER_HOUR = 5;   // the emailed code
@@ -394,7 +394,7 @@ paySecurityRouter.delete("/passkey/:id", guard(async (req, res) => {
   res.json({ removed: rowCount === 1 });
 }));
 
-// The page calls this about every 25 seconds while the person is active. Without it the unlock runs out after 2 minutes.
+// The page calls this about every 25 seconds while the person is active. Without it the unlock runs out after the idle time.
 paySecurityRouter.post("/touch", guard(async (req, res) => {
   const ok = await openUnlock(sessionKeyOf(req), false);
   if (!ok) return res.status(423).json({ error: "Your Pay section is locked.", code: "PAY_LOCKED" });

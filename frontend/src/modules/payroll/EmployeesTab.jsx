@@ -125,7 +125,7 @@ export default function EmployeesTab() {
   const close = (saved) => { setDlg(null); if (saved) load(); };
   return (
     <div className="card">
-      <div className="card-h"><div><h3>Salary, bank and tax details</h3><div className="muted">{data.employees.length} on the payroll for {monthLabel(data.period)} · FY {data.fy}</div></div>
+      <div className="card-h"><div><h3>Salary, bank and tax details</h3><div className="muted">{data.employees.filter((e) => !e.joinsLater).length} on the payroll for {monthLabel(data.period)}{data.employees.some((e) => e.joinsLater) && <> · {data.employees.filter((e) => e.joinsLater).length} joining later</>} · FY {data.fy}</div></div>
         <button type="button" className="btn glass" onClick={() => setDlg({ kind: "import" })}>Upload salaries (CSV)</button></div>
       {(missingSalary > 0 || missingBank > 0) && <div className="card-b" style={{ paddingTop: 0 }}><Callout>{missingSalary > 0 && <>{missingSalary} without a salary structure (their payroll line is incomplete). </>}{missingBank > 0 && <>{missingBank} without a salary bank account (they can't be in the bank file).</>}</Callout></div>}
       <div className="filters">
@@ -135,7 +135,7 @@ export default function EmployeesTab() {
       <div className="tbl-wrap"><table className="pr-table"><thead><tr><th>Employee</th><th className="hide-sm">Department</th><th className="num">Monthly gross</th><th className="num hide-sm">Annual CTC</th><th>Bank account</th><th>Tax</th><th /></tr></thead><tbody>
         {rows.length ? rows.map((e) => (
           <tr key={e.email}>
-            <td><Person name={e.name} sub={[e.empNo, e.title].filter(Boolean).join(" · ") || e.email} />{e.lastDay && <div className="muted">Last day {e.lastDay}</div>}</td>
+            <td><Person name={e.name} sub={[e.empNo, e.title].filter(Boolean).join(" · ") || e.email} />{e.lastDay && <div className="muted">Last day {e.lastDay}</div>}{e.joinsLater && <div><Pill tone="info">Joins {new Date(`${e.start}T00:00:00`).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}</Pill></div>}</td>
             <td className="hide-sm">{e.dept}</td>
             <td className="num">{e.salary ? <>{money(e.salary.monthlyGross)}<div className="muted">from {monthLabel(e.salary.effectiveFrom)}</div></> : <Pill tone="bad">Not set</Pill>}</td>
             <td className="num hide-sm">{e.salary && e.salary.annualCtc ? money(e.salary.annualCtc) : "—"}</td>

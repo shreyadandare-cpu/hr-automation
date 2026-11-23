@@ -3,7 +3,8 @@
 // figures for that year, and only leave taken after that date comes off it (frontend/leave-rules.cjs, employees.leave_opening).
 //   node scripts/import-leave-balances.mjs <file.json>           shows what would be saved (nothing is written)
 //   node scripts/import-leave-balances.mjs <file.json> --apply   saves it, in one transaction, and writes one audit line per person
-// The file: { "asOf": "2026-11-23", "source": "Keka report", "people": [{ "no": "WT/61", "name": "Abdul Majid", "casual": 0, "sick": 1.5, "compoff": 0 }, ...] }
+// The file: { "asOf": "2026-11-23", "source": "Keka report", "people": [{ "no": "WT/61", "name": "Abdul Majid", "casual": 0, "sick": 1.5, "compoff": 0,
+//   "casualQuota": 12, "casualUsed": 16, "sickQuota": 6, "sickUsed": 4.5, "compoffUsed": 0, "unpaidUsed": 0 }, ...] }   (the last six are optional: the year's quota and days used)
 // People are matched by employee number, then by first and last name; anyone not matched exactly once is listed and left alone.
 // Safe to run again: the same file just saves the same figures. The file holds people's leave, so keep it out of git.
 import "dotenv/config";
@@ -16,6 +17,7 @@ if (!file) { console.error("Usage: node scripts/import-leave-balances.mjs <file.
 const data = JSON.parse(fs.readFileSync(file, "utf8"));
 if (!L.validDate(data.asOf)) { console.error("The file needs asOf as a date like 2026-11-23."); process.exit(1); }
 const TYPES = ["casual", "sick", "compoff"];
+const EXTRAS = ["casualQuota", "casualUsed", "sickQuota", "sickUsed", "compoffUsed", "unpaidUsed"];   // optional: what the old system showed beside the balance
 
 const noKey = (s) => { const m = String(s || "").trim().toUpperCase().replace(/\s+/g, "").match(/^([A-Z]+)\/?0*(\d+)$/); return m ? `${m[1]}/${Number(m[2])}` : String(s || "").trim().toUpperCase(); };
 const words = (s) => String(s || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().split(/[^a-z0-9]+/).filter(Boolean);
@@ -32,7 +34,7 @@ for (const e of employees) {
 
 const plan = [], skipped = [];
 for (const p of data.people || []) {
-  const bad = TYPES.filter((t) => p[t] !== undefined && p[t] !== null && !(Number(p[t]) >= 0 && Number(p[t]) <= 1000));
+  const bad = [...TYPES, ...EXTRAS].filter((t) => p[t] !== undefined && p[t] !== null && !(Number(p[t]) >= 0 && Number(p[t]) <= 1000));
   if (bad.length) { skipped.push([p.name, `a figure is not a number from 0 to 1000 (${bad.join(", ")})`]); continue; }
   let hit = byNo.get(noKey(p.no)) || [], how = "employee number";
   if (hit.length !== 1) { hit = byName.get(nameKey(p.name)) || []; how = "name"; }
@@ -40,7 +42,7 @@ for (const p of data.people || []) {
   if (hit.length > 1) { skipped.push([`${p.name} (${p.no})`, `matches ${hit.length} people (${hit.map((h) => h.name).join(", ")})`]); continue; }
   const e = hit[0];
   if (e.status === "offboarded") { skipped.push([`${p.name} (${p.no})`, `${e.name} has left`]); continue; }
-  const opening = { asOf: data.asOf, ...Object.fromEntries(TYPES.filter((t) => p[t] !== undefined && p[t] !== null).map((t) => [t, Number(p[t])])) };
+  const opening = { asOf: data.asOf, ...Object.fromEntries([...TYPES, ...EXTRAS].filter((t) => p[t] !== undefined && p[t] !== null).map((t) => [t, Number(p[t])])) };
   plan.push({ e, p, how, opening });
 }
 

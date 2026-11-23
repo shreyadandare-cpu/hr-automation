@@ -34,3 +34,6 @@ backend/attendance-bridge/viewer.log
 backend/attendance-bridge/device-users.txt
 backend/.start-logs/
 backend/attendance-bridge/bridge.old.log
+
+# HR reports with people's personal data (leave balances and the like): keep them out of git
+/LEAVE QUOTA*

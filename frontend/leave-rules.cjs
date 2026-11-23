@@ -65,6 +65,8 @@
    * emp: { start, casualOpening, openings }  requests: that person's requests  compOffs: that person's comp-off credits
    * openings: { asOf, casual, sick, compoff }: the balance of each type on the day (asOf) HR brought the figures over from the
    * previous leave system. For that year the balance starts from it, and only leave on dates after asOf counts against it.
+   * Optional, so the pages can show what the old system showed: casualQuota, casualUsed, sickQuota, sickUsed, compoffUsed (the year's
+   * quota and the days already used up to asOf), and unpaidUsed (loss-of-pay days so far, shown only). Casual carried over is then worked out as balance - quota + used.
    * Approved requests count by their stored paid_days; pending ones are shown separately and not deducted.
    */
   function balances(year, emp, requests, compOffs) {
@@ -79,7 +81,9 @@
       casual = { carried: carry, quota, used, left: carry + quota - used };
       if (has("casual") && y === opYear) {   // brought over: the balance on that day, less only the leave taken after it
         const after = sum(approved.filter((r) => r.type === "casual" && yearOf(r.from) === y && r.from > op.asOf), (r) => r.paidDays);
-        casual = { carried: Number(op.casual), quota: 0, used: after, left: Number(op.casual) - after, opening: { asOf: op.asOf, balance: Number(op.casual) } };
+        const bal = Number(op.casual), rich = op.casualQuota !== undefined && op.casualQuota !== null && op.casualUsed !== undefined && op.casualUsed !== null;
+        const q = rich ? Number(op.casualQuota) : 0, u = rich ? Number(op.casualUsed) : 0;
+        casual = { carried: rich ? bal - q + u : bal, quota: q, used: u + after, left: bal - after, opening: { asOf: op.asOf, balance: bal } };
       }
       carry = Math.max(0, casual.left);   // unused casual leave carries over in full
     }
@@ -93,20 +97,24 @@
     let compoff = { earned, used: compUsed, left: earned - compUsed };
     if (has("sick") && year === opYear) {
       const after = sum(approved.filter((r) => r.type === "sick" && inYear(r) && r.from > op.asOf), (r) => r.paidDays);
-      sick = { quota: Number(op.sick), used: after, left: Number(op.sick) - after, opening: { asOf: op.asOf, balance: Number(op.sick) } };
+      const bal = Number(op.sick), rich = op.sickQuota !== undefined && op.sickQuota !== null && op.sickUsed !== undefined && op.sickUsed !== null;
+      sick = { quota: rich ? Number(op.sickQuota) : bal, used: (rich ? Number(op.sickUsed) : 0) + after, left: bal - after, opening: { asOf: op.asOf, balance: bal } };
     }
     if (has("compoff") && year === opYear) {
       const got = sum(compOffs.filter((c) => (c.status || "approved") === "approved" && yearOf(c.workedOn) === year && c.workedOn > op.asOf), (c) => c.days);
       const after = sum(approved.filter((r) => r.type === "compoff" && inYear(r) && r.from > op.asOf), (r) => r.paidDays);
-      compoff = { earned: Number(op.compoff) + got, used: after, left: Number(op.compoff) + got - after, opening: { asOf: op.asOf, balance: Number(op.compoff) } };
+      const before = Number(op.compoffUsed || 0);
+      compoff = { earned: before + Number(op.compoff) + got, used: before + after, left: Number(op.compoff) + got - after, opening: { asOf: op.asOf, balance: Number(op.compoff) } };
     }
     return {
       casual,
       sick,
       compoff,
-      lopDays: sum(approved.filter(inYear), (r) => r.lopDays),
+      lopDays: (op && year === opYear && op.unpaidUsed !== undefined && op.unpaidUsed !== null ? Number(op.unpaidUsed) : 0) + sum(approved.filter((r) => inYear(r) && (!(op && year === opYear && op.unpaidUsed !== undefined && op.unpaidUsed !== null) || r.from > op.asOf)), (r) => r.lopDays),
       pendingDays: sum(requests.filter((r) => r.status === "pending" && inYear(r)), (r) => r.days),
-      consumed: Object.fromEntries(Object.keys(TYPES).map((t) => [t, sum(approved.filter((r) => r.type === t && inYear(r)), (r) => r.days)])),
+      consumed: Object.fromEntries(Object.keys(TYPES).map((t) => [t, op && year === opYear && (t === "unpaid" ? op.unpaidUsed !== undefined && op.unpaidUsed !== null : has(t))
+        ? Number(op[`${t}Used`] || 0) + sum(approved.filter((r) => r.type === t && inYear(r) && r.from > op.asOf), (r) => r.days)   // brought over: what the old system counted, plus leave after that day
+        : sum(approved.filter((r) => r.type === t && inYear(r)), (r) => r.days)])),
     };
   }
 
@@ -155,7 +163,7 @@
     const gross = monthlyGross ? Number(monthlyGross) : null;
     const encashment = gross ? salaryCut(gross, casualLeft) : null;
     const deduction = gross ? salaryCut(gross, lopDays) : null;
-    return { casualLeft, quota: bal.casual.opening ? 0 : quota, carried: bal.casual.carried, used: bal.casual.used, lopDays, month,
+    return { casualLeft, quota: bal.casual.opening ? bal.casual.quota : quota, carried: bal.casual.carried, used: bal.casual.used, lopDays, month,
       monthlyGross: gross, encashment, deduction, net: gross ? encashment - deduction : null };
   }
 

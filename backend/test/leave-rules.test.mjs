@@ -192,3 +192,28 @@ test("leaving: a brought-over casual balance is paid out as it stands", () => {
   assert.equal(s.quota, 0);
   assert.equal(s.encashment, 4000);
 });
+
+test("with the old system's quota and days used, the pages can show them as it did", () => {
+  const rich = { ...emp, start: "2022-01-01", openings: { asOf: "2026-11-23", casual: 0, casualQuota: 12, casualUsed: 16, sick: 1.5, sickQuota: 6, sickUsed: 4.5, compoff: 1.5, compoffUsed: 8.5 } };
+  const b = L.balances(2026, rich, [taken("casual", "2026-12-01", "2026-12-01", 0)], []);
+  assert.deepEqual([b.casual.left, b.casual.quota, b.casual.carried, b.casual.used], [0, 12, 4, 16]);   // 4 carried + 12 quota - 16 used = 0
+  assert.deepEqual([b.sick.left, b.sick.quota, b.sick.used], [1.5, 6, 4.5]);
+  assert.deepEqual([b.compoff.left, b.compoff.earned, b.compoff.used], [1.5, 10, 8.5]);
+  assert.equal(b.consumed.casual, 16);
+  assert.equal(b.consumed.sick, 4.5);
+  const later = L.balances(2026, rich, [taken("sick", "2026-12-03", "2026-12-03", 1)], []);
+  assert.deepEqual([later.sick.left, later.sick.used, later.consumed.sick], [0.5, 5.5, 5.5]);
+  assert.equal(L.balances(2027, rich, [], []).casual.carried, 0);
+});
+
+test("loss-of-pay days brought over show as taken, and only later ones are added (display only)", () => {
+  const rich = { ...emp, start: "2022-01-01", openings: { asOf: "2026-11-23", unpaidUsed: 3 } };
+  const base = L.balances(2026, rich, [], []);
+  assert.deepEqual([base.lopDays, base.consumed.unpaid], [3, 3]);
+  const lopLater = { type: "unpaid", from: "2026-12-02", to: "2026-12-02", half: null, days: 1, paidDays: 0, lopDays: 1, status: "approved" };
+  const lopEarlier = { ...lopLater, from: "2026-11-02", to: "2026-11-02" };
+  const b = L.balances(2026, rich, [lopLater, lopEarlier], []);
+  assert.deepEqual([b.lopDays, b.consumed.unpaid], [4, 4]);   // the 2 Nov day is already inside the 3
+  assert.equal(L.balances(2027, rich, [], []).lopDays, 0);
+  assert.equal(L.balances(2026, { ...emp, openings: { asOf: "2026-11-23", casual: 1 } }, [lopEarlier], []).lopDays, 1);   // nothing brought over for it: counted as before
+});

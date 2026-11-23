@@ -11,7 +11,7 @@ import { toolsRouter } from "./tools.js";
 import { sessionRouter, accountRouter, usersRouter } from "./users.js";
 import { profileRouter } from "./profile.js";
 import { idCardRouter } from "./id-card.js";
-import { leaveRouter } from "./leave.js";
+import { leaveRouter, loadLeavePolicy } from "./leave.js";
 import { postsRouter } from "./posts.js";
 import { engageRouter } from "./engage.js";
 import { hrToolsRouter } from "./hr-tools.js";
@@ -110,6 +110,7 @@ app.use((err, _req, res, _next) => {
 
 await initDb();
 if (payPool !== pool) { await initDb(payPool, PAY_SCHEMA); console.log("Payroll and payslips use their own database (PAYROLL_DATABASE_URL)"); }
+await loadLeavePolicy();   // the leave policy numbers HR has saved
 await initPayroll(payPool);   // payroll workflow tables and starting tax rules (payroll/schema.sql)
 warmPayrollPreview();   // the month's payroll preview, worked out in the background so the first visit is quick
 await bootstrapAuth();

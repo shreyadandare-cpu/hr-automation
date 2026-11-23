@@ -67,9 +67,11 @@ export function LeaveStats({ email, year }) {
 /* The leave list with filters and pages. Shows who asked, who decided and when. `who`: also show the employee column (HR). */
 export function LeaveHistory({ list, who = false, onCancel, title = "Leave history" }) {
   const lv = useLeave();
-  const [f, setF] = useState({ type: "", status: "", q: "" });
+  const [f, setF] = useState({ type: "", status: "", q: "", dept: "" });
   const nameOf = (e) => (e ? (lv.empBy(e) || {}).name || e : "—");
-  const rows = list.filter((r) => (!f.type || r.type === f.type) && (!f.status || r.status === f.status)
+  const deptOf = (e) => ((lv.empBy(e) || {}).dept) || "";
+  const depts = [...new Set(list.map((r) => deptOf(r.email)).filter((d) => d && d !== "—"))].sort();
+  const rows = list.filter((r) => (!f.type || r.type === f.type) && (!f.status || r.status === f.status) && (!f.dept || deptOf(r.email) === f.dept)
     && (!f.q || lc(`${r.reason} ${nameOf(r.email)} ${LTYPE[r.type]}`).includes(lc(f.q))))
     .sort((a, b) => (a.from < b.from ? 1 : a.from > b.from ? -1 : b.id - a.id));
   const { rows: page, pager } = usePaged(rows, JSON.stringify(f) + list.length);
@@ -80,9 +82,11 @@ export function LeaveHistory({ list, who = false, onCancel, title = "Leave histo
           <select value={f.type} onChange={(e) => setF({ ...f, type: e.target.value })}><option value="">All types</option>{TYPES.map((t) => <option key={t} value={t}>{LTYPE[t]}</option>)}</select></label>
         <label className="lv-fsel"><span>Status</span>
           <select value={f.status} onChange={(e) => setF({ ...f, status: e.target.value })}><option value="">All status</option>{Object.keys(LSTAT).map((s) => <option key={s} value={s}>{LSTAT[s][0]}</option>)}</select></label>
+        {who && depts.length > 1 && <label className="lv-fsel"><span>Department</span>
+          <select value={f.dept} onChange={(e) => setF({ ...f, dept: e.target.value })}><option value="">All departments</option>{depts.map((d) => <option key={d} value={d}>{d}</option>)}</select></label>}
         <label className="lv-fsearch"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7" /><path d="m20 20-3.5-3.5" /></svg>
           <input type="search" placeholder={who ? "Search name, type or note" : "Search notes"} aria-label="Search leave" value={f.q} onChange={(e) => setF({ ...f, q: e.target.value })} /></label>
-        {(f.type || f.status || f.q) && <button type="button" className="btn link" onClick={() => setF({ type: "", status: "", q: "" })}>Clear filters</button>}
+        {(f.type || f.status || f.q || f.dept) && <button type="button" className="btn link" onClick={() => setF({ type: "", status: "", q: "", dept: "" })}>Clear filters</button>}
       </div>
       <div className="tbl-wrap"><table className="lv-hist">
         <thead><tr>{who && <th>Employee</th>}<th>Leave dates</th><th>Leave type</th><th>Status</th><th className="hide-sm">Requested by</th><th className="hide-sm">Action taken on</th><th className="hide-sm">Leave note</th>{onCancel && <th><span className="sr">Actions</span></th>}</tr></thead>
@@ -91,7 +95,7 @@ export function LeaveHistory({ list, who = false, onCancel, title = "Leave histo
             {who && <td><b>{nameOf(r.email)}</b></td>}
             <td><b>{rangeText(r, shortDate)}</b><small>{r.status === "approved" ? <>{dd(r.paidDays)} paid{r.lopDays ? <>, <span style={{ color: "var(--bad)" }}>{dd(r.lopDays)} loss of pay</span></> : null}</> : dd(r.days)}</small></td>
             <td>{LTYPE[r.type]}<small>Requested on {when(r.createdAt)}</small></td>
-            <td><Pill tone={LSTAT[r.status][1]}>{LSTAT[r.status][0]}</Pill>{r.status === "pending" ? <small>Waiting for {lv.approverName(r.email)}</small> : r.decidedBy ? <small>by {nameOf(r.decidedBy)}</small> : null}</td>
+            <td><Pill tone={LSTAT[r.status][1]}>{LSTAT[r.status][0]}</Pill>{r.status === "pending" ? <small>Waiting for {lv.approverName(r.email)}</small> : r.decidedBy ? <small>by {nameOf(r.decidedBy)}</small> : null}{r.note && <small className="lv-decnote">{r.status === "declined" ? "Reason" : "Comment"}: {r.note}</small>}</td>
             <td className="hide-sm">{r.createdBy ? nameOf(r.createdBy) : "—"}</td>
             <td className="hide-sm">{r.status === "pending" ? "—" : when(r.decidedAt)}</td>
             <td className="hide-sm lv-note">{r.reason}</td>

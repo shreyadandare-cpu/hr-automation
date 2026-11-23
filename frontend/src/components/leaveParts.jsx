@@ -11,15 +11,35 @@ import { HolidayTiles } from "./leaveSummary.jsx";
 /* Approve and decline buttons for people who may decide, otherwise who it is waiting for. kind: "requests" or "comp-offs". */
 export function DecideButtons({ kind, id, email }) {
   const lv = useLeave(), { reloadLeave } = useData(), toast = useToast();
+  const [ask, setAsk] = useState(null), [note, setNote] = useState(""), [busy, setBusy] = useState(false), [err, setErr] = useState("");
   if (!lv.canDecide(email)) return <Pill tone="warn">Waiting for {lv.approverName(email)}</Pill>;
-  const decide = async (decision) => {
-    const r = await api("POST", `/api/leave/${kind}/${id}/decision`, { decision });
-    if (!r.ok) { toast(apiMsg(r)); return; }
+  const send = async (decision, text) => {
+    setBusy(true); setErr("");
+    const r = await api("POST", `/api/leave/${kind}/${id}/decision`, kind === "requests" ? { decision, note: text } : { decision });
+    setBusy(false);
+    if (!r.ok) { setErr(apiMsg(r)); if (kind !== "requests") toast(apiMsg(r)); return; }
     const who = (lv.empBy(email) || {}).name || email;
     toast(kind === "requests" ? `Leave for ${who} ${decision}${decision === "approved" && r.data.lopDays ? `, ${r.data.lopDays} loss of pay` : ""}.` : `Comp off for ${who} ${decision}.`);
-    reloadLeave();
+    setAsk(null); setNote(""); reloadLeave();
   };
-  return <div className="row" style={{ gap: 8 }}><button type="button" className="btn glass sm" onClick={() => decide("declined")}>Decline</button><button type="button" className="btn primary sm" onClick={() => decide("approved")}>Approve</button></div>;
+  // A leave request asks for a comment first (a reason is needed to decline); a comp-off credit is decided in one click.
+  const open = (decision) => (kind === "requests" ? (setNote(""), setErr(""), setAsk(decision)) : send(decision));
+  return (
+    <div className="row" style={{ gap: 8 }}>
+      <button type="button" className="btn glass sm" onClick={() => open("declined")}>Decline</button>
+      <button type="button" className="btn primary sm" onClick={() => open("approved")}>Approve</button>
+      {ask && (
+        <Modal onClose={() => !busy && setAsk(null)}><form onSubmit={(ev) => { ev.preventDefault(); if (ask === "declined" && !note.trim()) return setErr("Add a reason for declining, so the employee knows why."); send(ask, note.trim()); }} noValidate>
+          <div className="card-h" style={{ paddingTop: 24 }}><h3>{ask === "approved" ? "Approve this leave" : "Decline this leave"}</h3></div>
+          <div className="card-b">
+            <Field id="dc-note" label={ask === "approved" ? "Comment for the employee (optional)" : "Reason for declining"} error={err}>
+              <textarea className="input" id="dc-note" rows={3} maxLength={500} autoFocus value={note} onChange={(ev) => setNote(ev.target.value)} placeholder={ask === "approved" ? "For example: Enjoy the break, please hand over before you leave." : "For example: The release is that week, please pick another date."} /></Field>
+          </div>
+          <div className="modal-f"><button type="button" className="btn glass" disabled={busy} onClick={() => setAsk(null)}>Cancel</button>
+            <button type="submit" className={`btn ${ask === "approved" ? "primary" : "danger"}`} disabled={busy}>{busy ? "Saving…" : ask === "approved" ? "Approve" : "Decline"}</button></div>
+        </form></Modal>)}
+    </div>
+  );
 }
 
 /* Errors from the server come back as { errors: { field: message } }. */
@@ -159,4 +179,60 @@ function HolidayModal({ holiday, onClose }) {
 export function HolidayCalendar({ editable }) {
   const [editing, setEditing] = useState(null);
   return <>{<HolidayTiles editable={editable} onEdit={setEditing} />}{editing && <HolidayModal holiday={editing} onClose={() => setEditing(null)} />}</>;
+}
+
+/* HR corrects what someone has left of each paid type today. It needs a reason, and it is written to the audit log with who changed it. */
+export function BalanceModal({ email, onClose }) {
+  const lv = useLeave(), { reloadLeave } = useData(), toast = useToast();
+  const e = lv.empBy(email), b = e ? lv.bal(e, Number(lv.today.slice(0, 4))) : null;
+  const [f, setF] = useState(() => ({ casual: b ? b.casual.left : "", sick: b ? b.sick.left : "", compoff: b ? b.compoff.left : "", reason: "" })), [er, setEr] = useState({}), [busy, setBusy] = useState(false);
+  if (!e || !b) return null;
+  const set = (k) => (ev) => setF({ ...f, [k]: ev.target.value });
+  const submit = async (ev) => {
+    ev.preventDefault(); setBusy(true);
+    const r = await api("PUT", `/api/leave/balances/${encodeURIComponent(e.email)}`, f);
+    setBusy(false);
+    if (!r.ok) { setEr(errorsOf(r)); if (!Object.keys(errorsOf(r)).length) toast(apiMsg(r)); return; }
+    toast(r.data.changed ? `Balances corrected for ${e.name}.` : "Nothing was changed."); reloadLeave(); onClose();
+  };
+  const rows = [["casual", "Casual leave left", b.casual.left], ["sick", "Sick leave left", b.sick.left], ["compoff", "Comp off left", b.compoff.left]];
+  return (
+    <Modal onClose={() => !busy && onClose()}><form onSubmit={submit} noValidate>
+      <div className="card-h" style={{ paddingTop: 24 }}><h3>Correct balances: {e.name}</h3></div>
+      <div className="card-b">
+        <div className="muted" style={{ fontSize: 13 }}>Enter the days they have left today. Leave on later dates still comes off these figures. Every change is recorded with your name and the reason.</div>
+        {rows.map(([k, label, now]) => <Field key={k} id={`lb-${k}`} label={label} hint={`Now ${now}`} error={er[k]}><input className="input" type="number" min="0" max="1000" step="0.25" id={`lb-${k}`} value={f[k]} onChange={set(k)} /></Field>)}
+        <Field id="lb-reason" label="Why is this being corrected?" error={er.reason || er.form}><input className="input" id="lb-reason" maxLength={300} placeholder="For example: 2 days missed from the old system" value={f.reason} onChange={set("reason")} /></Field>
+      </div>
+      <div className="modal-f"><button type="button" className="btn glass" disabled={busy} onClick={onClose}>Cancel</button><button type="submit" className="btn primary" disabled={busy}>{busy ? "Saving…" : "Save correction"}</button></div>
+    </form></Modal>
+  );
+}
+
+/* HR changes the leave policy numbers. They are saved on the server and every page uses them straight away. */
+export function PolicySettingsModal({ onClose }) {
+  const { reloadLeave } = useData(), toast = useToast();
+  const [f, setF] = useState(() => ({ casualPerYear: R.POLICY.casualPerYear, sickPerYear: R.POLICY.sickPerYear, sickBackdateDays: R.POLICY.sickBackdateDays, lopDivisor: R.POLICY.lopDivisor })), [er, setEr] = useState({}), [busy, setBusy] = useState(false);
+  const set = (k) => (ev) => setF({ ...f, [k]: ev.target.value });
+  const submit = async (ev) => {
+    ev.preventDefault(); setBusy(true);
+    const r = await api("PUT", "/api/leave/policy", f);
+    setBusy(false);
+    if (!r.ok) { setEr(errorsOf(r)); if (!Object.keys(errorsOf(r)).length) toast(apiMsg(r)); return; }
+    if (!r.data.changed) { toast("No changes to save."); return onClose(); }
+    Object.assign(R.POLICY, r.data.policy); toast("Leave policy saved."); reloadLeave(); onClose();
+  };
+  return (
+    <Modal onClose={() => !busy && onClose()}><form onSubmit={submit} noValidate>
+      <div className="card-h" style={{ paddingTop: 24 }}><h3>Leave policy</h3></div>
+      <div className="card-b">
+        <div className="muted" style={{ fontSize: 13 }}>These numbers apply to everyone from now on. People who joined mid-year get a share for the months left in their first year. Balances brought over from another system stay as they are.</div>
+        <Field id="lpo-casual" label="Casual leave days a year" hint="Unused casual leave carries over to the next year." error={er.casualPerYear}><input className="input" type="number" min="0" max="60" step="0.5" id="lpo-casual" value={f.casualPerYear} onChange={set("casualPerYear")} /></Field>
+        <Field id="lpo-sick" label="Sick leave days a year" hint="Unused sick leave lapses on 31 December." error={er.sickPerYear}><input className="input" type="number" min="0" max="60" step="0.5" id="lpo-sick" value={f.sickPerYear} onChange={set("sickPerYear")} /></Field>
+        <Field id="lpo-back" label="Days after the date sick leave can still be applied" error={er.sickBackdateDays}><input className="input" type="number" min="0" max="30" step="1" id="lpo-back" value={f.sickBackdateDays} onChange={set("sickBackdateDays")} /></Field>
+        <Field id="lpo-lop" label="Loss-of-pay divisor" hint="A loss-of-pay day cuts monthly gross divided by this number." error={er.lopDivisor}><input className="input" type="number" min="20" max="31" step="1" id="lpo-lop" value={f.lopDivisor} onChange={set("lopDivisor")} /></Field>
+      </div>
+      <div className="modal-f"><button type="button" className="btn glass" disabled={busy} onClick={onClose}>Cancel</button><button type="submit" className="btn primary" disabled={busy}>{busy ? "Saving…" : "Save policy"}</button></div>
+    </form></Modal>
+  );
 }

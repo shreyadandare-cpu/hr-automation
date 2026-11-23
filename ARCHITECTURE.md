@@ -14,7 +14,7 @@ tags:
   - postgres
 repo: hr-automation
 role: Wohlig's internal HR portal — one Express API plus a React interface, on Postgres
-updated: 2026-11-20
+updated: 2026-11-23
 ---
 
 # Wohlig One — Architecture
@@ -282,7 +282,7 @@ All paths below were read from the code. Unless noted, a signed-in session is re
 | Onboarding | `GET/POST /api/onboarding`, `GET/PUT/DELETE /api/onboarding/draft`, `GET /api/onboarding/next-employee-no`, `POST /api/onboarding/work-email`, `GET /api/work-email` | HR |
 | Offboarding | `GET/POST /api/offboarding`, `POST /api/offboarding/:id/run`, `/cancel`, `/steps/:key`, `/steps/:key/retry`, `/clearance/complete`, `GET /api/offboarding/:id/clearance`, `GET/POST /api/advances` | HR |
 | Profile and documents | `GET/PUT /api/profile`, `PUT/GET/DELETE /api/profile/photo`, `GET /api/documents`, `PUT /api/documents/:docKey`, `GET /api/documents/:id/file` | Own data |
-| Leave | `GET /api/leave`, `GET /api/leave/today`, `POST /api/leave/requests`, `POST /api/leave/requests/:id/decision`, `POST /api/leave/requests/:id/cancel`, `POST /api/leave/comp-off-requests`, `POST/PUT/DELETE /api/leave/holidays`, `GET /api/leave/salary-cuts` | Everyone; decisions by approver or HR |
+| Leave | `GET /api/leave`, `GET /api/leave/today`, `POST /api/leave/requests`, `POST /api/leave/requests/:id/decision` (a decline needs a reason, an approval may carry a comment), `POST /api/leave/requests/:id/cancel`, `PUT /api/leave/balances/:email` (HR corrects casual, sick and comp-off balances, with a reason; audited), `GET/PUT /api/leave/policy` (HR changes the policy numbers), `POST /api/leave/comp-off-requests`, `POST/PUT/DELETE /api/leave/holidays`, `GET /api/leave/salary-cuts` | Everyone; decisions by approver or HR; balance corrections and the policy by `leave.manage` |
 | Holiday list upload | `GET /api/leave/holidays/template?year=`, `POST /api/leave/holidays/import` (preview, saves nothing), `POST /api/leave/holidays/import/apply` | `leave.manage` (company-wide); the sheet is read by `holiday-import.js` and each row is saved like the 2026 holidays, marked `imported` |
 | Attendance | `GET /api/attendance/today`, `/presence` (who is in, not in yet or on leave today; shown on Employees and the dashboard head; off-site people left out), `/month`, `/day`, `/report`, `POST /api/attendance/punch`, `POST /api/attendance/punches`, `PUT /api/attendance/work-site` (HR: On-site or Off-site) | Everyone; team data for managers and HR |
 | Device | `POST /api/attendance/device/punches` (device key, no session), `GET/PUT /api/attendance/device/users` | Connector; HR |
@@ -425,7 +425,8 @@ People are linked mostly by work email (text, compared in lower case), not by fo
 | `onboarding_drafts` | One unsaved onboarding form per HR user | keyed by HR email |
 | `audit_log` | Every recorded action (`action`, `work_email`, `ts`) | by email |
 | `documents`, `profiles`, `profile_photos` | Uploaded documents, profile sections, photo | by email |
-| `leave_requests`, `comp_off_credits`, `holidays` | Leave, comp-off credit, holiday calendar | by email |
+| `leave_requests`, `comp_off_credits`, `holidays` | Leave, comp-off credit, holiday calendar. A decided request keeps the approver's comment or the reason for a decline (`decision_note`). | by email |
+| `leave_policy` | The policy numbers HR can change (casual and sick days a year, loss-of-pay divisor, days sick leave can be applied late). A missing key uses the default in `leave-rules.cjs`. | `key` |
 | `projects`, `employee_project_allocations` | Projects and who works on them | FK to `employees`, `projects` |
 | `attendance_punches`, `device_users`, `device_unmatched` | Punches, device ID links, punches waiting for a link | FK to `employees` |
 | `offboardings`, `offboarding_steps`, `offboarding_clearances` | Offboarding record, its steps, confirmed settlements | steps and clearances FK to `offboardings` |

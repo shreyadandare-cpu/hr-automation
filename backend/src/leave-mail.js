@@ -60,13 +60,13 @@ export const TEMPLATES = {
   approved_employee: (f) => ({
     subject: `Your leave is approved: ${f.type}, ${f.dates}`,
     body: lines(`Hello ${f.name},`, "", `${f.actorName} has approved your leave.`, "",
-      `Type: ${f.type}`, `Dates: ${f.dates}`, `Days: ${f.days}`, f.lopDays ? `Paid days: ${f.paidDays}` : null, f.lopDays ? `Loss of pay: ${f.lopDays} (deducted from salary)` : null, "",
+      `Type: ${f.type}`, `Dates: ${f.dates}`, `Days: ${f.days}`, f.lopDays ? `Paid days: ${f.paidDays}` : null, f.lopDays ? `Loss of pay: ${f.lopDays} (deducted from salary)` : null, f.note ? `Comment: ${f.note}` : null, "",
       `See your leave here: ${f.link}`) + sign,
   }),
   declined_employee: (f) => ({
     subject: `Your leave is declined: ${f.type}, ${f.dates}`,
     body: lines(`Hello ${f.name},`, "", `${f.actorName} has declined your leave request.`, "",
-      `Type: ${f.type}`, `Dates: ${f.dates}`, `Days: ${f.days}`, "", `Please speak to ${f.actorName} if you have questions. See your leave here: ${f.link}`) + sign,
+      `Type: ${f.type}`, `Dates: ${f.dates}`, `Days: ${f.days}`, f.note ? `Reason: ${f.note}` : null, "", `Please speak to ${f.actorName} if you have questions. See your leave here: ${f.link}`) + sign,
   }),
   // copy to HR
   decided_hr: (f) => ({
@@ -132,7 +132,7 @@ async function fields({ request, compOff, actor, decision }) {
     type: request ? L.TYPES[request.type].name : "Comp off",
     dates: request ? (request.half ? `${day(request.from)} (${L.HALVES[request.half]})` : request.from === request.to ? day(request.from) : `${day(request.from)} to ${day(request.to)}`) : day(compOff.workedOn),
     days: daysText(x.days), paidDays: request ? daysText(request.paidDays ?? x.days) : "", lopDays: request && request.lopDays ? daysText(request.lopDays) : "",
-    reason: x.reason || "—", decision, byHr: !!(request && request.createdBy && request.createdBy !== x.email.toLowerCase()),
+    reason: x.reason || "—", note: (request && request.note) || "", decision, byHr: !!(request && request.createdBy && request.createdBy !== x.email.toLowerCase()),
     notify: (request && request.notify) || [],
   };
 }

@@ -3,7 +3,7 @@ import { Link, Navigate, useSearchParams } from "react-router-dom";
 import { useData } from "../data.jsx";
 import { useAuth } from "../auth.jsx";
 import { PersonCell, Pill, SectionHead, Stat, shortDate, PageSkeleton } from "../components/ui.jsx";
-import { CompOffModal, DecideButtons, HolidayCalendar } from "../components/leaveParts.jsx";
+import { BalanceModal, CompOffModal, DecideButtons, HolidayCalendar, PolicySettingsModal } from "../components/leaveParts.jsx";
 import { CompOffHistory, LeaveHistory, ViewTabs } from "../components/leaveSummary.jsx";
 import { R } from "../lib/leave.js";
 import { LSTAT, LTYPE, dd, lc, rangeText, useLeave } from "../lib/useLeave.js";
@@ -26,7 +26,7 @@ export default function LeaveHr() {
   const { people } = useData();
   const lv = useLeave();
   const [q, setQ] = useState("");
-  const [modal, setModal] = useState(null);   // "comp"
+  const [modal, setModal] = useState(null);   // "comp", "policy", or { balance: email }
   const [params, setParams] = useSearchParams();
   const view = VIEWS.some(([k]) => k === params.get("view")) ? params.get("view") : "requests";
   const setView = (k) => setParams(k === "requests" ? {} : { view: k }, { replace: true });
@@ -45,6 +45,8 @@ export default function LeaveHr() {
   const covered = new Set((lv.L.pay || []).map((p) => lc(p.email)));   // the server sends leave data only for the people this person may see
   const here = people.filter((e) => e.status !== "offboarded" && covered.has(lc(e.email)) && (!q || lc(e.name + e.email).includes(lc(q))));
   const lopNow = lv.lopDaysIn(today.slice(0, 7));
+  // Others in the same team away on those dates (the same approver, pending or approved), so a clash is clear before approving.
+  const clashes = (r) => all.filter((o) => o.id !== r.id && o.email !== r.email && (o.status === "approved" || o.status === "pending") && o.from <= r.to && o.to >= r.from && lv.approverOf(o.email) === lv.approverOf(r.email));
   const waitingForMe = pend.filter((r) => lv.canDecide(r.email)).length + compPend.filter((c) => lv.canDecide(c.email)).length;
 
   return (
@@ -69,6 +71,7 @@ export default function LeaveHr() {
             return (
               <div key={r.id} className="li wrap"><div className="grow"><PersonCell person={r.emp} sub={`${LTYPE[r.type]} · ${rangeText(r, shortDate)} · ${dd(a.paid + a.lop)}`} />
                 <div className="meta" style={{ margin: "6px 0 0 48px" }}>“{r.reason}”</div>
+                {(() => { const c = clashes(r); return c.length ? <div className="meta" style={{ margin: "4px 0 0 48px", color: "var(--warn)" }}>Overlaps with {c.slice(0, 3).map((o) => `${o.emp.name} (${rangeText(o, shortDate)}, ${o.status === "pending" ? "waiting" : "approved"})`).join(", ")}{c.length > 3 ? ` and ${c.length - 3} more` : ""}</div> : null; })()}
                 <div className="meta" style={{ margin: "4px 0 0 48px" }}>If approved now: <b style={{ color: "var(--ink)" }}>{dd(a.paid)} paid</b>{a.lop > 0 && <> · <b style={{ color: "var(--bad)" }}>{dd(a.lop)} loss of pay</b></>}</div></div>
                 <DecideButtons kind="requests" id={r.id} email={r.email} /></div>); })}
           {!pend.length && !compPend.length && <div className="empty">No requests waiting. New ones show up here.</div>}
@@ -80,19 +83,22 @@ export default function LeaveHr() {
       </div>}
 
       {view === "balances" && <div className="card"><div className="card-h"><h3>Balances {year}</h3>
+        {manages && <button type="button" className="btn glass sm" onClick={() => setModal("policy")}>Leave policy</button>}
         <input className="input" placeholder="Search people" aria-label="Search balances" value={q} onChange={(e) => setQ(e.target.value)} style={{ width: 220, borderRadius: 999, padding: "8px 14px" }} /></div>
         <div style={{ padding: "0 24px 12px" }}><span className="muted">{LTYPE.casual} {R.POLICY.casualPerYear} days a year, unused days carry over · {LTYPE.sick} {R.POLICY.sickPerYear} days a year, lapses on 31 Dec · {LTYPE.compoff} earned by working a weekend or holiday, lapses on 31 Dec · {LTYPE.unpaid} is always a salary cut · Half days count as 0.5</span></div>
-        <PagedTable items={here} reset={q} cols={6} empty={`No one matches “${q}”.`}
-          head={<tr><th>Employee</th><th>Casual left</th><th className="hide-sm" title="Carried over + quota − used">Breakdown</th><th>Sick left</th><th>Comp off</th><th>Loss of pay</th></tr>}
+        <PagedTable items={here} reset={q} cols={manages ? 7 : 6} empty={`No one matches “${q}”.`}
+          head={<tr><th>Employee</th><th>Casual left</th><th className="hide-sm" title="Carried over + quota − used">Breakdown</th><th>Sick left</th><th>Comp off</th><th>Loss of pay</th>{manages && <th />}</tr>}
           row={(e) => { const b = lv.bal(e, year);
             return (
               <tr key={e.id}><td><PersonCell person={e} sub={e.title} /></td><td className="num-cell"><b>{b.casual.left}</b></td>
-                <td className="num-cell hide-sm muted">{b.casual.carried} + {b.casual.quota} − {b.casual.used}</td><td className="num-cell">{b.sick.left}</td><td className="num-cell">{b.compoff.left}</td><td className="num-cell">{b.lopDays || "—"}</td></tr>); }} /></div>}
+                <td className="num-cell hide-sm muted">{b.casual.carried} + {b.casual.quota} − {b.casual.used}</td><td className="num-cell">{b.sick.left}</td><td className="num-cell">{b.compoff.left}</td><td className="num-cell">{b.lopDays || "—"}</td>{manages && <td className="num"><button type="button" className="btn glass sm" onClick={() => setModal({ balance: e.email })}>Correct</button></td>}</tr>); }} /></div>}
 
       {view === "history" && <LeaveHistory list={all} who title="All leave" />}
       {view === "compoff" && <CompOffHistory list={lv.compOffs} who />}
       {view === "holidays" && <HolidayCalendar editable={manages} />}
       {modal === "comp" && <CompOffModal onClose={() => setModal(null)} />}
+      {modal === "policy" && <PolicySettingsModal onClose={() => setModal(null)} />}
+      {modal && modal.balance && <BalanceModal email={modal.balance} onClose={() => setModal(null)} />}
     </section>
   );
 }

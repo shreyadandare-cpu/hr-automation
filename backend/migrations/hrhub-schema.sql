@@ -116,6 +116,8 @@ ALTER TABLE leave_requests ADD COLUMN IF NOT EXISTS notify JSONB NOT NULL DEFAUL
 -- Who asked for it (the employee, or HR on their behalf) and who approved, declined or cancelled it. Empty on older rows.
 ALTER TABLE leave_requests ADD COLUMN IF NOT EXISTS created_by TEXT;
 ALTER TABLE leave_requests ADD COLUMN IF NOT EXISTS decided_by TEXT;
+-- The approver's comment on an approval, and the reason for a decline (shown to the employee).
+ALTER TABLE leave_requests ADD COLUMN IF NOT EXISTS decision_note TEXT;
 ALTER TABLE leave_requests DROP CONSTRAINT IF EXISTS leave_requests_status_check;
 ALTER TABLE leave_requests ADD CONSTRAINT leave_requests_status_check CHECK (status IN ('pending','approved','declined','cancelled'));
 ALTER TABLE leave_requests DROP CONSTRAINT IF EXISTS leave_requests_type_check;
@@ -123,6 +125,15 @@ ALTER TABLE leave_requests ADD CONSTRAINT leave_requests_type_check CHECK (type 
 ALTER TABLE leave_requests DROP CONSTRAINT IF EXISTS leave_requests_half_check;
 ALTER TABLE leave_requests ADD CONSTRAINT leave_requests_half_check CHECK (half IS NULL OR (half IN ('first','second') AND to_date = from_date));
 CREATE INDEX IF NOT EXISTS leave_requests_email ON leave_requests (lower(work_email), from_date);
+
+-- The leave policy numbers HR can change (leave.manage): casualPerYear, sickPerYear, lopDivisor, sickBackdateDays. A key that is not here uses the
+-- default in frontend/leave-rules.cjs. They are applied to the rules at start-up and when saved, and the pages read them from /leave-rules.js.
+CREATE TABLE IF NOT EXISTS leave_policy (
+  key        TEXT PRIMARY KEY,
+  value      NUMERIC(8,2) NOT NULL,
+  updated_by TEXT,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
 
 CREATE TABLE IF NOT EXISTS comp_off_credits (
   id         SERIAL PRIMARY KEY,

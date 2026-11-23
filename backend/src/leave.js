@@ -16,7 +16,7 @@ const when = (r) => (r.half ? `${r.from} (${L.HALVES[r.half]})` : `${r.from} to 
 const toRequest = (r) => ({
   id: r.id, email: r.work_email, type: r.type, from: r.from_date, to: r.to_date, half: r.half || null, days: num(r.days), reason: r.reason, notify: r.notify || [],
   status: r.status, paidDays: num(r.paid_days), lopDays: num(r.lop_days), decidedAt: r.decided_at, createdAt: r.created_at,
-  createdBy: r.created_by || null, decidedBy: r.decided_by || null,
+  createdBy: r.created_by || null, decidedBy: r.decided_by || null, note: r.decision_note || null,
 });
 const toCompOff = (c) => ({ id: c.id, email: c.work_email, workedOn: c.worked_on, days: num(c.days), reason: c.reason, status: c.status,
   createdAt: c.created_at, decidedAt: c.decided_at, createdBy: c.created_by || null, decidedBy: c.decided_by || null });
@@ -38,6 +38,14 @@ const mayDecideLeave = async (req, approver, owner, covers = []) => {
 const notYours = (approver) => ({ error: approver === "hr"
   ? "This person has no reporting manager, so a super admin decides this request. Nobody can decide their own request."
   : "Only this person's reporting manager or a super admin can approve or decline this request. Nobody can decide their own." });
+
+/** The leave policy numbers HR may change, with the lowest, highest and smallest step of each. */
+const POLICY_LIMITS = { casualPerYear: [0, 60, 0.5], sickPerYear: [0, 60, 0.5], lopDivisor: [20, 31, 1], sickBackdateDays: [0, 30, 1] };
+/** Applies the saved policy numbers (leave_policy) to the shared rules. Called at start-up, after the tables exist. */
+export async function loadLeavePolicy(db = pool) {
+  const { rows } = await db.query("SELECT key, value FROM leave_policy");
+  for (const x of rows) if (POLICY_LIMITS[x.key]) L.POLICY[x.key] = Number(x.value);
+}
 
 const holidayDays = async (db) => (await db.query("SELECT day FROM holidays ORDER BY day")).rows.map((h) => h.day);
 
@@ -204,6 +212,8 @@ export function leaveRouter(wrap) {
   r.post("/api/leave/requests/:id/decision", wrap(async (req, res) => {
     const decision = req.body && req.body.decision;
     if (!["approved", "declined"].includes(decision)) return res.status(400).json({ error: "Decision must be approved or declined." });
+    const note = String((req.body && req.body.note) || "").trim().slice(0, 500) || null;   // a comment on an approval; the reason for a decline
+    if (decision === "declined" && !note) return res.status(400).json({ error: "Add a reason for declining, so the employee knows why." });
     await tx(res, async (client) => {
       const found = await client.query("SELECT work_email FROM leave_requests WHERE id=$1", [Number(req.params.id) || 0]);
       if (!found.rows[0]) return [404, { error: "Leave request not found." }];
@@ -216,8 +226,8 @@ export function leaveRouter(wrap) {
       const name = L.TYPES[lr.type].name;
       if (decision === "declined") {
         const { rows: out } = await client.query(
-          "UPDATE leave_requests SET status='declined', decided_at=now(), decided_by=$2 WHERE id=$1 RETURNING *", [lr.id, self(req)]);
-        await audit(client, `${name} declined by ${req.user.email}: ${when(lr)}`, lr.email);
+          "UPDATE leave_requests SET status='declined', decided_at=now(), decided_by=$2, decision_note=$3 WHERE id=$1 RETURNING *", [lr.id, self(req), note]);
+        await audit(client, `${name} declined by ${req.user.email}: ${when(lr)}. Reason: ${note}`, lr.email);
         const request = toRequest(out[0]);
         return [200, request, () => tellLeave("decided", { request, actor: self(req), decision: "declined" })];
       }
@@ -227,9 +237,9 @@ export function leaveRouter(wrap) {
       const bal = L.balances(Number(lr.from.slice(0, 4)), emp ? toEmp(emp) : {}, hist.requests, hist.compOffs);
       const { paid, lop } = L.allocate(lr.type, days, bal);
       const { rows: out } = await client.query(
-        `UPDATE leave_requests SET status='approved', days=$2, paid_days=$3, lop_days=$4, decided_at=now(), decided_by=$5 WHERE id=$1 RETURNING *`,
-        [lr.id, days, paid, lop, self(req)]);
-      await audit(client, `${name} approved by ${req.user.email}: ${when(lr)} (${plural(paid)} paid${lop ? `, ${plural(lop)} loss of pay` : ""})`, lr.email);
+        `UPDATE leave_requests SET status='approved', days=$2, paid_days=$3, lop_days=$4, decided_at=now(), decided_by=$5, decision_note=$6 WHERE id=$1 RETURNING *`,
+        [lr.id, days, paid, lop, self(req), note]);
+      await audit(client, `${name} approved by ${req.user.email}: ${when(lr)} (${plural(paid)} paid${lop ? `, ${plural(lop)} loss of pay` : ""})${note ? `. Comment: ${note}` : ""}`, lr.email);
       const request = toRequest(out[0]);
       return [200, request, () => tellLeave("decided", { request, actor: self(req), decision: "approved" })];
     });
@@ -400,6 +410,63 @@ export function leaveRouter(wrap) {
       await client.query("UPDATE employees SET monthly_gross=$2, casual_opening=$3 WHERE id=$1", [emp.id, gross, opening]);
       await audit(client, `Updated ${changed.join(" and ")}`, emp.work_email);   // the salary figure itself is not logged
       return [200, { ok: true, changed: true }];
+    });
+  }));
+
+  // HR corrects what someone has left of casual, sick and comp-off leave. It is saved as a fresh "balance as of today" (employees.leave_opening):
+  // what they have left today for each type, with the year's quota and the days used so far, so the pages show it as before. Leave dated after today
+  // still comes off it. Every change is written to the audit log with who made it and why.
+  r.put("/api/leave/balances/:email", needAll("leave.manage"), wrap(async (req, res) => {
+    const body = req.body || {}, reason = String(body.reason || "").trim().slice(0, 300), want = {}, errors = {};
+    for (const t of ["casual", "sick", "compoff"]) {
+      if (body[t] === undefined || body[t] === null || body[t] === "") continue;
+      const v = Number(body[t]);
+      if (!(v >= 0 && v <= 1000 && Number.isInteger(v * 4))) errors[t] = "Enter days from 0 to 1000, in steps of a quarter day.";
+      else want[t] = v;
+    }
+    if (!Object.keys(want).length && !Object.keys(errors).length) errors.form = "Change at least one balance.";
+    if (!reason) errors.reason = "Add why the balance is being corrected.";
+    if (Object.keys(errors).length) return res.status(400).json({ errors });
+    await tx(res, async (client) => {
+      const emp = await lockEmployee(client, req.params.email);
+      if (!emp) return [404, { error: "Employee not found." }];
+      if (emp.status === "offboarded") return [409, { error: `${emp.name} has left, so the balance can't be changed.` }];
+      const today = todayIso(), hist = await historyOf(client, emp.work_email);
+      const year = Number(today.slice(0, 4));
+      const b = L.balances(year, toEmp(emp), hist.requests.filter((x) => x.from <= today), hist.compOffs.filter((c) => c.workedOn <= today));   // as of today
+      const all = L.balances(year, toEmp(emp), hist.requests, hist.compOffs);   // as the pages show it now: leave booked for later dates already taken off
+      const now = { casual: all.casual.left, sick: all.sick.left, compoff: all.compoff.left };
+      // HR enters what should show now. Approved leave on later dates still comes off the saved "as of today" figure, so it is added back to it here.
+      const next = Object.fromEntries(Object.keys(now).map((t) => [t, (want[t] ?? now[t]) + (b[t].left - all[t].left)]));
+      const label = { casual: "casual", sick: "sick", compoff: "comp off" };
+      const changes = Object.keys(want).filter((t) => want[t] !== now[t]).map((t) => `${label[t]} ${now[t]} → ${want[t]}`);
+      if (!changes.length) return [200, { ok: true, changed: false }];
+      const opening = { asOf: today, ...next, casualQuota: b.casual.quota, casualUsed: b.casual.used, sickQuota: b.sick.quota, sickUsed: b.sick.used, compoffUsed: b.compoff.used };
+      await client.query("UPDATE employees SET leave_opening=$2 WHERE id=$1", [emp.id, JSON.stringify(opening)]);
+      await audit(client, `Leave balance corrected by ${req.user.email}: ${changes.join(", ")}. Reason: ${reason}`, emp.work_email);
+      return [200, { ok: true, changed: true, openings: opening }];
+    });
+  }));
+
+  // The policy numbers HR can change (leave.manage). Saved in leave_policy and applied to the rules straight away.
+  r.get("/api/leave/policy", wrap(async (_req, res) => res.json({ policy: L.POLICY, limits: POLICY_LIMITS })));
+  r.put("/api/leave/policy", needAll("leave.manage"), wrap(async (req, res) => {
+    const body = req.body || {}, next = {}, errors = {};
+    for (const [k, [lo, hi, step]] of Object.entries(POLICY_LIMITS)) {
+      if (body[k] === undefined || body[k] === null || body[k] === "") continue;
+      const v = Number(body[k]);
+      if (!(v >= lo && v <= hi && Number.isInteger(v / step))) errors[k] = `Enter a number from ${lo} to ${hi}${step < 1 ? ", in half days" : ""}.`;
+      else next[k] = v;
+    }
+    if (Object.keys(errors).length) return res.status(400).json({ errors });
+    const changed = Object.keys(next).filter((k) => Number(L.POLICY[k]) !== next[k]);
+    if (!changed.length) return res.json({ policy: L.POLICY, changed: false });
+    await tx(res, async (client) => {
+      for (const k of changed) await client.query(
+        "INSERT INTO leave_policy (key, value, updated_by) VALUES ($1,$2,$3) ON CONFLICT (key) DO UPDATE SET value=$2, updated_by=$3, updated_at=now()", [k, next[k], self(req)]);
+      await audit(client, `Leave policy changed by ${req.user.email}: ${changed.map((k) => `${k} ${L.POLICY[k]} → ${next[k]}`).join(", ")}`, self(req));
+      Object.assign(L.POLICY, Object.fromEntries(changed.map((k) => [k, next[k]])));
+      return [200, { policy: L.POLICY, changed: true }];
     });
   }));
 

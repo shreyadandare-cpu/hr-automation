@@ -5,6 +5,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import zlib from "node:zlib";
 import express from "express";
+import L from "../../frontend/leave-rules.cjs";   // the same module object the leave routes use, so it holds the saved policy numbers
 import { googleRouter } from "./google-signin.js";
 import { inviteRouter } from "./invites.js";
 import { posterPictureRouter } from "./celebrations.js";
@@ -45,7 +46,12 @@ export function pagesRouter() {
   app.get("/login", (req, res) => (req.user ? home(req, res) : hasDist() ? res.sendFile(path.join(distDir, "login.html")) : notBuilt(res)));
   app.get("/", (req, res) => (req.user ? home(req, res) : res.redirect("/login")));
   // Leave rules shared by the page and the server (no personal data in it).
-  app.get("/leave-rules.js", (_req, res) => res.type("js").sendFile(path.join(frontendDir, "leave-rules.cjs")));
+  // The shared leave rules, with the policy numbers HR has saved (leave_policy) written over the defaults, so every page counts the same way.
+  app.get("/leave-rules.js", (_req, res) => {
+    const file = fs.readFileSync(path.join(frontendDir, "leave-rules.cjs"), "utf8");
+    res.setHeader("Cache-Control", "no-cache");
+    res.type("js").send(`${file}\n;Object.assign(window.LeaveRules.POLICY, ${JSON.stringify(L.POLICY)});\n`);
+  });
   return app;
 }
 

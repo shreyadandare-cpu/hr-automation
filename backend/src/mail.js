@@ -23,7 +23,14 @@ export const NO_REPLY_NOTE = "This is an automated email. Please do not reply to
 const noReplyHtml = `<p style="margin:18px 0 0;font:12px/1.5 Arial,Helvetica,sans-serif;color:#8a7a78">${NO_REPLY_NOTE}</p>`;
 
 /* attachments: [{ content: Buffer, filename, type, cid? }]. With a cid the file is shown inline: <img src="cid:..."> in the html. */
+/* Addresses the app sends no email to (the directors, for now). Their website access and the bell notifications are not affected.
+   MAIL_SKIP_RECIPIENTS replaces the list, comma separated; leave it empty to email everyone again. It is checked here, in the one
+   place every email goes through, so no feature (invitation, leave, celebration, festival) can mail these addresses by mistake. */
+export const mailSkipped = () =>
+  (process.env.MAIL_SKIP_RECIPIENTS ?? "chirag@wohlig.com,chintan@wohlig.com").split(",").map((s) => s.trim().toLowerCase()).filter(Boolean);
+
 export async function sendMail({ to, subject, text, html, attachments = [] }) {
+  if (mailSkipped().includes(String(to || "").trim().toLowerCase())) { console.log(`[email skipped: no email is sent to this address] subject="${subject}"`); return; }
   if (!mailConfigured()) throw new Error("Email is not set up");
   if (!process.env.MAIL_FROM) throw new Error("MAIL_FROM is not set");
   const from = parseAddress(process.env.MAIL_FROM);

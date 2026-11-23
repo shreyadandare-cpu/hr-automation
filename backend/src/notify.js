@@ -1,15 +1,11 @@
 import express from "express";
 import { pool } from "./db.js";
-import { mailConfigured, sendMail } from "./mail.js";
+import { mailConfigured, mailSkipped, sendMail } from "./mail.js";
+export { mailSkipped };
 
 // Email goes out through SendGrid when it is set up (see mail.js). Without it (local development) nothing is sent: the message is
 // recorded in email_outbox as "skipped" and the app carries on. Failures are recorded too, never thrown.
 export const emailMode = () => (mailConfigured() ? "sendgrid" : "off");
-
-/* Addresses the app sends no email to (the directors, for now). Their website access and the bell notifications are not affected.
-   MAIL_SKIP_RECIPIENTS replaces the list, comma separated; leave it empty to email everyone again. */
-export const mailSkipped = () =>
-  (process.env.MAIL_SKIP_RECIPIENTS ?? "chirag@wohlig.com,chintan@wohlig.com").split(",").map((s) => s.trim().toLowerCase()).filter(Boolean);
 
 export async function sendEmail(to, subject, body, html = null) {   // html: optional rich version of body
   if (!to) return;

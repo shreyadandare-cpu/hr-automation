@@ -59,6 +59,7 @@ sessionRouter.post("/auth/resend-invitation", needAll("users.manage"), wrap(asyn
     const u = (await pool.query("SELECT email FROM users WHERE lower(email)=$1", [email])).rows[0];
     if (u) mode = (await sendInvite(u.email, req.user.email)).mode;
   }
+  if (mode === "skipped") return res.json({ ok: true, skipped: true, message: "No invitation email is sent to this person for now." });
   if (mode === "failed" || mode === "not-configured") return res.status(502).json({ error: "The invitation email could not be sent. Check the email settings and try again." });
   res.json({ ok: true, message: "If that account exists, a new invitation has been sent." });
 }));

@@ -6,7 +6,7 @@ import express from "express";
 import { pool } from "./db.js";
 import { startSession, hashPassword } from "./auth.js";
 import { isCompanyEmail } from "./validate.js";
-import { mailConfigured, sendMail, frontendUrl, maskEmail } from "./mail.js";
+import { mailConfigured, mailSkipped, sendMail, frontendUrl, maskEmail } from "./mail.js";
 
 const VALID_MINUTES = 30;   // an invite not accepted in this time is cancelled
 export const INVITE_MINUTES = VALID_MINUTES;
@@ -94,8 +94,10 @@ const audit = (email, action) => pool.query("INSERT INTO audit_log (action, work
  * Returns { mode: "email" | "not-configured" | "failed", to }. HR can retry with a fresh invite when it was not sent.
  */
 export async function sendInvite(email, createdBy) {
-  const link = await createInvite(email, createdBy);
   const { to, name } = await recipientFor(email);
+  // The directors get no email for now (MAIL_SKIP_RECIPIENTS), so no link is made for them either.
+  if ([email, to].some((a) => mailSkipped().includes(String(a || "").trim().toLowerCase()))) { await audit(email, "Invite not sent (no email is sent to this person for now)"); return { mode: "skipped", to: maskEmail(to) }; }
+  const link = await createInvite(email, createdBy);
   if (!mailConfigured()) { await audit(email, "Invite not sent (email is not set up)"); return { mode: "not-configured", to: maskEmail(to) }; }
   try {
     await sendMail({ to, ...inviteEmail({ name, link }) });

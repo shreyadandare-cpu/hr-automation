@@ -79,12 +79,13 @@ export default function Users() {
   const makeLogin = async (p) => {
     const r = await api("POST", "/api/users", { email: p.email, role: "employee", sendInvite: true });
     if (!r.ok) { toast(apiMsg(r)); return; }
+    if (r.data.invite && r.data.invite.mode === "skipped") { toast(`Login created for ${p.name}. No invitation email is sent to this person for now.`); load(); return; }
     toast(r.data.invite && r.data.invite.mode === "email" ? `Login created for ${p.name}. Invitation email sent.` : `Login created for ${p.name}, but the invitation email could not be sent. Use "Send invite" to try again.`);
     load();
   };
   const resend = async (u) => {
     const r = await api("POST", "/api/auth/resend-invitation", { email: u.email });
-    toast(r.ok ? `Invitation sent to ${u.email}. Earlier links no longer work.` : apiMsg(r));
+    toast(r.ok ? (r.data.skipped ? `No invitation email is sent to ${u.name || u.email} for now.` : `Invitation sent to ${u.email}. Earlier links no longer work.`) : apiMsg(r));
     if (r.ok) load();
   };
   const toggleLogin = async (u) => {

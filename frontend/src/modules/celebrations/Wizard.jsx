@@ -10,7 +10,8 @@ import { OCCASIONS, canvasToBlob, defaultsFor, loadImage, msgFor, renderPoster }
 import { BRAND } from "../../brand.js";
 
 const STEPS = ["Occasion", "Employee photo", "Template", "Customize", "Preview", "Send"];
-const THEMES = [["maroon", "Maroon", "Deep maroon with cream text."], ["light", "Warm light", "Warm ivory with maroon text."]];
+const WELCOME_LOOK = [["maroon", "Wohlig welcome", "Maroon, grey and orange, with a round photo and the joining date."]];
+const THEMES_ALL = [["maroon", "Maroon", "Deep maroon with cream text."], ["light", "Warm light", "Warm ivory with maroon text."]];
 const ORDER = ["welcome", "birthday", "anniversary", "certified", "newrole"];
 const shortDate = (iso) => { const [y, m, d] = String(iso).split("-").map(Number); return iso ? new Date(Date.UTC(y, m - 1, d)).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" }) : ""; };
 const SUBJECT = (occ, n) => ({ birthday: `Happy Birthday, ${n}!`, welcome: `Welcome to Wohlig, ${n}!`, anniversary: `Happy work anniversary, ${n}!`,
@@ -39,12 +40,13 @@ export default function Wizard({ overview, start, onClose, onDone }) {
   const [audience, setAudience] = useState("all"); // "all" employees, or only the people picked
   const [to, setTo] = useState([]);                 // the people picked
   const assets = useRef(null);
+  const THEMES = occasion === "welcome" ? WELCOME_LOOK : THEMES_ALL;   // new joiners have the one welcome card
 
   const profilePhoto = emp && emp.photoV ? `/api/profile/photo?email=${encodeURIComponent(emp.email)}&v=${emp.photoV}` : "";
 
   // Picking a person fills in everything from the employee record.
   const choose = useCallback((occ, e) => {
-    setOccasion(occ); setEmp(e); setErr(""); setDraft(0); setPoster(null); setMsgEdited(false);
+    setOccasion(occ); setEmp(e); setErr(""); setDraft(0); setPoster(null); setMsgEdited(false); setTheme("maroon");
     setF(defaultsFor(occ, e, overview.today));
     setPhoto(e.photoV ? { url: `/api/profile/photo?email=${encodeURIComponent(e.email)}&v=${e.photoV}`, label: "Profile photo" } : null);
   }, [overview.today]);
@@ -183,11 +185,9 @@ export default function Wizard({ overview, start, onClose, onDone }) {
                   </div></>}
                 <div className="field" style={{ marginTop: NEW_ONLY ? 0 : 16, maxWidth: 420 }}>
                   <label htmlFor="cel-other">{NEW_ONLY ? "Who is it for?" : "Someone else"}</label>
-                  <select id="cel-other" className="input" value={emp && !candidates.some((c) => c.email === emp.email) ? emp.email : ""}
-                    onChange={(ev) => { const e = overview.employees.find((x) => x.email === ev.target.value); if (e) choose(occasion, e); }}>
-                    <option value="">Choose an employee…</option>
-                    {others.map((e) => <option key={e.email} value={e.email} disabled={!!taken(e)}>{e.name}{e.title ? ` — ${e.title}` : ""}{taken(e) ? " (already announced)" : ""}</option>)}
-                  </select>
+                  <PeoplePicker id="cel-other" people={others.filter((e) => !taken(e))} value={emp && !candidates.some((c) => c.email === emp.email) ? emp.email : ""}
+                    onChange={(email) => { const e = overview.employees.find((x) => x.email === email); if (e) choose(occasion, e); else { setEmp(null); setPoster(null); } }} placeholder="Search by name or role…" />
+                  {others.some((e) => taken(e)) && <p className="muted" style={{ margin: "6px 0 0", fontSize: 13 }}>People who already have this poster are not listed.</p>}
                 </div>
               </div>)}
           </div>)}
@@ -224,7 +224,7 @@ export default function Wizard({ overview, start, onClose, onDone }) {
             <div className="cel-tpl">
               {THEMES.map(([k, name, note]) => (
                 <button key={k} type="button" className={theme === k ? "on" : ""} aria-pressed={theme === k} onClick={() => { setTheme(k); setPoster(null); }}>
-                  {thumbs && thumbs[k] ? <img className="cel-thumb" src={thumbs[k]} alt="" /> : <div className="cel-thumb" />}
+                  {thumbs && thumbs[k] ? <img className={`cel-thumb${occasion === "welcome" ? " tall" : ""}`} src={thumbs[k]} alt="" /> : <div className={`cel-thumb${occasion === "welcome" ? " tall" : ""}`} />}
                   <b>{name}</b><span className="muted">{note}</span>
                 </button>))}
             </div>
@@ -244,13 +244,13 @@ export default function Wizard({ overview, start, onClose, onDone }) {
                 <textarea id="cel-m" className="input" rows={3} maxLength={300} value={f.message} onChange={(e) => edit("message", e.target.value)} />
               </Field></div>
             </div>
-            <div className="cel-thumb-box">{poster ? <img className="cel-thumb" src={poster.url} alt="Live preview" /> : <div className="cel-thumb" />}</div>
+            <div className="cel-thumb-box">{poster ? <img className="cel-thumb" src={poster.url} alt="Live preview" /> : <div className={`cel-thumb${occasion === "welcome" ? " tall" : ""}`} />}</div>
           </div>)}
 
         {step === 4 && (
           <div style={{ display: "grid", gap: 18 }}>
             <p style={{ margin: 0, color: "var(--ink-dim)" }}>This is exactly what the recipients will receive.</p>
-            <div className="cel-preview">{poster ? <img src={poster.url} alt={`${OCCASIONS[occasion].name} poster for ${f.name}`} /> : busy ? <Skeleton className="aspect-[4/5] w-full rounded-card" /> : <div className="empty">No poster yet.</div>}</div>
+            <div className="cel-preview">{poster ? <img src={poster.url} alt={`${OCCASIONS[occasion].name} poster for ${f.name}`} /> : busy ? <Skeleton className={`${occasion === "welcome" ? "aspect-[1080/1528]" : "aspect-[4/5]"} w-full rounded-card`} /> : <div className="empty">No poster yet.</div>}</div>
           </div>)}
 
         {step === 5 && (

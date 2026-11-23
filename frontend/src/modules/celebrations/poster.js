@@ -1,6 +1,7 @@
 /* Draws the celebration posters on a canvas, in the Wohlig look: a square (1080 x 1080) in maroon or warm light, an orange rule and
    a small label, a serif headline with an italic emphasis, the person's name, the Wohlig logo and the Google Cloud partner mark.
    One layout serves every occasion; the label and the wording change. What the preview shows is exactly the PNG that is emailed. */
+import { renderWelcome } from "./welcomePoster.js";
 export const POSTER_W = 1080, POSTER_H = 1080;
 
 const SERIF = (s, italic) => `${italic ? "italic " : ""}400 ${s}px "Playfair Display", "Source Serif 4", Georgia, serif`;
@@ -34,7 +35,7 @@ export function defaultsFor(occasion, emp, today) {
   const base = { heading: "", emphasis: "", name: emp.name, designation: emp.title || "", detail: "", joiningDate: "", message: "" };
   const years = emp.start ? Math.max(1, Number(today.slice(0, 4)) - Number(emp.start.slice(0, 4))) : 1;
   const f = {
-    welcome: { ...base, heading: "Welcome", emphasis: "aboard.", joiningDate: emp.start || today },
+    welcome: { ...base, heading: "Welcome to", emphasis: "Wohlig!!", joiningDate: emp.start || today },
     birthday: { ...base, heading: "Happy", emphasis: "birthday." },
     anniversary: { ...base, heading: "Cheers to", emphasis: yearsText(years), joiningDate: emp.start || today },
     certified: { ...base, heading: "Certified", emphasis: "& proud." },
@@ -45,7 +46,7 @@ export function defaultsFor(occasion, emp, today) {
 export function msgFor(occasion, f) {
   const first = firstName(f.name);
   return {
-    welcome: `We are excited to welcome ${first} to our team as our new ${f.designation || "team member"}.`,
+    welcome: `We are excited to welcome ${first} to our team as our new ${f.designation || "team member"}. 🎉`,
     birthday: "May this year bring you continued success, good health, and happiness.",
     anniversary: `Thank you for everything you bring to Wohlig, ${first}.`,
     certified: `Congratulations, ${first}${f.detail ? `, on earning ${f.detail}` : ""}!`,
@@ -89,6 +90,7 @@ function flower(ctx, cx, cy, color) {   // eight thin overlapping petals, a fain
 
 /** Draws a poster. o: { occasion, theme, name, heading, emphasis, designation, detail, joiningDate, message, photo, logos: { dark, light }, mark } -> canvas */
 export async function renderPoster(o) {
+  if (o.occasion === "welcome") return renderWelcome(o);   // new joiners and freshers: the portrait welcome card (welcomePoster.js)
   await ensureFonts();
   const canvas = document.createElement("canvas");
   canvas.width = POSTER_W; canvas.height = POSTER_H;

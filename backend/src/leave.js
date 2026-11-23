@@ -499,7 +499,7 @@ export function leaveRouter(wrap) {
     const year = req.query.year === undefined ? Number(todayIso().slice(0, 4)) : Number(req.query.year);
     if (!Number.isInteger(year) || year < 2000 || year > 2100) return res.status(400).json({ error: "Year must look like 2026." });
     const [emps, reqs, comps, hols] = await Promise.all([
-      pool.query("SELECT work_email, name, emp_no, dept, title, status, start_date, manager, casual_opening, leave_opening FROM employees ORDER BY name LIMIT 5000"),
+      pool.query("SELECT work_email, name, emp_no, dept, title, status, start_date, manager, work_location, casual_opening, leave_opening FROM employees ORDER BY name LIMIT 5000"),
       pool.query("SELECT * FROM leave_requests ORDER BY from_date DESC, id DESC LIMIT 20000"),
       pool.query("SELECT * FROM comp_off_credits ORDER BY worked_on DESC LIMIT 20000"),
       pool.query("SELECT day, name FROM holidays ORDER BY day"),
@@ -508,7 +508,7 @@ export function leaveRouter(wrap) {
     const buffer = await buildLeaveWorkbook({
       year, today: todayIso(), approvers,
       employees: emps.rows.map((e) => ({ email: e.work_email, name: e.name, empNo: e.emp_no, dept: e.dept, title: e.title, status: e.status, start: e.start_date,
-        manager: e.manager, casualOpening: num(e.casual_opening), openings: e.leave_opening || null })),
+        manager: e.manager, location: e.work_location, casualOpening: num(e.casual_opening), openings: e.leave_opening || null })),
       requests: reqs.rows.map(toRequest), compOffs: comps.rows.map(toCompOff), holidays: hols.rows,
     }, { generatedBy: req.user.email });
     res.set({ "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "Content-Disposition": `attachment; filename="Leave-${year}.xlsx"`, "Cache-Control": "no-store" });

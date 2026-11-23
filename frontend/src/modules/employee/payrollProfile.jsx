@@ -19,7 +19,7 @@ export function PayrollProfileCard({ email, name }) {
   const first = name.split(" ")[0];
   return (
     <div className="card">
-      <div className="card-h"><h3>Payroll profile</h3>{p && <Pill tone={p.profile.complete ? "ok" : "warn"}>{p.profile.complete ? "Ready" : "Incomplete payroll profile"}</Pill>}</div>
+      <div className="card-h"><h3>Payroll profile</h3>{p && <div className="row" style={{ gap: 8 }}>{p.onboarding && <Pill tone="info">Onboarding in progress</Pill>}<Pill tone={p.profile.complete ? "ok" : "warn"}>{p.profile.complete ? "Ready" : "Incomplete payroll profile"}</Pill></div>}</div>
       {!p ? <div className="card-b"><span className="skel" style={{ width: "50%" }} /></div> : <>
         {!p.profile.complete && <div className="card-b" style={{ paddingTop: 0 }}><div className="muted">Still needed before {first} is paid correctly: <b>{p.profile.missing.join(" and ")}</b>. Their payroll line stays marked incomplete until then, so no wrong salary is worked out.</div></div>}
         <dl className="facts" style={{ padding: "0 24px 8px" }}>

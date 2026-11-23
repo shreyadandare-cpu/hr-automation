@@ -66,7 +66,7 @@ export default function HistoryTab({ you }) {
         <div className="tbl-wrap"><table className="pr-table"><thead><tr><th>Month</th><th>Status</th><th className="num">Employees</th><th className="num">Gross</th><th className="num hide-sm">Deductions</th><th className="num hide-sm">TDS</th>
           <th className="num">Net payable</th><th>Approval</th><th>Files</th></tr></thead><tbody>
           {runs && runs.length ? runs.map((r) => {
-            const t = r.totals || {}, wb = r.files.filter((f) => f.kind === "workbook"), bank = r.files.filter((f) => f.kind === "bank");
+            const t = r.totals || {}, wb = r.files.filter((f) => f.kind === "workbook"), bank = r.files.filter((f) => f.kind === "bank" || f.kind === "bank_xlsx");
             return (
               <tr key={r.id}>
                 <td><b>{monthLabel(r.period)}</b><div className="muted">FY {r.fy}</div></td>
@@ -77,7 +77,7 @@ export default function HistoryTab({ you }) {
                   : r.workflow ? <span className="muted">{r.submittedBy ? `Sent by ${r.submittedBy}` : "Not reviewed yet"}</span> : <span className="muted">Before review workflow</span>}</td>
                 <td><div className="pr-files">
                   {wb.map((f) => <a key={f.id} href={fileUrl(r.id, f.id)} download className={f.superseded ? "muted" : ""}>Excel v{f.version}{f.superseded ? " (old)" : ""}</a>)}
-                  {bank.map((f) => <a key={f.id} href={fileUrl(r.id, f.id)} download className={f.superseded ? "muted" : ""}>Bank file v{f.version}</a>)}
+                  {bank.map((f) => <a key={f.id} href={fileUrl(r.id, f.id)} download className={f.superseded ? "muted" : ""}>{f.kind === "bank_xlsx" ? "Bank sheet (Excel)" : "Bank file (CSV)"} v{f.version}</a>)}
                   {!r.files.length && <span className="muted">—</span>}</div></td>
               </tr>);
           }) : runs ? <tr><td colSpan={9}><div className="empty">No payroll yet.</div></td></tr> : <TableSkeletonRow cols={9} />}

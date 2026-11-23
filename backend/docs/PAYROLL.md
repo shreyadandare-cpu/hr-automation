@@ -82,11 +82,11 @@ A salary structure applies from a month on. A raise is a new structure from a la
 
 `Payroll-YYYY-MM-vN.xlsx`, generated from the database and stored with the run. Earlier versions stay downloadable, marked old.
 
-1. **Employee Payroll Summary**: one row per person paid, with only these columns: **Name, Gross, PF, PT, ESIC, TDS, Deduction (Adv/Late), Reimbur, Net Payable**. `Net Payable = Gross − PF − PT − ESIC − TDS − Deduction + Reimbur` (a formula on each row). *Gross* is salary only; reimbursements are their own column and are added back. *Deduction (Adv/Late)* is loss of pay plus other deductions (advances, late marks, recoveries). The grand total row uses `SUM` formulas. Amounts are in INR, and empty amounts show "-".
+1. **Employee Payroll Summary**: one row per person paid. **Name, Employee ID, Department, Designation, Monthly salary (full month), Basic, HRA, Other allowances, Incentives & other earnings, Gross, PF, PT, ESIC, TDS, Deduction (Adv/Late), Reimbur, Net Payable** (a formula on each row: `Gross − PF − PT − ESIC − TDS − Deduction + Reimbur`), then the person's **Bank, Account (last 4) and IFSC**, and a grand-total row. Gross is salary only; reimbursements are the separate column.
 2. **Salary Calculation Details**: every earning and deduction per person, subtotals as formulas, employer contributions, the TDS working and each calculation step.
 3. **Payroll Summary**: month, FY, status, version, who generated it. Each total (including ESIC and reimbursements) is a formula over sheet 1 beside the database figure, with a *Matches/Check* column.
 
-Bank details are not in the report at all, because it is emailed for review. Only the bank file has them.
+The report shows the bank as its name, the last four digits and the IFSC only. The full account number is never in it, because it is stored and goes to the reviewer; it is only in the encrypted bank files.
 
 ## Bank transfer file (backend/src/payroll/bank.js)
 
@@ -112,7 +112,7 @@ Only after approval, and only HR. A CSV with Payment reference (`SAL202611<EmpID
 | `payroll_runs` (extended) | one per month (`period` UNIQUE): status, who submitted and reviewed and when, review note, bank reference, totals |
 | `payroll_items` (extended) | one per person per run (UNIQUE): HR's `inputs`, the full calculated `slip`, structure used |
 | `payroll_adjustments` | arrears/recoveries for finalized months and the run that paid them |
-| `payroll_files` | versioned Excel reports and bank files (bank encrypted), hash, totals, who generated them |
+| `payroll_files` | versioned Excel reports and bank files (kinds `workbook`, `bank` CSV and `bank_xlsx`; both bank kinds encrypted), hash, totals, who generated them |
 | `payroll_audit` | the audit trail (append-only) |
 
 ## API (`/api/payroll`)
@@ -124,6 +124,7 @@ Only after approval, and only HR. A CSV with Payment reference (`SAL202611<EmpID
 | `POST /runs {period}` | HR | Start a month (409 if it exists, 400 for a future month) |
 | `GET /runs/:id` | HR, reviewer* | Run, every line with its breakdown, totals, files, activity, next actions |
 | `PUT /runs/:id/lines/:lineId` | HR | Monthly inputs: `incentives, bonus, overtime, otherEarnings(+Reason), reimbursements, adjustment(+Reason), additionalDeductions(+Reason), lopDays, tdsOverride(+Reason), hold(+holdReason), note` |
+| `POST /runs/:id/hold` | HR | Choose who is processed: `{action: "hold"\|"release"\|"only", emails, reason}`. `only` holds everyone not selected. A hold needs a reason; only while the run can be edited |
 | `POST /runs/:id/recalculate` | HR | Re-read everything and recalculate (before review) |
 | `POST /runs/:id/actions/:action` | per workflow | `calculate, generate, submit, approve, reject, request_changes, bank_file, mark_paid` (`{note}`, `{bankReference}`) |
 | `GET /runs/:id/files/:fileId` | HR; reviewer for reports | Download (audited) |
@@ -141,10 +142,10 @@ Only after approval, and only HR. A CSV with Payment reference (`SAL202611<EmpID
 
 1. **Payroll › Salary & bank**: for anyone new, set **Salary** (structure from their first month), **Bank** (enter the account number twice) and, if they gave declarations, **Tax**. The callout lists who is missing what.
 2. **Payroll › Monthly payroll**: pick the month and press **Start payroll**. Unpaid leave and approved reimbursements are already in.
-3. Click a row to see the full calculation and edit that person's inputs. Put anyone not to be paid this month **on hold** with a reason. Use filters (department, designation, status) and sorting to check.
+3. Click a row to see the full calculation and edit that person's inputs. Tick people in the first column to **Process only these**, **Put on hold** (with a reason) or **Release hold**; anyone on hold is not paid this month and is left out of the bank files. Use filters (department, designation, status) and sorting to check.
 4. **Mark as calculated**, then **Generate Excel report**, then **Download Excel** and send it to Chirag. Then **Send for review**.
 5. If Chirag rejects or requests changes, his reason shows at the top. Correct the lines, then calculate, generate and send again.
-6. Once approved, press **Generate bank file**, then **Download bank file**, and upload it in corporate banking for authorized release.
+6. Once approved, press **Generate bank file**. Two copies of the same payments are made: **Bank file (CSV)** for upload in corporate banking, and **Bank sheet (Excel)** with a total that is checked against the approved net. Both are encrypted in storage and only people with the bank permission can download them.
 7. When the bank confirms, press **Mark as processed** and enter the bank's batch or UTR reference.
 8. Missed something after approval? **History › Adjustments** adds it to the next month.
 

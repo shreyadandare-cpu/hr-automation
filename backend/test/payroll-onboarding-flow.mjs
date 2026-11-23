@@ -45,6 +45,15 @@ try {
     await db.query("UPDATE employees SET google_status='active' WHERE lower(work_email)=$1", [email]);
   }
   await db.query("DELETE FROM notifications WHERE title LIKE 'New joiner Pn%'");
+  // while onboarding is still going (the work email exists, the last step is not done) the person is already on the payroll list, marked as onboarding
+  let mid = (await call(hr, "GET", `/api/payroll/employees?period=${month(0)}`)).d.employees.find((x) => x.email === NEW1);
+  ok("a person still being onboarded is already on the payroll list, marked as onboarding", !!mid && mid.onboarding === true && mid.status === "onboarding" && mid.name === "Pnow Joiner" && mid.dept === "Engineering" && mid.start === day(0), JSON.stringify(mid));
+  let jn = (await call(hr, "GET", `/api/payroll/joiners?period=${month(0)}`)).d;
+  let j1 = jn.joiners.find((x) => x.email === NEW1), j2 = jn.joiners.find((x) => x.email === NEW2);
+  ok("the Monthly payroll page's joiners list shows the person being onboarded, in this payroll, with what is missing", !!j1 && j1.onboarding === true && j1.inThisPayroll === true && j1.inRun === false && jn.runStarted === false && j1.missing.includes("Salary structure"), JSON.stringify(jn));
+  ok("and the one joining next month, as not in this payroll", !!j2 && j2.inThisPayroll === false && j2.onboarding === true);
+  ok("an employee cannot read the joiners list (403)", (await call(emp, "GET", "/api/payroll/joiners")).s === 403);
+  ok("their profile also says onboarding is in progress", (await call(hr, "GET", `/api/payroll/profile/${encodeURIComponent(NEW1)}`)).d.onboarding === true);
   let r = await finish(hr, NEW1, "Pnow", "Joiner", day(0));
   ok("onboarding is completed for a joiner who starts this month", r.s === 201, JSON.stringify(r.d));
   r = await finish(hr, NEW2, "Pnext", "Joiner", day(1));
@@ -59,6 +68,7 @@ try {
   let a = list.find((x) => x.email === NEW1), b = list.find((x) => x.email === NEW2);
   ok("the joiner who starts this month is on the payroll list", !!a && a.joinsLater === false && a.employmentType === "Employee", JSON.stringify(a));
   ok("the one who starts next month is on it too, marked as joining later", !!b && b.joinsLater === true);
+  ok("once onboarding is finished the 'in progress' mark is gone", a.onboarding === false && b.onboarding === false, JSON.stringify([a.onboarding, b.onboarding]));
   ok("with nothing set up, both show an incomplete payroll profile naming what is missing", a.missing.join() === "Salary structure,Bank account" && b.missing.join() === "Salary structure,Bank account", JSON.stringify(a.missing));
   ok("a PAN given in onboarding means PAN is not listed as missing", !a.missing.includes("PAN"));
   ok("the employee record is shared: one row per person, no copy", (await db.query("SELECT count(*)::int n FROM employees WHERE work_email IN ($1,$2)", [NEW1, NEW2])).rows[0].n === 2);
@@ -97,12 +107,19 @@ try {
   p = (await call(hr, "GET", `/api/payroll/profile/${encodeURIComponent(NEW2)}`)).d;
   ok("the profile counts the revisions", p.salary.revisions === 2);
 
+  // once a run is started, joiners already in the month are in it; the later one is not
+  r = await call(hr, "POST", "/api/payroll/runs", { period: month(0) });
+  ok("payroll for this month can be started", r.s === 201, JSON.stringify(r.d));
+  jn = (await call(hr, "GET", `/api/payroll/joiners?period=${month(0)}`)).d;
+  ok("then the joiner who started this month shows as in the run, and the next month's joiner is not", jn.runStarted === true && jn.joiners.find((x) => x.email === NEW1).inRun === true && jn.joiners.find((x) => x.email === NEW2).inThisPayroll === false, JSON.stringify(jn.joiners.map((x) => [x.name, x.inRun, x.inThisPayroll])));
   // someone who leaves drops off the payroll after their last day
   await db.query("UPDATE employees SET status='offboarded', last_day=$2 WHERE work_email=$1", [NEW1, `${month(-1)}-10`]);
   list = (await call(hr, "GET", `/api/payroll/employees?period=${month(0)}`)).d.employees;
   ok("someone who left last month is no longer on this month's payroll", !list.find((x) => x.email === NEW1));
 } catch (e) { fail++; console.log("ERROR  " + e.stack); }
 finally {
+  await db.query("DELETE FROM payroll_items WHERE run_id IN (SELECT id FROM payroll_runs WHERE processed_by=$1)", [HR]).catch(() => {});
+  await db.query("DELETE FROM payroll_runs WHERE processed_by=$1", [HR]).catch(() => {});
   await db.query("DELETE FROM salary_structures WHERE lower(work_email) IN ($1,$2)", [NEW1, NEW2]);
   await db.query("DELETE FROM payroll_bank_accounts WHERE lower(work_email) IN ($1,$2)", [NEW1, NEW2]);
   await db.query("DELETE FROM notifications WHERE title LIKE 'New joiner Pn%'");

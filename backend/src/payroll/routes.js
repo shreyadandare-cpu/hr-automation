@@ -10,7 +10,7 @@ import { STATUS, EDITABLE, FINAL, check, nextActions } from "./workflow.js";
 import { actorOf, approvers, bankOnly, hrOnly, seal, open, sha256, encryptionReady } from "./access.js";
 import { buildLines, recalcRun, loadRun, totalsOfLines, staffFor, joiningLater, payrollProfile, toStructure, structuresFor, seedTaxRules, deptOf, monthName } from "./store.js";
 import { buildWorkbook } from "./excel.js";
-import { buildBankFile } from "./bank.js";
+import { buildBankFile, buildBankWorkbook } from "./bank.js";
 import { readPayslipPdf } from "./payslip-read.js";
 import { previewFromFile, templateCsv, templateXlsx } from "./tax-import.js";
 import { DEFAULT_TAX_RULES } from "./tax-defaults.js";
@@ -30,6 +30,8 @@ import { PRODUCT } from "../brand.js";
  *   POST /runs/:id/recalculate       re-read salaries, leave, claims and tax and recalculate every line
  *   POST /runs/:id/actions/:action   calculate | generate | submit | approve | reject | request_changes | bank_file | mark_paid
  *   GET  /runs/:id/files/:fileId     download a stored Excel report (everyone who sees every line) or bank file (payroll.bank)
+ *   GET  /joiners?period=            people being onboarded and people joining from that month on: in this payroll or not, what their profile needs (HR)
+ *   GET  /profile/:email             one person's payroll profile at a glance (HR)
  *   GET  /employees                  who is on the payroll, and who joins later (onboarded, so set up ahead), and whether their salary, bank and tax details are set (HR)
  *   GET/PUT /bank/:email             salary bank account (the number is write-only; only the last four digits come back) (payroll.bank)
  *   GET/PUT /declarations/:email     tax regime and declarations for a financial year (HR)
@@ -89,7 +91,8 @@ const visible = (run, actor) => actor.hr || (run.workflow && !["draft", "calcula
 /** Whether this person's line is shown: everyone's, unless the viewer holds payroll.view for a team only. */
 const inScope = (actor, email) => !actor.scope || actor.scope.has(lc(email));
 /** Which stored files are listed: the bank file for payroll.bank holders, the Excel report for everyone who sees every line. */
-const fileShown = (actor, f) => !actor.scope && (f.kind === "bank" ? actor.bank : true);
+const isBankFile = (kind) => kind === "bank" || kind === "bank_xlsx";
+const fileShown = (actor, f) => !actor.scope && (isBankFile(f.kind) ? actor.bank : true);
 /** Totals of the lines shown (the same sums loadRun makes). */
 const totalsShown = (lines) => totalsOfLines(lines.map((l) => ({ ...l, slip: { summary: l.summary } })));
 
@@ -260,6 +263,36 @@ R.put("/runs/:id/lines/:lineId", hrOnly, wrap(async (req, res) => {
   send(res, out, () => res.json({ ok: true }));
 }));
 
+// Choose who is processed this month: put several people on hold at once, take them off hold, or process only the people selected (everyone else is held).
+// A hold needs a reason. Only while the run can still be edited; the run goes back to draft and is recalculated, like any other change to its inputs.
+R.post("/runs/:id/hold", hrOnly, wrap(async (req, res) => {
+  const body = req.body || {}, action = body.action, picked = new Set((Array.isArray(body.emails) ? body.emails : []).map(lc).slice(0, 1000));
+  if (!["hold", "release", "only"].includes(action)) return res.status(400).json({ error: "Choose hold, release or only." });
+  if (!picked.size) return res.status(400).json({ error: "Select at least one person." });
+  const why = String(body.reason || "").trim().slice(0, 200);
+  if (action !== "release" && why.length < 5) return res.status(400).json({ error: "Please say why.", errors: { reason: "Say why (at least 5 letters)." } });
+  const out = await tx(async (client) => {
+    const run = await lockRun(client, req.params.id);
+    if (!run) return fail(404, "Payroll run not found.");
+    if (!run.workflow || !EDITABLE.has(run.status)) return fail(409, `Payroll for ${monthName(run.period)} is ${STATUS[run.status].toLowerCase()} and can't be edited.`);
+    const { rows: items } = await client.query("SELECT id, work_email, inputs FROM payroll_items WHERE run_id=$1 FOR UPDATE", [run.id]);
+    const changes = [];
+    for (const it of items) {
+      const inputs = { ...(it.inputs || {}) }, isHeld = !!inputs.hold, sel = picked.has(lc(it.work_email));
+      const hold = action === "hold" ? sel : action === "only" ? !sel : false, release = action === "release" || action === "only" ? sel : false;
+      if (hold && !isHeld) { inputs.hold = true; inputs.holdReason = why; changes.push([it, inputs, "Salary put on hold"]); }
+      else if (release && isHeld) { delete inputs.hold; delete inputs.holdReason; changes.push([it, inputs, "Salary hold released"]); }
+    }
+    if (!changes.length) return fail(409, "Nothing to change: those people are already as you asked.");
+    for (const [it, inputs] of changes) await client.query("UPDATE payroll_items SET inputs=$2, updated_by=$3 WHERE id=$1", [it.id, JSON.stringify(inputs), req.user.email]);
+    await backToDraft(client, run, req.user.email, `Who is processed was changed for ${changes.length} ${changes.length === 1 ? "person" : "people"}`);
+    await recalcRun(client, { ...run, status: "draft" }, req.user.email);
+    for (const [it, , what] of changes) await audit(client, req.user.email, what, { run_id: run.id, period: run.period, work_email: it.work_email, detail: { reason: what === "Salary put on hold" ? why : null, bulk: true } });
+    return { held: changes.filter((c) => c[2] === "Salary put on hold").length, released: changes.filter((c) => c[2] === "Salary hold released").length };
+  });
+  send(res, out, () => res.json({ ok: true, held: out.held, released: out.released }));
+}));
+
 R.post("/runs/:id/recalculate", hrOnly, wrap(async (req, res) => {
   const out = await tx(async (client) => {
     const run = await lockRun(client, req.params.id);
@@ -357,12 +390,18 @@ R.post("/runs/:id/actions/:action", wrap(async (req, res) => {
       const plain = Buffer.from(bf.csv, "utf8");
       const { rows: [{ v }] } = await client.query("SELECT coalesce(max(version),0)+1 AS v FROM payroll_files WHERE run_id=$1 AND kind='bank'", [run.id]);
       const totals = { people: bf.count, net: bf.total };
-      await client.query("UPDATE payroll_files SET superseded=true WHERE run_id=$1 AND kind='bank'", [run.id]);
+      await client.query("UPDATE payroll_files SET superseded=true WHERE run_id=$1 AND kind IN ('bank','bank_xlsx')", [run.id]);
       const { rows: [f] } = await client.query(
         `INSERT INTO payroll_files (run_id, kind, version, filename, mime, size, sha256, encrypted, content, totals, generated_by)
          VALUES ($1,'bank',$2,$3,'text/csv',$4,$5,true,$6,$7,$8) RETURNING id`,
         [run.id, v, `Salary-transfer-${run.period}-v${v}.csv`, plain.length, sha256(plain), Buffer.from(seal(plain), "utf8"), JSON.stringify(totals), req.user.email]);
-      await moveTo(client, run, c.to, req.user.email, "Bank transfer file generated", { file: f.id, version: v, sha256: sha256(plain), totals });
+      // The same payments as an Excel sheet, stored beside the CSV (encrypted too: it holds full account numbers) with the same version.
+      const xlsx = await buildBankWorkbook(run.period, month, bf.payments, bf.total, data.totals.net, { version: v, generatedBy: req.user.email, generatedAt: new Date() });
+      await client.query(
+        `INSERT INTO payroll_files (run_id, kind, version, filename, mime, size, sha256, encrypted, content, totals, generated_by)
+         VALUES ($1,'bank_xlsx',$2,$3,'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',$4,$5,true,$6,$7,$8)`,
+        [run.id, v, `Salary-transfer-${run.period}-v${v}.xlsx`, xlsx.length, sha256(xlsx), Buffer.from(seal(xlsx), "utf8"), JSON.stringify(totals), req.user.email]);
+      await moveTo(client, run, c.to, req.user.email, "Bank transfer file generated", { file: f.id, version: v, sha256: sha256(plain), totals, excel: true });
       return { file: f.id };
     }
 
@@ -392,10 +431,10 @@ R.get("/runs/:id/files/:fileId", wrap(async (req, res) => {
     "SELECT f.*, r.period, r.status, r.workflow FROM payroll_files f JOIN payroll_runs r ON r.id=f.run_id WHERE f.id=$1 AND f.run_id=$2", [Number(req.params.fileId) || 0, Number(req.params.id) || 0]);
   if (!f || !visible(f, actor)) return res.status(404).json({ error: "File not found." });
   if (!fileShown(actor, f)) return res.status(403).json({ error: "You do not have access to this." });
-  if (f.kind === "bank" && !FINAL.has(f.status)) return res.status(409).json({ error: "The payroll isn't approved." });
+  if (isBankFile(f.kind) && !FINAL.has(f.status)) return res.status(409).json({ error: "The payroll isn't approved." });
   const body = f.encrypted ? open(f.content.toString("utf8")) : f.content;
   if (sha256(body) !== f.sha256) return res.status(500).json({ error: "This stored file failed its integrity check. Generate it again." });
-  await audit(pool, req.user.email, f.kind === "bank" ? "Bank transfer file downloaded" : "Payroll report downloaded", { run_id: f.run_id, period: f.period, detail: { file: f.id, version: f.version, superseded: f.superseded } });
+  await audit(pool, req.user.email, isBankFile(f.kind) ? "Bank transfer file downloaded" : "Payroll report downloaded", { run_id: f.run_id, period: f.period, detail: { file: f.id, version: f.version, superseded: f.superseded } });
   res.setHeader("Content-Type", f.mime);
   res.setHeader("Content-Disposition", `attachment; filename="${f.filename}"`);
   res.send(body);
@@ -430,7 +469,7 @@ R.get("/employees", hrOnly, wrap(async (req, res) => {
   res.json({ period, fy, employees: emps.map((e) => {
     const s = sOf.get(lc(e.work_email)), b = bOf.get(lc(e.work_email)), d = dOf.get(lc(e.work_email));
     const gross = s ? s.earnings.reduce((n, x) => n + Number(x.amount || 0), 0) : null;
-    return { email: e.work_email, name: e.name, empNo: e.emp_no, dept: deptOf(e.dept, e.title), title: e.title, start: e.start_date, lastDay: e.last_day, status: e.status, employmentType: e.employment_type || "Employee", joinsLater: laterSet.has(lc(e.work_email)),
+    return { email: e.work_email, name: e.name, empNo: e.emp_no, dept: deptOf(e.dept, e.title), title: e.title, start: e.start_date, lastDay: e.last_day, status: e.status, employmentType: e.employment_type || "Employee", onboarding: e.status === "onboarding" && !e.onboarded_at, joinsLater: laterSet.has(lc(e.work_email)),
       salary: s ? { effectiveFrom: s.effective_from, monthlyGross: gross, annualCtc: s.annual_ctc === null ? null : Number(s.annual_ctc), tdsMode: s.tds_mode || (s.tds_monthly !== null ? "manual" : "auto") } : null,
       bank: b ? { holder: b.holder_name, bankName: b.bank_name, ifsc: b.ifsc, last4: b.acct_last4, updatedAt: b.updated_at } : null,
       onboardingIfsc: e.ifsc || null, regime: d ? d.regime : "new", declared: !!d,
@@ -439,11 +478,37 @@ R.get("/employees", hrOnly, wrap(async (req, res) => {
   }) });
 }));
 
+// New joiners for the Monthly payroll page: people whose onboarding is still going, and people who joined in the shown month or join later. For each: whether they are
+// in that month's payroll (and in its run, once one has been started), and what their payroll profile still needs. They appear as soon as their work email is created.
+R.get("/joiners", hrOnly, wrap(async (req, res) => {
+  const period = PERIOD.test(String(req.query.period || "")) ? String(req.query.period) : istMonth();
+  const [y, m] = period.split("-").map(Number), monthEnd = `${period}-${String(new Date(Date.UTC(y, m, 0)).getUTCDate()).padStart(2, "0")}`;
+  const { rows } = await pool.query(
+    `SELECT work_email, name, emp_no, title, dept, start_date, status, onboarded_at, pan_masked, employment_type FROM employees
+      WHERE status <> 'offboarded' AND last_day IS NULL AND ((status='onboarding' AND onboarded_at IS NULL) OR start_date >= $1::date)
+      ORDER BY start_date NULLS LAST, name LIMIT 200`, [`${period}-01`]);
+  const emails = rows.map((e) => lc(e.work_email));
+  const [{ rows: sal }, { rows: bank }, { rows: inRun }, { rows: [run] }] = await Promise.all([
+    pool.query("SELECT DISTINCT lower(work_email) AS e FROM salary_structures WHERE lower(work_email) = ANY($1)", [emails]),
+    pool.query("SELECT lower(work_email) AS e FROM payroll_bank_accounts WHERE lower(work_email) = ANY($1)", [emails]),
+    pool.query("SELECT DISTINCT lower(i.work_email) AS e FROM payroll_items i JOIN payroll_runs r ON r.id=i.run_id WHERE r.period=$1 AND lower(i.work_email) = ANY($2)", [period, emails]),
+    pool.query("SELECT 1 AS one FROM payroll_runs WHERE period=$1", [period]),
+  ]);
+  const has = (list) => new Set(list.map((x) => x.e));
+  const hasSal = has(sal), hasBank = has(bank), isInRun = has(inRun);
+  res.json({ period, runStarted: !!run, joiners: rows.map((e) => {
+    const k = lc(e.work_email);
+    return { email: e.work_email, name: e.name, empNo: e.emp_no, title: e.title, dept: deptOf(e.dept, e.title), employmentType: e.employment_type || "Employee", start: e.start_date,
+      onboarding: e.status === "onboarding" && !e.onboarded_at, inThisPayroll: !!e.start_date && e.start_date <= monthEnd, inRun: isInRun.has(k),
+      missing: payrollProfile({ hasSalary: hasSal.has(k), hasBank: hasBank.has(k), pan: e.pan_masked }).missing };
+  }) });
+}));
+
 // One person's payroll profile at a glance: whether it is ready, what is missing, and when they join the payroll. No bank number, no tax figures.
 R.get("/profile/:email", hrOnly, wrap(async (req, res) => {
   const email = lc(req.params.email), month = istMonth();
   const { rows: [e] } = await pool.query(
-    "SELECT name, emp_no, title, dept, start_date, last_day, status, pan_masked, employment_type FROM employees WHERE lower(work_email)=$1", [email]);
+    "SELECT name, emp_no, title, dept, start_date, last_day, status, pan_masked, employment_type, onboarded_at FROM employees WHERE lower(work_email)=$1", [email]);
   if (!e) return res.status(404).json({ error: "Employee not found." });
   const [{ rows: all }, { rows: [b] }] = await Promise.all([
     pool.query("SELECT * FROM salary_structures WHERE lower(work_email)=$1 ORDER BY effective_from", [email]),
@@ -453,7 +518,7 @@ R.get("/profile/:email", hrOnly, wrap(async (req, res) => {
   const joinMonth = e.start_date ? String(e.start_date).slice(0, 7) : null;
   res.json({
     name: e.name, empNo: e.emp_no, title: e.title, dept: deptOf(e.dept, e.title), employmentType: e.employment_type || "Employee", start: e.start_date, lastDay: e.last_day, status: e.status,
-    paidFrom: joinMonth, joinsLater: !!joinMonth && joinMonth > month, leaving: !!e.last_day,
+    onboarding: e.status === "onboarding" && !e.onboarded_at, paidFrom: joinMonth, joinsLater: !!joinMonth && joinMonth > month, leaving: !!e.last_day,
     profile: payrollProfile({ hasSalary: !!st, hasBank: !!b, pan: e.pan_masked }),
     salary: st ? { effectiveFrom: st.effectiveFrom, monthlyGross: st.earnings.reduce((n, x) => n + Number(x.amount || 0), 0), annualCtc: st.annualCtc, revisions: all.length } : null,
     bank: b ? { bankName: b.bank_name, last4: b.acct_last4, updatedAt: b.updated_at } : null,

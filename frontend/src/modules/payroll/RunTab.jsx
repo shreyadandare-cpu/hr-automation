@@ -4,6 +4,7 @@ import Modal, { Field } from "../../components/Modal.jsx";
 import { Callout, DownloadIcon, Person } from "../../components/ui.jsx";
 import { useToast } from "../../components/toast.jsx";
 import LineModal from "./LineModal.jsx";
+import JoinersCard from "./JoinersCard.jsx";
 import { LinePill, STEPS, StatusPill, fileUrl, money, monthLabel, plural, thisMonth, when } from "./util.jsx";
 
 /* What each workflow button says and asks. note: a reason box (required when `need`). */
@@ -27,7 +28,9 @@ function Stepper({ status }) {
   );
 }
 
-function Table({ data, onOpen }) {
+function Table({ data, onOpen, runId, editable, onChanged }) {
+  const toast = useToast();
+  const [sel, setSel] = useState(() => new Set()), [ask, setAsk] = useState(null), [why, setWhy] = useState(""), [busy, setBusy] = useState(false), [err, setErr] = useState("");
   const [q, setQ] = useState(""), [dept, setDept] = useState(""), [title, setTitle] = useState(""), [status, setStatus] = useState(""), [sort, setSort] = useState("name");
   const opts = (k) => [...new Set(data.lines.map((l) => l[k]).filter(Boolean))].sort();
   const rows = useMemo(() => {
@@ -37,8 +40,34 @@ function Table({ data, onOpen }) {
     return list.slice().sort(by[sort]);
   }, [data.lines, q, dept, title, status, sort]);
   const t = data.totals;
+  const toggle = (email) => setSel((s) => { const n = new Set(s); n.has(email) ? n.delete(email) : n.add(email); return n; });
+  const allShown = rows.length > 0 && rows.every((l) => sel.has(l.email));
+  const send = async (action, reason) => {
+    setBusy(true); setErr("");
+    const r = await api("POST", `/api/payroll/runs/${runId}/hold`, { action, emails: [...sel], reason });
+    setBusy(false);
+    if (!r.ok) { setErr((r.data && r.data.errors && r.data.errors.reason) || apiMsg(r)); return; }
+    toast(r.data.held && r.data.released ? `${r.data.held} put on hold, ${r.data.released} released.` : r.data.held ? `${r.data.held} put on hold.` : `${r.data.released} released from hold.`);
+    setAsk(null); setWhy(""); setSel(new Set()); onChanged();
+  };
+  const ASK = { hold: ["Put the selected on hold", "They are not paid in this payroll and are left out of the bank file. Say why, so the reviewer knows."],
+    only: ["Process only the selected", "Everyone else is put on hold for this payroll. Say why, so the reviewer knows."] };
   return (
     <>
+      {editable && sel.size > 0 && <div className="filters" style={{ alignItems: "center" }}>
+        <b>{sel.size} selected</b>
+        <button type="button" className="btn primary sm" onClick={() => { setWhy(""); setErr(""); setAsk("only"); }}>Process only these</button>
+        <button type="button" className="btn glass sm" onClick={() => { setWhy(""); setErr(""); setAsk("hold"); }}>Put on hold</button>
+        <button type="button" className="btn glass sm" disabled={busy} onClick={() => send("release")}>Release hold</button>
+        <button type="button" className="btn link" onClick={() => setSel(new Set())}>Clear</button>
+      </div>}
+      {ask && (
+        <Modal onClose={() => !busy && setAsk(null)}>
+          <div className="card-h" style={{ paddingTop: 24 }}><h3>{ASK[ask][0]}</h3></div>
+          <div className="card-b"><Callout>{ASK[ask][1]}</Callout>
+            <Field id="hd-why" label="Reason" error={err}><input className="input" id="hd-why" autoFocus maxLength={200} value={why} onChange={(e) => setWhy(e.target.value)} placeholder="For example: joining after the 20th, paid next month" /></Field></div>
+          <div className="modal-f"><button type="button" className="btn glass" disabled={busy} onClick={() => setAsk(null)}>Cancel</button><button type="button" className="btn primary" disabled={busy} onClick={() => send(ask, why)}>{busy ? "Saving…" : "Confirm"}</button></div>
+        </Modal>)}
       <div className="filters">
         <input className="input grow" type="search" placeholder="Search name or employee ID" aria-label="Search employees" value={q} onChange={(e) => setQ(e.target.value)} />
         <select className="input" aria-label="Department" value={dept} onChange={(e) => setDept(e.target.value)}><option value="">All departments</option>{opts("dept").map((d) => <option key={d}>{d}</option>)}</select>
@@ -47,12 +76,14 @@ function Table({ data, onOpen }) {
         <select className="input" aria-label="Sort" value={sort} onChange={(e) => setSort(e.target.value)}><option value="name">Sort: name</option><option value="net-desc">Net pay, high to low</option><option value="net-asc">Net pay, low to high</option><option value="gross-desc">Gross, high to low</option></select>
       </div>
       <div className="tbl-wrap"><table className="pr-table pr-run"><thead><tr>
+        {editable && <th style={{ width: 36 }}><input type="checkbox" aria-label="Select everyone shown" checked={allShown} onChange={() => setSel((s) => { const n = new Set(s); rows.forEach((l) => (allShown ? n.delete(l.email) : n.add(l.email))); return n; })} /></th>}
         <th>Employee</th><th className="num">Basic</th><th className="num">HRA</th><th className="num">Allowances</th><th className="num hide-sm">Other earnings</th><th className="num">Gross</th>
         <th className="num">PF</th><th className="num hide-sm">ESIC</th><th className="num">PT</th><th className="num">TDS</th><th className="num">Other ded.</th><th className="num">Net payable</th></tr></thead><tbody>
         {rows.length ? rows.map((l) => {
           const s = l.summary;
           return (
             <tr key={l.id} className="pr-row" tabIndex={0} onClick={() => onOpen(l)} onKeyDown={(e) => { if (e.key === "Enter") onOpen(l); }}>
+              {editable && <td onClick={(e) => e.stopPropagation()}><input type="checkbox" aria-label={`Select ${l.name}`} checked={sel.has(l.email)} onChange={() => toggle(l.email)} /></td>}
               <td><Person name={l.name} sub={[l.empNo, l.title].filter(Boolean).join(" · ") || l.email} />
                 {l.status !== "ready" && <div className="pr-flag"><LinePill status={l.status} /> <span className="muted">{l.status === "hold" ? l.inputs.holdReason : l.incomplete[0]}</span></div>}</td>
               <td className="num">{money(s.basic)}</td><td className="num">{money(s.hra)}</td><td className="num">{money(s.allowances)}</td><td className="num hide-sm">{money(s.otherEarnings)}</td>
@@ -61,8 +92,8 @@ function Table({ data, onOpen }) {
               <td className="num">{money(s.lop + s.otherDeductions)}{s.lop > 0 && <div className="muted">incl. LOP {money(s.lop)}</div>}</td>
               <td className="num"><b className="pay-total">{l.status === "ready" ? money(s.net) : "—"}</b></td>
             </tr>);
-        }) : <tr><td colSpan={12}><div className="empty">Nobody matches these filters.</div></td></tr>}
-        <tr className="rb-total"><td><b>Total paid · {plural(t.people, "person", "people")}</b></td><td className="num">{money(t.basic)}</td><td className="num">{money(t.hra)}</td><td className="num">{money(t.allowances)}</td>
+        }) : <tr><td colSpan={13}><div className="empty">Nobody matches these filters.</div></td></tr>}
+        <tr className="rb-total">{editable && <td />}<td><b>Total paid · {plural(t.people, "person", "people")}</b></td><td className="num">{money(t.basic)}</td><td className="num">{money(t.hra)}</td><td className="num">{money(t.allowances)}</td>
           <td className="num hide-sm">{money(t.otherEarnings)}</td><td className="num"><b>{money(t.gross)}</b></td><td className="num">{money(t.pf)}</td><td className="num hide-sm">{money(t.esic)}</td><td className="num">{money(t.pt)}</td><td className="num">{money(t.tds)}</td>
           <td className="num">{money(t.lop + t.otherDeductions)}</td><td className="num"><b>{money(t.net)}</b></td></tr>
       </tbody></table></div>
@@ -137,6 +168,7 @@ export default function RunTab({ you }) {
   const run = data && data.run, t = (data && data.totals) || (ov && ov.totals);
   const workbook = data && data.files.find((f) => f.kind === "workbook" && !f.superseded);
   const bank = data && data.files.find((f) => f.kind === "bank" && !f.superseded);
+  const bankX = data && data.files.find((f) => f.kind === "bank_xlsx" && !f.superseded);
   const d = dlg && dlg.action && ACT[dlg.action];
 
   return (
@@ -170,13 +202,15 @@ export default function RunTab({ you }) {
               {!run && !you.hr && <span className="muted">{you.reviewer ? "No payroll has been sent for review for this month." : "There is no payroll for this month yet."}</span>}
               {run && run.editable && <button type="button" className="btn glass" disabled={busy} onClick={recalc}>Recalculate</button>}
               {workbook && <a className="btn glass" href={fileUrl(run.id, workbook.id)} download aria-label={`Download Excel (v${workbook.version})`} title="Download Excel"><DownloadIcon />Excel (v{workbook.version})</a>}
-              {bank && you.bank && <a className="btn glass" href={fileUrl(run.id, bank.id)} download aria-label="Download bank file" title="Download bank file"><DownloadIcon />Bank file</a>}
+              {bank && you.bank && <a className="btn glass" href={fileUrl(run.id, bank.id)} download aria-label="Download bank file" title="Download bank file"><DownloadIcon />Bank file (CSV)</a>}
+              {bankX && you.bank && <a className="btn glass" href={fileUrl(run.id, bankX.id)} download aria-label="Download bank transfer sheet (Excel)" title="Download bank transfer sheet (Excel)"><DownloadIcon />Bank sheet (Excel)</a>}
               {run && run.actions.map((a) => <button key={a} type="button" className={`btn ${ACT[a].tone}`} onClick={() => { setNote(""); setRef(""); setDlg({ action: a }); }}>{ACT[a].label}</button>)}
             </div>
           </>}
       </div>
 
-      {data && <div className="card"><div className="card-h"><h3>Employee-wise payroll</h3><span className="muted">Select a row for the full calculation{run.editable ? " and to edit inputs" : ""}.</span></div><Table data={data} onOpen={setLine} /></div>}
+      {you.hr && period && <JoinersCard period={period} again={run ? `${run.id}:${run.status}:${data && data.lines ? data.lines.length : 0}` : "none"} />}
+      {data && <div className="card"><div className="card-h"><h3>Employee-wise payroll</h3><span className="muted">Select a row for the full calculation{run.editable ? " and to edit inputs" : ""}.</span></div><Table data={data} runId={run.id} editable={!!run.editable} onChanged={() => load(period)} onOpen={setLine} /></div>}
 
       {data && data.events.length > 0 && (
         <div className="card"><details className="ln-det" style={{ padding: "16px 24px" }}><summary>Activity ({data.events.length})</summary>

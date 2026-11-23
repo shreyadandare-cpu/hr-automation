@@ -92,6 +92,7 @@ CREATE TABLE IF NOT EXISTS payroll_adjustments (
 CREATE INDEX IF NOT EXISTS payroll_adjustments_email ON payroll_adjustments (lower(work_email));
 
 -- Generated files, stored with their run. Bank files are encrypted (they hold full account numbers).
+-- kind: the payroll workbook, the bank transfer file as CSV, and the same payments as an Excel sheet (bank_xlsx; both hold full account numbers, so both are encrypted)
 CREATE TABLE IF NOT EXISTS payroll_files (
   id           SERIAL PRIMARY KEY,
   run_id       INTEGER NOT NULL REFERENCES payroll_runs(id),
@@ -109,6 +110,9 @@ CREATE TABLE IF NOT EXISTS payroll_files (
   superseded   BOOLEAN NOT NULL DEFAULT false,
   UNIQUE (run_id, kind, version)
 );
+
+ALTER TABLE payroll_files DROP CONSTRAINT IF EXISTS payroll_files_kind_check;
+ALTER TABLE payroll_files ADD CONSTRAINT payroll_files_kind_check CHECK (kind IN ('workbook','bank','bank_xlsx'));
 
 -- Who did what: salary and bank changes, calculations, overrides, the review, generated files and downloads.
 -- Append only: the trigger below refuses changes and deletions.

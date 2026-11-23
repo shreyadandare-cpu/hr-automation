@@ -6,10 +6,13 @@ import { BRAND, PRODUCT } from "../brand.js";
 
 /*
  * The month's payroll workbook, built from the run as stored in the database (loadRun). Three sheets:
- *   1. Employee Payroll Summary   Name, Gross, PF, PT, ESIC, TDS, Deduction (Adv/Late), Reimbur, Net Payable (a formula), grand total row
+ *   1. Employee Payroll Summary   Name, employee ID, department, designation, full-month salary, Basic, HRA, allowances, other earnings, Gross, PF, PT, ESIC, TDS,
+ *                                 Deduction (Adv/Late), Reimbur, Net Payable (a formula), bank name / last four digits / IFSC, grand total row
  *   2. Salary Calculation Details every earning and deduction per person, the calculation steps and the TDS working
  *   3. Payroll Summary            totals as formulas over sheet 1, next to the database's figures, and whether they match
- * Sheet 1 has only the columns of HR's sample sheet. Bank details are not in the report at all: they are only in the bank file.
+ * Sheet 1 starts with the columns of HR's sample sheet and adds who the person is, what their salary is made of and where it goes. The bank is shown as its
+ * name, the last four digits and the IFSC only: the full account number is never in this report (this copy is stored and goes to the reviewer); it is only in the
+ * encrypted bank files.
  */
 export const COMPANY = BRAND.company.legalNameShort;
 // Rows show "-" for nothing, like the sample sheet; totals always show the amount.
@@ -26,6 +29,14 @@ const SHEET1 = "Employee Payroll Summary";
  *  Gross is salary only (reimbursements are not in it); Deduction (Adv/Late) is loss of pay plus other deductions (advances, late marks…). */
 export const SUMMARY_COLUMNS = [
   { key: "name", header: "Name", width: 28 },
+  { key: "empNo", header: "Employee ID", width: 13 },
+  { key: "dept", header: "Department", width: 24 },
+  { key: "title", header: "Designation", width: 28 },
+  { key: "monthly", header: "Monthly salary (full month)", money: true, width: 18 },
+  { key: "basic", header: "Basic", money: true },
+  { key: "hra", header: "HRA", money: true },
+  { key: "allowances", header: "Other allowances", money: true, width: 16 },
+  { key: "otherEarnings", header: "Incentives & other earnings", money: true, width: 18 },
   { key: "gross", header: "Gross", money: true },
   { key: "pf", header: "PF", money: true },
   { key: "pt", header: "PT", money: true },
@@ -34,10 +45,13 @@ export const SUMMARY_COLUMNS = [
   { key: "deduction", header: "Deduction (Adv/Late)", money: true, width: 21 },
   { key: "reimb", header: "Reimbur", money: true },
   { key: "net", header: "Net Payable", money: true, f: (c) => `${c.gross}-${c.pf}-${c.pt}-${c.esic}-${c.tds}-${c.deduction}+${c.reimb}` },
+  { key: "bankName", header: "Bank", width: 22 },
+  { key: "last4", header: "Account (last 4)", width: 14 },
+  { key: "ifsc", header: "IFSC", width: 14 },
 ];
 /** One person's figures for those columns, added in paise. */
 const p100 = (n) => Math.round(Number(n || 0) * 100);
-export const rowOf = (s) => ({ gross: (p100(s.gross) - p100(s.reimbursements)) / 100, pf: s.pf || 0, pt: s.pt || 0, esic: s.esic || 0, tds: s.tds || 0,
+export const rowOf = (s) => ({ monthly: s.fullMonthGross || 0, basic: s.basic || 0, hra: s.hra || 0, allowances: s.allowances || 0, otherEarnings: s.otherEarnings || 0, gross: (p100(s.gross) - p100(s.reimbursements)) / 100, pf: s.pf || 0, pt: s.pt || 0, esic: s.esic || 0, tds: s.tds || 0,
   deduction: (p100(s.lop) + p100(s.otherDeductions)) / 100, reimb: s.reimbursements || 0, net: s.net });
 const colLetter = (i) => { let s = "", n = i + 1; while (n) { const r = (n - 1) % 26; s = String.fromCharCode(65 + r) + s; n = Math.floor((n - 1) / 26); } return s; };
 const round2 = (n) => Math.round(Number(n || 0) * 100) / 100;
@@ -67,7 +81,8 @@ export async function buildWorkbook(data, meta) {
   wb.calcProperties.fullCalcOnLoad = true;   // formulas are recalculated when opened; cached results are the database figures
   const fyText = fyOf(run.period);
   // The totals row, in the same columns as the rows (from the database totals).
-  const T = { gross: round2(t.gross - t.reimbursements), pf: t.pf, pt: t.pt, esic: t.esic, tds: t.tds, deduction: round2(t.lop + t.otherDeductions), reimb: t.reimbursements, net: t.net };
+  const sumPaid = (f) => paid.reduce((n, l) => n + p100(f(l.summary)), 0) / 100;
+  const T = { monthly: sumPaid((s) => s.fullMonthGross), basic: t.basic, hra: t.hra, allowances: t.allowances, otherEarnings: t.otherEarnings, gross: round2(t.gross - t.reimbursements), pf: t.pf, pt: t.pt, esic: t.esic, tds: t.tds, deduction: round2(t.lop + t.otherDeductions), reimb: t.reimbursements, net: t.net };
   const sub = `Payroll month ${monthName(run.period)} · FY ${fyText} · Status ${STATUS[run.status] || run.status} · Version ${meta.version} · Generated ${new Date(meta.generatedAt).toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })} by ${meta.generatedBy} · All amounts in INR`;
 
   /* ---------- Sheet 1 ---------- */
@@ -80,7 +95,8 @@ export async function buildWorkbook(data, meta) {
   header(s1.getRow(4));
   const first = 5;
   paid.forEach((l, n) => {
-    const r = first + n, v = { name: l.name, ...rowOf(l.summary) };
+    const r = first + n, b = l.bank && l.bank.onFile ? l.bank : null;
+    const v = { name: l.name, empNo: l.empNo || "", dept: l.dept || "", title: l.title || "", ...rowOf(l.summary), bankName: b ? b.bankName : "Not on file", last4: b ? `••${b.last4}` : "", ifsc: b ? b.ifsc : "" };
     const cells = Object.fromEntries(SUMMARY_COLUMNS.map((c) => [c.key, `${ref[c.key]}${r}`]));
     SUMMARY_COLUMNS.forEach((c, i) => {
       const cell = s1.getCell(r, i + 1);

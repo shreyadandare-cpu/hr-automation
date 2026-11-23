@@ -30,14 +30,11 @@ const call = async (token, method, path, body, raw) => {
   const type = r.headers.get("content-type") || "";
   return { status: r.status, type, data: type.includes("json") ? await r.json().catch(() => null) : Buffer.from(await r.arrayBuffer()) };
 };
-const unlock = async (t, pin) => { const r = await call(t, "POST", "/api/pay/pin", { pin, confirm: pin }); if (r.status !== 201) await call(t, "POST", "/api/pay/unlock", { pin }); };
 const FY = Number((await db.query("SELECT extract(year FROM (now() AT TIME ZONE 'Asia/Kolkata')::date - interval '3 months')::int AS y")).rows[0].y);
 
 try {
   await db.query("DELETE FROM tax_regime_policies");
-  await db.query("DELETE FROM pay_pins WHERE email IN ($1,$2,$3)", [EMP, EMP2, HR]);
   const e = await login(EMP), e2 = await login(EMP2), hr = await login(HR, "hr");
-  await unlock(e, "483920"); await unlock(e2, "902716"); await unlock(hr, "358024");
 
   let r = await call(e, "GET", "/api/tax-declaration");
   ok("no policy yet: a declaration starts on the New regime", r.status === 200 && r.data.regime === "new" && r.data.policy.set === false && r.data.policy.document === null, JSON.stringify(r.data && r.data.policy));
@@ -87,11 +84,6 @@ try {
   const rows = (await db.query("SELECT financial_year, default_regime FROM tax_regime_policies ORDER BY financial_year")).rows;
   ok("changing it this year adds this year's row and keeps last year's", rows.length === 2 && rows[0].default_regime === "old" && rows[1].default_regime === "new", JSON.stringify(rows));
 
-  // It sits behind the Pay PIN like the rest of tax.
-  await call(e, "POST", "/api/pay/lock", { reason: "manual" });
-  ok("locked Pay refuses the policy too (423)", (await call(e, "GET", "/api/tax-declaration/policy")).status === 423);
-  ok("and the policy document (423)", (await call(e, "GET", "/api/tax-declaration/policy/document")).status === 423);
-
   const log = (await db.query("SELECT action FROM audit_log WHERE work_email=$1 AND action ILIKE 'Tax regime policy%' ORDER BY id", [HR])).rows.map((x) => x.action).join("\n");
   ok("the changes are in the audit log", /Old regime is the default/.test(log) && /document uploaded/.test(log) && /document removed/.test(log), log);
 } catch (err) { fail++; console.log("ERROR  " + err.stack); }
@@ -99,7 +91,6 @@ finally {
   await db.query("DELETE FROM tax_declaration_requests WHERE lower(email) IN ($1,$2)", [EMP, EMP2]);
   await db.query("DELETE FROM tax_regime_policies");
   await db.query("DELETE FROM sessions WHERE lower(email) IN ($1,$2,$3)", [EMP, EMP2, HR]);
-  await db.query("DELETE FROM pay_pins WHERE email IN ($1,$2,$3)", [EMP, EMP2, HR]);
   await db.query("DELETE FROM users WHERE email IN ($1,$2)", [EMP, EMP2]);
   await db.query("DELETE FROM audit_log WHERE work_email IN ($1,$2,$3) AND (action ILIKE 'Tax regime policy%' OR action ILIKE '%pay%')", [EMP, EMP2, HR]);
   await db.end();

@@ -1,5 +1,4 @@
 import { lazy } from "react";
-import { PayGate } from "../paysecurity/PayLock.jsx";
 /* Each page loads only when it is first opened (code splitting), so the app starts fast. */
 const Polls = lazy(() => import("./Polls.jsx"));
 const Praise = lazy(() => import("./Praise.jsx"));
@@ -18,6 +17,6 @@ export const routes = [
   { path: "/app/apps", element: <Apps /> },
   { path: "/app/requests", element: <Requests /> },
   { path: "/app/hr-requests", element: <Requests all /> },
-  { path: "/app/tax", element: <PayGate><Tax /></PayGate> },
+  { path: "/app/tax", element: <Tax /> },
   { path: "/app/goals", element: <Goals /> },
 ];

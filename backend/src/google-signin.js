@@ -1,8 +1,7 @@
 import crypto from "node:crypto";
 import express from "express";
 import { pool } from "./db.js";
-import { startSession, accountForSignIn, sessionKeyOf } from "./auth.js";
-import { allowFactorReset, auditPay } from "./pay-security.js";
+import { startSession, accountForSignIn } from "./auth.js";
 import { isCompanyEmail } from "./validate.js";
 import { publicUrl } from "./mail.js";
 
@@ -37,27 +36,11 @@ googleRouter.get("/google", (_req, res) => {
   res.redirect(`${AUTH_URL}?${q}`);
 });
 
-/* "Forgot PIN" (Pay section): the same Google sign-in, asked for again from scratch (the person must choose their account and sign in
-   again). It never starts a session; it only proves the person at the keyboard is the one already signed in, and lets that session
-   set up the Pay security again (pay-security.js). */
-googleRouter.get("/google/pay-recover", (req, res) => {
-  if (!googleEnabled() || !sessionKeyOf(req)) return res.redirect("/app/my-finances?paypin=google_off");
-  const state = b64(crypto.randomBytes(24)), verifier = b64(crypto.randomBytes(32));
-  const challenge = b64(crypto.createHash("sha256").update(verifier).digest());
-  res.append("Set-Cookie", `${COOKIE}=${state}.${verifier}.pay; HttpOnly; SameSite=Lax; Path=/auth/google; Max-Age=600${secure()}`);
-  const q = new URLSearchParams({
-    client_id: process.env.GOOGLE_OAUTH_CLIENT_ID, redirect_uri: redirectUri(), response_type: "code", scope: "openid email profile",
-    state, code_challenge: challenge, code_challenge_method: "S256", hd: "wohlig.com", prompt: "login select_account", max_age: "0",
-  });
-  res.redirect(`${AUTH_URL}?${q}`);
-});
-const authTime = (idToken) => { try { return Number(JSON.parse(Buffer.from(String(idToken).split(".")[1], "base64url").toString()).auth_time) || 0; } catch { return 0; } };
-
 googleRouter.get("/google/callback", async (req, res) => {
   try {
     if (!googleEnabled()) return back(res, "google_off");
     if (req.query.error) return back(res, req.query.error === "access_denied" ? "google_cancelled" : "google");
-    const [state, verifier, purpose] = (cookieOf(req) || "").split(".");
+    const [state, verifier] = (cookieOf(req) || "").split(".");
     const code = String(req.query.code || ""), got = String(req.query.state || "");
     if (!state || !verifier || !code || !same(state, got)) return back(res, "google_state");
 
@@ -76,17 +59,6 @@ googleRouter.get("/google/callback", async (req, res) => {
     const email = String(info.email || "").toLowerCase();
     if (!infoRes.ok || info.email_verified !== true || !email) return back(res, "google");
     if (!isCompanyEmail(email)) return back(res, "google_domain");
-
-    if (purpose === "pay") {   // Setting up Pay security: the Google account must be the one this session is signed in as, and the sign-in must be fresh
-      clearCookie(res);
-      const me = await pool.query("SELECT email FROM sessions WHERE token_hash=$1 AND expires_at > now()", [sessionKeyOf(req) || ""]);
-      const who = me.rows[0] && me.rows[0].email.toLowerCase();
-      if (!who || who !== email) { if (who) auditPay(who, "Pay security reset refused: Google account did not match"); return res.redirect("/app/my-finances?paypin=mismatch"); }
-      if (Date.now() / 1000 - authTime(tokens.id_token) > 180) return res.redirect("/app/my-finances?paypin=stale");
-      await allowFactorReset(sessionKeyOf(req));
-      auditPay(who, "Google sign-in confirmed for Pay security setup");
-      return res.redirect("/app/my-finances?paypin=reset");
-    }
 
     const u = await accountForSignIn(email);
     if (!u) return back(res, "google_no_account");

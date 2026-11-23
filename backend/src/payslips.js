@@ -4,7 +4,6 @@ import { fileURLToPath } from "node:url";
 import PDFDocument from "pdfkit";
 import { payPool as pool } from "./db.js";   // payroll may use its own database (PAYROLL_DATABASE_URL)
 import { requireAuth } from "./auth.js";
-import { requirePayUnlock } from "./pay-security.js";
 import { can, canAll } from "./access.js";
 import { BRAND } from "./brand.js";
 
@@ -157,9 +156,8 @@ export function drawPdf(doc, p) {
 
 export function payslipsRouter(wrap) {
   const r = express.Router();
-  // A person's own payslips are behind Pay security (pay-security.js). Someone else's (?email=, for payroll.view holders, from the employee's profile) is guarded by that permission instead.
   const forOther = (req) => { const a = String(req.query.email || "").toLowerCase(); return !!a && !!req.user && a !== req.user.email.toLowerCase(); };
-  r.use("/api/payslips", requireAuth, (req, res, next) => (forOther(req) ? next() : requirePayUnlock(req, res, next)));
+  r.use("/api/payslips", requireAuth);
   r.use("/api/payslips", (_req, res, next) => { res.setHeader("Cache-Control", "private, no-store"); next(); });
 
   // Months with a payslip, newest first.

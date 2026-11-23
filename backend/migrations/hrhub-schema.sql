@@ -1164,61 +1164,9 @@ CREATE TABLE IF NOT EXISTS tool_bills (
   deleted_at   TIMESTAMPTZ);
 CREATE INDEX IF NOT EXISTS tool_bills_month ON tool_bills (month, tool) WHERE deleted_at IS NULL;
 
--- The Pay section PIN (pay-security.js), one of the ways to open Pay for a device with no fingerprint reader. One salted hash per person (never the PIN), a count of wrong tries, and the time a lockout ends.
-CREATE TABLE IF NOT EXISTS pay_pins (
-  email           TEXT PRIMARY KEY,                      -- lower case, same as users.email
-  pin_hash        TEXT NOT NULL,
-  failed_attempts INT NOT NULL DEFAULT 0,
-  locked_until    TIMESTAMPTZ,
-  created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
-  updated_at      TIMESTAMPTZ NOT NULL DEFAULT now()
-);
--- The 6-digit code emailed to prove who is setting up Pay security: only its HMAC, one live code per person, with its try count and a send limit (5 an hour).
-CREATE TABLE IF NOT EXISTS pay_pin_otps (
-  email        TEXT PRIMARY KEY,                         -- lower case, same as users.email
-  code_hash    TEXT NOT NULL,
-  expires_at   TIMESTAMPTZ NOT NULL,
-  attempts     INT NOT NULL DEFAULT 0,
-  sent_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
-  send_count   INT NOT NULL DEFAULT 1,
-  window_start TIMESTAMPTZ NOT NULL DEFAULT now()
-);
--- Pay security. An authenticator app (TOTP): the secret is stored encrypted; last_step stops a code being used twice; 5 wrong codes lock checking for 15 minutes.
-CREATE TABLE IF NOT EXISTS pay_totp (
-  email           TEXT PRIMARY KEY,                      -- lower case, same as users.email
-  secret_enc      TEXT NOT NULL,
-  confirmed       BOOLEAN NOT NULL DEFAULT false,        -- true once the first code from the app has been typed
-  last_step       BIGINT NOT NULL DEFAULT 0,
-  failed_attempts INT NOT NULL DEFAULT 0,
-  locked_until    TIMESTAMPTZ,
-  created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
-  updated_at      TIMESTAMPTZ NOT NULL DEFAULT now()
-);
--- Fingerprints, Face ID and device unlock (WebAuthn passkeys): only the public key is kept.
-CREATE TABLE IF NOT EXISTS pay_passkeys (
-  id            BIGSERIAL PRIMARY KEY,
-  email         TEXT NOT NULL,                           -- lower case, same as users.email
-  credential_id TEXT NOT NULL UNIQUE,
-  public_key    TEXT NOT NULL,
-  counter       BIGINT NOT NULL DEFAULT 0,
-  transports    TEXT,
-  device_name   TEXT,
-  created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
-  last_used_at  TIMESTAMPTZ
-);
-CREATE INDEX IF NOT EXISTS pay_passkeys_email_idx ON pay_passkeys (email);
--- The one-time challenge of a passkey step, per browser session; it lives 5 minutes and is deleted when used.
-CREATE TABLE IF NOT EXISTS pay_challenges (
-  token_hash TEXT NOT NULL,
-  kind       TEXT NOT NULL,                              -- register | auth
-  challenge  TEXT NOT NULL,
-  expires_at TIMESTAMPTZ NOT NULL,
-  PRIMARY KEY (token_hash, kind)
-);
--- Whether this browser session may open Pay, and until when. Cleared by locking, by a PIN reset, and when the session ends.
-ALTER TABLE sessions ADD COLUMN IF NOT EXISTS pay_unlocked_until TIMESTAMPTZ;
-ALTER TABLE sessions ADD COLUMN IF NOT EXISTS pay_unlocked_at    TIMESTAMPTZ;
-ALTER TABLE sessions ADD COLUMN IF NOT EXISTS pay_recover_until  TIMESTAMPTZ;   -- set after proof of identity (emailed code or fresh Google sign-in): the session may set up its Pay security
+-- The Pay lock (fingerprint, authenticator app, PIN) was removed on 2026-11-23: its tables and columns are dropped.
+DROP TABLE IF EXISTS pay_pins, pay_pin_otps, pay_totp, pay_passkeys, pay_challenges;
+ALTER TABLE sessions DROP COLUMN IF EXISTS pay_unlocked_until, DROP COLUMN IF EXISTS pay_unlocked_at, DROP COLUMN IF EXISTS pay_recover_until;
 
 -- Tax regime policy (engage.js): the regime a declaration starts on for a financial year (New or Old) and the policy document behind it.
 -- A year without a row uses the latest earlier one; no rows at all means the New regime.

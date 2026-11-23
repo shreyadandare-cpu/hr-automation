@@ -6,7 +6,6 @@ import { UPLOAD_DIR } from "./documents.js";
 import { MAX_BYTES, checkFile } from "./extract.js";
 import { pool } from "./db.js";
 import { requireAuth, unlessHidden } from "./auth.js";
-import { requirePayUnlock } from "./pay-security.js";
 import { can, canAll, mayDecide, need, scopeOf } from "./access.js";
 import { notify } from "./notify.js";
 import { readProof } from "./finance-rules.js";
@@ -36,7 +35,7 @@ async function namesFor(emails) {
 
 export function engageRouter(wrap) {
   const r = express.Router();
-  r.use("/api/tax-declaration", requireAuth, requirePayUnlock);   // a person's own tax declaration is personal pay: behind Pay security (pay-security.js). The HR list of everyone's (/api/tax-declarations) is not: it is guarded by its permission.
+  r.use("/api/tax-declaration", requireAuth);   // a person's own tax declaration. The HR list of everyone's (/api/tax-declarations) is guarded by its permission.
   r.use("/api/tax-declarations", requireAuth);
   r.use(["/api/polls", "/api/praise", "/api/rewards", "/api/articles", "/api/apps", "/api/requests", "/api/remote-today", "/api/tax-declaration", "/api/goals"], requireAuth);
 

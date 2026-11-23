@@ -121,7 +121,10 @@ export function onboardingRouter(wrap) {
 
   r.post("/api/onboarding/work-email", wrap(async (req, res) => {
     const { d = {}, existingEmail } = req.body || {};
+    // HR may type the work email instead of having Google create one (for example while the Google credentials are not set up).
+    const typed = String(req.body?.typedEmail || "").trim().toLowerCase();
     const errors = detailsErrors(d);
+    if (typed && !(/^[^\s@]+@wohlig\.com$/.test(typed))) errors.typedEmail = `Please enter a work email that ends in @${DOMAIN}.`;
     if (Object.keys(errors).length) return res.status(400).json({ errors });
 
     const full = `${d.first} ${d.last}`.trim();
@@ -149,18 +152,19 @@ export function onboardingRouter(wrap) {
            address=$8, google_status=$9, emp_no=COALESCE($11, emp_no) WHERE lower(work_email)=$10`, [...fields, status, email.toLowerCase(), no]);
       } else {
         await client.query("LOCK TABLE employees IN SHARE ROW EXCLUSIVE MODE");
-        email = await nextWorkEmail(client, d.first, d.last);
+        email = typed || await nextWorkEmail(client, d.first, d.last);
+        if (typed && (await client.query("SELECT 1 FROM employees WHERE lower(work_email)=$1", [typed])).rows[0]) { await client.query("ROLLBACK"); return res.status(400).json({ errors: { typedEmail: `${typed} already belongs to someone in the employee list.` } }); }
         if (!email) { await client.query("ROLLBACK"); return res.status(400).json({ error: "Add a first name and surname first." }); }
         const owner = await personalEmailOwner(client, d.pemail, "");
         if (owner) { await client.query("ROLLBACK"); return res.status(400).json({ errors: dupEmailError(d.pemail.trim(), owner) }); }
-        status = "pending";
+        status = typed ? "existing" : "pending";   // a typed address is used as it is: nothing is created in Google
         const no = String(d.empNo || "").trim() || await nextEmployeeNoFrom(client);   // the table is locked above, so two joiners never get the same number
         const taken = no ? await employeeNoOwner(client, no) : null;
         if (taken) { await client.query("ROLLBACK"); return res.status(400).json({ errors: { empNo: `${no} already belongs to ${taken}.` } }); }
         await client.query(
           `INSERT INTO employees (name, dept, title, manager, start_date, personal_email, phone, address, work_email, status, google_status, emp_no)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'onboarding','pending',$10)`, [...fields, email, no]);
-        await client.query("INSERT INTO audit_log (action, work_email) VALUES ($1,$2)", ["Work email reserved", email]);
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'onboarding',$11,$10)`, [...fields, email, no, status]);
+        await client.query("INSERT INTO audit_log (action, work_email) VALUES ($1,$2)", [typed ? "Work email entered by HR" : "Work email reserved", email]);
       }
       await client.query("UPDATE employees SET employment_type=$1 WHERE lower(work_email)=$2", [kindOf(d), email.toLowerCase()]);
       await client.query("COMMIT");

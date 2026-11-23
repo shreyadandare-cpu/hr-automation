@@ -77,12 +77,13 @@ export function peopleRouter(wrap) {
                                                      'status', a.status, 'start', a.start_date, 'end', a.end_date)
                                    ORDER BY (a.status = 'Active') DESC, p.name), '[]'::json)
           FROM employee_project_allocations a JOIN projects p ON p.id = a.project_id WHERE a.employee_id = e.id) AS projects,
-         (SELECT extract(epoch FROM ph.updated_at)::bigint FROM profile_photos ph WHERE lower(ph.email) = lower(e.work_email)) AS photo_v
+         (SELECT extract(epoch FROM ph.updated_at)::bigint FROM profile_photos ph WHERE lower(ph.email) = lower(e.work_email)) AS photo_v,
+         EXISTS (SELECT 1 FROM users u WHERE lower(u.email) = lower(e.work_email) AND u.login_blocked) AS login_off
        FROM employees e ORDER BY e.id`);
     res.json(rows.map((r) => ({ id: r.id, no: r.emp_no, name: r.name, email: r.work_email, title: r.title, subTitle: r.sub_title,
       location: r.work_location, manager: r.manager, managerEmail: r.manager_email || "", start: r.start_date,
       // Who is leaving, and when, is shown only to people who may see personal details for that person (and to the person).
-      lastDay: sees(r.work_email) ? r.last_day : null, status: r.status === "offboarding" && !sees(r.work_email) ? "active" : r.status, onboarded: !!r.onboarding_closed_at, employmentType: r.employment_type, mailPlan: mailPlanOf(r.title), projects: r.projects, photoV: r.photo_v })));
+      lastDay: sees(r.work_email) ? r.last_day : null, status: r.status === "offboarding" && !sees(r.work_email) ? "active" : r.status, onboarded: !!r.onboarding_closed_at, employmentType: r.employment_type, mailPlan: mailPlanOf(r.title), projects: r.projects, photoV: r.photo_v, loginOff: r.login_off })));
   }));
 
   // Who reports to whom, for everyone. Only the manager's name is sent, so this is safe for employees too.

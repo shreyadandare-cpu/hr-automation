@@ -18,7 +18,7 @@ const WINDOW = 30;
 export function upcomingAnniversaries(people, today) {
   const y = Number(today.slice(0, 4)), out = [];
   for (const p of people || []) {
-    if (p.status === "offboarded" || !/^\d{4}-\d{2}-\d{2}/.test(p.start || "")) continue;
+    if (p.status === "offboarded" || p.loginOff || !/^\d{4}-\d{2}-\d{2}/.test(p.start || "")) continue;
     const sy = Number(p.start.slice(0, 4)), md = p.start.slice(5, 10);
     for (const yy of [y, y + 1]) {
       const date = `${yy}-${md === "02-29" && !leap(yy) ? "02-28" : md}`;
@@ -48,7 +48,7 @@ export default function CelebrateCard() {
 
   const bAll = (d && d.birthdays) || [], bToday = bAll.filter((b) => b.date === today), bSoon = bAll.filter((b) => b.date !== today);
   const aAll = upcomingAnniversaries(people, today), aToday = aAll.filter((a) => a.date === today), aSoon = aAll.filter((a) => a.date !== today);
-  const joiners = (people || []).filter((x) => x.status !== "offboarded" && x.start && x.start <= today && dayNo(today) - dayNo(x.start) <= WINDOW).sort((a, b) => (a.start < b.start ? 1 : -1));
+  const joiners = (people || []).filter((x) => x.status !== "offboarded" && !x.loginOff && x.start && x.start <= today && dayNo(today) - dayNo(x.start) <= WINDOW).sort((a, b) => (a.start < b.start ? 1 : -1));
   const tabs = [["birthdays", `${bToday.length} Birthdays`], ["anniversaries", `${aToday.length} Work anniversaries`], ["joiners", `${joiners.length} New joiners`]];
 
   return (

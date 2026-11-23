@@ -56,7 +56,7 @@ function DocsCard({ person, docs }) {
 }
 
 /* The work email is created in Google Workspace and active straight away. Only HR can do this. */
-function WorkEmailCard({ ob, taken, onCreate }) {
+function WorkEmailCard({ ob, taken, onCreate, onType, setTyped }) {
   const w = ob.work, d = ob.d;
   if (!w) {
     const preview = makeWorkEmail(d.first, d.last, taken);
@@ -68,6 +68,9 @@ function WorkEmailCard({ ob, taken, onCreate }) {
           <p style={{ margin: 0, color: "var(--ink-dim)" }}>Built as <span className="mono">name.surname@{DOMAIN}</span>, in lowercase. If the address is taken, a number is added. Fill in the details above, then create it. The name cannot be changed afterwards.</p>
           <Callout>A different password is generated for each person and emailed to their personal email. They must choose a new one at first sign-in.</Callout>
           <div className="row"><button type="button" className="btn primary" disabled={ob.busy} onClick={onCreate}>{ob.busy ? "Creating…" : "Create work email"}</button></div>
+          <hr className="m-0 border-0 border-t border-line" />
+          <Fld label="Or type the work email yourself" id="typedEmail" type="email" value={ob.typed || ""} onChange={setTyped} err={ob.errors.typedEmail} hint={`Use this when the address already exists, or Google is not connected yet. Nothing is created in Google, and the login invitation goes to this address.`} />
+          <div className="row"><button type="button" className="btn glass" disabled={ob.busy || !(ob.typed || "").trim()} onClick={onType}>Use this work email</button></div>
         </div></div>
     );
   }
@@ -187,12 +190,12 @@ export default function Onboarding() {
   const cancel = () => { clearDraft(); touched.current = true; setOb(newOb()); setPick(""); setRestored(false); window.scrollTo(0, 0); };
 
   /* Step 1: save the details, create the work email and activate it in Google. */
-  const makeEmail = async () => {
+  const makeEmail = async (typedEmail) => {
     const errs = step1Errors(d);
     if (Object.keys(errs).length) return fail(errs);
     patch({ busy: true, errors: {} });
     try {
-      const r = await api("POST", "/api/onboarding/work-email", { d, existingEmail: (ob.work && ob.work.email) || (picked && picked.email) || undefined });
+      const r = await api("POST", "/api/onboarding/work-email", { d, typedEmail: typedEmail || undefined, existingEmail: (ob.work && ob.work.email) || (picked && picked.email) || undefined });
       if (r.status === 400) {
         const errors = (r.data && r.data.errors) || {};
         toast(Object.values(errors)[0] || (r.data && r.data.error) || "The server rejected the details.");
@@ -298,7 +301,7 @@ export default function Onboarding() {
             <Fld label="Start date" id="start" type="date" value={d.start} onChange={(v) => setD("start", v)} err={er.start} />
             <Fld label="Employee ID" id="empNo" value={d.empNo} onChange={(v) => setD("empNo", v)} err={er.empNo} ph="e.g. WT/206" dis={!!ob.work} />
           </div></div>
-          <WorkEmailCard ob={ob} taken={taken} onCreate={makeEmail} />
+          <WorkEmailCard ob={ob} taken={taken} onCreate={() => makeEmail()} onType={() => makeEmail((ob.typed || "").trim())} setTyped={(v) => patch({ typed: v })} />
           <DocsCard person={picked} docs={docs} />
         </>}
         {ob.step === 2 && w && (

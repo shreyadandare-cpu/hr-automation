@@ -54,7 +54,8 @@ async function activeEmployees(db = pool) {
             COALESCE(NULLIF(p.data->'primary'->>'dob', ''), e.dob::text) AS dob,
             (SELECT extract(epoch FROM ph.updated_at)::bigint FROM profile_photos ph WHERE lower(ph.email) = lower(e.work_email)) AS photo_v
      FROM employees e LEFT JOIN profiles p ON lower(p.email) = lower(e.work_email)
-     WHERE e.status <> 'offboarded' AND e.last_day IS NULL ORDER BY e.name`);
+     WHERE e.status <> 'offboarded' AND e.last_day IS NULL
+       AND NOT EXISTS (SELECT 1 FROM users u WHERE lower(u.email) = lower(e.work_email) AND u.login_blocked) ORDER BY e.name`);
   return rows;
 }
 const person = (e, extra = {}) => ({ email: e.email, name: e.name, title: e.title || "", dept: e.dept || "", employmentType: e.employment_type || "Employee",

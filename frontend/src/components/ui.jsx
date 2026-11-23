@@ -211,6 +211,17 @@ export function ViewTabs({ views, view, onView, label, style }) {
   );
 }
 
+/** Tabs shown as the standard buttons: the open one is the maroon primary button, the others are glass. Same behaviour as ViewTabs. */
+export function ButtonTabs({ views, view, onView, label }) {
+  return (
+    <Tabs.Root value={view} onValueChange={onView} activationMode="manual" style={{ minWidth: 0 }}>
+      <Tabs.List className="m-0 flex flex-wrap gap-2 p-0" aria-label={label}>
+        {views.filter(Boolean).map(([k, text]) => <Tabs.Trigger key={k} value={k} className={`btn sm ${view === k ? "primary" : "glass"}`}>{text}</Tabs.Trigger>)}
+      </Tabs.List>
+    </Tabs.Root>
+  );
+}
+
 /* ---------- Skeletons: what a page shows while it loads. Never a "Loading…" text: the shape of the content, softly lit. ---------- */
 const SK = "block animate-skel bg-[linear-gradient(90deg,var(--color-tint)_25%,var(--color-line)_50%,var(--color-tint)_75%)] bg-[length:200%_100%]";
 const Busy = ({ children, className = "" }) => (

@@ -36,12 +36,10 @@ export const structuresFor = (db, period, email = null) => db.query(
   `SELECT DISTINCT ON (lower(work_email)) * FROM salary_structures WHERE effective_from <= $1 ${email ? "AND lower(work_email)=$2" : ""}
    ORDER BY lower(work_email), effective_from DESC`, email ? [period, email] : [period]).then((r) => r.rows);
 
-/** Whether a person's payroll profile is ready: a salary structure and a salary bank account are needed to pay them correctly; a PAN is advisory (TDS can be higher without one). */
+/** Whether a person's payroll profile is ready: a salary structure, a salary bank account and a PAN are all needed (the list in /employees uses the same three). */
 export function payrollProfile({ hasSalary, hasBank, pan }) {
-  const missing = [];
-  if (!hasSalary) missing.push("Salary structure");
-  if (!hasBank) missing.push("Bank account");
-  return { complete: !missing.length, missing, advisory: pan ? [] : ["PAN not on file"] };
+  const missing = [!hasSalary && "Salary structure", !hasBank && "Bank account", !pan && "PAN"].filter(Boolean);
+  return { complete: !missing.length, missing };
 }
 
 export const toStructure = (x) => ({

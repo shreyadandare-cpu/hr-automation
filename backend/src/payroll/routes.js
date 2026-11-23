@@ -431,10 +431,11 @@ R.get("/employees", hrOnly, wrap(async (req, res) => {
     const s = sOf.get(lc(e.work_email)), b = bOf.get(lc(e.work_email)), d = dOf.get(lc(e.work_email));
     const gross = s ? s.earnings.reduce((n, x) => n + Number(x.amount || 0), 0) : null;
     return { email: e.work_email, name: e.name, empNo: e.emp_no, dept: deptOf(e.dept, e.title), title: e.title, start: e.start_date, lastDay: e.last_day, status: e.status, employmentType: e.employment_type || "Employee", joinsLater: laterSet.has(lc(e.work_email)),
-      profile: payrollProfile({ hasSalary: !!s, hasBank: !!b, pan: e.pan_masked }),
       salary: s ? { effectiveFrom: s.effective_from, monthlyGross: gross, annualCtc: s.annual_ctc === null ? null : Number(s.annual_ctc), tdsMode: s.tds_mode || (s.tds_monthly !== null ? "manual" : "auto") } : null,
       bank: b ? { holder: b.holder_name, bankName: b.bank_name, ifsc: b.ifsc, last4: b.acct_last4, updatedAt: b.updated_at } : null,
-      onboardingIfsc: e.ifsc || null, regime: d ? d.regime : "new", declared: !!d };
+      onboardingIfsc: e.ifsc || null, regime: d ? d.regime : "new", declared: !!d,
+      // A payroll profile is complete with a salary structure, a salary bank account and a PAN. Until then the person shows as incomplete, and no salary is invented for them.
+      missing: [!s && "Salary structure", !b && "Bank account", !e.pan_masked && "PAN"].filter(Boolean) };
   }) });
 }));
 

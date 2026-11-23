@@ -3,7 +3,8 @@
 import express from "express";
 import { pool } from "./db.js";
 import { createGoogleUser as createLogin } from "./auth.js";
-import { invalidateTree, mayActOnLogin, needAll } from "./access.js";
+import { invalidateTree, mayActOnLogin, needAll, canAll } from "./access.js";
+import { saveOnboardingSalary } from "./payroll.js";
 import { checkManager } from "./people.js";
 import { createInvite, INVITE_MINUTES } from "./invites.js";
 import { linkDeviceUserByEmployeeNo } from "./device.js";
@@ -256,11 +257,23 @@ export function onboardingRouter(wrap) {
       if (idNow) await ensureKit(client, idNow.id, "onboarding");   // the Digital Kit is ready when they first sign in
       await client.query("COMMIT");
       invalidateTree();   // a manager or new joiner may have changed the reporting tree
+      // Payroll: a salary entered here becomes the person's first salary structure on this same employee record (payroll.js). Only someone who
+      // prepares payroll may do this; the rest of onboarding is saved either way, and the answer says what happened to the salary.
+      let salary = null;
+      const sal = req.body.salary;
+      if (sal && String(sal.monthlyGross || "").trim() !== "") {
+        if (!canAll(req, "payroll.prepare")) salary = { saved: false, error: "Only someone who prepares payroll can enter a salary. HR can add it in Payroll." };
+        else {
+          try { salary = await saveOnboardingSalary(row.work_email, { annualCtc: sal.annualCtc, monthlyGross: sal.monthlyGross, startDate: d.start }, req.user.email); }
+          catch (err) { salary = { saved: false, error: "The salary could not be saved. HR can add it in Payroll." }; console.error("Onboarding salary:", err.message); }
+        }
+      }
       // The employee record is the payroll record (one employees table), so they are already on the payroll list from their joining month. Tell the people who prepare payroll
-      // that the salary structure and bank account are still needed, so they are paid correctly from the first month.
+      // what is still needed (the salary structure unless one was just entered, and the bank account), so they are paid correctly from the first month.
       const joins = new Date(`${d.start}T00:00:00`).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" });
-      await notify("perm:payroll.prepare", { title: `New joiner ${full}: set up their payroll profile`, body: `Joins ${joins}. Add their salary structure and bank account so they are paid correctly from the first month.`, link: `/app/employees/${encodeURIComponent(row.work_email)}` });
-      res.status(201).json({ ...toApi(await loadRecord(row.work_email)), deviceLink: device });
+      const needs = salary && salary.saved ? "their bank account" : "their salary structure and bank account";
+      await notify("perm:payroll.prepare", { title: `New joiner ${full}: set up their payroll profile`, body: `Joins ${joins}. Add ${needs} so they are paid correctly from the first month.`, link: `/app/employees/${encodeURIComponent(row.work_email)}` });
+      res.status(201).json({ ...toApi(await loadRecord(row.work_email)), deviceLink: device, salary });
     } catch (err) {
       await client.query("ROLLBACK");
       throw err;

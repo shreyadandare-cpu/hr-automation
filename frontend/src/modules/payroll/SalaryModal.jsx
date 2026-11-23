@@ -134,8 +134,8 @@ export default function SalaryModal({ email, onClose }) {
         <div className="sal-grid">
           <Field id="sal-from" label="Applies from" hint="This month and later use it. For someone already working here, pick the first month payroll should use it (April covers this financial year). For a raise, pick the first month of the new salary: earlier months keep theirs." error={er.effectiveFrom}>
             <input className="input" id="sal-from" type="month" value={f.effectiveFrom} onChange={set("effectiveFrom")} /></Field>
-          <Field id="sal-ctc" label="Annual CTC (₹)" hint="For records; payroll uses the monthly lines below." error={er.annualCtc}>
-            <input className="input" id="sal-ctc" type="number" min="0" step="1" value={f.annualCtc} onChange={set("annualCtc")} /></Field>
+          <Field id="sal-ctc" label="Annual CTC (₹)" hint="The monthly gross below is filled as this divided by 12. Payroll uses the monthly lines." error={er.annualCtc}>
+            <input className="input" id="sal-ctc" type="number" min="0" step="1" value={f.annualCtc} onChange={(e) => { set("annualCtc")(e); const c = Math.round(Number(e.target.value) / 12); setGross(c > 0 ? String(c) : ""); }} /></Field>
         </div>
         {(revision || (latest && f.effectiveFrom === latest.effectiveFrom)) && <Field id="sal-why" label={revision ? "Reason for the revision (required)" : "Reason for the change"} error={er.reason}>
           <input className="input" id="sal-why" maxLength={300} value={f.reason} onChange={set("reason")} placeholder="Annual increment, promotion, correction…" /></Field>}
@@ -175,7 +175,7 @@ export default function SalaryModal({ email, onClose }) {
 
         <div className="sal-sum" style={{ marginTop: 16 }}>
           <span>Gross <b>{money(monthly)}</b> a month · <b>{money(monthly * 12)}</b> a year</span>
-          {f.annualCtc && Number(f.annualCtc) < monthly * 12 && <Pill tone="warn">CTC is less than 12 × gross</Pill>}
+          {f.annualCtc && Number(f.annualCtc) < monthly * 12 - 6 && <Pill tone="warn">CTC is less than 12 × gross</Pill>}
         </div>
         {revision && <Callout>Saved as a revision from {monthLabel(f.effectiveFrom)}. {monthLabel(latest.effectiveFrom)} onwards until then keeps the current structure.</Callout>}
         {info.structures.length > 1 && <div className="muted" style={{ marginTop: 12 }}>History: {info.structures.map((s) => `from ${monthLabel(s.effectiveFrom)} ${money(total(s.earnings))}${s.reason ? ` (${s.reason})` : ""}`).join(" · ")}.</div>}

@@ -117,7 +117,7 @@ export default function EmployeesTab() {
     if (!data || !data.employees) return [];
     const s = q.trim().toLowerCase();
     return data.employees.filter((e) => (!s || `${e.name} ${e.empNo || ""} ${e.email}`.toLowerCase().includes(s))
-      && (!only || (only === "salary" && !e.salary) || (only === "bank" && !e.bank) || (only === "profile" && !e.profile.complete)));
+      && (!only || (only === "salary" && !e.salary) || (only === "bank" && !e.bank) || (only === "incomplete" && e.missing && e.missing.length > 0)));
   }, [data, q, only]);
   if (!data) return <div className="card"><div className="card-b"><span className="skel" style={{ width: "60%" }} /></div></div>;
   if (data.error) return <div className="card"><div className="empty">{data.error}</div></div>;
@@ -130,12 +130,12 @@ export default function EmployeesTab() {
       {(missingSalary > 0 || missingBank > 0) && <div className="card-b" style={{ paddingTop: 0 }}><Callout>{missingSalary > 0 && <>{missingSalary} without a salary structure (their payroll line is incomplete). </>}{missingBank > 0 && <>{missingBank} without a salary bank account (they can't be in the bank file).</>}</Callout></div>}
       <div className="filters">
         <input className="input grow" type="search" placeholder="Search name or employee ID" aria-label="Search employees" value={q} onChange={(e) => setQ(e.target.value)} />
-        <select className="input" aria-label="Show" value={only} onChange={(e) => setOnly(e.target.value)}><option value="">Everyone</option><option value="profile">Incomplete payroll profile</option><option value="salary">Salary not set</option><option value="bank">Bank account missing</option></select>
+        <select className="input" aria-label="Show" value={only} onChange={(e) => setOnly(e.target.value)}><option value="">Everyone</option><option value="salary">Salary not set</option><option value="bank">Bank account missing</option><option value="incomplete">Incomplete profile</option></select>
       </div>
       <div className="tbl-wrap"><table className="pr-table"><thead><tr><th>Employee</th><th className="hide-sm">Department</th><th className="num">Monthly gross</th><th className="num hide-sm">Annual CTC</th><th>Bank account</th><th>Tax</th><th /></tr></thead><tbody>
         {rows.length ? rows.map((e) => (
           <tr key={e.email}>
-            <td><Person name={e.name} sub={[e.empNo, e.title, e.employmentType === "Intern" ? "Intern" : ""].filter(Boolean).join(" · ") || e.email} />{e.lastDay && <div className="muted">Last day {e.lastDay}</div>}{!e.profile.complete && <div><Pill tone="warn" title={`Needed: ${e.profile.missing.join(", ")}`}>Incomplete payroll profile</Pill></div>}{e.joinsLater && <div><Pill tone="info">Joins {new Date(`${e.start}T00:00:00`).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}</Pill></div>}</td>
+            <td><Person name={e.name} sub={[e.empNo, e.title, e.employmentType === "Intern" ? "Intern" : ""].filter(Boolean).join(" · ") || e.email} />{e.lastDay && <div className="muted">Last day {e.lastDay}</div>}{e.missing && e.missing.length > 0 && <div title={`Missing: ${e.missing.join(", ")}`}><Pill tone="warn">Incomplete payroll profile</Pill><div className="muted">Missing: {e.missing.join(", ")}</div></div>}{e.joinsLater && <div><Pill tone="info">Joins {new Date(`${e.start}T00:00:00`).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}</Pill></div>}</td>
             <td className="hide-sm">{e.dept}</td>
             <td className="num">{e.salary ? <>{money(e.salary.monthlyGross)}<div className="muted">from {monthLabel(e.salary.effectiveFrom)}</div></> : <Pill tone="bad">Not set</Pill>}</td>
             <td className="num hide-sm">{e.salary && e.salary.annualCtc ? money(e.salary.annualCtc) : "—"}</td>

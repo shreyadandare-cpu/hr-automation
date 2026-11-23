@@ -118,7 +118,6 @@ export async function startSession(res, email) {
   res.append("Set-Cookie", `${COOKIE}=${token}; HttpOnly; SameSite=Lax; Path=/; Max-Age=${SESSION_HOURS * 3600}${cookieSecure()}`);
 }
 
-export const sessionKeyOf = (req) => { const t = /(?:^|;\s*)sid=([a-f0-9]{64})/.exec(req.headers.cookie || "")?.[1]; return t ? sha(t) : null; };   // the stored key of this browser's session (pay-security.js)
 const tokenOf = (req) => /(?:^|;\s*)sid=([a-f0-9]{64})/.exec(req.headers.cookie || "")?.[1];
 
 export async function endSession(req, res) {

@@ -59,8 +59,8 @@ try {
   let a = list.find((x) => x.email === NEW1), b = list.find((x) => x.email === NEW2);
   ok("the joiner who starts this month is on the payroll list", !!a && a.joinsLater === false && a.employmentType === "Employee", JSON.stringify(a));
   ok("the one who starts next month is on it too, marked as joining later", !!b && b.joinsLater === true);
-  ok("with nothing set up, both show an incomplete payroll profile naming what is missing", a.profile.complete === false && a.profile.missing.join() === "Salary structure,Bank account" && b.profile.complete === false, JSON.stringify(a.profile));
-  ok("a PAN given in onboarding means no PAN warning", a.profile.advisory.length === 0);
+  ok("with nothing set up, both show an incomplete payroll profile naming what is missing", a.missing.join() === "Salary structure,Bank account" && b.missing.join() === "Salary structure,Bank account", JSON.stringify(a.missing));
+  ok("a PAN given in onboarding means PAN is not listed as missing", !a.missing.includes("PAN"));
   ok("the employee record is shared: one row per person, no copy", (await db.query("SELECT count(*)::int n FROM employees WHERE work_email IN ($1,$2)", [NEW1, NEW2])).rows[0].n === 2);
   ok("salary is not invented: no structure, no gross", a.salary === null && b.salary === null);
 
@@ -78,11 +78,11 @@ try {
   ok("HR sets the salary structure for the one who joins next month, from that month", r.s === 200, JSON.stringify(r.d));
   list = (await call(hr, "GET", `/api/payroll/employees?period=${month(0)}`)).d.employees; b = list.find((x) => x.email === NEW2);
   ok("it shows against them now (not 'Not set'), with the month it applies from", !!b.salary && b.salary.effectiveFrom === month(1) && b.salary.monthlyGross === 50000, JSON.stringify(b.salary));
-  ok("the profile still needs a bank account, and no longer a salary", b.profile.missing.join() === "Bank account");
+  ok("the profile still needs a bank account, and no longer a salary", b.missing.join() === "Bank account");
   r = await call(hr, "PUT", `/api/payroll/bank/${encodeURIComponent(NEW2)}`, { holder: "Pnext Joiner", bankName: "HDFC Bank", ifsc: "HDFC0001234", account: "123456789012", accountConfirm: "123456789012" });
   ok("HR adds the bank account", r.s === 200, JSON.stringify(r.d));
   list = (await call(hr, "GET", `/api/payroll/employees?period=${month(0)}`)).d.employees; b = list.find((x) => x.email === NEW2);
-  ok("the payroll profile is now ready", b.profile.complete === true && b.profile.missing.length === 0, JSON.stringify(b.profile));
+  ok("the payroll profile is now ready", b.missing.length === 0, JSON.stringify(b.missing));
   p = (await call(hr, "GET", `/api/payroll/profile/${encodeURIComponent(NEW2)}`)).d;
   ok("the profile shows the salary, its start month, the bank last four and no full number", p.profile.complete && p.salary.monthlyGross === 50000 && p.salary.annualCtc === 600000 && p.bank.last4 === "9012" && !JSON.stringify(p).includes("123456789012"), JSON.stringify(p));
 

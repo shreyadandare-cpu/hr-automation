@@ -175,7 +175,7 @@ export default function SalaryModal({ email, onClose }) {
 
         <div className="sal-sum" style={{ marginTop: 16 }}>
           <span>Gross <b>{money(monthly)}</b> a month · <b>{money(monthly * 12)}</b> a year</span>
-          {f.annualCtc && Number(f.annualCtc) < monthly * 12 && <Pill tone="warn">CTC is less than 12 × gross</Pill>}
+          {f.annualCtc && Number(f.annualCtc) < monthly * 12 - 6 && <Pill tone="warn">CTC is less than 12 × gross</Pill>}
         </div>
         {revision && <Callout>Saved as a revision from {monthLabel(f.effectiveFrom)}. {monthLabel(latest.effectiveFrom)} onwards until then keeps the current structure.</Callout>}
         {info.structures.length > 1 && <div className="muted" style={{ marginTop: 12 }}>History: {info.structures.map((s) => `from ${monthLabel(s.effectiveFrom)} ${money(total(s.earnings))}${s.reason ? ` (${s.reason})` : ""}`).join(" · ")}.</div>}

@@ -6,7 +6,7 @@ import { UPLOAD_DIR } from "./documents.js";
 import { MAX_BYTES, checkFile } from "./extract.js";
 import { pool } from "./db.js";
 import { requireAuth, unlessHidden } from "./auth.js";
-import { requirePayUnlock } from "./pay-pin.js";
+import { requirePayUnlock } from "./pay-security.js";
 import { can, canAll, mayDecide, need, scopeOf } from "./access.js";
 import { notify } from "./notify.js";
 import { readProof } from "./finance-rules.js";
@@ -36,7 +36,7 @@ async function namesFor(emails) {
 
 export function engageRouter(wrap) {
   const r = express.Router();
-  r.use(["/api/tax-declaration", "/api/tax-declarations"], requireAuth, requirePayUnlock);   // tax declarations are pay: behind the Pay PIN (pay-pin.js)
+  r.use(["/api/tax-declaration", "/api/tax-declarations"], requireAuth, requirePayUnlock);   // tax declarations are pay: behind Pay security (pay-security.js)
   r.use(["/api/polls", "/api/praise", "/api/rewards", "/api/articles", "/api/apps", "/api/requests", "/api/remote-today", "/api/tax-declaration", "/api/goals"], requireAuth);
 
   r.use("/api/polls", unlessHidden("polls"));

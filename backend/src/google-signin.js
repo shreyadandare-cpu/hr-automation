@@ -2,7 +2,7 @@ import crypto from "node:crypto";
 import express from "express";
 import { pool } from "./db.js";
 import { startSession, accountForSignIn, sessionKeyOf } from "./auth.js";
-import { allowPinReset, auditPay } from "./pay-pin.js";
+import { allowFactorReset, auditPay } from "./pay-security.js";
 import { isCompanyEmail } from "./validate.js";
 import { publicUrl } from "./mail.js";
 
@@ -39,7 +39,7 @@ googleRouter.get("/google", (_req, res) => {
 
 /* "Forgot PIN" (Pay section): the same Google sign-in, asked for again from scratch (the person must choose their account and sign in
    again). It never starts a session; it only proves the person at the keyboard is the one already signed in, and lets that session
-   choose a new Pay PIN (pay-pin.js). */
+   set up the Pay security again (pay-security.js). */
 googleRouter.get("/google/pay-recover", (req, res) => {
   if (!googleEnabled() || !sessionKeyOf(req)) return res.redirect("/app/my-finances?paypin=google_off");
   const state = b64(crypto.randomBytes(24)), verifier = b64(crypto.randomBytes(32));
@@ -77,14 +77,14 @@ googleRouter.get("/google/callback", async (req, res) => {
     if (!infoRes.ok || info.email_verified !== true || !email) return back(res, "google");
     if (!isCompanyEmail(email)) return back(res, "google_domain");
 
-    if (purpose === "pay") {   // Forgot PIN: the Google account must be the one this session is signed in as, and the sign-in must be fresh
+    if (purpose === "pay") {   // Setting up Pay security: the Google account must be the one this session is signed in as, and the sign-in must be fresh
       clearCookie(res);
       const me = await pool.query("SELECT email FROM sessions WHERE token_hash=$1 AND expires_at > now()", [sessionKeyOf(req) || ""]);
       const who = me.rows[0] && me.rows[0].email.toLowerCase();
-      if (!who || who !== email) { if (who) auditPay(who, "Pay PIN reset refused: Google account did not match"); return res.redirect("/app/my-finances?paypin=mismatch"); }
+      if (!who || who !== email) { if (who) auditPay(who, "Pay security reset refused: Google account did not match"); return res.redirect("/app/my-finances?paypin=mismatch"); }
       if (Date.now() / 1000 - authTime(tokens.id_token) > 180) return res.redirect("/app/my-finances?paypin=stale");
-      await allowPinReset(sessionKeyOf(req));
-      auditPay(who, "Google sign-in confirmed for a Pay PIN reset");
+      await allowFactorReset(sessionKeyOf(req));
+      auditPay(who, "Google sign-in confirmed for Pay security setup");
       return res.redirect("/app/my-finances?paypin=reset");
     }
 

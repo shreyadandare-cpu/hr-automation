@@ -18,7 +18,7 @@ docker build -t hrhub-frontend frontend
 | `MAIL_SKIP_RECIPIENTS` | leave **unset** (default is Chirag and Chintan) | Directors get no email. Setting it to empty turns the block off. |
 | `PAYSLIP_AUTO` | `off` **until HR has entered the real salaries** | Stops the hourly job that starts and recalculates the monthly payroll draft. With it off, payroll changes only when HR does something. Remove it (or set anything else) to turn the automation back on. |
 | `GEMINI_API_KEY` | a Gemini API key (Google AI Studio) | LinkedIn kit: the headline suggestions. Without it the button says Gemini isn't set up. Model defaults to `gemini-flash-lite-latest` (`GEMINI_MODEL` to change). Keep the key in the server settings only. |
-| `PAY_PIN_PEPPER` | a long random secret (`openssl rand -hex 32`) | Mixed into every Pay PIN hash. Set it **before** people create PINs and never change it afterwards. |
+| `PAY_PIN_PEPPER` | a long random secret (`openssl rand -hex 32`) | Encrypts authenticator secrets, is mixed into every Pay PIN hash and keys the emailed codes. Set it **before** people set up Pay security and never change it afterwards (everyone would have to set up again). Pay fingerprints also need the site on **HTTPS** with `PUBLIC_URL` set to its real address. |
 | `PAYROLL_REVIEWERS`, `PAYROLL_ENCRYPTION_KEY` | as in `backend/.env.example` | Payroll approval and bank details. |
 | `BACKGROUND_JOBS` | leave on only on the **one** server that should run scheduled jobs | Daily leave digest, reminders, payslip notices. |
 

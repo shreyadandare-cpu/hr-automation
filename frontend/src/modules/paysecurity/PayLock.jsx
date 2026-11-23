@@ -28,7 +28,11 @@ const NOTICE = {
 const Ctx = createContext(null);
 export const usePay = () => useContext(Ctx);
 
-export function PayProvider({ children }) {
+/** The Pay lock is switched off for now (decided 2026-11-23). Set to true here, and PAY_LOCK_ON in backend/src/pay-security.js, to bring it back. */
+const PAY_LOCK_ON = false;
+export const PayProvider = ({ children }) => (PAY_LOCK_ON ? <LockProvider>{children}</LockProvider> : <>{children}</>);
+
+function LockProvider({ children }) {
   const { pathname } = useLocation();
   const inPay = inPaySection(pathname);
   const [s, setS] = useState({ phase: "idle", reason: "", notice: "", out: 0, pinOut: 0, factors: { totp: false, passkeys: 0, pin: false } });
@@ -125,6 +129,7 @@ export function PayProvider({ children }) {
 /** Wraps a Pay page: its content appears only while Pay is unlocked; otherwise the right security screen. */
 export function PayGate({ children }) {
   const pay = usePay();
+  if (!PAY_LOCK_ON) return <>{children}</>;
   if (!pay || pay.phase === "open") return <>{pay && <PayBar />}{children}</>;
   if (pay.phase === "loading" || pay.phase === "idle") return <PageSkeleton stats={0} rows={4} />;
   if (pay.phase === "error") return <Panel icon="lock" title="Pay could not be checked" text="Wohlig One could not reach the server. Please check your connection and try again.">

@@ -154,9 +154,12 @@ const publicState = (st) => ({ enrolled: factorCount(st) > 0, totp: st.totp, pas
  * Guards a pay endpoint: the signed-in person's session must hold a live Pay unlock. It does not extend the unlock (only the
  * heartbeat, POST /api/pay/touch, does, and the page sends that only while the person is active). Otherwise 423 with a code the page understands.
  */
+/** The Pay lock is switched off for now (decided 2026-11-23): set to true here, and PAY_LOCK_ON in frontend/src/modules/paysecurity/PayLock.jsx, to bring it back. */
+export const PAY_LOCK_ON = false;
 export async function requirePayUnlock(req, res, next) {
   try {
     if (!req.user) return res.status(401).json({ error: "Please sign in." });
+    if (!PAY_LOCK_ON) return next();
     const st = await stateOf(req);
     if (st.open) return next();
     if (st.until) { await closeUnlock(st.key); if (st.until && new Date(st.until) < new Date()) audit(st.email, "Pay locked automatically after inactivity"); }

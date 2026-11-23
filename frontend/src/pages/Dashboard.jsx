@@ -134,7 +134,7 @@ function EmployeeDashboard() {
   if (R && leave) {
     try {
       const pay = (leave.pay || []).find((x) => String(x.email).toLowerCase() === user.email.toLowerCase()) || { casualOpening: 0 };
-      const b = R.balances(Number(today.slice(0, 4)), { start: me.start, casualOpening: pay.casualOpening },
+      const b = R.balances(Number(today.slice(0, 4)), { start: me.start, casualOpening: pay.casualOpening, openings: pay.openings },
         leave.requests.filter((r) => r.email.toLowerCase() === user.email.toLowerCase()), leave.compOffs.filter((c) => c.email.toLowerCase() === user.email.toLowerCase()));
       const cT = b.casual.carried + b.casual.quota;
       bal = (

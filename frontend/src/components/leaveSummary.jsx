@@ -9,6 +9,8 @@ import { Pill, shortDate } from "./ui.jsx";
 import { R } from "../lib/leave.js";
 import { LSTAT, LTYPE, dd, lc, rangeText, useLeave } from "../lib/useLeave.js";
 
+const onDay = (s) => new Date(`${s}T00:00:00`).toLocaleDateString("en-IN", { day: "numeric", month: "long", year: "numeric" });
+
 const TYPES = ["casual", "compoff", "sick", "unpaid"];
 const COLOR = { casual: "var(--lv-casual)", sick: "var(--lv-sick)", compoff: "var(--lv-comp)", unpaid: "var(--lv-unpaid)" };
 const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
@@ -143,13 +145,20 @@ export function CompOffHistory({ list, who = false, title = "Compensatory off re
 function ledger(type, year, emp, b, reqs, comps) {
   const rows = [], start = emp.start && yearOf(emp.start) === year ? emp.start : `${year}-01-01`;
   const used = reqs.filter((r) => r.status === "approved" && yearOf(r.from) === year);
+  const brought = (o) => rows.push([o.asOf, "Balance brought over from the previous leave system", o.balance]);
   if (type === "casual") {
-    if (b.casual.carried) rows.push([`${year}-01-01`, "Carried over from last year", b.casual.carried]);
-    rows.push([start, start === `${year}-01-01` ? "Annual quota" : "Quota for the months left in your joining year", b.casual.quota]);
+    if (b.casual.opening) brought(b.casual.opening);
+    else {
+      if (b.casual.carried) rows.push([`${year}-01-01`, "Carried over from last year", b.casual.carried]);
+      rows.push([start, start === `${year}-01-01` ? "Annual quota" : "Quota for the months left in your joining year", b.casual.quota]);
+    }
   }
-  if (type === "sick") rows.push([start, start === `${year}-01-01` ? "Annual quota" : "Quota for the months left in your joining year", b.sick.quota]);
-  if (type === "compoff") for (const c of comps.filter((x) => x.status === "approved" && yearOf(x.workedOn) === year)) rows.push([c.workedOn, `Earned for working on ${shortDate(c.workedOn)}`, Number(c.days)]);
-  for (const r of used) {
+  if (type === "sick" && b.sick.opening) brought(b.sick.opening);
+  else if (type === "sick") rows.push([start, start === `${year}-01-01` ? "Annual quota" : "Quota for the months left in your joining year", b.sick.quota]);
+  if (type === "compoff" && b.compoff.opening) brought(b.compoff.opening);
+  const since = (type !== "unpaid" && b[type] && b[type].opening) ? b[type].opening.asOf : "";   // brought-over balances already include everything on or before that day
+  if (type === "compoff") for (const c of comps.filter((x) => x.status === "approved" && yearOf(x.workedOn) === year && (!since || x.workedOn > since))) rows.push([c.workedOn, `Earned for working on ${shortDate(c.workedOn)}`, Number(c.days)]);
+  for (const r of used.filter((x) => !since || x.type !== type || x.from > since)) {
     if (type === "unpaid") {
       if (r.type === "unpaid") rows.push([r.from, `Unpaid leave, ${rangeText(r, shortDate)}`, -Number(r.days)]);
       else if (r.lopDays) rows.push([r.from, `${LTYPE[r.type]} over the balance, ${rangeText(r, shortDate)}`, -Number(r.lopDays)]);
@@ -169,17 +178,17 @@ export function PolicyExplain({ email, year, onClose }) {
   const rows = ledger(tab, year, { start: emp.start }, b, reqs, comps);
   const info = {
     casual: { about: "For planned personal time off. Unused days carry over to next year.", left: b.casual.left, total: b.casual.carried + b.casual.quota,
-      quota: `You are allotted ${dd(b.casual.quota)} of casual leave for Jan ${year} to Dec ${year}${b.casual.carried ? `, plus ${dd(b.casual.carried)} carried over from last year` : ""}. A full year is ${P.casualPerYear} days; joiners get a share for the months left in their first year.`,
+      quota: b.casual.opening ? `Your balance on ${onDay(b.casual.opening.asOf)} was ${dd(b.casual.opening.balance)}, brought over from the previous leave system. Casual leave taken after that date is deducted.` : `You are allotted ${dd(b.casual.quota)} of casual leave for Jan ${year} to Dec ${year}${b.casual.carried ? `, plus ${dd(b.casual.carried)} carried over from last year` : ""}. A full year is ${P.casualPerYear} days; joiners get a share for the months left in their first year.`,
       rules: ["Leave must start today or later. It can't be for a date that has passed.",
         "You can't take more casual leave than you have left (requests waiting for approval count). Days over that are sent as unpaid leave, which is loss of pay.",
         "A note is required."],
       end: "Unused casual leave carries over to next year in full." },
     compoff: { about: "One extra day for working on a Saturday, Sunday or company holiday, once your reporting manager approves the credit.", left: b.compoff.left, total: b.compoff.earned,
-      quota: `You have earned ${dd(b.compoff.earned)} of comp off in ${year}. Ask for a credit with “Request credit for comp off” after working a weekend or holiday.`,
+      quota: b.compoff.opening ? `Your balance on ${onDay(b.compoff.opening.asOf)} was ${dd(b.compoff.opening.balance)}, brought over from the previous leave system. Comp offs earned and used after that date are added and deducted.` : `You have earned ${dd(b.compoff.earned)} of comp off in ${year}. Ask for a credit with “Request credit for comp off” after working a weekend or holiday.`,
       rules: ["Leave must start today or later.", "You can only use comp off days you have earned and that were approved.", "A note is required."],
       end: "Comp offs lapse on 31 December. Unused days are not carried over or paid." },
     sick: { about: "For when you are unwell.", left: b.sick.left, total: b.sick.quota,
-      quota: `You are allotted ${dd(b.sick.quota)} of sick leave for Jan ${year} to Dec ${year}. A full year is ${P.sickPerYear} days; joiners get a share for the months left in their first year.`,
+      quota: b.sick.opening ? `Your balance on ${onDay(b.sick.opening.asOf)} was ${dd(b.sick.opening.balance)}, brought over from the previous leave system. Sick leave taken after that date is deducted.` : `You are allotted ${dd(b.sick.quota)} of sick leave for Jan ${year} to Dec ${year}. A full year is ${P.sickPerYear} days; joiners get a share for the months left in their first year.`,
       rules: [`Sick leave can be applied up to ${P.sickBackdateDays} days after the date. Further back is not allowed.`,
         "Days over what you have left are sent as unpaid leave (loss of pay). For a past date with no sick leave left, the whole request goes in as unpaid leave.",
         "A note is required."],

@@ -32,13 +32,13 @@ const AWAITING = { submitted: "Submitted", under_review: "Under review", resubmi
 export async function leaveSettlement(db, email, lastDay) {
   const lc = email.toLowerCase();
   // One after another: this often runs on a single transaction client, which can't take parallel queries.
-  const emp = await db.query("SELECT start_date, casual_opening, monthly_gross FROM employees WHERE lower(work_email)=$1", [lc]);
+  const emp = await db.query("SELECT start_date, casual_opening, leave_opening, monthly_gross FROM employees WHERE lower(work_email)=$1", [lc]);
   const reqs = await db.query("SELECT * FROM leave_requests WHERE lower(work_email)=$1", [lc]);
   const comps = await db.query("SELECT * FROM comp_off_credits WHERE lower(work_email)=$1", [lc]);
   const hols = await db.query("SELECT day FROM holidays");
   const e = emp.rows[0] || {};
   return L.exitSettlement({
-    emp: { start: e.start_date, casualOpening: n(e.casual_opening) || 0 },
+    emp: { start: e.start_date, casualOpening: n(e.casual_opening) || 0, openings: e.leave_opening || null },
     lastDay,
     requests: reqs.rows.map((r) => ({ type: r.type, from: r.from_date, to: r.to_date, half: r.half, status: r.status,
       days: n(r.days), paidDays: n(r.paid_days), lopDays: n(r.lop_days) })),

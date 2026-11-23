@@ -27,7 +27,7 @@ export function useLeave() {
     const empBy = (email) => (people || []).find((p) => lc(p.email) === lc(email));
     const reqsOf = (email) => L.requests.filter((r) => lc(r.email) === lc(email));
     const compsOf = (email) => L.compOffs.filter((c) => lc(c.email) === lc(email));
-    const payOf = (email) => pay[lc(email)] || { monthlyGross: null, casualOpening: 0 };
+    const payOf = (email) => pay[lc(email)] || { monthlyGross: null, casualOpening: 0, openings: null };
     const holDays = L.holidays.map((h) => h.day);
     const approverOf = (email) => (L.approvers || {})[lc(email)] || "hr";
     const approverName = (email) => { const a = approverOf(email); return a === "hr" ? "a super admin" : (empBy(a) || {}).name || a; };
@@ -35,7 +35,7 @@ export function useLeave() {
     // the teams they stand in for, and everyone for a super admin. Nobody decides their own.
     const approvedByMe = (email) => lc(email) !== lc(user.email) && approverOf(email) === lc(user.email);
     const canDecide = approvedByMe;
-    const bal = (p, year) => R.balances(year, { start: p.start, casualOpening: payOf(p.email).casualOpening }, reqsOf(p.email), compsOf(p.email));
+    const bal = (p, year) => R.balances(year, { start: p.start, casualOpening: payOf(p.email).casualOpening, openings: payOf(p.email).openings }, reqsOf(p.email), compsOf(p.email));
     const preview = (r) => {
       const p = empBy(r.email), days = R.requestDays(r.from, r.to, r.half, holDays);
       return p ? R.allocate(r.type, days, bal(p, Number(r.from.slice(0, 4)))) : { paid: 0, lop: days };

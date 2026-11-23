@@ -20,7 +20,7 @@ const toRequest = (r) => ({
 });
 const toCompOff = (c) => ({ id: c.id, email: c.work_email, workedOn: c.worked_on, days: num(c.days), reason: c.reason, status: c.status,
   createdAt: c.created_at, decidedAt: c.decided_at, createdBy: c.created_by || null, decidedBy: c.decided_by || null });
-const toEmp = (e) => ({ name: e.name, status: e.status, start: e.start_date, casualOpening: num(e.casual_opening) });
+const toEmp = (e) => ({ name: e.name, status: e.status, start: e.start_date, casualOpening: num(e.casual_opening), openings: e.leave_opening || null });
 
 // Employees see and act on their own leave only. "Approve leave" (leave.approve) sees and decides for the people in scope;
 // "Manage leave settings" (leave.manage, whole company) runs holidays, pay and salary cuts.
@@ -105,7 +105,7 @@ export function leaveRouter(wrap) {
       pool.query(`SELECT * FROM leave_requests ${where} ORDER BY from_date DESC, id DESC`, args),
       pool.query(`SELECT * FROM comp_off_credits ${where} ORDER BY worked_on DESC`, args),
       pool.query("SELECT day, name, type, source FROM holidays ORDER BY day"),
-      pool.query(`SELECT work_email, start_date, monthly_gross, casual_opening FROM employees ${where}`, args),
+      pool.query(`SELECT work_email, start_date, monthly_gross, casual_opening, leave_opening FROM employees ${where}`, args),
     ]);
     res.json({
       policy: L.POLICY,
@@ -114,7 +114,7 @@ export function leaveRouter(wrap) {
       compOffs: comps.rows.map(toCompOff),
       holidays: hols.rows,
       pay: pay.rows.map((p) => ({ email: p.work_email, start: p.start_date,
-        monthlyGross: !payScope || payScope.has(p.work_email.toLowerCase()) || p.work_email.toLowerCase() === self(req) ? num(p.monthly_gross) : null, casualOpening: num(p.casual_opening) })),
+        monthlyGross: !payScope || payScope.has(p.work_email.toLowerCase()) || p.work_email.toLowerCase() === self(req) ? num(p.monthly_gross) : null, casualOpening: num(p.casual_opening), openings: p.leave_opening || null })),
       approvers,
       hrLeaveApprovers: hrLeaveApprovers(),
     });

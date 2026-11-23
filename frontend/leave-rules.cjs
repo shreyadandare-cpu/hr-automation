@@ -6,7 +6,7 @@
 })(typeof self !== "undefined" ? self : this, function () {
   const POLICY = {
     startYear: 2026,      // first year tracked here; earlier leave sits in each person's opening balance
-    casualPerYear: 14,    // casual leave days a year, pro-rated in the year someone joins
+    casualPerYear: 12,    // casual leave days a year, pro-rated in the year someone joins
     sickPerYear: 6,       // sick leave days a year, pro-rated the same way
     lopDivisor: 30,       // salary cut per loss-of-pay day = monthly gross / 30
     sickBackdateDays: 2,  // sick leave can be applied this many days after the date; other leave can't start in the past
@@ -62,29 +62,48 @@
 
   /**
    * Balances for one person in `year`.
-   * emp: { start, casualOpening }  requests: that person's requests  compOffs: that person's comp-off credits
+   * emp: { start, casualOpening, openings }  requests: that person's requests  compOffs: that person's comp-off credits
+   * openings: { asOf, casual, sick, compoff }: the balance of each type on the day (asOf) HR brought the figures over from the
+   * previous leave system. For that year the balance starts from it, and only leave on dates after asOf counts against it.
    * Approved requests count by their stored paid_days; pending ones are shown separately and not deducted.
    */
   function balances(year, emp, requests, compOffs) {
     const first = Math.max(POLICY.startYear, emp.start && validDate(emp.start) ? yearOf(emp.start) : POLICY.startYear);
     const approved = requests.filter((r) => r.status === "approved");
+    const op = emp.openings && validDate(emp.openings.asOf) ? emp.openings : null, opYear = op ? yearOf(op.asOf) : null;
+    const has = (t) => op && op[t] !== null && op[t] !== undefined && op[t] !== "";
     let carry = Number(emp.casualOpening || 0), casual = null;
     for (let y = first; y <= year; y++) {
       const quota = casualQuota(y, emp.start);
       const used = sum(approved.filter((r) => r.type === "casual" && yearOf(r.from) === y), (r) => r.paidDays);
       casual = { carried: carry, quota, used, left: carry + quota - used };
+      if (has("casual") && y === opYear) {   // brought over: the balance on that day, less only the leave taken after it
+        const after = sum(approved.filter((r) => r.type === "casual" && yearOf(r.from) === y && r.from > op.asOf), (r) => r.paidDays);
+        casual = { carried: Number(op.casual), quota: 0, used: after, left: Number(op.casual) - after, opening: { asOf: op.asOf, balance: Number(op.casual) } };
+      }
       carry = Math.max(0, casual.left);   // unused casual leave carries over in full
     }
     if (!casual) casual = { carried: 0, quota: 0, used: 0, left: 0 };   // year before tracking or before joining
     const inYear = (r) => yearOf(r.from) === year;
     const sickQuota = quota(POLICY.sickPerYear, year, emp.start);
     const sickUsed = sum(approved.filter((r) => r.type === "sick" && inYear(r)), (r) => r.paidDays);
-    const earned = sum(compOffs.filter((c) => (c.status || "approved") === "approved" && yearOf(c.workedOn) === year), (c) => c.days);
-    const compUsed = sum(approved.filter((r) => r.type === "compoff" && inYear(r)), (r) => r.paidDays);
+    let earned = sum(compOffs.filter((c) => (c.status || "approved") === "approved" && yearOf(c.workedOn) === year), (c) => c.days);
+    let compUsed = sum(approved.filter((r) => r.type === "compoff" && inYear(r)), (r) => r.paidDays);
+    let sick = { quota: year < POLICY.startYear ? 0 : sickQuota, used: sickUsed, left: (year < POLICY.startYear ? 0 : sickQuota) - sickUsed };
+    let compoff = { earned, used: compUsed, left: earned - compUsed };
+    if (has("sick") && year === opYear) {
+      const after = sum(approved.filter((r) => r.type === "sick" && inYear(r) && r.from > op.asOf), (r) => r.paidDays);
+      sick = { quota: Number(op.sick), used: after, left: Number(op.sick) - after, opening: { asOf: op.asOf, balance: Number(op.sick) } };
+    }
+    if (has("compoff") && year === opYear) {
+      const got = sum(compOffs.filter((c) => (c.status || "approved") === "approved" && yearOf(c.workedOn) === year && c.workedOn > op.asOf), (c) => c.days);
+      const after = sum(approved.filter((r) => r.type === "compoff" && inYear(r) && r.from > op.asOf), (r) => r.paidDays);
+      compoff = { earned: Number(op.compoff) + got, used: after, left: Number(op.compoff) + got - after, opening: { asOf: op.asOf, balance: Number(op.compoff) } };
+    }
     return {
       casual,
-      sick: { quota: year < POLICY.startYear ? 0 : sickQuota, used: sickUsed, left: (year < POLICY.startYear ? 0 : sickQuota) - sickUsed },
-      compoff: { earned, used: compUsed, left: earned - compUsed },
+      sick,
+      compoff,
       lopDays: sum(approved.filter(inYear), (r) => r.lopDays),
       pendingDays: sum(requests.filter((r) => r.status === "pending" && inYear(r)), (r) => r.days),
       consumed: Object.fromEntries(Object.keys(TYPES).map((t) => [t, sum(approved.filter((r) => r.type === t && inYear(r)), (r) => r.days)])),
@@ -129,13 +148,14 @@
     const firstMonth = jy === year ? Number(emp.start.slice(5, 7)) : 1;
     const months = Math.max(0, exitMonth - firstMonth + 1);
     const quota = jy > year ? 0 : half((POLICY.casualPerYear * months) / 12);
-    const casualLeft = Math.max(0, bal.casual.left - full + quota);
+    // Brought over from the previous system: that balance is already what is owed to date, so no part-year quota is worked out on top of it.
+    const casualLeft = bal.casual.opening ? Math.max(0, bal.casual.left) : Math.max(0, bal.casual.left - full + quota);
     const month = lastDay.slice(0, 7);
     const lopDays = taken.reduce((n, r) => n + (lopByMonth(r, holidays)[month] || 0), 0);
     const gross = monthlyGross ? Number(monthlyGross) : null;
     const encashment = gross ? salaryCut(gross, casualLeft) : null;
     const deduction = gross ? salaryCut(gross, lopDays) : null;
-    return { casualLeft, quota, carried: bal.casual.carried, used: bal.casual.used, lopDays, month,
+    return { casualLeft, quota: bal.casual.opening ? 0 : quota, carried: bal.casual.carried, used: bal.casual.used, lopDays, month,
       monthlyGross: gross, encashment, deduction, net: gross ? encashment - deduction : null };
   }
 

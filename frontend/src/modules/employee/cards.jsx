@@ -190,7 +190,7 @@ export function OffCard({ e, rec, scheduled, mayRun, maySetPay, onChanged }) {
   if (rec && rec.lastDay === e.lastDay && rec.settlement) s = rec.settlement;
   else if (R && R.validDate(e.lastDay || "")) {
     const p = lv.payOf(e.baseEmail);
-    s = R.exitSettlement({ emp: { start: e.start, casualOpening: p.casualOpening }, lastDay: e.lastDay, requests: lv.reqsOf(e.baseEmail), compOffs: lv.compsOf(e.baseEmail), monthlyGross: p.monthlyGross, holidays: lv.holDays });
+    s = R.exitSettlement({ emp: { start: e.start, casualOpening: p.casualOpening, openings: p.openings }, lastDay: e.lastDay, requests: lv.reqsOf(e.baseEmail), compOffs: lv.compsOf(e.baseEmail), monthlyGross: p.monthlyGross, holidays: lv.holDays });
   }
   const call = async (path, okMsg) => {
     setBusy(true);

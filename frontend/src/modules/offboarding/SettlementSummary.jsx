@@ -13,7 +13,7 @@ export function settlementFor(lv, person, lastDay, record) {
   if (!R || !R.validDate(lastDay || "")) return null;
   if (record && record.lastDay === lastDay && record.settlement) return record.settlement;
   const p = lv.payOf(person.email);
-  return R.exitSettlement({ emp: { start: person.start, casualOpening: p.casualOpening }, lastDay, requests: lv.reqsOf(person.email), compOffs: lv.compsOf(person.email), monthlyGross: p.monthlyGross, holidays: lv.holDays });
+  return R.exitSettlement({ emp: { start: person.start, casualOpening: p.casualOpening, openings: p.openings }, lastDay, requests: lv.reqsOf(person.email), compOffs: lv.compsOf(person.email), monthlyGross: p.monthlyGross, holidays: lv.holDays });
 }
 
 export const leaveAfter = (lv, person, day) => lv.reqsOf(person.email).filter((r) => (r.status === "pending" || r.status === "approved") && r.from > day);

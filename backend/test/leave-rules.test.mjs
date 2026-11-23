@@ -4,15 +4,15 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import L from "../../frontend/leave-rules.cjs";
 
-// Joined before tracking started, so the full 14 casual and 6 sick days are there in 2026.
+// Joined before tracking started, so the full 12 casual and 6 sick days are there in 2026.
 const emp = { name: "Test Person", status: "active", start: "2024-01-01", casualOpening: 0 };
 const taken = (type, from, to, days, status = "approved") => ({ type, from, to, half: null, days, paidDays: days, lopDays: 0, status });
-// 11 casual days already approved, so 3 are left.
-const history = [taken("casual", "2026-02-02", "2026-02-16", 11)];
+// 9 casual days already approved, so 3 are left.
+const history = [taken("casual", "2026-02-02", "2026-02-16", 9)];
 const bal = L.balances(2026, emp, history, []);
 const base = { emp, reason: "Trip", holidays: [], existing: history, bal };
 
-test("3 casual days left after 11 of 14 are used", () => {
+test("3 casual days left after 9 of 12 are used", () => {
   assert.equal(bal.casual.left, 3);
   assert.equal(L.available("casual", bal, history, 2026), 3);
 });
@@ -140,4 +140,55 @@ test("no sick leave left for a future date: still refused (choose unpaid leave i
   const args = { ...base, existing: used, bal: b, type: "sick", from: "2026-11-16", to: "2026-11-16", today };
   assert.match(L.requestProblems({ ...args, split: true }).type, /No sick leave left/);
   assert.equal(L.planRequest(args), null);
+});
+
+// ---- balances brought over from a previous leave system (employees.leave_opening) ----
+const brought = { ...emp, start: "2022-01-01", openings: { asOf: "2026-11-23", casual: 4, sick: 1.5, compoff: 2.5 } };
+test("brought-over balances replace the policy figures for that year", () => {
+  const b = L.balances(2026, brought, [taken("casual", "2026-03-02", "2026-03-10", 7)], []);   // taken before the date: already inside the figures
+  assert.equal(b.casual.left, 4);
+  assert.equal(b.sick.left, 1.5);
+  assert.equal(b.compoff.left, 2.5);
+  assert.deepEqual(b.casual.opening, { asOf: "2026-11-23", balance: 4 });
+});
+
+test("only leave after the date comes off a brought-over balance", () => {
+  const later = [taken("casual", "2026-11-23", "2026-11-23", 1), taken("casual", "2026-12-01", "2026-12-02", 2), taken("sick", "2026-12-03", "2026-12-03", 1), taken("compoff", "2026-12-04", "2026-12-04", 1)];
+  const b = L.balances(2026, brought, later, []);
+  assert.equal(b.casual.left, 2);     // 4 less the 2 days after 23 Nov (the 23rd is inside the figure)
+  assert.equal(b.sick.left, 0.5);
+  assert.equal(b.compoff.left, 1.5);
+});
+
+test("comp offs earned after the date are added to a brought-over balance", () => {
+  const b = L.balances(2026, brought, [], [{ workedOn: "2026-11-29", days: 1, status: "approved" }, { workedOn: "2026-11-01", days: 1, status: "approved" }]);
+  assert.equal(b.compoff.left, 3.5);   // 2.5 + the one after 23 Nov; the one before is already inside it
+});
+
+test("a brought-over casual balance carries into the next year; sick and comp off start again", () => {
+  const b = L.balances(2027, brought, [taken("casual", "2026-12-01", "2026-12-01", 1)], []);
+  assert.equal(b.casual.carried, 3);
+  assert.equal(b.casual.left, 3 + 12);
+  assert.equal(b.sick.quota, 6);
+  assert.equal(b.compoff.left, 0);
+});
+
+test("a type with no brought-over figure keeps the policy figures", () => {
+  const b = L.balances(2026, { ...emp, openings: { asOf: "2026-11-23", casual: 4 } }, [], []);
+  assert.equal(b.casual.left, 4);
+  assert.equal(b.sick.left, 6);
+  assert.equal(b.sick.opening, undefined);
+});
+
+test("a casual balance of zero is still a brought-over figure", () => {
+  const b = L.balances(2026, { ...emp, openings: { asOf: "2026-11-23", casual: 0 } }, [], []);
+  assert.equal(b.casual.left, 0);
+  assert.equal(L.available("casual", b, [], 2026), 0);
+});
+
+test("leaving: a brought-over casual balance is paid out as it stands", () => {
+  const s = L.exitSettlement({ emp: brought, lastDay: "2026-12-15", requests: [], compOffs: [], monthlyGross: 30000, holidays: [] });
+  assert.equal(s.casualLeft, 4);
+  assert.equal(s.quota, 0);
+  assert.equal(s.encashment, 4000);
 });

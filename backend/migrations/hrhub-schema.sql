@@ -1375,22 +1375,16 @@ INSERT INTO access_grants (email, permission, scope, scope_root_email, note, gra
       AND NOT EXISTS (SELECT 1 FROM access_grants x WHERE lower(x.email) = lower(g.email) AND x.permission = 'offers.approve');
 
 -- ---------------------------------------------------------------------------------------------------------------------
--- Web clock-in with location and a selfie (2026-11-24), as Keka's geo-fencing. HR switches it on and lists the offices on
+-- Web clock-in with location (2026-11-24), as Keka's geo-fencing. HR switches it on and lists the offices on
 -- Shifts > Clock-in. New tables and new nullable columns on attendance_punches; nothing older changes meaning.
 -- ---------------------------------------------------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS clock_in_policy (
   id INT PRIMARY KEY CHECK (id = 1), enabled BOOLEAN NOT NULL DEFAULT false, need_location BOOLEAN NOT NULL DEFAULT false,
-  need_selfie BOOLEAN NOT NULL DEFAULT false, allow_outside BOOLEAN NOT NULL DEFAULT false, updated_by TEXT, updated_at TIMESTAMPTZ NOT NULL DEFAULT now());
+  allow_outside BOOLEAN NOT NULL DEFAULT false, updated_by TEXT, updated_at TIMESTAMPTZ NOT NULL DEFAULT now());
 -- An office: a point and a radius in metres. A punch inside it is matched to it.
 CREATE TABLE IF NOT EXISTS clock_in_sites (
   id SERIAL PRIMARY KEY, name TEXT NOT NULL, lat NUMERIC(9,6) NOT NULL CHECK (lat BETWEEN -90 AND 90), lng NUMERIC(9,6) NOT NULL CHECK (lng BETWEEN -180 AND 180),
   radius_m INT NOT NULL CHECK (radius_m BETWEEN 30 AND 5000), created_by TEXT NOT NULL, created_at TIMESTAMPTZ NOT NULL DEFAULT now(), deleted_at TIMESTAMPTZ);
--- A selfie taken to punch. The file is on disk (UPLOAD_DIR); kept 90 days, then deleted with its row (jobs.js).
-CREATE TABLE IF NOT EXISTS attendance_selfies (
-  id SERIAL PRIMARY KEY, email TEXT NOT NULL, stored TEXT NOT NULL, mime TEXT NOT NULL, size INT NOT NULL, upload_key TEXT,
-  punch_id INT REFERENCES attendance_punches(id) ON DELETE SET NULL, created_at TIMESTAMPTZ NOT NULL DEFAULT now());
-CREATE UNIQUE INDEX IF NOT EXISTS attendance_selfies_key ON attendance_selfies (upload_key) WHERE upload_key IS NOT NULL;
-CREATE INDEX IF NOT EXISTS attendance_selfies_created ON attendance_selfies (created_at);
 -- Where a web punch was made: the phone's reading, the nearest office's name then, how far, and whether it was outside every office.
 ALTER TABLE attendance_punches ADD COLUMN IF NOT EXISTS lat NUMERIC(9,6);
 ALTER TABLE attendance_punches ADD COLUMN IF NOT EXISTS lng NUMERIC(9,6);
@@ -1398,7 +1392,6 @@ ALTER TABLE attendance_punches ADD COLUMN IF NOT EXISTS accuracy_m INT;
 ALTER TABLE attendance_punches ADD COLUMN IF NOT EXISTS site_name TEXT;
 ALTER TABLE attendance_punches ADD COLUMN IF NOT EXISTS distance_m INT;
 ALTER TABLE attendance_punches ADD COLUMN IF NOT EXISTS outside BOOLEAN NOT NULL DEFAULT false;
-ALTER TABLE attendance_punches ADD COLUMN IF NOT EXISTS selfie_id INT REFERENCES attendance_selfies(id) ON DELETE SET NULL;
 
 -- Saved custom reports (2026-11-24): a person's own named report definitions (Manage > Report builder). Running one checks
 -- access again each time; the columns and filters are keys from report-builder-rules.js, never SQL.

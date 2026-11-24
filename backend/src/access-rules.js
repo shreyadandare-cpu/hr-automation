@@ -26,7 +26,7 @@ export const PERMISSIONS = [
   { key: "leave.manage", group: "Time", team: false, label: "Manage leave settings", hint: "Holidays, leave policy, balances and salary cuts." },
   { key: "attendance.view", group: "Time", team: true, label: "See attendance", hint: "Punches and monthly attendance of the people in scope." },
   { key: "attendance.edit", group: "Time", team: true, label: "Correct attendance", hint: "Add or change punches and decide attendance requests." },
-  { key: "shifts.manage", group: "Time", team: false, label: "Manage shifts and clock-in", hint: "Create shifts, put people on them (the roster), choose who is paid overtime, and set web clock-in: the offices, location and selfie." },
+  { key: "shifts.manage", group: "Time", team: false, label: "Manage shifts and clock-in", hint: "Create shifts, put people on them (the roster), choose who is paid overtime, and set web clock-in: the offices and the location check." },
   { key: "overtime.approve", group: "Time", team: true, label: "Approve overtime", hint: "Approve or reject the monthly overtime of the people in scope. Payroll still types the amount on the payslip." },
   { key: "timesheets.approve", group: "Time", team: true, label: "Approve timesheets", hint: "Approve or return weekly timesheets." },
   { key: "reviews.manage", group: "Performance and hiring", team: true, label: "Run reviews", hint: "Start review cycles, write the final review and read colleague feedback." },

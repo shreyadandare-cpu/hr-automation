@@ -1,3 +1,4 @@
+import { matches } from "../lib/search.js";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { api, apiMsg } from "../api.js";
 import { useAuth } from "../auth.jsx";
@@ -17,8 +18,7 @@ function DayTable({ day, onOpen, onFix, canFix }) {
   const people = day.people;
   const [q, setQ] = useState("");
   const shown = useMemo(() => {
-    const t = q.trim().toLowerCase();
-    return t ? people.filter((x) => `${x.name} ${x.email} ${x.title || ""} ${x.no || ""}`.toLowerCase().includes(t)) : people;
+    return q.trim() ? people.filter((x) => matches(q, x.name, x.email, x.title, x.no)) : people;
   }, [people, q]);
   const { rows, pager } = usePaged(shown, `${day.date}|${q}`);
   const count = (s) => people.filter((x) => x.status === s).length;
@@ -31,7 +31,7 @@ function DayTable({ day, onOpen, onFix, canFix }) {
       </div>
       {day.off && <p className="muted">{day.holiday || day.off}: no attendance is expected on this day.</p>}
       <div className="card">
-        <div className="filters"><input className="input grow" type="search" placeholder="Search any employee by name, email or role" aria-label="Search employees" value={q} onChange={(e) => setQ(e.target.value)} />
+        <div className="filters"><input className="input grow" type="search" placeholder="Search any employee by name, employee ID, email or role" aria-label="Search employees" value={q} onChange={(e) => setQ(e.target.value)} />
           {q.trim() && <span className="muted" style={{ whiteSpace: "nowrap" }}>{shown.length} of {people.length}</span>}</div>
         <div className="tbl-wrap"><table>
         <thead><tr><th>Employee</th><th>Status</th><th>First punch</th><th>Last punch</th><th className="hide-sm">Attendance visual</th><th>Hours</th>{onFix && <th></th>}</tr></thead>
@@ -191,8 +191,7 @@ function MonthlyReport({ onOpen }) {
     return () => { live = false; };
   }, [month]);
   const shown = useMemo(() => {
-    const t = q.trim().toLowerCase();
-    return ((d && d.rows) || []).filter((x) => !t || `${x.no} ${x.name} ${x.email} ${x.title}`.toLowerCase().includes(t));
+    return ((d && d.rows) || []).filter((x) => matches(q, x.no, x.name, x.email, x.title));
   }, [d, q]);
   const { rows, pager } = usePaged(shown, `${month}|${q}`);
   return (

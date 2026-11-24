@@ -10,9 +10,10 @@ export default function PeoplePicker({ id, people, value, onChange, multi = fals
   const byEmail = useMemo(() => new Map((people || []).map((p) => [p.email, p])), [people]);
   const matches = useMemo(() => {
     const s = q.trim().toLowerCase();
-    return (people || []).filter((p) => !chosen.includes(p.email) && (!s || `${p.name} ${p.no || ""} ${p.title || ""} ${p.email}`.toLowerCase().includes(s))).slice(0, 8);
+    return (people || []).filter((p) => !chosen.includes(p.email) && (!s || `${p.name} ${p.no || ""} ${p.title || ""} ${p.email}`.toLowerCase().includes(s))).slice(0, 100);
   }, [people, q, chosen]);
   useEffect(() => { setAt(0); }, [q]);
+  useEffect(() => { if (open && box.current) { const el = box.current.querySelector('[role="option"][aria-selected="true"]'); if (el) el.scrollIntoView({ block: "nearest" }); } }, [at, open]);
   useEffect(() => {
     const away = (e) => { if (box.current && !box.current.contains(e.target)) setOpen(false); };
     document.addEventListener("mousedown", away);
@@ -42,7 +43,7 @@ export default function PeoplePicker({ id, people, value, onChange, multi = fals
       {showInput && <input id={id} className="input" type="search" autoComplete="off" placeholder={multi && chosen.length ? "Add another person…" : placeholder} value={q} role="combobox" aria-expanded={open} aria-controls={`${id}-list`}
         onChange={(e) => { setQ(e.target.value); setOpen(true); }} onFocus={() => setOpen(true)} onKeyDown={key} />}
       {open && showInput && (
-        <div id={`${id}-list`} role="listbox" style={{ position: "absolute", left: 0, right: 0, top: "100%", zIndex: 30, marginTop: 4, maxHeight: 240, overflowY: "auto", background: "var(--surface)", border: "1px solid var(--line)", borderRadius: 14, boxShadow: "0 14px 34px rgba(30,30,90,.18)" }}>
+        <div id={`${id}-list`} role="listbox" style={{ position: "absolute", left: 0, right: 0, top: "100%", zIndex: 30, marginTop: 4, maxHeight: "min(50vh, 380px)", overflowY: "auto", background: "var(--surface)", border: "1px solid var(--line)", borderRadius: 14, boxShadow: "0 14px 34px rgba(30,30,90,.18)" }}>
           {matches.length ? matches.map((p, i) => (
             <button key={p.email} type="button" role="option" aria-selected={i === at} onMouseEnter={() => setAt(i)} onClick={() => pick(p)}
               style={{ display: "block", width: "100%", textAlign: "left", padding: "9px 14px", border: 0, cursor: "pointer", color: "inherit", font: "inherit", background: i === at ? "var(--tint)" : "transparent" }}>

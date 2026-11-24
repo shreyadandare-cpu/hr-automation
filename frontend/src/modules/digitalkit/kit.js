@@ -69,29 +69,37 @@ function arcs(ctx, w, h, color, alpha = 0.5) {   // the brand's soft concentric 
   for (const [cx, cy, r] of [[w * 0.98, h * 0.05, h * 0.62], [w * 0.98, h * 0.05, h * 0.9], [w * 0.98, h * 0.05, h * 1.2]]) { ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2); ctx.stroke(); }
   ctx.restore();
 }
-const lines = (p) => [p.email, p.phone, p.location].filter(Boolean);
 
-/** Business card, 3.5 x 2 inches at 300 dpi. Front: ivory with the maroon logo. Back: deep maroon with the ivory logo. */
-export async function drawCard(p, side) {
+/** Business card, 3.5 x 2 inches at 300 dpi, as on the Wohlig brand guidelines page. Front: ivory, the maroon logo, a short orange bar, the name, then the contact lines and a faint flower
+    on the right. Back: deep maroon with the ivory logo centred and the web address below. `opts` turns the phone number and the office cities on or off. */
+export const CARD_DEFAULT_OPTS = { phone: true, cities: false };
+export async function drawCard(p, side, opts = CARD_DEFAULT_OPTS) {
   const [W, H] = [1050, 600], c = newCanvas(W, H), x = c.getContext("2d");
   await loadFonts();
   if (side === "back") {
     const g = await loadImage(LOGO_DARK);
-    x.fillStyle = C.maroon; x.fillRect(0, 0, W, H); arcs(x, W, H, C.ivory, 0.12);
-    const lw = 520, lh = lw / (g.naturalWidth / g.naturalHeight || 2.715);
-    x.drawImage(g, (W - lw) / 2, (H - lh) / 2 - 20, lw, lh);
-    x.fillStyle = C.orange; x.fillRect(W / 2 - 40, H / 2 + lh / 2 + 18, 80, 5);
-    x.fillStyle = C.beige; x.font = `700 26px ${SANS}`; x.textAlign = "center"; x.fillText(SITE, W / 2, H - 70); x.textAlign = "left";
+    const bg = x.createLinearGradient(0, 0, W, H); bg.addColorStop(0, "#7a1033"); bg.addColorStop(1, C.maroonDeep);
+    x.fillStyle = bg; x.fillRect(0, 0, W, H);
+    const lw = 420, lh = lw / (g.naturalWidth / g.naturalHeight || 2.715);
+    x.drawImage(g, (W - lw) / 2, 270 - lh / 2, lw, lh);
+    x.fillStyle = "rgba(255,247,233,.62)"; x.font = `400 27px ${SANS}`; x.textAlign = "center"; x.fillText(SITE, W / 2, 420); x.textAlign = "left";
     return c;
   }
   const g = await loadImage(LOGO_LIGHT);
-  x.fillStyle = C.ivory; x.fillRect(0, 0, W, H); arcs(x, W, H, C.beige, 0.7);
-  logo(x, g, 70, 62, 70);
-  x.fillStyle = C.maroon; const ns = fit(x, p.name, W - 140, 62, 600, SERIF, 36); x.font = `600 ${ns}px ${SERIF}`; x.fillText(p.name, 70, 290);
-  if (p.title) { x.fillStyle = C.terracotta; const ts = fit(x, p.title.toUpperCase(), W - 140, 26, 700, SANS, 16); x.font = `700 ${ts}px ${SANS}`; x.letterSpacing = "3px"; x.fillText(p.title.toUpperCase(), 70, 338); x.letterSpacing = "0px"; }
-  x.fillStyle = C.orange; x.fillRect(70, 372, 90, 5);
-  x.fillStyle = C.ink; x.font = `400 27px ${SANS}`;
-  [...lines(p), SITE].forEach((t, i) => x.fillText(t, 70, 430 + i * 40));
+  x.fillStyle = C.ivory; x.fillRect(0, 0, W, H);
+  x.save(); x.beginPath(); x.rect(0, 0, W, H); x.clip();   // the faint flower, cut by the card's right edge
+  flower(x, 905, 158, 340, 0.1, C.terracotta, 0.28, 1.6);
+  x.restore();
+  logo(x, g, 73, 50, 104);
+  const rows = [p.email, opts.phone && p.phone, opts.cities && OFFICES].filter(Boolean), last = 548, step = 38;
+  const first = last - rows.length * step;   // the contact lines fill upward from the web address, so a long card never runs off the bottom
+  const nameY = first - (p.title ? 110 : 78);
+  x.fillStyle = C.orange; x.fillRect(73, nameY - 76, 60, 5);
+  x.fillStyle = C.maroon; const ns = fit(x, p.name, W - 146, 56, 600, SERIF, 34); x.font = `600 ${ns}px ${SERIF}`; x.fillText(p.name, 73, nameY);
+  if (p.title) { x.fillStyle = C.terracotta; const ts = fit(x, p.title.toUpperCase(), W - 146, 22, 700, SANS, 14); x.font = `700 ${ts}px ${SANS}`; x.letterSpacing = "3px"; x.fillText(p.title.toUpperCase(), 73, nameY + 40); x.letterSpacing = "0px"; }
+  x.fillStyle = C.ink; x.font = `400 28px ${SANS}`;
+  rows.forEach((t, i) => x.fillText(t, 73, first + i * step));
+  x.fillStyle = C.maroon; x.font = `700 28px ${SANS}`; x.fillText(SITE, 73, last);
   return c;
 }
 

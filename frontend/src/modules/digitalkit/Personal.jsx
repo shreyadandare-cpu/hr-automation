@@ -4,7 +4,7 @@ import { api, apiMsg } from "../../api.js";
 import { Field } from "../../components/Modal.jsx";
 import { Callout, DownloadIcon, Skeleton, ButtonTabs } from "../../components/ui.jsx";
 import { useToast } from "../../components/toast.jsx";
-import { BANNER_PRESETS, BANNER_THEMES, CELEBRATIONS, ICON_PROD, SIG_DEFAULT_OPTS, SIG_STYLES, aboutText, copyHtml, copyText, captionFor, drawBackground, drawBanner, drawCard, drawCelebrate, fileSafe, hashtags, headlines, jpegOf,
+import { BANNER_PRESETS, BANNER_THEMES, CELEBRATIONS, ICON_PROD, SIG_DEFAULT_OPTS, SIG_STYLES, aboutText, copyHtml, copyText, captionFor, drawBackground, drawBanner, CARD_DEFAULT_OPTS, drawCard, drawCelebrate, fileSafe, hashtags, headlines, jpegOf,
   pdfFromJpegs, saveBlob, saveText, signatureHtml, signaturePlain, toBlob, webLink } from "./kit.js";
 
 /* A picture drawn on a canvas, shown as an image. It is drawn again when the inputs change. */
@@ -102,24 +102,28 @@ export function Signature({ p }) {
 
 export function Card({ p }) {
   const toast = useToast();
-  const [busy, setBusy] = useState("");
-  const png = async (side) => { setBusy(side); try { saveBlob(await toBlob(await drawCard(p, side)), `${fileSafe(p.name)}-business-card-${side}.png`); } catch { toast("Could not make the file."); } setBusy(""); };
+  const [busy, setBusy] = useState(""), [o, setO] = useState(CARD_DEFAULT_OPTS);
+  const png = async (side) => { setBusy(side); try { saveBlob(await toBlob(await drawCard(p, side, o)), `${fileSafe(p.name)}-business-card-${side}.png`); } catch { toast("Could not make the file."); } setBusy(""); };
   const pdf = async () => {
     setBusy("pdf");
     try {
       const pages = [];
-      for (const side of ["front", "back"]) { const c = await drawCard(p, side); pages.push({ jpeg: await jpegOf(c), w: c.width, h: c.height }); }
+      for (const side of ["front", "back"]) { const c = await drawCard(p, side, o); pages.push({ jpeg: await jpegOf(c), w: c.width, h: c.height }); }
       saveBlob(pdfFromJpegs(pages, 252, 144), `${fileSafe(p.name)}-business-card.pdf`);
     } catch { toast("Could not make the file."); }
     setBusy("");
   };
-  const k = [p.name, p.title, p.email, p.phone, p.location].join("|");
+  const k = [p.name, p.title, p.email, p.phone, o.phone, o.cities].join("|");
   return (
     <div className="card"><div className="card-h"><h3>Your business card</h3><span className="muted">3.5 × 2 in, print ready</span></div>
       <div className="card-b">
         <div className="dk-pair">
-          <figure><Drawn draw={() => drawCard(p, "front")} deps={[k, "f"]} alt="Business card front" /><figcaption>Front</figcaption></figure>
+          <figure><Drawn draw={() => drawCard(p, "front", o)} deps={[k, "f"]} alt="Business card front" /><figcaption>Front</figcaption></figure>
           <figure><Drawn draw={() => drawCard(p, "back")} deps={["b"]} alt="Business card back" /><figcaption>Back</figcaption></figure>
+        </div>
+        <div className="mt-4 flex flex-wrap gap-x-6 gap-y-2 rounded-field bg-tint px-4 py-3">
+          <label className="flex min-h-11 items-center gap-2"><input type="checkbox" checked={o.phone} onChange={(e) => setO({ ...o, phone: e.target.checked })} />Show my phone number</label>
+          <label className="flex min-h-11 items-center gap-2"><input type="checkbox" checked={o.cities} onChange={(e) => setO({ ...o, cities: e.target.checked })} />Show office cities</label>
         </div>
         <div className="row dk-actions">
           <button type="button" className="btn primary sm" disabled={needTitle(p) || !!busy} onClick={pdf}><DownloadIcon />PDF, both sides</button>

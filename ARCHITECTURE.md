@@ -144,7 +144,8 @@ people to the Claude organization and removes them. The app does not call a Clau
 ```
 hr-automation/
 ├── docker-compose.yml          frontend (nginx) + backend + optional db
-├── .claude/settings.json       shared Claude Code hook: checks this file at the end of each turn
+├── .claude/settings.json       shared Claude Code hooks: check this file, and check that interface changes were seen in a browser
+├── .claude/hooks/              browser-check.mjs: the browser-check Stop hook
 ├── docs/                       BRAND_GUIDELINES.md and the brand PDF
 ├── backend/
 │   ├── src/                    the server: index.js plus one file per feature
@@ -541,7 +542,7 @@ People are linked mostly by work email (text, compared in lower case), not by fo
 - **Migrations.** There is no migration tool. `initDb()` runs all of `schema.sql` on every start, so every statement is written to be repeatable (`CREATE TABLE IF NOT EXISTS`, `ADD COLUMN IF NOT EXISTS`, guarded `DO` blocks, `app_migrations` keys). `npm run migrate` does the same by hand, with `-- --dry-run`. `npm run migrate:sql` regenerates [backend/migrations/hrhub-schema.sql](backend/migrations/hrhub-schema.sql).
 - **Tests.** Run from `backend/`:
   - `npm test` runs `test/*.test.mjs` (`leave-rules`, `payroll-calc`, `tax-import`, `architecture`). No database needed.
-  - `npm run check:docs` runs [backend/scripts/check-architecture.mjs](backend/scripts/check-architecture.mjs): it fails when this file no longer names every server file, route mount, table, `.env.example` variable, page, module and component, or when the docs link to a missing file. The `architecture` test runs the same check, and a Claude Code Stop hook in [.claude/settings.json](.claude/settings.json) runs it at the end of each Claude turn.
+  - `npm run check:docs` runs [backend/scripts/check-architecture.mjs](backend/scripts/check-architecture.mjs): it fails when this file no longer names every server file, route mount, table, `.env.example` variable, page, module and component, or when the docs link to a missing file. The `architecture` test runs the same check, and a Claude Code Stop hook in [.claude/settings.json](.claude/settings.json) runs it at the end of each Claude turn. A second Stop hook, [.claude/hooks/browser-check.mjs](.claude/hooks/browser-check.mjs), sends Claude back once when a file under `frontend/` changed and no browser looked at a page afterwards (Claude's own browser first, then Claude in Chrome, Playwright only as the fallback; see CLAUDE.md).
   - `npm run test:invites` and `npm run test:device` start a throwaway server and use the database in `DATABASE_URL`; they create and remove temporary rows.
   - The frontend has no tests and no lint script.
 

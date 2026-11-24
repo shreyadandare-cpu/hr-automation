@@ -8,6 +8,12 @@
             "command": "node \"$CLAUDE_PROJECT_DIR/backend/scripts/check-architecture.mjs\" --hook",
             "timeout": 30,
             "statusMessage": "Checking ARCHITECTURE.md against the code"
+          },
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/browser-check.mjs\"",
+            "timeout": 20,
+            "statusMessage": "Checking that interface changes were tested in a browser"
           }
         ]
       }

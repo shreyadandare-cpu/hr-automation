@@ -33,7 +33,7 @@ Before a task, check the skills list and use the one that fits. If none fits, sa
 | Task | Skill |
 |---|---|
 | New or reshaped screen | `frontend-design:frontend-design`, then `redesign-existing-projects` for an existing page |
-| Check a screen in a browser, every size | `playwright-cli` (or the Playwright browser tools) |
+| Check a screen in a browser, every size | Claude's own browser first, then Claude in Chrome; `playwright-cli` only as the fallback (see below) |
 | Accessibility, contrast, focus | `chrome-devtools-mcp:a11y-debugging` |
 | Layout, network or console problems | `chrome-devtools-mcp:chrome-devtools` |
 | Slow page load | `chrome-devtools-mcp:debug-optimize-lcp` |
@@ -261,7 +261,7 @@ softly lit, from the shared pieces in [frontend/src/components/ui.jsx](frontend/
 - Empty and error states stay as words ("No requests yet.", the error): a skeleton is only for waiting.
 - Words for an action in progress on its own button ("Saving…", "Uploading…") are fine: that is feedback, not loading.
 
-## Responsive on every screen, tested with Playwright (always)
+## Responsive on every screen, tested in a browser (always)
 
 This applies to everyone who works in this repo, on every screen they add or change.
 
@@ -269,8 +269,20 @@ This applies to everyone who works in this repo, on every screen they add or cha
   portrait and landscape. No sideways scroll, no cut-off or overlapping content, no text below 14px.
 - Build it responsive from the start: fluid widths, `clamp()` sizes, grid or flex that reflows, container or media
   queries. Never fixed pixel widths for layout.
-- **Test with Playwright before calling the work done.** Load the `playwright-cli` skill, or use the Playwright
-  browser tools, and open the built page at these sizes:
+- **Check every interface change in a browser before calling the work done. This is compulsory** for any change
+  under `frontend/` (pages, components, styles, `brand.config.json`, files in `frontend/public`), however small.
+  Use the browsers in this order:
+  1. **Claude's own browser** (the browser pane in the Claude app, `mcp__Claude_Browser__*`): `preview_start` the
+     local server from `.claude/launch.json`, then `navigate`, `read_page`, `resize_window`, a screenshot and
+     `read_console_messages`.
+  2. **Claude in Chrome** (the Chrome extension, `mcp__claude-in-chrome__*`) when the built-in browser cannot reach
+     the page.
+  3. **Playwright** (the `playwright-cli` skill or the Playwright browser tools) only as the fallback, when neither
+     Claude browser works. Say why the first two could not be used.
+- A Stop hook enforces it ([.claude/hooks/browser-check.mjs](.claude/hooks/browser-check.mjs)): when a file under
+  `frontend/` changed and no browser looked at a page afterwards, Claude is sent back once to check it. Opening the
+  server or listing tabs does not count; a page has to be looked at.
+- Open the page at these sizes:
 
   | Screen | Size |
   |---|---|

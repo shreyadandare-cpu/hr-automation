@@ -10,8 +10,8 @@ import { payrollChanged } from "./payroll/preview-cache.js";
  * Company loans, inside Expenses. An employee asks (amount, months, reason); HR opens the request and approves the amount asked, approves a different amount, or
  * rejects it; before it goes live HR sees the whole repayment schedule, confirms the money was paid out and activates it. Nothing is deducted before that.
  *
- *   Activate   makes one employee_advances row with the approved amount, the instalment and the first month. Payroll already deducts such an instalment each month
- *              (advanceInstalments in clearance.js), labels it "Company Loan Repayment" on the payslip, never deducts more than is still owed, and records it once per
+ *   Activate   makes one employee_advances row with the approved amount, the installment and the first month. Payroll already deducts such an installment each month
+ *              (advanceInstallments in clearance.js), labels it "Company Loan Repayment" on the payslip, never deducts more than is still owed, and records it once per
  *              advance and month when the month is approved (so recalculating a month cannot deduct twice; a month already approved is not touched).
  *   Repaid     when the recoveries reach the approved amount the loan is completed (syncLoans), and payroll stops deducting because nothing is owed.
  *   Who        everyone sees their own loans; loans for everyone need advances.approve for the whole company (HR). Nobody decides their own request.
@@ -51,7 +51,7 @@ export async function syncLoans() {
       WHERE l.status = 'active' AND r.advance_id = l.advance_id AND r.repaid >= l.approved_amount RETURNING l.id, l.work_email, l.loan_no, l.approved_amount`);
   for (const l of rows) {
     await log(pool, l.id, "system", "Loan completed", { repaid: money(l.approved_amount) });
-    await notify(l.work_email, { title: `Your loan ${l.loan_no} is fully repaid.`, body: "No more instalments will be deducted.", link: `/app/loans?open=${l.id}` }).catch(() => {});
+    await notify(l.work_email, { title: `Your loan ${l.loan_no} is fully repaid.`, body: "No more installments will be deducted.", link: `/app/loans?open=${l.id}` }).catch(() => {});
   }
   return rows.length;
 }
@@ -193,7 +193,7 @@ loansRouter.get("/:id/review", wrap(async (req, res) => {
   res.json(await review(l.work_email.toLowerCase(), amount, months, req.query.first));
 }));
 
-// HR: final approval. The approved amount, months, instalment, first month and the confirmed payment date are saved and the loan goes live.
+// HR: final approval. The approved amount, months, installment, first month and the confirmed payment date are saved and the loan goes live.
 loansRouter.post("/:id/activate", wrap(async (req, res) => {
   if (!isHr(req)) return res.status(403).json(NO_ACCESS);
   const b = req.body || {}, errors = {}, remarks = clip(b.remarks, 500);

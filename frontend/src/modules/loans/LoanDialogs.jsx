@@ -8,7 +8,7 @@ import { LoanPill, Progress, STATUS, fdate, money, monthName, monthlyOf, nextMon
 const dt = (s) => new Date(s).toLocaleString("en-IN", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" });
 const Facts = ({ pairs, cols }) => <dl className="facts" style={{ border: 0, padding: 0, ...(cols ? { gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))` } : {}) }}>{pairs.filter((p) => p).map(([k, v]) => <div key={k}><dt>{k}</dt><dd>{v === "" || v == null ? "—" : v}</dd></div>)}</dl>;
 
-/* The employee's request form: who they are is filled in, the instalment is worked out as they type. */
+/* The employee's request form: who they are is filled in, the installment is worked out as they type. */
 export function RequestDialog({ profile, onClose }) {
   const toast = useToast();
   const [f, setF] = useState({ amount: "", months: "", reason: "" }), [er, setEr] = useState({}), [busy, setBusy] = useState(false);
@@ -104,11 +104,11 @@ function ApproveDialog({ loan, existing, focusAmount, onClose }) {
           <div className="rb-stat"><span className="lbl">Approved amount</span><b>{money(total)}</b></div>
           <div className="rb-stat"><span className="lbl">Monthly deduction</span><b>{p && p.count ? money(p.monthly) : "—"}</b></div>
           <div className="rb-stat"><span className="lbl">Duration</span><b>{p && p.count ? `${p.count} month${p.count === 1 ? "" : "s"}` : "—"}</b></div>
-          <div className="rb-stat"><span className="lbl">Total repayment</span><b>{money(total)}</b>{p && p.count > 1 && p.last !== p.monthly && <span className="sub">Last instalment {money(p.last)}</span>}</div>
+          <div className="rb-stat"><span className="lbl">Total repayment</span><b>{money(total)}</b>{p && p.count > 1 && p.last !== p.monthly && <span className="sub">Last installment {money(p.last)}</span>}</div>
         </div>
         {rv && rv.gross != null && <div className="muted">Monthly salary {money(rv.gross)}{rv.committed ? `, already deducted for other loans and advances ${money(rv.committed)}` : ""}; left after this deduction: {money(rv.available - (p ? p.monthly : 0))}.</div>}
         {rv && rv.schedule.length > 0 && (
-          <div className="tbl-wrap" style={{ maxHeight: 220, overflow: "auto" }}><table className="pr-table"><thead><tr><th>Instalment</th><th>Salary month</th><th className="num">Deduction</th><th className="num">Balance after</th></tr></thead>
+          <div className="tbl-wrap" style={{ maxHeight: 220, overflow: "auto" }}><table className="pr-table"><thead><tr><th>Installment</th><th>Salary month</th><th className="num">Deduction</th><th className="num">Balance after</th></tr></thead>
             <tbody>{rv.schedule.map((r, i) => <tr key={r.n}><td>{r.n}</td><td>{monthName(r.month)}</td><td className="num">{money(r.amount)}</td><td className="num">{money(Math.round((total - rv.schedule.slice(0, i + 1).reduce((n, x) => n + x.amount, 0)) * 100) / 100)}</td></tr>)}</tbody></table></div>)}
         <label className="row" style={{ gap: 8, alignItems: "flex-start" }}><input type="checkbox" checked={f.confirmPaid} onChange={(e) => setF({ ...f, confirmPaid: e.target.checked })} /><span>I confirm that {money(total)} has been paid to {loan.employee.name}. Salary deductions start only after this.</span></label>
         {er.confirmPaid && <span className="ferr" role="alert">{er.confirmPaid}</span>}
@@ -151,7 +151,7 @@ export function LoanDetail({ id, hr, me, onClose }) {
             <div className="rb-stat"><span className="lbl">Installments remaining</span><b>{d.remainingCount}</b></div>
           </div>}
           {live && <Progress percent={l.percent} />}
-          {l.status === "completed" && <Callout><b>Loan completed.</b> The loan is fully repaid{l.completedOn ? ` (${fdate(String(l.completedOn).slice(0, 10))})` : ""}. No more instalments are deducted.</Callout>}
+          {l.status === "completed" && <Callout><b>Loan completed.</b> The loan is fully repaid{l.completedOn ? ` (${fdate(String(l.completedOn).slice(0, 10))})` : ""}. No more installments are deducted.</Callout>}
           {hr && d.others && d.others.length > 0 && <Callout><b>Other loans of {l.employee.name}:</b><ul style={{ margin: "6px 0 0", paddingLeft: 18 }}>{d.others.map((o) => <li key={o.id}>{o.loanNo}: {(STATUS[o.status] || [o.status])[0]}, {o.approvedAmount ? `${money(o.approvedAmount)} approved, ${money(o.outstanding)} outstanding` : `${money(o.requestedAmount)} requested`}</li>)}</ul></Callout>}
           {hr && l.status === "pending" && d.existing && d.existing.length > 0 && <Callout><b>Not repaid yet:</b><ul style={{ margin: "6px 0 0", paddingLeft: 18 }}>{d.existing.map((x) => <li key={x.id}>{x.reason}: {money(x.outstanding)} left</li>)}</ul></Callout>}
           {hr && own && l.status === "pending" && <Callout>This is your own request, so another HR user has to decide it.</Callout>}

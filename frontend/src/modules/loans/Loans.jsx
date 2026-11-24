@@ -13,7 +13,7 @@ const VIEWS_HR = [["pending", "Pending approvals"], ["all", "All loan requests"]
 const YEARS = (() => { const y = new Date().getFullYear(); return [y, y - 1, y - 2]; })();
 
 /* Loan requests, inside Expenses next to Budget requests. Everyone asks for a loan and follows their own; HR sees every loan, decides the waiting ones and tracks repayment.
-   The instalments are deducted by payroll by itself once HR activates a loan. */
+   The installments are deducted by payroll by itself once HR activates a loan. */
 export default function Loans() {
   const { user, canAll } = useAuth(), hr = canAll("advances.approve");
   const [params, setParams] = useSearchParams();
@@ -63,7 +63,7 @@ export default function Loans() {
   return (
     <section className="section">
       <SectionHead title={hr ? "Expenses" : "My expenses"} tabs={<Tabs cur="loans" />}
-        sub={hr ? "Review loan requests, approve the amount and the months, and activate the loan. Payroll then deducts each instalment from the salary by itself until it is repaid." : "Need to borrow from the company? Request a loan. HR decides the amount and the months, and the instalments are deducted from your salary once the loan is active."}
+        sub={hr ? "Review loan requests, approve the amount and the months, and activate the loan. Payroll then deducts each installment from the salary by itself until it is repaid." : "Need to borrow from the company? Request a loan. HR decides the amount and the months, and the installments are deducted from your salary once the loan is active."}
         actions={<button className="btn primary" onClick={() => setDlg({ kind: "request" })} disabled={!mine}>Request a loan</button>} />
       {err && <Callout>{err}</Callout>}
       {hr && <ViewTabs label="Loan views" views={VIEWS_HR} view={view} onView={setView} />}
@@ -75,7 +75,7 @@ export default function Loans() {
           <div className="filters">
             <input className="input grow" type="search" placeholder="Search employee name, number or loan number" aria-label="Search" value={f.q} onChange={(e) => setF({ ...f, q: e.target.value })} />
             <select className="input" aria-label="Department" value={f.dept} onChange={(e) => setF({ ...f, dept: e.target.value })}><option value="">All departments</option>{(all ? all.departments : []).map((d) => <option key={d}>{d}</option>)}</select>
-            {view === "all" && <select className="input" aria-label="Loan status" value={f.status} onChange={(e) => setF({ ...f, status: e.target.value })}><option value="">All statuses</option><option value="pending">Pending HR approval</option><option value="active">Approved / Active</option><option value="completed">Completed</option><option value="rejected">Rejected</option><option value="cancelled">Cancelled</option></select>}
+            {view === "all" && <select className="input" aria-label="Loan status" value={f.status} onChange={(e) => setF({ ...f, status: e.target.value })}><option value="">All status</option><option value="pending">Pending HR approval</option><option value="active">Approved / Active</option><option value="completed">Completed</option><option value="rejected">Rejected</option><option value="cancelled">Cancelled</option></select>}
             <select className="input" aria-label="Month requested" value={f.month} onChange={(e) => setF({ ...f, month: e.target.value })}><option value="">Any month</option>{MONTHS.map((m, i) => <option key={m} value={i + 1}>{m}</option>)}</select>
             <select className="input" aria-label="Year requested" value={f.year} onChange={(e) => setF({ ...f, year: e.target.value })}><option value="">Any year</option>{YEARS.map((y) => <option key={y}>{y}</option>)}</select>
           </div>)}

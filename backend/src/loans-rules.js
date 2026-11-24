@@ -1,12 +1,12 @@
 /*
- * Company loans: the arithmetic, kept pure so the browser and the tests can use it. A loan is an amount repaid in equal monthly instalments from a first month.
- * The instalment is rounded UP to the paisa, so the last one is the exact remainder (never more than the others, never a leftover paisa).
+ * Company loans: the arithmetic, kept pure so the browser and the tests can use it. A loan is an amount repaid in equal monthly installments from a first month.
+ * The installment is rounded UP to the paisa, so the last one is the exact remainder (never more than the others, never a leftover paisa).
  */
 export const money = (n) => Math.round((Number(n) + Number.EPSILON) * 100) / 100;
 const ceil2 = (n) => Math.ceil(Math.round(n * 1e6) / 1e4) / 100;
 export const MAX_AMOUNT = 10_000_000, MAX_MONTHS = 60;
 
-/** The instalment and how many are needed: { monthly, count, last }. */
+/** The installment and how many are needed: { monthly, count, last }. */
 export function plan(amount, months) {
   const a = money(amount), m = Math.floor(Number(months));
   if (!(a > 0) || !(m >= 1)) return { monthly: 0, count: 0, last: 0 };

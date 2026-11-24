@@ -1,7 +1,7 @@
 /*
- * Web clock-in with location and a selfie, end to end, against a LOCAL server and database (never the shared one): HR's
- * settings and offices, a punch inside an office, outside refused or flagged, the selfie (type, size, expiry, who may open
- * it), where the punch was made on the attendance log, and the clean-up of old selfies.
+ * Web clock-in with location, end to end, against a LOCAL server and database (never the shared one): HR's settings and
+ * offices, a punch inside an office, outside refused or flagged, where the punch was made on the attendance log, and that a
+ * punch never asks for a selfie.
  *
  *   DATABASE_URL=postgresql://localhost:5432/hrhub_local BASE=http://localhost:3100 node test/clockin-flow.mjs
  *
@@ -18,7 +18,6 @@ const sha = (s) => crypto.createHash("sha256").update(s).digest("hex");
 const HR = "test.clockin.hr@wohlig.com", EMP = "test.clockin.employee@wohlig.com", MGR = "test.clockin.manager@wohlig.com", OUT = "test.clockin.outsider@wohlig.com";
 const ALL = [HR, EMP, MGR, OUT], OFFICE = "Clock-in test office (Mumbai)";
 const AT_OFFICE = { lat: 19.0760, lng: 72.8777 }, NEAR = { lat: 19.0765, lng: 72.8777, accuracy: 15 }, FAR = { lat: 19.2, lng: 72.9, accuracy: 15 };
-const JPEG = Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xe0]), Buffer.alloc(200, 7), Buffer.from([0xff, 0xd9])]);
 let pass = 0, fail = 0, saved = null, empId = 0;
 const ok = (name, cond, extra = "") => { cond ? pass++ : fail++; console.log(`${cond ? "PASS" : "FAIL"}  ${name}${cond ? "" : "  " + extra}`); };
 async function login(email, perms = []) {
@@ -38,7 +37,6 @@ const call = async (token, method, path, body, raw) => {
 const policy = (t, p) => call(t, "PUT", "/api/attendance/clock-in", p);
 const rewind = () => db.query("UPDATE attendance_punches SET punch_time = punch_time - interval '3 minutes' WHERE employee_id=$1", [empId]);   // the one-minute gap between punches
 const clean = async () => {
-  await db.query("DELETE FROM attendance_selfies WHERE lower(email)=ANY($1)", [ALL]);
   await db.query("DELETE FROM attendance_punches WHERE employee_id IN (SELECT id FROM employees WHERE lower(work_email)=ANY($1))", [ALL]);
   await db.query("DELETE FROM clock_in_sites WHERE name LIKE 'Clock-in test office%'");
   await db.query("DELETE FROM employees WHERE lower(work_email)=ANY($1)", [ALL]);
@@ -72,70 +70,40 @@ try {
   ok("office: removed", (await call(hr, "DELETE", `/api/attendance/clock-in/sites/${temp}`)).status === 200);
   ok("office: removing twice gives 404", (await call(hr, "DELETE", `/api/attendance/clock-in/sites/${temp}`)).status === 404);
   s = await policy(hr, { enabled: true, needLocation: true, needSelfie: true, allowOutside: false });
-  ok("settings: saved and returned with the offices", s.status === 200 && s.data.needSelfie === true && s.data.sites.some((x) => x.id === siteId && x.radius === 200), JSON.stringify(s.data));
+  ok("settings: saved and returned with the offices; a selfie setting is ignored", s.status === 200 && s.data.needLocation === true && !("needSelfie" in s.data) && s.data.sites.some((x) => x.id === siteId && x.radius === 200), JSON.stringify(s.data));
 
   // Today tells the app what to ask for
   const today = await call(emp, "GET", "/api/attendance/today");
-  ok("today: the app is told to ask for location and a selfie", today.data.canPunch && today.data.needLocation && today.data.needSelfie, JSON.stringify(today.data));
+  ok("today: the app is told to ask for location, never a selfie", today.data.canPunch && today.data.needLocation && !("needSelfie" in today.data), JSON.stringify(today.data));
 
   // Refused punches
   ok("punch: no location is refused", /allow location/.test((await call(emp, "POST", "/api/attendance/punch", {})).data.error));
   ok("punch: nonsense location is refused", (await call(emp, "POST", "/api/attendance/punch", { lat: 999, lng: 1 })).status === 400);
-  ok("punch: no selfie is refused", /selfie/.test((await call(emp, "POST", "/api/attendance/punch", NEAR)).data.error));
-  ok("punch: an unknown selfie key is refused", /expired/.test((await call(emp, "POST", "/api/attendance/punch", { ...NEAR, selfieKey: "nope" })).data.error));
-
-  // Selfie upload
-  ok("selfie: a PNG or script is refused", (await call(emp, "POST", "/api/attendance/selfie", Buffer.from("<svg onload=alert(1)>xxxxxxxx</svg>"), "image/svg+xml")).status === 400);
-  ok("selfie: an empty upload is refused", (await call(emp, "POST", "/api/attendance/selfie", Buffer.alloc(0), "image/jpeg")).status === 400);
-  ok("selfie: too large is refused", (await call(emp, "POST", "/api/attendance/selfie", Buffer.concat([JPEG, Buffer.alloc(410 * 1024)]), "image/jpeg")).status === 413
-    || (await call(emp, "POST", "/api/attendance/selfie", Buffer.concat([JPEG, Buffer.alloc(401 * 1024)]), "image/jpeg")).status === 400);
-  let up = await call(emp, "POST", "/api/attendance/selfie", JPEG, "image/jpeg");
-  ok("selfie: a JPEG is kept and a key returned", up.status === 201 && /^[0-9a-f]{48}$/.test(up.data.key), JSON.stringify(up));
-  const otherKey = (await call(out, "POST", "/api/attendance/selfie", JPEG, "image/jpeg")).data.key;
-  ok("selfie: someone else's selfie key cannot be used", /expired/.test((await call(emp, "POST", "/api/attendance/punch", { ...NEAR, selfieKey: otherKey })).data.error));
-
-  ok("punch: outside the offices is refused with the distance", /km from Clock-in test office/.test((await call(emp, "POST", "/api/attendance/punch", { ...FAR, selfieKey: up.data.key })).data.error));
-  let p = await call(emp, "POST", "/api/attendance/punch", { ...NEAR, selfieKey: up.data.key });
-  ok("punch: inside the office, with a selfie, is saved and matched to the office", p.status === 200 && p.data.direction === "IN" && p.data.place.site === OFFICE && !p.data.place.outside, JSON.stringify(p));
-  ok("selfie: a key works once", /expired/.test((await (async () => { await rewind(); return call(emp, "POST", "/api/attendance/punch", { ...NEAR, selfieKey: up.data.key }); })()).data.error));
+  ok("punch: outside the offices is refused with the distance", /km from Clock-in test office/.test((await call(emp, "POST", "/api/attendance/punch", FAR)).data.error));
+  let p = await call(emp, "POST", "/api/attendance/punch", NEAR);
+  ok("punch: inside the office, one tap with no selfie, is saved and matched to the office", p.status === 200 && p.data.direction === "IN" && p.data.place.site === OFFICE && !p.data.place.outside, JSON.stringify(p));
+  ok("selfie: the old selfie upload address is gone", (await call(emp, "POST", "/api/attendance/selfie", {})).status === 404);
 
   // Outside allowed and flagged
-  await policy(hr, { enabled: true, needLocation: true, needSelfie: false, allowOutside: true });
+  await policy(hr, { enabled: true, needLocation: true, allowOutside: true });
   await rewind();
   p = await call(emp, "POST", "/api/attendance/punch", FAR);
   ok("punch: with outside allowed, a far punch is kept and flagged", p.status === 200 && p.data.direction === "OUT" && p.data.place.outside === true && /HR can see this/.test(p.data.note), JSON.stringify(p));
 
-  // Where the punches were made, on the attendance log, and who may open the selfie
+  // Where the punches were made, on the attendance log
   const month = new Date(Date.now() + 330 * 60000).toISOString().slice(0, 7);
   const m = await call(hr, "GET", `/api/attendance/month?email=${encodeURIComponent(EMP)}&month=${month}`);
   const ps = m.data.days.flatMap((d) => d.punches || []);
-  const inP = ps.find((x) => x.direction === "IN" && x.selfie), outP = ps.find((x) => x.place && x.place.outside);
-  ok("log: the punch in shows the office and has a selfie", inP && inP.place.site === OFFICE && inP.source === "web", JSON.stringify(ps));
+  const inP = ps.find((x) => x.direction === "IN" && x.place), outP = ps.find((x) => x.place && x.place.outside);
+  ok("log: the punch in shows the office, and no selfie", inP && inP.place.site === OFFICE && inP.source === "web" && !("selfie" in inP), JSON.stringify(ps));
   ok("log: the punch out is flagged as outside with its distance", outP && outP.place.distance > 1000, JSON.stringify(ps));
-  const pic = `/api/attendance/selfies/${inP.selfie}`;
-  let g = await call(emp, "GET", pic);
-  ok("selfie: the person may open their own, as a cached picture", g.status === 200 && g.type === "image/jpeg" && /immutable/.test(g.cache), `${g.status} ${g.type} ${g.cache}`);
-  ok("selfie: HR with attendance access may open it", (await call(hr, "GET", pic)).status === 200);
-  ok("selfie: the reporting manager may open it", (await call(mgr, "GET", pic)).status === 200);
-  ok("selfie: anyone else gets 404", (await call(out, "GET", pic)).status === 404);
-  ok("selfie: an unused selfie cannot be opened", (await call(out, "GET", `/api/attendance/selfies/${(await db.query("SELECT id FROM attendance_selfies WHERE lower(email)=$1", [OUT])).rows[0].id}`)).status === 404);
-
-  // Clean-up of old selfies (the job): age them, then run the sweep the server runs hourly
-  await db.query("UPDATE attendance_selfies SET created_at = now() - interval '91 days' WHERE lower(email)=$1", [EMP]);
-  const { purgeSelfies } = await import("../src/attendance.js").catch(() => ({}));
-  if (purgeSelfies) {
-    const r = await purgeSelfies();
-    ok("clean-up: selfies older than 90 days are deleted", r.removed >= 1 && (await db.query("SELECT 1 FROM attendance_selfies WHERE lower(email)=$1", [EMP])).rowCount === 0);
-    ok("clean-up: the punch stays, without its selfie", (await db.query("SELECT selfie_id FROM attendance_punches WHERE employee_id=$1 AND direction='IN'", [empId])).rows[0].selfie_id === null);
-  }
-
   // Location not asked: punches work without it
-  await policy(hr, { enabled: true, needLocation: false, needSelfie: false, allowOutside: false });
+  await policy(hr, { enabled: true, needLocation: false, allowOutside: false });
   await rewind();
   ok("punch: with nothing asked, a plain punch works", (await call(emp, "POST", "/api/attendance/punch", {})).status === 200);
 } catch (err) { fail++; console.error("FAIL  the test stopped:", err.message); } finally {
-  if (saved) await db.query("UPDATE clock_in_policy SET enabled=$1, need_location=$2, need_selfie=$3, allow_outside=$4, updated_by=$5, updated_at=$6 WHERE id=1",
-    [saved.enabled, saved.need_location, saved.need_selfie, saved.allow_outside, saved.updated_by, saved.updated_at]);
+  if (saved) await db.query("UPDATE clock_in_policy SET enabled=$1, need_location=$2, allow_outside=$3, updated_by=$4, updated_at=$5 WHERE id=1",
+    [saved.enabled, saved.need_location, saved.allow_outside, saved.updated_by, saved.updated_at]);
   else await db.query("DELETE FROM clock_in_policy WHERE id=1");
   await clean();
   await db.end();

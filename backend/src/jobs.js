@@ -9,7 +9,6 @@ import { runLeaveDigest } from "./leave-digest.js";
 import { runClaudeReminders } from "./claude-requests.js";
 import { runCelebrationAlerts } from "./celebrations.js";
 import { runTaxReminders } from "./tax-reminders.js";
-import { purgeSelfies } from "./attendance.js";
 import { startPortalAttendanceSync } from "./portal-attendance.js";
 import { startGmailIntel } from "./gmail-intel-routes.js";
 
@@ -51,11 +50,6 @@ export function startBackgroundJobs() {
     .catch((err) => console.error("Tax reminder check failed:", err));
   checkTax();
   setInterval(checkTax, 60 * 60_000);
-  // Clock-in selfies older than 90 days, and ones never used for a punch, are deleted with their files (attendance.js); hourly.
-  const sweepSelfies = () => purgeSelfies().then((r) => { if (r.removed) console.log("Clock-in selfies removed:", r.removed); })
-    .catch((err) => console.error("Selfie clean-up failed:", err));
-  sweepSelfies();
-  setInterval(sweepSelfies, 60 * 60_000);
   startGmailIntel();   // reads project emails from the mailboxes HR switched on (only when GMAIL_INTEL_ENABLED=true)
   startPortalAttendanceSync();   // copies the office device punches the Employee Portal received (only when PORTAL_ATTENDANCE_SYNC=true)
 }

@@ -2,6 +2,10 @@ import L from "../../../frontend/leave-rules.cjs";
 import { computeLine, summaryOfLegacy, totalsOf, P, R } from "./engine.js";
 import { fyOf, fyMonths } from "./tax.js";
 import { DEFAULT_TAX_RULES } from "./tax-defaults.js";
+import { pool as mainPool } from "../db.js";
+import { fromEmployee } from "./declared.js";
+import { approvedOvertime } from "../shifts.js";
+import { advanceInstalments } from "../clearance.js";
 
 /*
  * Reads what the payroll engine needs from the database and saves its result as the run's lines.
@@ -56,34 +60,43 @@ export async function seedTaxRules(db) {
     await db.query("INSERT INTO tax_rules (fy, regime, rules, source) VALUES ($1,$2,$3,$4) ON CONFLICT (fy, regime) DO NOTHING", [r.fy, r.regime, JSON.stringify(r.rules), r.source]);
 }
 
-/** Taxable salary, TDS and professional tax already in this financial year's earlier months, per person. */
-async function paidSoFar(db, period) {
+/** Taxable salary, TDS and professional tax already in this financial year's earlier months, per person (or for one person). */
+export async function paidSoFar(db, period, email = null) {
   const months = fyMonths(fyOf(period)).filter((m) => m < period);
   const out = new Map();
   if (!months.length) return out;
   const { rows } = await db.query(
     `SELECT i.work_email, i.slip, i.inputs, i.base_salary, i.lop_deduction, i.payable FROM payroll_items i JOIN payroll_runs r ON r.id=i.run_id
-     WHERE r.period = ANY($1) AND r.status IN ('approved','bank_ready','paid','processed')`, [months]);
+     WHERE r.period = ANY($1) AND r.status IN ('approved','bank_ready','paid','processed') ${email ? "AND lower(i.work_email)=$2" : ""}`, email ? [months, email] : [months]);
   for (const i of rows) {
     if (i.inputs && i.inputs.hold) continue;
     if (i.slip && i.slip.incomplete && i.slip.incomplete.length) continue;
     const s = summaryOfLegacy(i.slip, i);
-    const k = lc(i.work_email), cur = out.get(k) || { taxable: 0, tds: 0, pt: 0 };
-    out.set(k, { taxable: R(P(cur.taxable) + P(s.taxable)), tds: R(P(cur.tds) + P(s.tds)), pt: R(P(cur.pt) + P(s.pt)) });
+    const k = lc(i.work_email), cur = out.get(k) || { taxable: 0, tds: 0, pt: 0, pf: 0 };
+    out.set(k, { taxable: R(P(cur.taxable) + P(s.taxable)), tds: R(P(cur.tds) + P(s.tds)), pt: R(P(cur.pt) + P(s.pt)), pf: R(P(cur.pf) + P(s.pf || 0)) });
   }
   return out;
 }
 
 /** Adds what this employer paid in the year before payroll moved to this app (declared as opening figures) to what the app paid. */
-function withOpening(paid = { taxable: 0, tds: 0, pt: 0 }, d = {}) {
+export function withOpening(paid = { taxable: 0, tds: 0, pt: 0, pf: 0 }, d = {}) {
   const o = (k) => P(Number(d && d[k]) || 0);
-  return { taxable: R(P(paid.taxable) + o("openingTaxable")), tds: R(P(paid.tds) + o("openingTds")), pt: R(P(paid.pt) + o("openingPt")) };
+  return { taxable: R(P(paid.taxable) + o("openingTaxable")), tds: R(P(paid.tds) + o("openingTds")), pt: R(P(paid.pt) + o("openingPt")), pf: R(P(paid.pf || 0)) };
+}
+
+/** The year's submitted declarations by email, and whether the proof due date has passed (then only verified claims count). */
+async function submittedDeclarations(fyStart) {
+  const [{ rows }, { rows: [pol] }] = await Promise.all([
+    mainPool.query("SELECT email, regime, items, proofs FROM tax_declaration_requests WHERE financial_year=$1 AND status='submitted'", [fyStart]),
+    mainPool.query("SELECT proof_due < (now() AT TIME ZONE 'Asia/Kolkata')::date AS closed FROM tax_regime_policies WHERE financial_year=$1", [fyStart]),
+  ]);
+  return { requests: new Map(rows.map((r) => [lc(r.email), r])), proofsFinal: !!(pol && pol.closed) };
 }
 
 /** People on the payroll for a month: joined by its last day, and not gone before its first day. */
 export async function staffFor(db, period) {
   const { rows } = await db.query(
-    `SELECT id, work_email, name, emp_no, title, dept, start_date, last_day, status, pan_masked, acct_masked, ifsc, pf_number, employment_type, onboarded_at FROM employees
+    `SELECT id, work_email, name, emp_no, title, dept, start_date, last_day, dob, status, pan_masked, acct_masked, ifsc, pf_number, employment_type, onboarded_at FROM employees
      WHERE start_date IS NOT NULL AND start_date <= $2::date
        AND ((last_day IS NULL AND status <> 'offboarded') OR last_day >= $1::date)
      ORDER BY name`, [period + "-01", monthEnd(period)]);
@@ -93,7 +106,7 @@ export async function staffFor(db, period) {
 /** People who are onboarded but join after this month: not on its payroll run, but HR can set their salary, bank and tax details ahead of time. */
 export async function joiningLater(db, period) {
   const { rows } = await db.query(
-    `SELECT id, work_email, name, emp_no, title, dept, start_date, last_day, status, pan_masked, acct_masked, ifsc, pf_number, employment_type, onboarded_at FROM employees
+    `SELECT id, work_email, name, emp_no, title, dept, start_date, last_day, dob, status, pan_masked, acct_masked, ifsc, pf_number, employment_type, onboarded_at FROM employees
      WHERE start_date > $1::date AND last_day IS NULL AND status <> 'offboarded'
      ORDER BY start_date, name`, [monthEnd(period)]);
   return rows;
@@ -108,6 +121,11 @@ export async function buildLines(db, period, runId = null, existing = []) {
   const emps = await staffFor(db, period);
   const kept = new Map(existing.map((i) => [lc(i.work_email), i]));
   // Side by side on the pool; one at a time inside a transaction (its single client can't run queries in parallel).
+  // Declarations people submitted on Pay > Tax declaration (main database, read only), used for anyone payroll has not entered
+  // tax details for, with HR's proof decisions applied (declared.js). Read beside the month's own data.
+  const ownDecl = submittedDeclarations(Number(fy.slice(0, 4)));
+  const overtimeOf = approvedOvertime(mainPool, period);   // approved overtime hours, shown on the line (main database, read only)
+  const instalmentsOf = advanceInstalments(mainPool, period);   // advance and loan instalments to deduct (main database, read only)
   const [{ rows: claims }, { rows: lop }, { rows: hols }, structures, { rows: rules }, { rows: decls }, { rows: adjs }, { rows: banks }, paid] = await together(db, [
     () => db.query(`SELECT * FROM reimbursements WHERE (status='payroll_pending' AND payroll_period <= $1) OR (status='in_payroll' AND payroll_run_id=$2) ORDER BY id`, [period, runId]),
     () => db.query("SELECT * FROM leave_requests WHERE status='approved' AND lop_days > 0 AND from_date < $1::date + interval '1 month'", [period + "-01"]),
@@ -123,6 +141,8 @@ export async function buildLines(db, period, runId = null, existing = []) {
   const structureOf = new Map(structures.map((x) => [lc(x.work_email), toStructure(x)]));
   const rulesOf = Object.fromEntries(rules.map((r) => [r.regime, r.rules]));
   const declOf = new Map(decls.map((d) => [lc(d.work_email), d]));
+  const { requests: submitted, proofsFinal } = await ownDecl;
+  const overtime = await overtimeOf, instalments = await instalmentsOf;
   const bankOf = new Map(banks.map((b) => [lc(b.work_email), b]));
   const by = (list, k = "work_email") => { const m = new Map(); for (const x of list) { const e = lc(x[k]); if (!m.has(e)) m.set(e, []); m.get(e).push(x); } return m; };
   const claimsOf = by(claims), adjOf = by(adjs);
@@ -135,7 +155,9 @@ export async function buildLines(db, period, runId = null, existing = []) {
   return emps.map((e) => {
     const k = lc(e.work_email), inputs = (kept.get(k) && kept.get(k).inputs) || {};
     const structure = structureOf.get(k) || null;
-    const decl = declOf.get(k);
+    // Payroll's own tax details win; otherwise the employee's submitted declaration; otherwise the new regime with nothing declared.
+    const fromOwn = !declOf.get(k) && submitted.get(k) ? fromEmployee({ request: submitted.get(k), structure, fy, start: e.start_date, lastDay: e.last_day, proofsFinal }) : null;
+    const decl = declOf.get(k) || fromOwn;
     const regime = decl ? decl.regime : "new";
     const hold = !!inputs.hold;
     const myClaims = hold ? [] : claimsOf.get(k) || [];
@@ -144,10 +166,11 @@ export async function buildLines(db, period, runId = null, existing = []) {
     const bank = bankOf.get(k);
     const slip = computeLine({
       period,
-      employee: { name: e.name, empNo: e.emp_no, title: e.title, dept: deptOf(e.dept, e.title), start: e.start_date, lastDay: e.last_day, pan: e.pan_masked,
+      employee: { name: e.name, empNo: e.emp_no, title: e.title, dept: deptOf(e.dept, e.title), start: e.start_date, lastDay: e.last_day, pan: e.pan_masked || "", dob: e.dob,
         pfNumber: e.pf_number, paymentMode: bank || e.acct_masked ? "Bank Transfer" : null },
-      structure, inputs, leaveLopDays: lopOf.get(k) || 0, claims: R(myClaims.reduce((n, c) => n + P(pay(c)), 0)), adjustments: myAdj,
-      tax: { rules: rulesOf[regime] || null, regime, declaration: decl ? decl.declaration : {}, paidSoFar: withOpening(paid.get(k), decl && decl.declaration) },
+      structure, inputs, leaveLopDays: lopOf.get(k) || 0, overtimeApprovedMinutes: overtime.get(k) || 0, advanceRecoveries: hold ? [] : instalments.get(k) || [], claims: R(myClaims.reduce((n, c) => n + P(pay(c)), 0)), adjustments: myAdj,
+      tax: { rules: rulesOf[regime] || null, regime, declaration: decl ? decl.declaration : {}, paidSoFar: withOpening(paid.get(k), decl && decl.declaration),
+        source: declOf.get(k) ? "payroll" : fromOwn ? "employee" : "none", hra: fromOwn ? fromOwn.hra : null, lta: fromOwn ? fromOwn.lta : null },
     });
     if (!bank && !hold) slip.warnings.push("No salary bank account on file: this person can't be included in the bank file.");
     return {
@@ -219,6 +242,7 @@ export function lineView(i, bank) {
     id: i.id, email: i.work_email, name: i.name || e.name || i.work_email, empNo: i.emp_no || e.empNo || null, dept: e.dept || deptOf(i.dept, i.title), title: e.title || i.title || null,
     status, inputs, summary: slip.summary || summaryOfLegacy(slip, i), days: slip.days, tds: slip.tds, incomplete: slip.incomplete || [], warnings: slip.warnings || [],
     earnings: slip.earnings || [], contributions: slip.contributions || [], deductions: slip.deductions || [], employer: slip.employer || [], calc: slip.calc || [],
+    overtime: slip.overtime || null,
     calculatedAt: i.calculated_at, updatedBy: i.updated_by,
     bank: bank ? { onFile: true, last4: bank.acct_last4, bankName: bank.bank_name, ifsc: bank.ifsc, holder: bank.holder_name } : { onFile: false },
   };

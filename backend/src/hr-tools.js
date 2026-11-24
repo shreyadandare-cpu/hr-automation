@@ -6,7 +6,9 @@ import { notify } from "./notify.js";
 import { managerOf, reportsOf } from "./teams.js";
 import { deptOf } from "./payroll/store.js";
 import { afterSelf, candidateDraft, interviewIcs, readCycle, readFeedbackAsk, readInterview, readVerdict } from "./workforce-rules.js";
-import { probationEnd, readCandidate, readExit, readOpening, readProbation, readReply, readReviewStart, readReviewText, readTicket } from "./hr-tools-rules.js";
+import { readJobDetails } from "./careers-rules.js";
+import { postToChat } from "./chat.js";
+import { probationEnd, readCandidate, readExit, readOpening, readProbation, readReply, readReviewStart, readReviewText, readTicket, readCalibration, nineBox, spread, POTENTIAL } from "./hr-tools-rules.js";
 import { COMPANY_LEGAL, MAROON, PRODUCT, SIGN_OFF } from "./brand.js";
 
 /*
@@ -132,17 +134,35 @@ export function hrToolsRouter(wrap) {
   /* ---------- Hiring (hiring.manage, company-wide) ---------- */
   r.get("/api/hr/openings", hires, wrap(async (_req, res) => {
     const { rows } = await pool.query(
-      `SELECT o.id, o.title, o.dept, o.description, o.status, o.created_at,
+      `SELECT o.id, o.title, o.dept, o.description, o.status, o.created_at, o.is_public, o.location, o.kind, o.experience,
+         (SELECT count(*)::int FROM candidates c WHERE c.opening_id=o.id AND c.deleted_at IS NULL AND c.source='referral') AS referrals,
          (SELECT count(*)::int FROM candidates c WHERE c.opening_id=o.id AND c.deleted_at IS NULL) AS candidates,
          (SELECT count(*)::int FROM candidates c WHERE c.opening_id=o.id AND c.deleted_at IS NULL AND c.stage NOT IN ('hired','rejected')) AS active
        FROM job_openings o WHERE o.deleted_at IS NULL ORDER BY (o.status='closed'), o.created_at DESC LIMIT 200`);
-    res.json({ openings: rows.map((o) => ({ id: o.id, title: o.title, dept: o.dept, description: o.description, status: o.status, createdAt: o.created_at, candidates: o.candidates, active: o.active })) });
+    res.json({ openings: rows.map((o) => ({ id: o.id, title: o.title, dept: o.dept, description: o.description, status: o.status, createdAt: o.created_at, candidates: o.candidates, active: o.active,
+      isPublic: o.is_public, location: o.location, kind: o.kind, experience: o.experience, referrals: o.referrals })) });
   }));
   r.post("/api/hr/openings", hires, wrap(async (req, res) => {
     const { title, dept, description, errors } = readOpening(req.body);
+    const d = readJobDetails(req.body);
     if (Object.keys(errors).length) return bad(res, errors);
-    const { rows: [o] } = await pool.query("INSERT INTO job_openings (title, dept, description, created_by) VALUES ($1,$2,$3,$4) RETURNING id", [title, dept, description, me(req)]);
+    const { rows: [o] } = await pool.query("INSERT INTO job_openings (title, dept, description, created_by, is_public, location, kind, experience) VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id",
+      [title, dept, description, me(req), d.isPublic, d.location, d.kind, d.experience]);
     res.status(201).json({ id: o.id });
+    if (d.isPublic) postToChat("openings", { title: `We are hiring: ${title}`, text: [dept, d.location, d.kind].filter(Boolean).join(" · "), link: `/careers/${o.id}` });
+  }));
+  // Change a role: its text, and whether it shows on the public careers page.
+  r.put("/api/hr/openings/:id", hires, wrap(async (req, res) => {
+    const { title, dept, description, errors } = readOpening(req.body);
+    const d = readJobDetails(req.body);
+    if (Object.keys(errors).length) return bad(res, errors);
+    const { rows: [was] } = await pool.query("SELECT is_public FROM job_openings WHERE id=$1 AND deleted_at IS NULL", [idOf(req.params.id)]);
+    const { rowCount } = await pool.query("UPDATE job_openings SET title=$2, dept=$3, description=$4, is_public=$5, location=$6, kind=$7, experience=$8 WHERE id=$1 AND deleted_at IS NULL",
+      [idOf(req.params.id), title, dept, description, d.isPublic, d.location, d.kind, d.experience]);
+    if (!rowCount) return res.status(404).json({ error: "This role is not available." });
+    res.json({ ok: true });
+    // Posted once, when a role first goes on the careers page.
+    if (d.isPublic && was && !was.is_public) postToChat("openings", { title: `We are hiring: ${title}`, text: [dept, d.location, d.kind].filter(Boolean).join(" · "), link: `/careers/${idOf(req.params.id)}` });
   }));
   r.post("/api/hr/openings/:id/status", hires, wrap(async (req, res) => {
     const status = (req.body || {}).status === "closed" ? "closed" : "open";
@@ -151,10 +171,13 @@ export function hrToolsRouter(wrap) {
     res.json({ ok: true });
   }));
   r.get("/api/hr/openings/:id/candidates", hires, wrap(async (req, res) => {
-    const { rows: [o] } = await pool.query("SELECT id, title, dept, description, status FROM job_openings WHERE id=$1 AND deleted_at IS NULL", [idOf(req.params.id)]);
+    const { rows: [o] } = await pool.query("SELECT id, title, dept, description, status, is_public, location, kind, experience FROM job_openings WHERE id=$1 AND deleted_at IS NULL", [idOf(req.params.id)]);
     if (!o) return res.status(404).json({ error: "This role is not available." });
-    const { rows } = await pool.query("SELECT id, name, email, phone, stage, notes, updated_at FROM candidates WHERE opening_id=$1 AND deleted_at IS NULL ORDER BY id LIMIT 500", [o.id]);
-    res.json({ opening: o, candidates: rows.map((c) => ({ id: c.id, name: c.name, email: c.email, phone: c.phone, stage: c.stage, notes: c.notes, updatedAt: c.updated_at })) });
+    const { rows } = await pool.query(`SELECT c.id, c.name, c.email, c.phone, c.stage, c.notes, c.updated_at, c.source, c.referred_by, c.cover_note, c.profile_link, c.resume_name,
+        (SELECT name FROM employees e WHERE lower(e.work_email)=lower(c.referred_by)) AS referrer
+      FROM candidates c WHERE c.opening_id=$1 AND c.deleted_at IS NULL ORDER BY c.id LIMIT 500`, [o.id]);
+    res.json({ opening: { ...o, isPublic: o.is_public }, candidates: rows.map((c) => ({ id: c.id, name: c.name, email: c.email, phone: c.phone, stage: c.stage, notes: c.notes, updatedAt: c.updated_at,
+      source: c.source, referredBy: c.referred_by ? { email: c.referred_by, name: c.referrer || c.referred_by } : null, coverNote: c.cover_note, link: c.profile_link, resume: c.resume_name ? { name: c.resume_name } : null })) });
   }));
   r.post("/api/hr/openings/:id/candidates", hires, wrap(async (req, res) => {
     const { name, email, phone, notes, stage, errors } = readCandidate(req.body);
@@ -172,7 +195,8 @@ export function hrToolsRouter(wrap) {
     res.json({ ok: true });
   }));
   r.delete("/api/hr/candidates/:id", hires, wrap(async (req, res) => {
-    await pool.query("UPDATE candidates SET deleted_at=now() WHERE id=$1 AND deleted_at IS NULL", [idOf(req.params.id)]);
+    const { rowCount } = await pool.query("UPDATE candidates SET deleted_at=now() WHERE id=$1 AND deleted_at IS NULL", [idOf(req.params.id)]);
+    if (!rowCount) return res.status(404).json({ error: "This candidate was not found. They may already have been removed." });
     res.json({ ok: true });
   }));
 
@@ -283,6 +307,44 @@ export function hrToolsRouter(wrap) {
     res.json({ ok: true });
   }));
 
+  /* Calibration for one cycle: every review with the manager's rating, HR's calibrated rating and potential, the spread of
+     ratings before and after, and the 9-box. reviews.manage for the whole company, like cycles. */
+  r.get("/api/review-cycles/:id/calibration", needAll("reviews.manage"), wrap(async (req, res) => {
+    const id = idOf(req.params.id);
+    const { rows: [c] } = await pool.query("SELECT id, name, dept, status FROM review_cycles WHERE id=$1", [id]);
+    if (!c) return res.status(404).json({ error: "This cycle was not found." });
+    const { rows } = await pool.query(
+      `SELECT r.id, r.email, r.status, r.self_at, r.manager_email, r.manager_rating, r.calibrated_rating, r.potential, r.calibration_note, r.calibrated_by,
+         r.calibrated_at, r.rating, e.name, e.dept, e.title, m.name AS manager_name
+       FROM reviews r LEFT JOIN employees e ON lower(e.work_email) = lower(r.email)
+       LEFT JOIN employees m ON lower(m.work_email) = lower(r.manager_email)
+       WHERE r.cycle_id = $1 ORDER BY e.name NULLS LAST, r.email LIMIT 2000`, [id]);
+    const out = rows.map((x) => {
+      const now = x.calibrated_rating || x.manager_rating || null;   // the rating as it stands: HR's if moved, else the manager's
+      return { id: x.id, name: x.name || x.email, email: x.email, dept: deptOf(x.dept, x.title), status: x.status, selfDone: !!x.self_at,
+        manager: x.manager_email ? (x.manager_name || x.manager_email) : null, managerRating: x.manager_rating, calibratedRating: x.calibrated_rating,
+        rating: now, finalRating: x.rating, potential: x.potential, note: x.calibration_note || "", calibratedAt: x.calibrated_at, box: nineBox(now, x.potential) };
+    });
+    const dept = String(req.query.dept || "").trim().toLowerCase();
+    const shown = dept ? out.filter((x) => String(x.dept).toLowerCase() === dept) : out;
+    res.set("Cache-Control", "private, no-store");
+    res.json({ cycle: { id: c.id, name: c.name, dept: c.dept, status: c.status }, depts: [...new Set(out.map((x) => x.dept).filter(Boolean))].sort(),
+      potentials: POTENTIAL, reviews: shown,
+      spread: { manager: spread(shown.map((x) => x.managerRating)), now: spread(shown.map((x) => x.rating)) } });
+  }));
+  /* Move a rating (with the reason when it differs from the manager's) and set potential. Not on a finished review, never your own. */
+  r.put("/api/reviews/:id/calibrate", need("reviews.manage"), wrap(async (req, res) => {
+    const { rows: [rv] } = await pool.query("SELECT id, email, status, manager_rating FROM reviews WHERE id=$1", [idOf(req.params.id)]);
+    if (!rv) return res.status(404).json({ error: "This review is not available." });
+    if (!(await mayDecide(req, "reviews.manage", rv.email))) return res.status(403).json(NO_ACCESS);
+    if (rv.status === "done") return res.status(409).json({ error: "This review is finished, so its rating can no longer be calibrated." });
+    const { rating, potential, note, errors } = readCalibration(req.body, rv.manager_rating);
+    if (Object.keys(errors).length) return bad(res, errors);
+    await pool.query(`UPDATE reviews SET calibrated_rating=$2, potential=$3, calibration_note=$4, calibrated_by=$5, calibrated_at=now(), updated_at=now()
+      WHERE id=$1 AND status <> 'done'`, [rv.id, rating, potential, note, me(req)]);
+    res.json({ ok: true, box: nineBox(rating, potential) });
+  }));
+
   /* ---------- Performance reviews ---------- */
   // view: "own" (the person), "team" (their manager) or "all" (reviews.manage, for the people in scope).
   const reviewOut = (x, person, view, feedback = []) => {
@@ -292,6 +354,7 @@ export function hrToolsRouter(wrap) {
       // The person sees the manager's and HR's review and rating only once it is finished.
       managerText: lead || done ? x.manager_text || "" : "", managerRating: lead || done ? x.manager_rating : null, managerAt: lead || done ? x.manager_at : null,
       hrText: hr || done ? x.hr_text || "" : "", rating: hr || done ? x.rating : null, updatedAt: x.updated_at,
+      ...(hr ? { calibratedRating: x.calibrated_rating, calibrationNote: x.calibration_note || "" } : {}),
       // Colleague feedback: HR and the manager only, never the person reviewed.
       ...(lead ? { feedback: feedback.filter((f) => f.review_id === x.id).map((f) => ({ from: person(f.from_email), text: f.text || "", submittedAt: f.submitted_at })) } : {}) };
   };
@@ -299,8 +362,8 @@ export function hrToolsRouter(wrap) {
     const reviews = await can(req, "reviews.manage"), scope = reviews ? await scopeOf(req, "reviews.manage") : new Set();
     const view = reviews && req.query.scope === "all" ? "all" : req.query.scope === "team" ? "team" : "own";
     const where = view === "all" ? (scope ? "WHERE lower(email) = ANY($2)" : "") : view === "team" ? "WHERE lower(manager_email)=$2" : "WHERE lower(email)=$2";
-    const { rows } = await pool.query(`SELECT id, email, period, self_text, self_at, hr_text, rating, status, updated_at, manager_email, manager_text, manager_rating, manager_at
-      FROM reviews ${where} ORDER BY updated_at DESC LIMIT $1`, view !== "all" ? [500, me(req)] : scope ? [500, [...scope]] : [500]);
+    const { rows } = await pool.query(`SELECT id, email, period, self_text, self_at, hr_text, rating, status, updated_at, manager_email, manager_text, manager_rating, manager_at,
+      calibrated_rating, calibration_note FROM reviews ${where} ORDER BY updated_at DESC LIMIT $1`, view !== "all" ? [500, me(req)] : scope ? [500, [...scope]] : [500]);
     const { rows: feedback } = view !== "own" && rows.length ? await pool.query("SELECT review_id, from_email, text, submitted_at FROM review_feedback WHERE review_id = ANY($1)", [rows.map((x) => x.id)]) : { rows: [] };
     const person = await namesFor([...rows.flatMap((x) => [x.email, x.manager_email]), ...feedback.map((f) => f.from_email)]);
     // A lead: anyone with people reporting to them, or named as the manager on a review.

@@ -1,8 +1,10 @@
+import { localOnly } from "./live-services.js";
 import { COMPANY_LEGAL, MAROON, PRODUCT, SIGN_OFF } from "./brand.js";
 /* Outgoing email through the SendGrid Web API (HTTPS, no SMTP). Settings are read when needed, so the .env file is already loaded.
    Needs SENDGRID_API_KEY (Mail Send permission) and a MAIL_FROM address verified in SendGrid (Sender Authentication). */
 const SENDGRID_URL = () => `https://api.${process.env.SENDGRID_EU === "true" ? "eu." : ""}sendgrid.com/v3/mail/send`;
-export const mailConfigured = () => Boolean(process.env.SENDGRID_API_KEY);
+// Never on a server pointed at a local database (live-services.js): test runs must not email real people.
+export const mailConfigured = () => Boolean(process.env.SENDGRID_API_KEY) && !localOnly();
 
 /** The address people use to reach this app. Links in emails and the Google sign-in redirect are built from it. */
 export const publicUrl = () => (process.env.PUBLIC_URL || `http://localhost:${process.env.PORT || 3000}`).replace(/\/+$/, "");

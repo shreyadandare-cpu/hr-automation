@@ -199,7 +199,9 @@ export function annualStatement(months) {
 
 export const PROOF_STATES = ["received", "verified", "rejected"];
 /** HR's note on the proof for one line of a tax declaration. */
-export function readProof(b = {}, lineCount = 0) {
+/** HR's decision on the proof for one line. `declaredMinor` is the line's amount: a verified line may be approved for less
+    (`approved`, in rupees), as Keka allows; empty means the full amount. */
+export function readProof(b = {}, lineCount = 0, declaredMinor = []) {
   const errors = {};
   const index = Number(b.index);
   const status = PROOF_STATES.includes(b.status) ? b.status : b.status === "waiting" ? "waiting" : null;
@@ -207,7 +209,16 @@ export function readProof(b = {}, lineCount = 0) {
   if (!Number.isInteger(index) || index < 0 || index >= lineCount) errors.index = "Please choose a line of the declaration.";
   if (!status) errors.status = "Please choose what happened with the proof.";
   if (status === "rejected" && !note) errors.note = "Please say what is wrong with the proof, so the person knows what to send.";
-  return { index, status, note, errors };
+  let approvedMinor = null;
+  const raw = b.approved == null ? "" : String(b.approved).replace(/[₹,\s]/g, "");
+  if (status === "verified" && raw !== "" && !errors.index) {
+    const n = Number(raw), declared = Number(declaredMinor[index]) || 0;
+    if (!Number.isFinite(n) || n < 0) errors.approved = "Please enter the approved amount in rupees.";
+    else if (Math.round(n * 100) > declared) errors.approved = "The approved amount cannot be more than the amount declared.";
+    else if (Math.round(n * 100) < declared) approvedMinor = Math.round(n * 100);
+    if (approvedMinor !== null && approvedMinor < declared && !note) errors.note = "Please say why a lower amount is approved.";
+  }
+  return { index, status, note, approvedMinor, errors };
 }
 
 /* ---------- Who may open finance reports without being HR or a payroll reviewer ---------- */

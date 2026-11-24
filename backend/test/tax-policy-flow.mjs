@@ -14,13 +14,15 @@ if (!/@?(localhost|127\.0\.0\.1)[:/]/.test(DB)) { console.error("Refusing: DATAB
 if (!/^http:\/\/(localhost|127\.0\.0\.1)/.test(BASE)) { console.error("Refusing: BASE must be a local server."); process.exit(2); }
 const db = new pg.Pool({ connectionString: DB });
 const sha = (s) => crypto.createHash("sha256").update(s).digest("hex");
-const EMP = "tax.emp@wohlig.com", EMP2 = "tax.emp2@wohlig.com", HR = "hr.test@wohlig.com";
+const EMP = "test.taxpolicy.employee@wohlig.com", EMP2 = "test.taxpolicy.employee.two@wohlig.com", HR = "test.taxpolicy.admin@wohlig.com";   // clearly named test people; a local server sends no email
 let pass = 0, fail = 0;
 const ok = (name, cond, extra = "") => { cond ? pass++ : fail++; console.log(`${cond ? "PASS" : "FAIL"}  ${name}${cond ? "" : "  " + extra}`); };
 const PDF = Buffer.from("%PDF-1.4\n1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj\n2 0 obj<</Type/Pages/Kids[3 0 R]/Count 1>>endobj\n3 0 obj<</Type/Page/Parent 2 0 R/MediaBox[0 0 200 200]>>endobj\ntrailer<</Root 1 0 R>>\n%%EOF\n");
 
 async function login(email, role = "employee", pin = "483920") {
   await db.query("INSERT INTO users (email, password_hash, role) VALUES ($1,'x',$2) ON CONFLICT DO NOTHING", [email, role]);
+  // users.role is only a label: access comes from grants (access.js), so the payroll person is given the payroll permissions.
+  if (role === "hr") for (const p of ["payroll.prepare", "payroll.view"]) await db.query("INSERT INTO access_grants (email, permission, scope, granted_by, note) VALUES ($1,$2,'company','test','flow-test')", [email, p]);
   const token = crypto.randomBytes(32).toString("hex");
   await db.query("INSERT INTO sessions (token_hash, email, expires_at) VALUES ($1,$2, now() + interval '1 hour')", [sha(token), email]);
   return token;
@@ -91,7 +93,8 @@ finally {
   await db.query("DELETE FROM tax_declaration_requests WHERE lower(email) IN ($1,$2)", [EMP, EMP2]);
   await db.query("DELETE FROM tax_regime_policies");
   await db.query("DELETE FROM sessions WHERE lower(email) IN ($1,$2,$3)", [EMP, EMP2, HR]);
-  await db.query("DELETE FROM users WHERE email IN ($1,$2)", [EMP, EMP2]);
+  await db.query("DELETE FROM access_grants WHERE lower(email)=$1 AND note='flow-test'", [HR]);
+  await db.query("DELETE FROM users WHERE email IN ($1,$2,$3)", [EMP, EMP2, HR]);   // the HR test user too, or a later access check picks it up
   await db.query("DELETE FROM audit_log WHERE work_email IN ($1,$2,$3) AND (action ILIKE 'Tax regime policy%' OR action ILIKE '%pay%')", [EMP, EMP2, HR]);
   await db.end();
 }

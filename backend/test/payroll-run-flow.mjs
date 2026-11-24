@@ -14,7 +14,7 @@ import pg from "pg";
 const DB = process.env.DATABASE_URL || "", BASE = process.env.BASE || "http://localhost:3190";
 if (!/@?(localhost|127\.0\.0\.1)[:/]/.test(DB) || !/^http:\/\/(localhost|127\.0\.0\.1)/.test(BASE)) { console.error("Refusing: a local database and a local server only."); process.exit(2); }
 const db = new pg.Pool({ connectionString: DB }), sha = (s) => crypto.createHash("sha256").update(s).digest("hex");
-const HR = "pr.hr@wohlig.com", REV = "pr.reviewer@wohlig.com", EMP = "pr.emp@wohlig.com", E = ["pr.one@wohlig.com", "pr.two@wohlig.com", "pr.three@wohlig.com"];
+const HR = "test.payroll.preparer@wohlig.com", REV = "test.payroll.reviewer@wohlig.com", EMP = "test.payroll.employee@wohlig.com", E = ["test.payroll.staff.one@wohlig.com", "test.payroll.staff.two@wohlig.com", "test.payroll.staff.three@wohlig.com"];   // clearly named test people; a local server sends no email
 const NAMES = ["Asha One", "Bina Two", "Chetan Three"], ACCT = ["111122223333", "222233334444", "333344445555"];
 let pass = 0, fail = 0;
 const ok = (name, cond, extra = "") => { cond ? pass++ : fail++; console.log(`${cond ? "PASS" : "FAIL"}  ${name}${cond ? "" : "  " + extra}`); };
@@ -30,7 +30,7 @@ const call = async (tok, method, path, body) => {
 };
 const file = async (tok, path) => { const r = await fetch(BASE + path, { headers: { cookie: `sid=${tok}` } }); return { s: r.status, buf: Buffer.from(await r.arrayBuffer()), type: r.headers.get("content-type") }; };
 const month = (add = 0) => { const d = new Date(Date.now() + 330 * 60000); d.setUTCDate(1); d.setUTCMonth(d.getUTCMonth() + add); return d.toISOString().slice(0, 7); };
-const PERIOD = month(-1);
+const PERIOD = process.env.FLOW_PERIOD || month(-1);   // FLOW_PERIOD=2026-09 when last month already has a payroll on this database
 const rowsOf = (ws) => { const out = []; ws.eachRow((row) => out.push(row.values.slice(1).map((v) => (v && typeof v === "object" && "result" in v ? v.result : v)))); return out; };
 const structure = (gross) => ({ effectiveFrom: month(-3), earnings: [{ name: "Basic", amount: gross * 0.5 }, { name: "HRA", amount: gross * 0.3 }, { name: "Special allowance", amount: gross * 0.2 }], pfEmployee: 1800, professionalTax: 200, otherDeductions: [], tdsMode: "manual", tdsMonthly: 0, reason: "Offer", annualCtc: gross * 12, pfApplicable: true, ptApplicable: true, tdsApplicable: false });
 
@@ -41,6 +41,8 @@ const wipe = async () => {
     await c.query("SET session_replication_role = replica");
     const runs = "(SELECT id FROM payroll_runs WHERE processed_by=$1)";
     for (const t of ["payroll_files", "payroll_items"]) await c.query(`DELETE FROM ${t} WHERE run_id IN ${runs}`, [HR]).catch(() => {});
+    // Saving a salary refreshes every draft month, so the test people can land in someone else's draft too: take them out of all runs.
+    await c.query("DELETE FROM payroll_items WHERE lower(work_email) = ANY($1)", [[...E, EMP]]).catch(() => {});
     await c.query("DELETE FROM payroll_audit WHERE actor = ANY($1) OR work_email = ANY($2)", [[HR, REV], E]).catch(() => {});
     await c.query("DELETE FROM payroll_runs WHERE processed_by=$1", [HR]).catch((e) => console.log("cleanup runs:", e.message));
     await c.query("DELETE FROM salary_structures WHERE lower(work_email) = ANY($1)", [E]);

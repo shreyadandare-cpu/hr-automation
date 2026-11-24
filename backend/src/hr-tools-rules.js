@@ -85,3 +85,31 @@ export function readReviewText(b = {}, withRating = false) {
   if (withRating) { rating = Math.round(Number(b.rating)); if (!Number.isInteger(rating) || rating < 1 || rating > 5) errors.rating = "Please choose a rating from 1 to 5."; }
   return { text: body, rating, errors };
 }
+
+/* Calibration (as Keka's): HR lines up a cycle's ratings, moves a rating with a reason, and places each person on the 9-box
+   by performance (the rating) and potential (low, medium, high), which HR judges. */
+export const POTENTIAL = { 1: "Low", 2: "Medium", 3: "High" };
+export function readCalibration(b = {}, managerRating = null) {
+  const errors = {};
+  const rating = Math.round(Number(b.rating));
+  if (!Number.isInteger(rating) || rating < 1 || rating > 5) errors.rating = "Please choose a rating from 1 to 5.";
+  let potential = null;
+  if (b.potential !== undefined && b.potential !== null && b.potential !== "") {
+    potential = Math.round(Number(b.potential));
+    if (!POTENTIAL[potential]) errors.potential = "Please choose low, medium or high potential.";
+  }
+  const note = text(b.note);
+  if (note.length > 1000) errors.note = "Please keep the reason under 1,000 characters.";
+  else if (!errors.rating && managerRating && rating !== managerRating && !note) errors.note = "Please give the reason for changing the manager's rating.";
+  return { rating, potential, note, errors };
+}
+/** The 9-box cell for a rating (1-2 low, 3 medium, 4-5 high performance) and a potential; null until both are known. */
+const BOXES = { "3-1": "Rough diamond", "3-2": "High potential", "3-3": "Star", "2-1": "Inconsistent performer", "2-2": "Core player",
+  "2-3": "High performer", "1-1": "Needs attention", "1-2": "Effective", "1-3": "Trusted professional" };
+export function nineBox(rating, potential) {
+  if (!rating || !potential) return null;
+  const perf = rating <= 2 ? 1 : rating === 3 ? 2 : 3;
+  return { perf, potential, label: BOXES[`${potential}-${perf}`] };
+}
+/** How many people have each rating 1 to 5 (empty ratings are left out). */
+export const spread = (ratings) => [1, 2, 3, 4, 5].map((n) => ratings.filter((r) => r === n).length);

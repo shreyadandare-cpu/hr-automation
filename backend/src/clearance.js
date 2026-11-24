@@ -48,6 +48,37 @@ export async function leaveSettlement(db, email, lastDay) {
   });
 }
 
+/** An instalment plan: a monthly amount and the first payroll month, or both empty for none. Returns { monthly, fromMonth, errors }. */
+export function readPlan(b = {}, amount = Infinity) {
+  const errors = {}, raw = String(b.monthly ?? "").replace(/[₹,\s]/g, ""), from = String(b.fromMonth ?? "").trim();
+  if (!raw && !from) return { monthly: null, fromMonth: null, errors };
+  const monthly = Number(raw);
+  if (!Number.isFinite(monthly) || monthly <= 0 || Math.round(monthly * 100) / 100 !== monthly) errors.monthly = "Enter the monthly instalment in rupees.";
+  else if (monthly > amount) errors.monthly = "The instalment cannot be more than the advance.";
+  if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(from)) errors.fromMonth = "Choose the first month payroll deducts it.";
+  return { monthly: errors.monthly ? null : monthly, fromMonth: errors.fromMonth ? null : from, errors };
+}
+
+/**
+ * The instalments payroll deducts in a month (main database, read once): for each advance with a plan starting by `period`, the
+ * instalment or what is still owed, whichever is less. Recoveries already made for this same month are not counted as made, so
+ * recalculating a month never deducts twice. Returns Map(lower email → [{ id, reason, amount }]).
+ */
+export async function advanceInstalments(db, period) {
+  const { rows } = await db.query(
+    `SELECT a.id, lower(a.work_email) AS email, a.reason, a.amount, a.monthly_recovery,
+            COALESCE((SELECT sum(r.amount) FROM advance_recoveries r WHERE r.advance_id = a.id AND (r.payroll_period IS NULL OR r.payroll_period <> $1)), 0) AS recovered
+       FROM employee_advances a WHERE a.monthly_recovery IS NOT NULL AND a.recover_from <= $1`, [period]);
+  const out = new Map();
+  for (const a of rows) {
+    const left = money(money(a.amount) - money(a.recovered)), amount = Math.min(money(a.monthly_recovery), left);
+    if (!(amount > 0)) continue;
+    if (!out.has(a.email)) out.set(a.email, []);
+    out.get(a.email).push({ id: a.id, reason: a.reason, amount });
+  }
+  return out;
+}
+
 /** Advances with what has been recovered of each. */
 export async function advancesOf(db, email) {
   const { rows } = await db.query(
@@ -56,7 +87,9 @@ export async function advancesOf(db, email) {
   return rows.map((a) => {
     const amount = money(a.amount), recovered = money(a.recovered), outstanding = money(amount - recovered);
     return { id: a.id, date: a.advance_date, reason: a.reason, amount, recovered, outstanding,
-      status: outstanding <= 0 ? "Fully recovered" : recovered > 0 ? "Partially recovered" : "Outstanding", createdBy: a.created_by };
+      status: outstanding <= 0 ? "Fully recovered" : recovered > 0 ? "Partially recovered" : "Outstanding", createdBy: a.created_by,
+      monthly: a.monthly_recovery == null ? null : money(a.monthly_recovery), fromMonth: a.recover_from || null,
+      monthsLeft: a.monthly_recovery == null || outstanding <= 0 ? 0 : Math.ceil(outstanding / money(a.monthly_recovery)) };
   });
 }
 
@@ -168,6 +201,11 @@ export function clearanceRouter(wrap) {
   // Clearance: offboarding.manage for the whole company. Advances: advances.approve (the whole company or a team); each handler
   // checks the person, and nobody records, recovers or removes an advance of their own.
   r.use(["/api/offboarding/clearance", "/api/offboarding/:id/clearance"], needAll("offboarding.manage"));
+  // Your own advances and loans, with what is still owed and the instalments payroll deducts (read only). Before the permission check below, so everyone can read their own.
+  r.get("/api/advances/mine", wrap(async (req, res) => {
+    if (!req.user) return res.status(401).json({ error: "Please sign in." });
+    res.json(await advancesOf(pool, req.user.email));
+  }));
   r.use("/api/advances", need("advances.approve"));
   const NO_ACCESS = { error: "You do not have access to this." };
   const OWN = { error: "Someone else has to record advances of your own." };
@@ -226,12 +264,14 @@ export function clearanceRouter(wrap) {
     const amount = Number(b.amount);
     if (!Number.isFinite(amount) || amount <= 0) errors.amount = "Enter an amount above zero.";
     else if (amount > 10000000 || money(amount) !== amount) errors.amount = "Enter a valid amount in rupees (up to 2 decimals).";
+    const plan = readPlan(b, amount);
+    Object.assign(errors, plan.errors);
     if (Object.keys(errors).length) return res.status(400).json({ errors });
     const no = await cannotChange(req, emp.work_email);
     if (no) return res.status(403).json(no);
-    await pool.query("INSERT INTO employee_advances (work_email, advance_date, reason, amount, created_by) VALUES ($1,$2,$3,$4,$5)",
-      [emp.work_email, day, reason, amount, req.user.email]);
-    await audit(pool, `Advance recorded: ${inr(amount)} on ${day} (${reason}) by ${req.user.email}`, emp.work_email);
+    await pool.query("INSERT INTO employee_advances (work_email, advance_date, reason, amount, created_by, monthly_recovery, recover_from) VALUES ($1,$2,$3,$4,$5,$6,$7)",
+      [emp.work_email, day, reason, amount, req.user.email, plan.monthly, plan.fromMonth]);
+    await audit(pool, `Advance recorded: ${inr(amount)} on ${day} (${reason})${plan.monthly ? `, ${inr(plan.monthly)} a month from ${plan.fromMonth}` : ""} by ${req.user.email}`, emp.work_email);
     res.status(201).json(await advancesOf(pool, emp.work_email));
   }));
   r.post("/api/advances/:id/recoveries", wrap(async (req, res) => {
@@ -256,6 +296,18 @@ export function clearanceRouter(wrap) {
       await client.query("COMMIT");
       res.status(201).json(await advancesOf(pool, rows[0].work_email));
     } catch (err) { await client.query("ROLLBACK"); throw err; } finally { client.release(); }
+  }));
+  // Instalments: payroll deducts the amount each month from the month given, until the advance is repaid. Empty stops them.
+  r.put("/api/advances/:id/plan", wrap(async (req, res) => {
+    const { rows } = await pool.query("SELECT * FROM employee_advances WHERE id=$1", [Number(req.params.id) || 0]);
+    if (!rows[0]) return res.status(404).json({ error: "Advance not found." });
+    const no = await cannotChange(req, rows[0].work_email);
+    if (no) return res.status(403).json(no);
+    const plan = readPlan(req.body || {}, money(rows[0].amount));
+    if (Object.keys(plan.errors).length) return res.status(400).json({ errors: plan.errors });
+    await pool.query("UPDATE employee_advances SET monthly_recovery=$2, recover_from=$3 WHERE id=$1", [rows[0].id, plan.monthly, plan.fromMonth]);
+    await audit(pool, plan.monthly ? `Advance instalments set: ${inr(plan.monthly)} a month from ${plan.fromMonth} (${rows[0].reason}) by ${req.user.email}` : `Advance instalments stopped (${rows[0].reason}) by ${req.user.email}`, rows[0].work_email);
+    res.json(await advancesOf(pool, rows[0].work_email));
   }));
   // A mistaken entry can be removed only while nothing has been recovered against it.
   r.delete("/api/advances/:id", wrap(async (req, res) => {

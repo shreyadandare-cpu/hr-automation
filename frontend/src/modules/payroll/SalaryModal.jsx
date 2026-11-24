@@ -168,7 +168,7 @@ export default function SalaryModal({ email, onClose }) {
         </div>}
         <Toggle id="sal-tdson" label="TDS applies" checked={f.tdsApplicable} onChange={set("tdsApplicable")} />
         {f.tdsApplicable && <div className="sal-grid">
-          <Field id="sal-tdsmode" label="How TDS is worked out" hint={f.tdsMode === "auto" ? "From the year's projected salary, the tax rules for the year, the employee's regime and declarations, and TDS already deducted." : "The amount below is deducted every month while income is above ₹12,00,000 a year."} error={er.tdsMode}>
+          <Field id="sal-tdsmode" label="How TDS is worked out" hint={f.tdsMode === "auto" ? "From the year's projected salary, the tax rules for the year, the employee's regime and declarations, and TDS already deducted." : "The amount below is deducted every month: under the new regime while income is above ₹12,00,000 a year, under the old regime always."} error={er.tdsMode}>
             <select className="input" id="sal-tdsmode" value={f.tdsMode} onChange={set("tdsMode")}><option value="auto">Calculated (recommended)</option><option value="manual">Fixed monthly amount from the CA</option></select></Field>
           {f.tdsMode === "manual" && <Field id="sal-tds" label="Monthly TDS (₹)" error={er.tdsMonthly}><input className="input" id="sal-tds" type="number" min="0" step="1" value={f.tdsMonthly} onChange={set("tdsMonthly")} /></Field>}
         </div>}

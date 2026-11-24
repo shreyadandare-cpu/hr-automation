@@ -9,6 +9,7 @@ import { Callout, PersonCell, Pill, SectionHead, ViewTabs, ListSkeleton } from "
 import { useToast } from "../../components/toast.jsx";
 import { scopeSet } from "../../lib/useLeave.js";
 import { problems, useList, usePerson, when } from "../engage/shared.jsx";
+import Calibration from "./Calibration.jsx";
 
 const TONE = { "self-pending": "warn", "manager-pending": "warn", "hr-pending": "info", done: "ok" };
 const STATUS = { "self-pending": "Waiting for self-review", "manager-pending": "Waiting for manager", "hr-pending": "Waiting for HR", done: "Finished" };
@@ -104,7 +105,7 @@ function Start({ onClose, onDone }) {
 
 function Write({ x, as, onClose, onDone }) {
   const start = as === "hr" ? x.hrText : as === "manager" ? x.managerText : x.selfText;
-  const [text, setText] = useState(start || ""), [rating, setRating] = useState((as === "hr" ? x.rating || x.managerRating : x.managerRating) || 3), [err, setErr] = useState({}), [busy, setBusy] = useState(false);
+  const [text, setText] = useState(start || ""), [rating, setRating] = useState((as === "hr" ? x.rating || x.calibratedRating || x.managerRating : x.managerRating) || 3), [err, setErr] = useState({}), [busy, setBusy] = useState(false);
   const rated = as !== "self";
   const save = async () => {
     setBusy(true);
@@ -122,6 +123,7 @@ function Write({ x, as, onClose, onDone }) {
         {as !== "self" && x.selfText && <Quote label="Their self-review">{x.selfText}</Quote>}
         {as === "hr" && x.managerText && <Quote label={`${x.manager ? x.manager.name : "Manager"}'s review${x.managerRating ? `, rating ${x.managerRating} of 5` : ""}`}>{x.managerText}</Quote>}
         <Field id="rw-t" label={as === "self" ? "What went well, what did not, and what you want to work on" : "Your review"} error={err.text}><textarea id="rw-t" className="input" rows={10} maxLength={8000} value={text} onChange={(e) => setText(e.target.value)} aria-invalid={!!err.text} /></Field>
+        {as === "hr" && x.calibratedRating && <Quote label={`Calibrated rating ${x.calibratedRating} of 5`}>{x.calibrationNote || "No reason was given."}</Quote>}
         {rated && <Field id="rw-r" label="Rating" hint={as === "hr" ? "The person sees the reviews and the rating once you finish." : "HR reads your review before it is finished. The person sees it then."} error={err.rating}><select id="rw-r" className="input" value={rating} onChange={(e) => setRating(Number(e.target.value))}>{RATINGS.map(([k, n]) => <option key={k} value={k}>{n}</option>)}</select></Field>}
       </div>
       <div className="modal-f"><button type="button" className="btn glass" onClick={onClose} disabled={busy}>Cancel</button><button type="button" className="btn primary" onClick={save} disabled={busy}>{busy ? "Saving…" : as === "hr" ? "Finish review" : as === "manager" ? "Send to HR" : "Send"}</button></div>
@@ -186,6 +188,7 @@ function Cycles() {
   const { data, error, reload } = useList("/api/review-cycles");
   const { people } = useData();
   const toast = useToast();
+  const [calibrating, setCalibrating] = useState(null);
   const [opening, setOpening] = useState(false), [f, setF] = useState({ name: "", dept: "", selfDue: "", managerDue: "" }), [err, setErr] = useState({}), [busy, setBusy] = useState(false);
   const depts = [...new Set((people || []).filter((p) => p.status !== "offboarded").map((p) => p.dept).filter((d) => d && d !== "—"))].sort();
   const list = (data && data.cycles) || [];
@@ -195,17 +198,19 @@ function Cycles() {
     setOpening(false); setErr({}); toast(`${r.data.opened} reviews were opened${r.data.skipped ? `; ${r.data.skipped} people already had one for this period` : ""}. Everyone has been told.`); reload();
   };
   const close = async (c) => { const r = await api("POST", `/api/review-cycles/${c.id}/close`); if (!r.ok) toast(apiMsg(r)); else { toast("The cycle was closed."); reload(); } };
+  if (calibrating) return <Calibration cycle={calibrating} onBack={() => { setCalibrating(null); reload(); }} />;
   return (
     <>
       <div className="flex justify-end"><button type="button" className="btn primary" onClick={() => setOpening(true)}>Open a cycle</button></div>
       {error && <Callout>{error}</Callout>}
       <div className="card">{!data ? <ListSkeleton /> : list.length ? (
         <div className="tbl-wrap"><table>
-          <thead><tr><th>Cycle</th><th>Who</th><th>Self-reviews due</th><th>Manager reviews due</th><th className="text-right">Waiting for self</th><th className="text-right">Waiting for manager</th><th className="text-right">Waiting for HR</th><th className="text-right">Finished</th><th><span className="sr-only">Close</span></th></tr></thead>
+          <thead><tr><th>Cycle</th><th>Who</th><th>Self-reviews due</th><th>Manager reviews due</th><th className="text-right">Waiting for self</th><th className="text-right">Waiting for manager</th><th className="text-right">Waiting for HR</th><th className="text-right">Finished</th><th><span className="sr-only">Actions</span></th></tr></thead>
           <tbody>{list.map((c) => (
             <tr key={c.id}><td><b className="font-bold">{c.name}</b>{c.status === "closed" && <div className="text-[13px] text-ink-faint">Closed</div>}</td><td>{c.dept || "Everyone"}</td><td>{longDate(c.selfDue)}</td><td>{longDate(c.managerDue)}</td>
               <td className="num-cell text-right">{c.selfPending}</td><td className="num-cell text-right">{c.managerPending}</td><td className="num-cell text-right">{c.hrPending}</td><td className="num-cell text-right">{c.done} of {c.total}</td>
-              <td className="text-right">{c.status === "open" && <button type="button" className="btn glass sm" onClick={() => close(c)}>Close</button>}</td></tr>))}</tbody>
+              <td className="text-right"><span className="inline-flex flex-wrap justify-end gap-2">{c.total > 0 && <button type="button" className="btn glass sm" onClick={() => setCalibrating(c)}>Calibrate</button>}
+                {c.status === "open" && <button type="button" className="btn glass sm" onClick={() => close(c)}>Close</button>}</span></td></tr>))}</tbody>
         </table></div>) : <div className="empty">No cycles yet. Open one to start reviews for everyone at once.</div>}
       </div>
       <Callout>Each person's reporting manager reviews after the self-review. People with no manager go straight to HR. Find each review under All reviews.</Callout>

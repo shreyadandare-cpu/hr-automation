@@ -31,9 +31,19 @@ const rules = (regime) => DEFAULT_TAX_RULES.find((r) => r.fy === "2026-27" && r.
 const tdsFor = (gross, regime = "new", period = "2026-04") => computeLine({ period, employee: { start: "2020-01-01" }, structure: { earnings: [{ name: "Basic", amount: gross }], pfEmployee: 0, professionalTax: 0 },
   tax: { rules: rules(regime), regime, declaration: {}, paidSoFar: { taxable: 0, tds: 0, pt: 0 } } }).summary.tds;
 
-test("TDS: a yearly income of 12 lakh or less pays none; above it the regime's tax is worked out", () => {
+test("TDS: under the new regime a yearly income of 12 lakh or less pays none; above it the regime's tax is worked out", () => {
   assert.equal(tdsFor(100000), 0);          // exactly 12,00,000 a year
   assert.equal(tdsFor(60000), 0);
   assert.ok(tdsFor(150000) > 0);            // 18,00,000 a year, new regime
   assert.ok(tdsFor(150000, "old") > tdsFor(150000, "new") - 1);
+});
+
+test("TDS under the old regime is worked out below 12 lakh too, as Keka does (the rebate stops at 5 lakh)", () => {
+  // ₹1,00,000 a month = ₹12,00,000 a year; less ₹50,000 standard = ₹11,50,000 → 12,500 + 1,00,000 + 45,000 = 1,57,500 + 4% = 1,63,800 → 13,650 a month
+  assert.equal(tdsFor(100000, "old"), 13650);
+  assert.equal(tdsFor(40000, "old"), 0, "₹4,80,000 a year: within the old regime's rebate");
+  const fixed = (regime) => computeLine({ period: "2026-04", employee: { start: "2020-01-01" }, structure: { earnings: [{ name: "Basic", amount: 60000 }], professionalTax: 0, tdsMode: "manual", tdsMonthly: 2500 },
+    tax: { rules: rules(regime), regime, declaration: {} } }).summary.tds;
+  assert.equal(fixed("old"), 2500, "a fixed amount is deducted under the old regime whatever the income");
+  assert.equal(fixed("new"), 0, "and under the new regime only above 12 lakh");
 });

@@ -31,8 +31,9 @@ export const isTdsApplicable = (annual) => Number(annual) > TDS_THRESHOLD;
  * (structure.tdsMonthly). No rate or slab is assumed here. When the CA's rules arrive, compute `amount` from
  * { annualIncome, structure, period } instead; callers only read these three fields.
  */
-export function calculateTds({ annualIncome: annual, structure }) {
-  if (!isTdsApplicable(annual)) return { applicable: false, amount: 0, missing: false };
+/* `always`: the old regime, where tax is owed below ₹12,00,000 too, so the amount entered is deducted whatever the income. */
+export function calculateTds({ annualIncome: annual, structure, always = false }) {
+  if (!always && !isTdsApplicable(annual)) return { applicable: false, amount: 0, missing: false };
   const entered = structure.tdsMonthly;
   if (entered === null || entered === undefined || entered === "") return { applicable: true, amount: 0, missing: true };
   return { applicable: true, amount: round2(entered), missing: false };

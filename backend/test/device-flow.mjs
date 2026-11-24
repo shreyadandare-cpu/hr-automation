@@ -23,6 +23,8 @@ try {
   for (let i = 0; i < 40; i++) { try { await fetch(base + "/login"); break; } catch { await new Promise((r) => setTimeout(r, 250)); } }
   empId = (await pool.query("INSERT INTO employees (emp_no, name, work_email, status) VALUES ($1,'Device Test','" + empEmail + "','active') RETURNING id", [`TST/${devId}`])).rows[0].id;
   await createUser(pool, hrEmail, "hr");
+  // users.role is only a label: access comes from grants (access.js), so HR is given attendance.edit for the device IDs.
+  await pool.query("INSERT INTO access_grants (email, permission, scope, granted_by, note) VALUES ($1,'attendance.edit','company','test','flow-test')", [hrEmail]);
   const login = await fetch(`${base}/api/login`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email: hrEmail, password: await getDefaultPassword() }) });
   const cookie = login.headers.get("set-cookie").split(";")[0];
   const hr = (method, path, body) => fetch(`${base}${path}`, { method, headers: { "Content-Type": "application/json", cookie }, body: body ? JSON.stringify(body) : undefined }).then(async (r) => ({ status: r.status, body: await r.json() }));
@@ -72,6 +74,7 @@ try {
   await pool.query("DELETE FROM device_users WHERE device_user_id = $1", [devId]);
   if (empId) await pool.query("DELETE FROM employees WHERE id = $1", [empId]);   // punches go with the employee
   await pool.query("DELETE FROM sessions WHERE lower(email) = $1", [hrEmail]);
+  await pool.query("DELETE FROM access_grants WHERE lower(email) = $1 AND note='flow-test'", [hrEmail]);
   await pool.query("DELETE FROM users WHERE lower(email) = $1", [hrEmail]);
   await pool.query("DELETE FROM audit_log WHERE work_email IN ($1,$2)", [empEmail, hrEmail]);
   if (before) await pool.query("UPDATE settings SET value=$1 WHERE key='device_last_sync'", [before.value]); else await pool.query("DELETE FROM settings WHERE key='device_last_sync'");

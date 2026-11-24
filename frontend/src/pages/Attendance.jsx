@@ -3,7 +3,7 @@ import { api, apiMsg } from "../api.js";
 import { useAuth } from "../auth.jsx";
 import { Callout, DownloadIcon, Person, Pill, SectionHead, Stat, hours, shortDate, ViewTabs, ListSkeleton, TableSkeletonRow } from "../components/ui.jsx";
 import Requests from "../modules/engage/Requests.jsx";
-import { ActionsCard, AttendanceLog, DayCell, ForgotPunchPopup, StatsCard, TimingsCard, istNow, useH24, useMonths, useNow } from "../components/attendance.jsx";
+import { ActionsCard, AttendanceLog, DayCell, DayMarks, ForgotPunchPopup, StatsCard, TimingsCard, istNow, useH24, useMonths, useNow } from "../components/attendance.jsx";
 import Pager, { usePaged } from "../components/Pager.jsx";
 import { useData } from "../data.jsx";
 import { scopeSet } from "../lib/useLeave.js";
@@ -39,7 +39,7 @@ function DayTable({ day, onOpen, onFix, canFix }) {
           {rows.map((x) => (
           <tr key={x.email} className="click" tabIndex={0} onClick={() => onOpen(x)} onKeyDown={(e) => e.key === "Enter" && onOpen(x)}>
             <td><Person name={x.name} sub={x.title || x.email} /></td>
-            <td><StatusPill status={x.status} />{x.missingOut && <> <Pill tone="warn">No punch out</Pill></>}</td>
+            <td><StatusPill status={x.status} />{x.missingOut && <> <Pill tone="warn">No punch out</Pill></>} <DayMarks d={x} />{x.shift && !x.shift.isDefault && <div className="text-[13px] text-ink-faint">{x.shift.name}</div>}</td>
             <td>{x.firstIn || "—"}</td><td>{x.lastPunch ? <>{x.lastPunch}{x.punchCount > 1 ? "" : <span className="muted"> · only punch</span>}</> : "—"}</td><td className="hide-sm"><DayCell x={x} /></td><td>{x.forgotOut ? <>{hours(x.minutes)}<div className="muted" style={{ fontSize: 12 }}>forgot to punch out</div></> : x.minutes ? hours(x.minutes) : x.punchCount ? <span className="muted">{x.missingOut ? "No punch out" : "Just started"}</span> : "—"}</td>
           {onFix && <td>{day.date < day.today && (x.status === "No punch" || x.missingOut || x.forgotOut) && (!canFix || canFix(x))
               ? <button type="button" className="btn glass sm" onClick={(e) => { e.stopPropagation(); onFix(x); }}>Fix</button> : null}</td>}

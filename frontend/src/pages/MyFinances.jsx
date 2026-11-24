@@ -14,6 +14,8 @@ export default function MyFinances() {
   const [d, setD] = useState(null);
   const [error, setError] = useState("");
   useEffect(() => { api("GET", "/api/payslips").then((r) => { if (r.ok) setD(r.data); else { setError(apiMsg(r)); setD({ payslips: [] }); } }); }, []);
+  const [adv, setAdv] = useState([]);   // advances and loans, with the instalments payroll deducts (read only)
+  useEffect(() => { api("GET", "/api/advances/mine").then((r) => { if (r.ok) setAdv(r.data || []); }); }, []);
   if (!d) return <PageSkeleton />;
 
   const ready = d.payslips.filter((p) => p.available && !p.draft);
@@ -33,6 +35,12 @@ export default function MyFinances() {
         <div className="rb-stat"><span className="lbl">Payslips this year</span><b>{thisYear.length}</b><span className="sub">published</span></div>
         <div className="rb-stat"><span className="lbl">All payslips</span><b>{ready.length}</b><span className="sub">available to download</span></div>
       </div>
+      {adv.some((a) => a.outstanding > 0) && <div className="card"><div className="card-h"><h3>Advances and loans</h3></div>
+        <ul className="m-0 flex list-none flex-col p-0">{adv.filter((a) => a.outstanding > 0).map((a) => (
+          <li key={a.id} className="flex flex-wrap items-center justify-between gap-2 border-t border-line px-6 py-3 first:border-t-0 max-sm:px-4">
+            <span><b className="font-bold">{a.reason}</b><span className="block text-[14px] text-ink-dim">{inr(a.outstanding)} still owed of {inr(a.amount)}{a.monthly ? `, ${inr(a.monthly)} deducted from your salary each month` : ", recovered as agreed with HR"}</span></span>
+            {a.monthsLeft > 0 && <Pill tone="info">{a.monthsLeft === 1 ? "1 month left" : `${a.monthsLeft} months left`}</Pill>}</li>))}</ul>
+      </div>}
       <div className="card"><div className="card-h"><h3>Recent pay</h3><Link className="btn link" to="/app/payslips">All payslips</Link></div>
         {ready.length ? (
           <div className="tbl-wrap"><table>

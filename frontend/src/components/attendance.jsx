@@ -1,12 +1,22 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api, apiMsg } from "../api.js";
-import { ListSkeleton, TableSkeletonRow } from "./ui.jsx";
+import { ListSkeleton, Pill, TableSkeletonRow } from "./ui.jsx";
 import Modal from "./Modal.jsx";
 
 /* The employee's attendance page, laid out like a standard HR attendance screen: stats, today's shift and the punch button on top,
    then a log of every day with a 24-hour bar, break time and gross hours, and a calendar. Times are Indian time. */
-export const SHIFT = { start: "09:30", end: "18:30" };   // the office shift
-const GRACE_MIN = 0;                                     // minutes after the shift start that still count as on time
+export const SHIFT = { start: "09:30", end: "18:30" };   // the default office shift, for days the server sent without one
+/** The shift of a day as the server worked it out (the roster or the default shift), or the default. */
+const shiftOf = (d) => (d && d.shift) || SHIFT;
+/* Late arrival, early leaving and overtime on a day, as marks only: nothing is deducted (company decision, 2026-11-24). */
+export function DayMarks({ d }) {
+  if (!d || !(d.late || d.early || d.overtimeMinutes)) return null;
+  return <span className="inline-flex flex-wrap gap-1 align-middle">
+    {d.late && <Pill tone="warn">{`Late ${d.lateBy} min`}</Pill>}
+    {d.early && <Pill tone="warn">{`Left ${d.earlyBy} min early`}</Pill>}
+    {d.overtimeMinutes > 0 && <Pill tone="info">{`Overtime ${dur(d.overtimeMinutes)}`}</Pill>}
+  </span>;
+}
 const MON = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"];
 const MONTH_LONG = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 const DOW = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
@@ -109,11 +119,12 @@ export function StatsCard({ byMonth, today, name = "Me" }) {
   const [from, to] = rangeFor(range, today);
   const days = daysIn(byMonth, from, to).filter((d) => d.firstIn);
   const avg = days.length ? Math.round(days.reduce((n, d) => n + d.minutes, 0) / days.length) : null;
-  const onTime = days.length ? Math.round((days.filter((d) => mins(d.firstIn) <= mins(SHIFT.start) + GRACE_MIN).length / days.length) * 100) : null;
+  // On time: not marked late against the day's shift (its start plus the grace period).
+  const onTime = days.length ? Math.round((days.filter((d) => (d.late !== undefined ? !d.late : mins(d.firstIn) <= mins(shiftOf(d).start))).length / days.length) * 100) : null;
   return (
     <div className="card att-stats"><div className="att-stats-h">
       <select className="input" aria-label="Period" value={range} onChange={(e) => setRange(e.target.value)}>{Object.entries(RANGES).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select>
-      <span className="att-info" title={`On time means the first punch is at or before ${clock(SHIFT.start)}. Average hours count the days you punched.`}>i</span></div>
+      <span className="att-info" title="On time means the first punch is within the grace period after your shift starts. Average hours count the days you punched.">i</span></div>
       <div className="att-stat-row"><span className="att-av">{String(name).charAt(0).toUpperCase()}</span><b>{name}</b>
         <div><small>AVG HRS / DAY</small><strong>{avg === null ? "—" : dur(avg)}</strong></div>
         <div><small>ON TIME ARRIVAL</small><strong>{onTime === null ? "—" : `${onTime}%`}</strong></div></div>
@@ -126,10 +137,10 @@ export function TimingsCard({ today, punches, minutesToday, now, h24, byMonth = 
   const [pick, setPick] = useState(today);
   const monday = addDays(today, -((dow(today) + 6) % 7));
   const week = [0, 1, 2, 3, 4, 5, 6].map((i) => addDays(monday, i));
-  const s = mins(SHIFT.start), e = mins(SHIFT.end), span = e - s;
-  const pct = (m) => Math.max(0, Math.min(100, ((m - s) / span) * 100));
   const isToday = pick === today;
   const rec = byMonth[pick.slice(0, 7)]?.days.find((d) => d.date === pick);
+  const sh = shiftOf(rec), s = mins(sh.start), e = mins(sh.end), span = e - s;
+  const pct = (m) => Math.max(0, Math.min(100, ((m - s) / span) * 100));
   // The bar and the numbers for the picked day.
   let from = null, to = null, worked = 0, note = "";   // stepping out to eat is not a break, so there is none to show
   if (isToday) {
@@ -151,7 +162,7 @@ export function TimingsCard({ today, punches, minutesToday, now, h24, byMonth = 
             title={d > today ? "Not yet" : dayText(d)} onClick={() => setPick(d)}>{["M", "T", "W", "T", "F", "S", "S"][i]}</button>))}
       </div>
       <div className="att-shift">
-        <div className="att-shift-t">{title} ({clock(SHIFT.start, h24)} - {clock(SHIFT.end, h24)})</div>
+        <div className="att-shift-t">{title} ({sh.name ? `${sh.name}, ` : ""}{clock(sh.start, h24)} - {clock(sh.end, h24)}) {rec && <DayMarks d={rec} />}</div>
         <div className="att-track"><i style={{ left: `${fillFrom}%`, width: `${Math.max(0, fillTo - fillFrom)}%` }} /></div>
         <div className="att-shift-b"><span>Duration: {dur(span)}</span><span title="Stepping out is not counted as a break">☕ 0 min</span></div>
         <div className="att-shift-n">{note ? <span className="muted">{note}</span> : from !== null
@@ -179,7 +190,7 @@ export function ForgotPunchPopup({ byMonth, today, h24 }) {
         <p style={{ margin: 0 }}>{days.length === 1 ? "There is only one punch for this day, so we counted your hours until the end of your shift." : "There is only one punch on each of these days, so we counted your hours until the end of your shift."}</p>
         {days.map((d) => (
           <div key={d.date} className="card" style={{ padding: "12px 16px" }}>
-            <b>{dayText(d.date)}</b><div className="muted">Punched in at {clock(d.firstIn, h24)}, no punch out. Counted until {clock(SHIFT.end, h24)}: <b style={{ color: "var(--ink)" }}>{dur(d.minutes)}</b>.</div>
+            <b>{dayText(d.date)}</b><div className="muted">Punched in at {clock(d.firstIn, h24)}, no punch out. Counted until {clock(shiftOf(d).end, h24)}: <b style={{ color: "var(--ink)" }}>{dur(d.minutes)}</b>.</div>
           </div>))}
         <p className="muted" style={{ margin: 0 }}>If you left at a different time, ask HR to add your punch out. Please punch out every day.</p>
       </div>
@@ -199,7 +210,9 @@ const POLICY = {
   track: { label: "Time tracking policy", intro: "Below are the details of time tracking policy assigned to you", items: [
     ["Bio-Metric & Web Clock-In", "Your attendance is automatically tracked using biometric device(s)."],
     ["On-duty (OD)", "You can request for only full day OD."],
-    ["How days are counted", `The shift is ${clock(SHIFT.start)} to ${clock(SHIFT.end)}. Hours come from your punches, each IN with the next OUT. Six hours or more is a present day and three to six hours is a half day. Weekends and holidays are not expected working days.`],
+    ["How days are counted", `Each day is counted against your shift (the default shift is ${clock(SHIFT.start)} to ${clock(SHIFT.end)}, with Saturday and Sunday off). Hours come from your punches, each IN with the next OUT. Six hours or more is a present day and three to six hours is a half day. Your shift's days off and holidays are not expected working days.`],
+    ["Late arrival and early leaving", "Arriving after your shift starts plus its grace period (15 minutes on the default shift) is marked Late, and leaving before it ends is marked Left early. They are shown to you, your manager and HR only; nothing is deducted."],
+    ["Overtime", "Time worked beyond your shift on a working day is shown as overtime. For staff paid overtime, HR or your manager approves it each month and payroll adds the payment to your payslip. Work on a day off earns a comp-off instead."],
   ] },
 };
 export function PolicyModal({ onClose }) {
@@ -242,7 +255,7 @@ export function ActionsCard({ today, state, punches, onPunch, busy, now, h24 }) 
 /* ---- the log, and the calendar ---- */
 const LOG_ICON = { ok: "On track", warn: "Check", live: "Live" };
 function logIcon(d, today) {
-  if (d.forgotOut) return ["warn", `Forgot to punch out: the hours are counted until the end of the shift (${clock(SHIFT.end)})`];
+  if (d.forgotOut) return ["warn", `Forgot to punch out: the hours are counted until the end of the shift (${clock(shiftOf(d).end)})`];
   if (d.missingOut) return ["warn", "No punch out"];
   if (d.missingSwipe) return ["warn", "A punch in the middle has no matching return: ask HR to check the day"];
   if (d.status === "Working") return ["live", "Still working"];
@@ -255,7 +268,7 @@ function Row({ d, today, nowMin, h24, canEdit, onRemove }) {
   const k = kind(d, today);
   const tag = k === "weekend" ? <span className="att-tag off">W-OFF</span> : k === "holiday" ? <span className="att-tag hol">HLDY</span> : null;
   const rowClass = k === "weekend" ? "att-off" : k === "holiday" ? "att-hol" : "";
-  const date = <td><span className="att-date">{dayText(d.date)}</span> {tag}</td>;
+  const date = <td><span className="att-date">{dayText(d.date)}</span> {tag} <DayMarks d={d} /></td>;
   if (k === "worked") {
     const gross = grossOf(d, today, nowMin), brk = 0;   // stepping out to eat is not counted as a break
     const [tone, tip] = logIcon(d, today);
@@ -263,16 +276,16 @@ function Row({ d, today, nowMin, h24, canEdit, onRemove }) {
       <>
         <tr className={`${rowClass} click`} onClick={() => setOpen(!open)} tabIndex={0} onKeyDown={(e) => e.key === "Enter" && setOpen(!open)} aria-expanded={open}>
           {date}
-          <td><DayBar firstIn={d.firstIn} lastOut={d.lastOut || (d.forgotOut ? SHIFT.end : null)} open={!d.lastOut && !d.forgotOut} /></td>
+          <td><DayBar firstIn={d.firstIn} lastOut={d.lastOut || (d.forgotOut ? shiftOf(d).end : null)} open={!d.lastOut && !d.forgotOut} /></td>
           <td className="num-cell">{dur(brk)}</td>
-          <td className="num-cell">{d.forgotOut ? <>{dur(d.minutes)}<div className="muted" style={{ fontSize: 12 }}>counted to {clock(SHIFT.end, h24)}</div></> : gross === null ? <span className="muted">No punch out</span> : dur(gross)}</td>
+          <td className="num-cell">{d.forgotOut ? <>{dur(d.minutes)}<div className="muted" style={{ fontSize: 12 }}>counted to {clock(shiftOf(d).end, h24)}</div></> : gross === null ? <span className="muted">No punch out</span> : dur(gross)}</td>
           <td><span className={`att-chip ${tone}`} title={tip}>{d.forgotOut ? "Forgot punch out" : /^Half day/.test(d.status || "") ? "Half day" : LOG_ICON[tone]}</span></td>
         </tr>
         {open && <tr className="att-detail"><td colSpan="5">
           <div className="att-punches">{[d.punches.find((p) => p.direction === "IN"), [...d.punches].reverse().find((p) => p.direction === "OUT")].filter(Boolean).map((p) => (
-            <span key={p.id}><b>{p.direction}</b> {clock(p.time, h24)}{p.source === "hr" ? ` (HR: ${p.note || ""})` : p.source === "device" ? " (office device)" : ""}
+            <span key={p.id}><b>{p.direction}</b> {clock(p.time, h24)}{p.source === "hr" ? ` (HR: ${p.note || ""})` : p.source === "device" ? " (office device)" : p.source === "web" ? " (app)" : ""}<PunchPlace p={p} />
               {canEdit && <> <button type="button" className="btn link sm" aria-label={`Remove ${p.direction} at ${p.time}`} onClick={(e) => { e.stopPropagation(); onRemove(p.id); }}>Remove</button></>}</span>))}
-            <span className="muted">{d.status}{d.off ? ` · ${d.off.toLowerCase()}` : ""}</span></div>
+            <span className="muted">{d.status}{d.off ? ` · ${d.off.toLowerCase()}` : ""}{d.shift && !d.shift.isDefault ? ` · ${d.shift.name}` : ""}</span> <DayMarks d={d} /></div>
         </td></tr>}
       </>
     );
@@ -352,3 +365,17 @@ export function AttendanceLog({ months, today, canEdit = false, onRemove = () =>
 
 /** The 24 hour bar and times for one person on one day: used in the everyone-for-a-day table that HR sees. */
 export const DayCell = ({ x, h24 }) => (x.firstIn ? <DayBar firstIn={x.firstIn} lastOut={x.lastOut} open={!x.lastOut} /> : <span className="muted">—</span>);
+
+/* Where a punch from the app was made, and its selfie, when web clock-in asked for them. */
+const far = (m) => (m < 1000 ? `${m} m` : `${(m / 1000).toFixed(1)} km`);
+function PunchPlace({ p }) {
+  if (!p.place && !p.selfie) return null;
+  return (
+    <>
+      {p.place && (p.place.outside
+        ? <span className="font-bold text-bad"> · outside the offices, {far(p.place.distance)} from {p.place.site}</span>
+        : p.place.site ? <span className="text-ink-dim"> · at {p.place.site}</span> : null)}
+      {p.selfie && <> · <a className="font-bold text-accent" href={`/api/attendance/selfies/${p.selfie}`} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()}>Selfie</a></>}
+    </>
+  );
+}

@@ -12,7 +12,7 @@ import L from "../../frontend/leave-rules.cjs";
 const DB = process.env.DATABASE_URL || "", BASE = process.env.BASE || "http://localhost:3190";
 if (!/@?(localhost|127\.0\.0\.1)[:/]/.test(DB) || !/^http:\/\/(localhost|127\.0\.0\.1)/.test(BASE)) { console.error("Refusing: a local database and a local server only."); process.exit(2); }
 const db = new pg.Pool({ connectionString: DB }), sha = (s) => crypto.createHash("sha256").update(s).digest("hex");
-const HR = "lv.hr@wohlig.com", EMP = "lv.emp@wohlig.com", EMP2 = "lv.emp2@wohlig.com";
+const HR = "test.leave.admin@wohlig.com", EMP = "test.leave.employee@wohlig.com", EMP2 = "test.leave.employee.two@wohlig.com";   // clearly named test people; a local server sends no email
 let pass = 0, fail = 0;
 const ok = (name, cond, extra = "") => { cond ? pass++ : fail++; console.log(`${cond ? "PASS" : "FAIL"}  ${name}${cond ? "" : "  " + extra}`); };
 const login = async (email, superAdmin = false) => {
@@ -33,7 +33,7 @@ const balanceOf = async (tok, email) => {
 
 try {
   for (const e of [HR, EMP, EMP2]) await db.query("DELETE FROM employees WHERE work_email=$1", [e]);
-  await db.query("INSERT INTO employees (emp_no, name, work_email, title, start_date, status, onboarded_at, manager_email, leave_opening) VALUES ('T/1','Lv Hr',$1,'HR','2020-01-01','active',now(),NULL,NULL),('T/2','Lv Emp',$2,'Dev','2022-01-01','active',now(),$1,$3),('T/3','Lv Emp Two',$4,'Dev','2022-01-01','active',now(),$1,NULL)",
+  await db.query("INSERT INTO employees (emp_no, name, work_email, title, start_date, status, onboarded_at, manager_email, leave_opening) VALUES ('T/1','Test Leave Admin',$1,'HR','2020-01-01','active',now(),NULL,NULL),('T/2','Test Leave Employee',$2,'Dev','2022-01-01','active',now(),$1,$3),('T/3','Test Leave Employee Two',$4,'Dev','2022-01-01','active',now(),$1,NULL)",
     [HR, EMP, JSON.stringify({ asOf: "2026-11-23", casual: 5, sick: 2, compoff: 1, casualQuota: 12, casualUsed: 7, sickQuota: 6, sickUsed: 4, compoffUsed: 0 }), EMP2]);
   const hr = await login(HR, true), emp = await login(EMP), emp2 = await login(EMP2);
 
@@ -77,7 +77,7 @@ try {
   await call(hr, "POST", `/api/leave/requests/${id4}/decision`, { decision: "approved" });
   ok("leave after a correction comes off the corrected balance (sick 3 - 1 = 2)", (await balanceOf(hr, EMP)).b.sick.left === 2);
   const log = (await db.query("SELECT action FROM audit_log WHERE work_email=$1 ORDER BY id", [EMP])).rows.map((x) => x.action).join("\n");
-  ok("the audit log names who corrected what and why", /Leave balance corrected by lv\.hr@wohlig\.com: casual 2 → 6, sick 2 → 3\. Reason: Two days missed from the old system/.test(log), log);
+  ok("the audit log names who corrected what and why", /Leave balance corrected by test\.leave\.admin@wohlig\.com: casual 2 → 6, sick 2 → 3\. Reason: Two days missed from the old system/.test(log), log);
   ok("the audit log keeps the decline reason and the approval comment", /Reason: Release week/.test(log) && /Comment: Enjoy, please hand over first\./.test(log));
   // someone with nothing brought over can be corrected too
   r = await call(hr, "PUT", `/api/leave/balances/${EMP2}`, { casual: 9, reason: "Opening figure from the old sheet" });
@@ -95,7 +95,7 @@ try {
   ok("they are stored in the database", (await db.query("SELECT key, value::float AS v FROM leave_policy ORDER BY key")).rows.map((x) => `${x.key}=${x.v}`).join() === "casualPerYear=10,sickPerYear=7");
   ok("the pages get them from /leave-rules.js", /Object\.assign\(window\.LeaveRules\.POLICY, \{[^}]*"casualPerYear":10/.test(await (await fetch(BASE + "/leave-rules.js")).text()));
   ok("the leave data carries them too", (await call(emp, "GET", "/api/leave")).d.policy.casualPerYear === 10);
-  ok("the audit log records the policy change", (await db.query("SELECT 1 FROM audit_log WHERE action LIKE 'Leave policy changed by lv.hr@wohlig.com: casualPerYear % → 10%'")).rowCount === 1);
+  ok("the audit log records the policy change", (await db.query("SELECT 1 FROM audit_log WHERE action LIKE 'Leave policy changed by test.leave.admin@wohlig.com: casualPerYear % → 10%'")).rowCount === 1);
   ok("saving the same numbers changes nothing", (await call(hr, "PUT", "/api/leave/policy", { casualPerYear: 10 })).d.changed === false);
   await call(hr, "PUT", "/api/leave/policy", { casualPerYear: was.casualPerYear, sickPerYear: was.sickPerYear });
   ok("and the numbers can be put back", (await call(hr, "GET", "/api/leave/policy")).d.policy.casualPerYear === was.casualPerYear);
@@ -103,7 +103,7 @@ try {
 finally {
   await db.query("DELETE FROM leave_requests WHERE lower(work_email) IN ($1,$2,$3)", [HR, EMP, EMP2]);
   await db.query("DELETE FROM leave_policy");
-  await db.query("DELETE FROM audit_log WHERE work_email IN ($1,$2,$3) OR action LIKE 'Leave policy changed by lv.hr%'", [HR, EMP, EMP2]);
+  await db.query("DELETE FROM audit_log WHERE work_email IN ($1,$2,$3) OR action LIKE 'Leave policy changed by test.leave.admin%'", [HR, EMP, EMP2]);
   await db.query("DELETE FROM sessions WHERE lower(email) IN ($1,$2,$3)", [HR, EMP, EMP2]);
   await db.query("DELETE FROM employees WHERE work_email IN ($1,$2,$3)", [HR, EMP, EMP2]);
   await db.query("DELETE FROM users WHERE email IN ($1,$2,$3)", [HR, EMP, EMP2]);

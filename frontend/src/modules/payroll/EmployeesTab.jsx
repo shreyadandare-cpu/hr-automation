@@ -55,12 +55,16 @@ export function BankModal({ email, onClose }) {
 }
 
 const DECL = [["openingTaxable", "Taxable salary we paid this year before payroll moved here", "both"], ["openingTds", "TDS we deducted this year before payroll moved here", "both"],
-  ["openingPt", "Professional tax deducted before payroll moved here", "both"], ["hraExemption", "HRA exemption 10(13A)", "old"], ["section80C", "80C (PF, PPF, ELSS, LIC…)", "old"], ["section80D", "80D health insurance", "old"], ["homeLoanInterest", "Home loan interest 24(b)", "old"],
-  ["nps80CCD1B", "80CCD(1B) own NPS", "old"], ["employerNps", "80CCD(2) employer NPS", "both"], ["otherDeductions", "Other Chapter VI-A", "old"],
+  ["openingPt", "Professional tax deducted before payroll moved here", "both"], ["hraExemption", "HRA exemption 10(13A)", "old"], ["ltaExemption", "Leave travel exemption 10(5)", "old"], ["section80C", "80C investments, not salary PF (PPF, ELSS, LIC…). Payroll adds the employee PF itself", "old"], ["section80D", "80D health insurance, self and parents", "old"], ["homeLoanInterest", "Home loan interest 24(b)", "old"],
+  ["nps80CCD1B", "80CCD(1B) own NPS", "old"], ["employerNps", "80CCD(2) employer NPS (up to 14% of Basic, 10% old regime)", "both"],
+  ["rentWithoutHra", "Rent paid with no HRA in the salary (80GG is worked out)", "old"], ["savingsInterest", "Savings interest (80TTA, or 80TTB from 60)", "old"],
+  ["educationLoan80E", "80E education loan interest", "old"], ["homeLoan80EEA", "80EEA first home loan interest", "old"], ["donations80G", "80G donations, the amount that qualifies", "old"],
+  ["disability80DD", "80DD dependant with a disability", "old"], ["medical80DDB", "80DDB treatment of a specified illness", "old"], ["disability80U", "80U own disability", "old"],
+  ["otherDeductions", "Other Chapter VI-A", "old"], ["housePropertyIncome", "Income from a let-out house, after 30% and interest (a loss is negative)", "both"],
   ["otherIncome", "Other income declared", "both"], ["previousEmployerIncome", "Salary from a previous employer this year", "both"], ["previousEmployerTds", "TDS by the previous employer", "both"]];
 
 /* The employee's tax regime and declarations for a financial year, used by the TDS calculation. */
-function TaxModal({ email, name, onClose }) {
+function TaxModal({ email, name, fixedTds, onClose }) {
   const toast = useToast();
   const [fy, setFy] = useState(fyOf(thisMonth()));
   const [f, setF] = useState(null);
@@ -70,7 +74,7 @@ function TaxModal({ email, name, onClose }) {
     setF(null);
     api("GET", `/api/payroll/declarations/${encodeURIComponent(email)}?fy=${fy}`).then((r) => {
       if (!r.ok) { toast(apiMsg(r)); onClose(); return; }
-      setF({ regime: r.data.regime, declaration: Object.fromEntries(DECL.map(([k]) => [k, r.data.declaration[k] ?? ""])), updatedBy: r.data.updatedBy, updatedAt: r.data.updatedAt });
+      setF({ regime: r.data.regime, declaration: Object.fromEntries(DECL.map(([k]) => [k, r.data.declaration[k] ?? ""])), updatedBy: r.data.updatedBy, updatedAt: r.data.updatedAt, submitted: r.data.submitted || null });
     });
   }, [email, fy]);   // eslint-disable-line react-hooks/exhaustive-deps
   const save = async (e) => {
@@ -82,19 +86,33 @@ function TaxModal({ email, name, onClose }) {
     toast(`Tax details saved for ${name}. Recalculate any open payroll to apply them.`); onClose(true);
   };
   const y = Number(fy.slice(0, 4));
+  // What the employee submitted on Pay > Tax declaration: copied into this form for payroll to check before saving.
+  const useSubmitted = () => {
+    const sub = f.submitted;
+    setF({ ...f, regime: sub.regime, declaration: { ...f.declaration, ...Object.fromEntries(DECL.filter(([k]) => !k.startsWith("opening")).map(([k]) => [k, sub.fields[k] ?? ""])) } });
+    toast("The employee's declaration is filled in. Please check it and save.");
+  };
+  const priorDeclared = f && ["previousEmployerIncome", "previousEmployerTds", "openingTaxable", "openingTds"].some((k) => Number(f.declaration[k]) > 0);
   return (
     <Modal wide onClose={() => onClose()}><form onSubmit={save} noValidate>
-      <div className="card-h" style={{ paddingTop: 24 }}><h3>Tax regime and declarations: {name}</h3>
-        <select className="input" aria-label="Financial year" style={{ width: "auto" }} value={fy} onChange={(e) => setFy(e.target.value)}>
+      {/* Inside a form, so the dialog's own title-row spacing does not reach it: room for the close button is set here. */}
+      <div className="card-h flex-wrap gap-3 pt-6 pr-16"><h3>Tax regime and declarations: {name}</h3>
+        <select className="input w-auto min-w-36" aria-label="Financial year" value={fy} onChange={(e) => setFy(e.target.value)}>
           {[y - 1, y, y + 1].map((s) => { const v = `${s}-${String((s + 1) % 100).padStart(2, "0")}`; return <option key={v} value={v}>FY {v}</option>; })}</select></div>
       {!f ? <div className="card-b"><span className="skel" style={{ width: "60%" }} /></div> : <>
         <div className="card-b form">
+          {f.submitted && <Callout>{name} submitted a declaration on {when(f.submitted.submittedAt)} under the {f.submitted.regime === "old" ? "Old" : "New"} regime.
+            {f.submitted.hra && f.submitted.hra.exemption > 0 && <> Their rent of ₹{Number(f.submitted.hra.rent).toLocaleString("en-IN")} gives an HRA exemption of ₹{Number(f.submitted.hra.exemption).toLocaleString("en-IN")} ({f.submitted.hra.metro ? "50" : "40"}% city).</>}
+            {f.submitted.lta && f.submitted.lta.exemption > 0 && <> Their travel fares of ₹{Number(f.submitted.lta.fares).toLocaleString("en-IN")} give a leave travel exemption of ₹{Number(f.submitted.lta.exemption).toLocaleString("en-IN")}, up to the allowance for the year.</>}
+            {" "}Until you save tax details here, payroll uses their declaration, with your proof decisions applied.
+            {" "}<button type="button" className="btn glass sm" onClick={useSubmitted}>Fill from their declaration</button></Callout>}
+          {fixedTds && priorDeclared && <Callout>This person&rsquo;s salary structure uses a fixed monthly TDS, so the previous employer&rsquo;s salary and TDS and the opening figures are not used. Please change the structure to calculated TDS to use them.</Callout>}
           <div className="field"><span className="lab">Regime</span><div className="seg" role="radiogroup">
             {[["new", "New regime (default)"], ["old", "Old regime"]].map(([k, l]) => <label key={k}><input type="radio" name="regime" checked={f.regime === k} onChange={() => setF({ ...f, regime: k })} />{l}</label>)}</div></div>
           <div className="muted">{f.regime === "new" ? "The new regime allows the standard deduction and employer NPS only; other investments are ignored." : "Deductions are capped as the year's tax rules say (e.g. 80C ₹1,50,000)."} Amounts are for the whole financial year.</div>
           <div className="sal-grid">
             {DECL.filter(([, , r]) => r === "both" || f.regime === "old").map(([k, label]) => (
-              <Field key={k} id={`dc-${k}`} label={`${label} (₹)`} error={er[k]}><input className="input" id={`dc-${k}`} type="number" min="0" step="1" value={f.declaration[k]} onChange={(e) => setF({ ...f, declaration: { ...f.declaration, [k]: e.target.value } })} /></Field>))}
+              <Field key={k} id={`dc-${k}`} label={`${label} (₹)`} error={er[k]}><input className="input" id={`dc-${k}`} type="number" min={k === "housePropertyIncome" ? undefined : "0"} step="1" value={f.declaration[k]} onChange={(e) => setF({ ...f, declaration: { ...f.declaration, [k]: e.target.value } })} /></Field>))}
           </div>
           {f.updatedBy && <div className="muted">Last saved by {f.updatedBy} on {when(f.updatedAt)}.</div>}
         </div>
@@ -140,16 +158,16 @@ export default function EmployeesTab() {
             <td className="num">{e.salary ? <>{money(e.salary.monthlyGross)}<div className="muted">from {monthLabel(e.salary.effectiveFrom)}</div></> : <Pill tone="bad">Not set</Pill>}</td>
             <td className="num hide-sm">{e.salary && e.salary.annualCtc ? money(e.salary.annualCtc) : "—"}</td>
             <td>{e.bank ? <>{e.bank.bankName} ••{e.bank.last4}<div className="muted">{e.bank.ifsc}</div></> : <Pill tone="warn">Missing</Pill>}</td>
-            <td>{e.regime === "old" ? "Old regime" : "New regime"}<div className="muted">{e.salary && e.salary.tdsMode === "manual" ? "Fixed TDS" : e.declared ? "Declared" : "No declaration"}</div></td>
+            <td>{e.regime === "old" ? "Old regime" : "New regime"}<div className="muted">{e.salary && e.salary.tdsMode === "manual" ? "Fixed TDS" : e.declared ? "Entered by payroll" : e.declaredBy === "employee" ? "From their declaration" : "No declaration"}</div></td>
             <td className="num"><div className="row" style={{ gap: 6, justifyContent: "flex-end", flexWrap: "nowrap" }}>
               <button type="button" className="btn glass sm" onClick={() => setDlg({ kind: "salary", email: e.email })}>Salary</button>
               {bankAccess && <button type="button" className="btn glass sm" onClick={() => setDlg({ kind: "bank", email: e.email })}>Bank</button>}
-              <button type="button" className="btn glass sm" onClick={() => setDlg({ kind: "tax", email: e.email, name: e.name })}>Tax</button></div></td>
+              <button type="button" className="btn glass sm" onClick={() => setDlg({ kind: "tax", email: e.email, name: e.name, fixedTds: !!(e.salary && e.salary.tdsMode === "manual") })}>Tax</button></div></td>
           </tr>)) : <tr><td colSpan={7}><div className="empty">Nobody matches.</div></td></tr>}
       </tbody></table></div>
       {dlg && dlg.kind === "salary" && <SalaryModal email={dlg.email} onClose={close} />}
       {dlg && dlg.kind === "bank" && <BankModal email={dlg.email} onClose={close} />}
-      {dlg && dlg.kind === "tax" && <TaxModal email={dlg.email} name={dlg.name} onClose={close} />}
+      {dlg && dlg.kind === "tax" && <TaxModal email={dlg.email} name={dlg.name} fixedTds={dlg.fixedTds} onClose={close} />}
       {dlg && dlg.kind === "import" && <ImportModal onClose={close} />}
     </div>
   );

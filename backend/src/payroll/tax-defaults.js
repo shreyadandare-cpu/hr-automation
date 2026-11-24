@@ -17,7 +17,7 @@ const NEW_REGIME = {
   surcharge: [{ above: 5000000, rate: 10 }, { above: 10000000, rate: 15 }, { above: 20000000, rate: 25 }],
   cessRate: 4,
   allowedDeductions: ["employerNps"],
-  caps: {},
+  caps: { employerNpsPercent: 14 },
 };
 
 const OLD_REGIME = {
@@ -27,8 +27,8 @@ const OLD_REGIME = {
   rebate: { maxIncome: 500000, maxRebate: 12500, marginalRelief: false },
   surcharge: [{ above: 5000000, rate: 10 }, { above: 10000000, rate: 15 }, { above: 20000000, rate: 25 }, { above: 50000000, rate: 37 }],
   cessRate: 4,
-  allowedDeductions: ["professionalTax", "hraExemption", "section80C", "section80D", "homeLoanInterest", "nps80CCD1B", "employerNps", "otherDeductions"],
-  caps: { section80C: 150000, section80D: 100000, homeLoanInterest: 200000, nps80CCD1B: 50000 },
+  allowedDeductions: ["professionalTax", "hraExemption", "ltaExemption", "section80C", "section80D", "homeLoanInterest", "nps80CCD1B", "employerNps", "otherDeductions"],
+  caps: { section80C: 150000, section80D: 100000, homeLoanInterest: 200000, nps80CCD1B: 50000, employerNpsPercent: 10 },
   note: "Basic exemption shown is for residents below 60. Senior citizens (₹3,00,000) and super seniors (₹5,00,000) need their own rule or a TDS override.",
 };
 

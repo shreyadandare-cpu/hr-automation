@@ -630,6 +630,13 @@ CREATE TABLE IF NOT EXISTS advance_recoveries (
   recovered_on DATE NOT NULL, note TEXT, recorded_by TEXT NOT NULL, offboarding_id INT REFERENCES offboardings(id),
   created_at TIMESTAMPTZ NOT NULL DEFAULT now());
 CREATE INDEX IF NOT EXISTS advance_recoveries_advance ON advance_recoveries (advance_id);
+-- Instalments (2026-11-24, as Keka's loans and salary advances): a fixed amount payroll deducts each month from a month on, until
+-- the advance is repaid. A recovery made by payroll names its month, once per advance and month (recorded when the month is approved).
+ALTER TABLE employee_advances ADD COLUMN IF NOT EXISTS monthly_recovery NUMERIC(12,2) CHECK (monthly_recovery IS NULL OR monthly_recovery > 0);
+ALTER TABLE employee_advances ADD COLUMN IF NOT EXISTS recover_from TEXT CHECK (recover_from IS NULL OR recover_from ~ '^\d{4}-(0[1-9]|1[0-2])$');
+ALTER TABLE advance_recoveries ADD COLUMN IF NOT EXISTS payroll_period TEXT;
+CREATE UNIQUE INDEX IF NOT EXISTS advance_recoveries_payroll ON advance_recoveries (advance_id, payroll_period) WHERE payroll_period IS NOT NULL;
+CREATE INDEX IF NOT EXISTS employee_advances_instalments ON employee_advances (recover_from) WHERE monthly_recovery IS NOT NULL;
 
 -- Each time HR confirms an offboarding's financial clearance: the figures as they were, who confirmed it and when.
 CREATE TABLE IF NOT EXISTS offboarding_clearances (
@@ -1033,6 +1040,14 @@ ALTER TABLE reviews ADD COLUMN IF NOT EXISTS manager_text TEXT;
 ALTER TABLE reviews ADD COLUMN IF NOT EXISTS manager_rating INT;
 ALTER TABLE reviews ADD COLUMN IF NOT EXISTS manager_at TIMESTAMPTZ;
 CREATE INDEX IF NOT EXISTS reviews_manager ON reviews (lower(manager_email)) WHERE manager_email IS NOT NULL;
+-- Calibration (2026-11-24): HR's adjusted rating with the reason, and potential for the 9-box. Only HR sees these; the final
+-- rating (reviews.rating) is still set when HR finishes the review, starting from the calibrated one.
+ALTER TABLE reviews ADD COLUMN IF NOT EXISTS calibrated_rating INT CHECK (calibrated_rating BETWEEN 1 AND 5);
+ALTER TABLE reviews ADD COLUMN IF NOT EXISTS potential INT CHECK (potential BETWEEN 1 AND 3);
+ALTER TABLE reviews ADD COLUMN IF NOT EXISTS calibration_note TEXT NOT NULL DEFAULT '';
+ALTER TABLE reviews ADD COLUMN IF NOT EXISTS calibrated_by TEXT;
+ALTER TABLE reviews ADD COLUMN IF NOT EXISTS calibrated_at TIMESTAMPTZ;
+CREATE INDEX IF NOT EXISTS reviews_cycle ON reviews (cycle_id) WHERE cycle_id IS NOT NULL;
 -- Colleague (360) feedback on a review. Seen by HR and the reviewer's manager, never by the person reviewed.
 CREATE TABLE IF NOT EXISTS review_feedback (
   id SERIAL PRIMARY KEY, review_id INTEGER NOT NULL REFERENCES reviews(id) ON DELETE CASCADE, from_email TEXT NOT NULL, asked_by TEXT NOT NULL,
@@ -1189,5 +1204,203 @@ CREATE TABLE IF NOT EXISTS tax_regime_policies (
   updated_by     TEXT NOT NULL,
   updated_at     TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+-- Declaration and proof windows (2026-11-24): payroll's due dates for the year's declarations and proofs (Keka's cut-off dates).
+-- Only the row for the year itself counts; a row carried over from an earlier year has its dates left empty.
+ALTER TABLE tax_regime_policies ADD COLUMN IF NOT EXISTS declaration_due DATE;
+ALTER TABLE tax_regime_policies ADD COLUMN IF NOT EXISTS proof_due DATE;
+-- New joiners may declare for this many days after joining, even after the declaration date (Keka's period for new employees).
+ALTER TABLE tax_regime_policies ADD COLUMN IF NOT EXISTS joiner_days INTEGER CHECK (joiner_days BETWEEN 0 AND 180);
+-- Reminders sent before a due date (tax-reminders.js): one row per reminder, so each goes out once.
+CREATE TABLE IF NOT EXISTS tax_reminders_sent (
+  financial_year INTEGER NOT NULL, kind TEXT NOT NULL CHECK (kind IN ('declaration','proof')), due DATE NOT NULL, days_before INTEGER NOT NULL,
+  sent_at TIMESTAMPTZ NOT NULL DEFAULT now(), PRIMARY KEY (financial_year, kind, due, days_before));
+-- Payroll reopens the declaration or the proofs for one person after the due date (a new joiner, a proof sent back), until a date.
+CREATE TABLE IF NOT EXISTS tax_declaration_unlocks (
+  id SERIAL PRIMARY KEY, email TEXT NOT NULL, financial_year INT NOT NULL,
+  kind TEXT NOT NULL CHECK (kind IN ('declaration','proof')),
+  until DATE NOT NULL, granted_by TEXT NOT NULL, granted_at TIMESTAMPTZ NOT NULL DEFAULT now());
+CREATE UNIQUE INDEX IF NOT EXISTS tax_declaration_unlocks_one ON tax_declaration_unlocks (lower(email), financial_year, kind);
+CREATE INDEX IF NOT EXISTS tax_declaration_unlocks_year ON tax_declaration_unlocks (financial_year, until);
+-- A person's request to change their declaration or proofs after the due date, with a reason (as Keka takes a late
+-- declaration for approval). Payroll approves it until a date (which writes a tax_declaration_unlocks row) or declines it.
+CREATE TABLE IF NOT EXISTS tax_late_requests (
+  id SERIAL PRIMARY KEY, email TEXT NOT NULL, financial_year INT NOT NULL,
+  kind TEXT NOT NULL CHECK (kind IN ('declaration','proof')),
+  reason TEXT NOT NULL CHECK (length(reason) <= 500),
+  status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','approved','declined')),
+  until DATE, note TEXT, decided_by TEXT, decided_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now());
+CREATE UNIQUE INDEX IF NOT EXISTS tax_late_requests_one_pending ON tax_late_requests (lower(email), financial_year, kind) WHERE status = 'pending';
+CREATE INDEX IF NOT EXISTS tax_late_requests_year ON tax_late_requests (financial_year, status, created_at DESC);
+CREATE INDEX IF NOT EXISTS tax_late_requests_person ON tax_late_requests (lower(email), financial_year);
+-- Submitted declarations of a year, read by payroll for every person at once when it builds a month.
+CREATE INDEX IF NOT EXISTS tax_declaration_requests_year ON tax_declaration_requests (financial_year) WHERE status = 'submitted';
+
+-- Shifts (2026-11-24, shifts.js and shift-rules.js): the hours people work, the grace for arriving late, the weekly days off, and
+-- the minutes that make a full day, a half day and overtime. One shift is the default for anyone not on the roster.
+CREATE TABLE IF NOT EXISTS shifts (
+  id SERIAL PRIMARY KEY,
+  name TEXT NOT NULL CHECK (char_length(name) BETWEEN 1 AND 60),
+  start_time TIME NOT NULL, end_time TIME NOT NULL CHECK (end_time > start_time),
+  grace_minutes INTEGER NOT NULL DEFAULT 15 CHECK (grace_minutes BETWEEN 0 AND 120),
+  weekly_offs INTEGER[] NOT NULL DEFAULT '{0,6}',          -- 0 Sunday … 6 Saturday
+  present_minutes INTEGER NOT NULL DEFAULT 360 CHECK (present_minutes BETWEEN 30 AND 1440),
+  half_day_minutes INTEGER NOT NULL DEFAULT 180 CHECK (half_day_minutes >= 0),
+  overtime_after_minutes INTEGER NOT NULL DEFAULT 30 CHECK (overtime_after_minutes BETWEEN 0 AND 600),
+  is_default BOOLEAN NOT NULL DEFAULT false,
+  created_by TEXT NOT NULL, created_at TIMESTAMPTZ NOT NULL DEFAULT now(), updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  archived_at TIMESTAMPTZ);
+CREATE UNIQUE INDEX IF NOT EXISTS shifts_one_default ON shifts (is_default) WHERE is_default AND archived_at IS NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS shifts_name ON shifts (lower(name)) WHERE archived_at IS NULL;
+-- The office shift before shifts existed becomes the default, once.
+INSERT INTO shifts (name, start_time, end_time, grace_minutes, weekly_offs, is_default, created_by)
+  SELECT 'General shift', '09:30', '18:30', 15, '{0,6}', true, 'system' WHERE NOT EXISTS (SELECT 1 FROM shifts);
+-- The roster: who is on which shift from a date, until a date or open. With no entry a person is on the default shift.
+CREATE TABLE IF NOT EXISTS shift_assignments (
+  id SERIAL PRIMARY KEY, email TEXT NOT NULL, shift_id INTEGER NOT NULL REFERENCES shifts(id),
+  from_date DATE NOT NULL, to_date DATE CHECK (to_date IS NULL OR to_date >= from_date),
+  created_by TEXT NOT NULL, created_at TIMESTAMPTZ NOT NULL DEFAULT now());
+CREATE INDEX IF NOT EXISTS shift_assignments_person ON shift_assignments (lower(email), from_date DESC);
+CREATE INDEX IF NOT EXISTS shift_assignments_dates ON shift_assignments (from_date, to_date);
+-- Staff whose overtime is approved each month (the company pays overtime only to people HR marks). Payroll never pays it by itself.
+CREATE TABLE IF NOT EXISTS overtime_staff (
+  email TEXT PRIMARY KEY, added_by TEXT NOT NULL, added_at TIMESTAMPTZ NOT NULL DEFAULT now());
+CREATE UNIQUE INDEX IF NOT EXISTS overtime_staff_email ON overtime_staff (lower(email));
+-- A month's overtime for one person: the hours worked out from attendance when it was decided, and the hours approved.
+CREATE TABLE IF NOT EXISTS overtime_approvals (
+  id SERIAL PRIMARY KEY, email TEXT NOT NULL, month TEXT NOT NULL CHECK (month ~ '^\d{4}-(0[1-9]|1[0-2])$'),
+  computed_minutes INTEGER NOT NULL CHECK (computed_minutes >= 0), approved_minutes INTEGER NOT NULL DEFAULT 0 CHECK (approved_minutes >= 0),
+  status TEXT NOT NULL CHECK (status IN ('approved','rejected')), note TEXT NOT NULL DEFAULT '' CHECK (char_length(note) <= 300),
+  decided_by TEXT NOT NULL, decided_at TIMESTAMPTZ NOT NULL DEFAULT now());
+CREATE UNIQUE INDEX IF NOT EXISTS overtime_approvals_one ON overtime_approvals (lower(email), month);
+CREATE INDEX IF NOT EXISTS overtime_approvals_month ON overtime_approvals (month, status);
+-- The two new permissions, given once to whoever could already correct attendance, for the same scope: managing shifts (company-wide
+-- holders only) and approving overtime. A later revoke sticks: any earlier row of the permission, revoked or not, stops the copy.
+INSERT INTO access_grants (email, permission, scope, scope_root_email, note, granted_by)
+  SELECT g.email, 'shifts.manage', 'company', NULL, 'Given with Correct attendance when shifts were added', 'system'
+    FROM access_grants g WHERE g.permission = 'attendance.edit' AND g.scope = 'company' AND g.revoked_at IS NULL
+      AND NOT EXISTS (SELECT 1 FROM access_grants x WHERE lower(x.email) = lower(g.email) AND x.permission = 'shifts.manage');
+INSERT INTO access_grants (email, permission, scope, scope_root_email, note, granted_by)
+  SELECT g.email, 'overtime.approve', g.scope, g.scope_root_email, 'Given with Correct attendance when overtime was added', 'system'
+    FROM access_grants g WHERE g.permission = 'attendance.edit' AND g.revoked_at IS NULL
+      AND NOT EXISTS (SELECT 1 FROM access_grants x WHERE lower(x.email) = lower(g.email) AND x.permission = 'overtime.approve');
+
+-- OKRs (2026-11-24, performance.js): company and team objectives for a quarter, their key results, and personal goals linked to them.
+CREATE TABLE IF NOT EXISTS okr_objectives (
+  id SERIAL PRIMARY KEY, title TEXT NOT NULL CHECK (char_length(title) BETWEEN 1 AND 200), detail TEXT NOT NULL DEFAULT '' CHECK (char_length(detail) <= 1000),
+  level TEXT NOT NULL CHECK (level IN ('company','team')), quarter TEXT NOT NULL CHECK (quarter ~ '^\d{4}-Q[1-4]$'),
+  owner_email TEXT NOT NULL, parent_id INTEGER REFERENCES okr_objectives(id),
+  created_by TEXT NOT NULL, created_at TIMESTAMPTZ NOT NULL DEFAULT now(), updated_at TIMESTAMPTZ NOT NULL DEFAULT now(), archived_at TIMESTAMPTZ);
+CREATE INDEX IF NOT EXISTS okr_objectives_quarter ON okr_objectives (quarter, level) WHERE archived_at IS NULL;
+CREATE TABLE IF NOT EXISTS okr_key_results (
+  id SERIAL PRIMARY KEY, objective_id INTEGER NOT NULL REFERENCES okr_objectives(id) ON DELETE CASCADE,
+  title TEXT NOT NULL CHECK (char_length(title) BETWEEN 1 AND 200), unit TEXT NOT NULL DEFAULT '' CHECK (char_length(unit) <= 20),
+  start_value NUMERIC(14,2) NOT NULL DEFAULT 0, target_value NUMERIC(14,2) NOT NULL, current_value NUMERIC(14,2) NOT NULL DEFAULT 0,
+  updated_by TEXT NOT NULL, updated_at TIMESTAMPTZ NOT NULL DEFAULT now());
+CREATE INDEX IF NOT EXISTS okr_key_results_objective ON okr_key_results (objective_id);
+ALTER TABLE goals ADD COLUMN IF NOT EXISTS objective_id INTEGER REFERENCES okr_objectives(id);
+CREATE INDEX IF NOT EXISTS goals_objective ON goals (objective_id) WHERE deleted_at IS NULL AND objective_id IS NOT NULL;
+-- 1:1 meetings: a manager and a direct report, with shared talking points, actions and notes; private notes are each person's own.
+CREATE TABLE IF NOT EXISTS one_on_ones (
+  id SERIAL PRIMARY KEY, manager_email TEXT NOT NULL, report_email TEXT NOT NULL, meets_on DATE NOT NULL,
+  status TEXT NOT NULL DEFAULT 'scheduled' CHECK (status IN ('scheduled','done','cancelled')),
+  shared_notes TEXT NOT NULL DEFAULT '' CHECK (char_length(shared_notes) <= 5000),
+  created_by TEXT NOT NULL, created_at TIMESTAMPTZ NOT NULL DEFAULT now(), updated_at TIMESTAMPTZ NOT NULL DEFAULT now());
+CREATE INDEX IF NOT EXISTS one_on_ones_manager ON one_on_ones (lower(manager_email), meets_on DESC);
+CREATE INDEX IF NOT EXISTS one_on_ones_report ON one_on_ones (lower(report_email), meets_on DESC);
+CREATE TABLE IF NOT EXISTS one_on_one_items (
+  id SERIAL PRIMARY KEY, meeting_id INTEGER NOT NULL REFERENCES one_on_ones(id) ON DELETE CASCADE,
+  kind TEXT NOT NULL CHECK (kind IN ('talking_point','action')), body TEXT NOT NULL CHECK (char_length(body) BETWEEN 1 AND 500),
+  owner_email TEXT, done BOOLEAN NOT NULL DEFAULT false, added_by TEXT NOT NULL, created_at TIMESTAMPTZ NOT NULL DEFAULT now());
+CREATE INDEX IF NOT EXISTS one_on_one_items_meeting ON one_on_one_items (meeting_id, id);
+CREATE TABLE IF NOT EXISTS one_on_one_private (
+  meeting_id INTEGER NOT NULL REFERENCES one_on_ones(id) ON DELETE CASCADE, email TEXT NOT NULL,
+  notes TEXT NOT NULL DEFAULT '' CHECK (char_length(notes) <= 5000), updated_at TIMESTAMPTZ NOT NULL DEFAULT now(), PRIMARY KEY (meeting_id, email));
+
+-- Careers page and referrals (2026-11-24, careers.js): a role HR publishes shows on the public careers page; anyone may apply with a CV,
+-- and staff may refer someone. The candidate records where they came from.
+ALTER TABLE job_openings ADD COLUMN IF NOT EXISTS is_public BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE job_openings ADD COLUMN IF NOT EXISTS location TEXT NOT NULL DEFAULT '';
+ALTER TABLE job_openings ADD COLUMN IF NOT EXISTS kind TEXT NOT NULL DEFAULT 'Full time';
+ALTER TABLE job_openings ADD COLUMN IF NOT EXISTS experience TEXT NOT NULL DEFAULT '';
+CREATE INDEX IF NOT EXISTS job_openings_public ON job_openings (created_at DESC) WHERE is_public AND status = 'open' AND deleted_at IS NULL;
+ALTER TABLE candidates ADD COLUMN IF NOT EXISTS source TEXT NOT NULL DEFAULT 'hr' CHECK (source IN ('hr','careers','referral'));
+ALTER TABLE candidates ADD COLUMN IF NOT EXISTS referred_by TEXT;
+ALTER TABLE candidates ADD COLUMN IF NOT EXISTS cover_note TEXT NOT NULL DEFAULT '';
+ALTER TABLE candidates ADD COLUMN IF NOT EXISTS profile_link TEXT NOT NULL DEFAULT '';
+ALTER TABLE candidates ADD COLUMN IF NOT EXISTS resume_name TEXT;
+ALTER TABLE candidates ADD COLUMN IF NOT EXISTS resume_mime TEXT;
+ALTER TABLE candidates ADD COLUMN IF NOT EXISTS resume_size INTEGER;
+ALTER TABLE candidates ADD COLUMN IF NOT EXISTS resume_stored TEXT;
+-- A short-lived key to send the CV right after applying (the form sends the details, then the file).
+ALTER TABLE candidates ADD COLUMN IF NOT EXISTS upload_key TEXT;
+ALTER TABLE candidates ADD COLUMN IF NOT EXISTS upload_until TIMESTAMPTZ;
+CREATE INDEX IF NOT EXISTS candidates_referred_by ON candidates (lower(referred_by)) WHERE referred_by IS NOT NULL AND deleted_at IS NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS candidates_upload_key ON candidates (upload_key) WHERE upload_key IS NOT NULL;
+CREATE INDEX IF NOT EXISTS candidates_opening_email ON candidates (opening_id, lower(email)) WHERE deleted_at IS NULL;
+
+-- Offer letters and signing them (2026-11-24, offers.js): HR prepares an offer for a candidate, someone else approves it, and the
+-- candidate signs it through a private link by typing their name. The words are fixed when it is sent; the fingerprint shows any change.
+CREATE TABLE IF NOT EXISTS offer_letters (
+  id SERIAL PRIMARY KEY, candidate_id INTEGER NOT NULL REFERENCES candidates(id),
+  title TEXT NOT NULL CHECK (char_length(title) BETWEEN 1 AND 120), ctc_annual NUMERIC(14,2) NOT NULL CHECK (ctc_annual > 0),
+  joining_date DATE NOT NULL, location TEXT NOT NULL DEFAULT '', terms TEXT NOT NULL DEFAULT '' CHECK (char_length(terms) <= 4000),
+  status TEXT NOT NULL DEFAULT 'pending_approval' CHECK (status IN ('pending_approval','approved','sent','signed','declined','withdrawn','returned')),
+  created_by TEXT NOT NULL, created_at TIMESTAMPTZ NOT NULL DEFAULT now(), updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  decided_by TEXT, decided_at TIMESTAMPTZ, decision_note TEXT,
+  letter_text TEXT, letter_sha256 TEXT, sign_key_hash TEXT, sent_by TEXT, sent_at TIMESTAMPTZ, sign_until TIMESTAMPTZ,
+  signed_name TEXT, signed_at TIMESTAMPTZ, signed_ip TEXT, signed_agent TEXT, declined_reason TEXT);
+CREATE INDEX IF NOT EXISTS offer_letters_candidate ON offer_letters (candidate_id, id DESC);
+CREATE UNIQUE INDEX IF NOT EXISTS offer_letters_sign_key ON offer_letters (sign_key_hash) WHERE sign_key_hash IS NOT NULL;
+CREATE INDEX IF NOT EXISTS offer_letters_pending ON offer_letters (created_at) WHERE status = 'pending_approval';
+-- Approving offers is its own permission, given once to whoever runs hiring (a later revoke sticks). Nobody approves their own offer.
+INSERT INTO access_grants (email, permission, scope, scope_root_email, note, granted_by)
+  SELECT g.email, 'offers.approve', 'company', NULL, 'Given with Run hiring when offer letters were added', 'system'
+    FROM access_grants g WHERE g.permission = 'hiring.manage' AND g.scope = 'company' AND g.revoked_at IS NULL
+      AND NOT EXISTS (SELECT 1 FROM access_grants x WHERE lower(x.email) = lower(g.email) AND x.permission = 'offers.approve');
+
+-- ---------------------------------------------------------------------------------------------------------------------
+-- Web clock-in with location and a selfie (2026-11-24), as Keka's geo-fencing. HR switches it on and lists the offices on
+-- Shifts > Clock-in. New tables and new nullable columns on attendance_punches; nothing older changes meaning.
+-- ---------------------------------------------------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS clock_in_policy (
+  id INT PRIMARY KEY CHECK (id = 1), enabled BOOLEAN NOT NULL DEFAULT false, need_location BOOLEAN NOT NULL DEFAULT false,
+  need_selfie BOOLEAN NOT NULL DEFAULT false, allow_outside BOOLEAN NOT NULL DEFAULT false, updated_by TEXT, updated_at TIMESTAMPTZ NOT NULL DEFAULT now());
+-- An office: a point and a radius in metres. A punch inside it is matched to it.
+CREATE TABLE IF NOT EXISTS clock_in_sites (
+  id SERIAL PRIMARY KEY, name TEXT NOT NULL, lat NUMERIC(9,6) NOT NULL CHECK (lat BETWEEN -90 AND 90), lng NUMERIC(9,6) NOT NULL CHECK (lng BETWEEN -180 AND 180),
+  radius_m INT NOT NULL CHECK (radius_m BETWEEN 30 AND 5000), created_by TEXT NOT NULL, created_at TIMESTAMPTZ NOT NULL DEFAULT now(), deleted_at TIMESTAMPTZ);
+-- A selfie taken to punch. The file is on disk (UPLOAD_DIR); kept 90 days, then deleted with its row (jobs.js).
+CREATE TABLE IF NOT EXISTS attendance_selfies (
+  id SERIAL PRIMARY KEY, email TEXT NOT NULL, stored TEXT NOT NULL, mime TEXT NOT NULL, size INT NOT NULL, upload_key TEXT,
+  punch_id INT REFERENCES attendance_punches(id) ON DELETE SET NULL, created_at TIMESTAMPTZ NOT NULL DEFAULT now());
+CREATE UNIQUE INDEX IF NOT EXISTS attendance_selfies_key ON attendance_selfies (upload_key) WHERE upload_key IS NOT NULL;
+CREATE INDEX IF NOT EXISTS attendance_selfies_created ON attendance_selfies (created_at);
+-- Where a web punch was made: the phone's reading, the nearest office's name then, how far, and whether it was outside every office.
+ALTER TABLE attendance_punches ADD COLUMN IF NOT EXISTS lat NUMERIC(9,6);
+ALTER TABLE attendance_punches ADD COLUMN IF NOT EXISTS lng NUMERIC(9,6);
+ALTER TABLE attendance_punches ADD COLUMN IF NOT EXISTS accuracy_m INT;
+ALTER TABLE attendance_punches ADD COLUMN IF NOT EXISTS site_name TEXT;
+ALTER TABLE attendance_punches ADD COLUMN IF NOT EXISTS distance_m INT;
+ALTER TABLE attendance_punches ADD COLUMN IF NOT EXISTS outside BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE attendance_punches ADD COLUMN IF NOT EXISTS selfie_id INT REFERENCES attendance_selfies(id) ON DELETE SET NULL;
+
+-- Saved custom reports (2026-11-24): a person's own named report definitions (Manage > Report builder). Running one checks
+-- access again each time; the columns and filters are keys from report-builder-rules.js, never SQL.
+CREATE TABLE IF NOT EXISTS saved_reports (
+  id SERIAL PRIMARY KEY, owner TEXT NOT NULL, name TEXT NOT NULL, dataset TEXT NOT NULL, columns JSONB NOT NULL DEFAULT '[]', filters JSONB NOT NULL DEFAULT '{}',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(), deleted_at TIMESTAMPTZ);
+CREATE INDEX IF NOT EXISTS saved_reports_owner ON saved_reports (lower(owner)) WHERE deleted_at IS NULL;
+
+-- Slack and Microsoft Teams channels (2026-11-24): incoming webhooks HR adds on Manage > Slack and Teams, and the company news
+-- each one gets (chat-rules.js EVENTS). The webhook link is a secret: stored encrypted (PAYROLL_ENCRYPTION_KEY), with a hint.
+CREATE TABLE IF NOT EXISTS chat_channels (
+  id SERIAL PRIMARY KEY, kind TEXT NOT NULL CHECK (kind IN ('slack','teams')), name TEXT NOT NULL, url_sealed TEXT NOT NULL, url_hint TEXT NOT NULL DEFAULT '',
+  events JSONB NOT NULL DEFAULT '[]', enabled BOOLEAN NOT NULL DEFAULT true, created_by TEXT NOT NULL, created_at TIMESTAMPTZ NOT NULL DEFAULT now(), deleted_at TIMESTAMPTZ);
+-- Every message tried: sent, skipped (a local server) or failed, with the reason.
+CREATE TABLE IF NOT EXISTS chat_outbox (
+  id SERIAL PRIMARY KEY, channel_id INT NOT NULL REFERENCES chat_channels(id) ON DELETE CASCADE, event TEXT NOT NULL, title TEXT NOT NULL,
+  status TEXT NOT NULL CHECK (status IN ('sent','skipped','failed')), error TEXT NOT NULL DEFAULT '', created_at TIMESTAMPTZ NOT NULL DEFAULT now());
+CREATE INDEX IF NOT EXISTS chat_outbox_recent ON chat_outbox (id DESC);
 
 COMMIT;

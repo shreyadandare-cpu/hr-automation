@@ -1,3 +1,4 @@
+import { localOnly } from "./live-services.js";
 import fs from "node:fs";
 import crypto from "node:crypto";
 import { JWT } from "google-auth-library";
@@ -7,7 +8,7 @@ const keyFile = process.env.GOOGLE_SERVICE_ACCOUNT_FILE;
 const adminEmail = process.env.GOOGLE_ADMIN_EMAIL;
 
 /** "live" when a service account and admin email are configured, otherwise "simulated". */
-export const googleMode = keyFile && adminEmail ? "live" : "simulated";
+export const googleMode = keyFile && adminEmail && !localOnly() ? "live" : "simulated";   // never live against a local database (live-services.js)
 
 let client;
 function authClient() {

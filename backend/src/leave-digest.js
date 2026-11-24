@@ -6,6 +6,7 @@ import { publicUrl } from "./mail.js";
 import { sendEmail } from "./notify.js";
 import { hrList } from "./leave-mail.js";
 import { COMPANY_LEGAL, MAROON, PRODUCT, SIGN_OFF } from "./brand.js";
+import { postToChat } from "./chat.js";
 
 /*
  * Daily leave digest: one email to each HR person, every working morning, listing everyone on approved leave today,
@@ -126,6 +127,9 @@ export async function runLeaveDigest(now = new Date()) {
   const { rowCount } = await pool.query(
     `INSERT INTO settings (key, value) VALUES ($1, $2) ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value WHERE settings.value < EXCLUDED.value`, [KEY, day]);
   if (!rowCount) return { skipped: "already sent" };
+  // The chat channels get names only: never the kind of leave (sick leave is private).
+  if (d.people.length) postToChat("leave_today", { title: `On leave today: ${d.people.length} ${d.people.length === 1 ? "person" : "people"}`,
+    text: d.people.map((p) => `${p.name}${p.leaves.every((l) => l.half) ? " (half day)" : ""}`).join(", "), link: "/app/dashboard" });
   if (!d.people.length && !sendEmpty()) return { skipped: "nobody on leave" };
   const mail = renderDigest(d), to = await recipients();
   for (const r of to) await sendEmail(r, mail.subject, mail.text, mail.html);

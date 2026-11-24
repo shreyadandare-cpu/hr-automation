@@ -45,7 +45,8 @@ festivalLookRouter.get("/festival-look", wrap(async (req, res) => {
 /* "Festivals" (festivals.manage) switches the festival look on or off. */
 festivalsRouter.put("/look", wrap(async (req, res) => {
   if (!mayKeepFestivals(req, res)) return;
-  const on = (req.body || {}).on !== false;
+  const on = (req.body || {}).on;
+  if (typeof on !== "boolean") return res.status(400).json({ error: "Please choose to switch the festival look on or off." });
   await pool.query("INSERT INTO settings (key, value) VALUES ('festival_look', $1) ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value", [on ? "on" : "off"]);
   res.json(await festivalNow());
 }));

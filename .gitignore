@@ -37,3 +37,6 @@ backend/attendance-bridge/bridge.old.log
 
 # HR reports with people's personal data (leave balances and the like): keep them out of git
 /LEAVE QUOTA*
+
+# Browser test screenshots and logs (may show staff data)
+.playwright-mcp/

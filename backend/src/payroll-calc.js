@@ -200,3 +200,10 @@ export function splitGross(monthlyGross) {
   fixed.push(["Special Allowance", Math.max(0, g - used)]);
   return fixed.map(([name, amount]) => ({ name, amount }));
 }
+
+/**
+ * An intern's salary structure: one line, the stipend, and nothing deducted (no PF, professional tax or TDS). The payroll engine also takes nothing off an intern
+ * whatever an old structure says (payroll/engine.js), so a person converted to an employee only needs a new structure from that month.
+ */
+export const stipendBody = (amount) => ({ earnings: [{ name: "Stipend", amount }], pfEmployee: 0, professionalTax: 0, employerPf: 0, esicEmployee: 0,
+  pfApplicable: false, ptApplicable: false, tdsApplicable: false, tdsMode: "auto" });

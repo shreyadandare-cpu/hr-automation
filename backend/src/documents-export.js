@@ -3,8 +3,9 @@ import { BRAND } from "./brand.js";
 
 /*
  * The documents workbook HR downloads (GET /api/documents/export): who has uploaded which document. Two sheets:
- *   1. Document status   one row per current employee, with each document type as Uploaded / Missing (a count for the types that take several files),
- *                        how many of the 8 types are in, and the date of the latest upload
+ *   1. Document status   one row per current employee: the PAN and Aadhaar numbers HR holds (full where stored, masked otherwise), then each document type as Uploaded (a file is in),
+ *                        Number on file (PAN and Aadhaar when only the masked number is held) or Missing (a count for the types that take several files),
+ *                        how many of the 8 types are on record, and the date of the latest upload
  *   2. Files             one row per uploaded file: person, document type, file name, size and upload date
  * Only names and dates go in: never the files themselves or their stored names. Pure given its inputs, so the layout can be tested.
  */
@@ -41,7 +42,7 @@ function sheet(wb, name, subtitle, columns, rows, paint) {
 }
 
 /**
- * data = { today, employees: [{ email, name, empNo, dept, title, status, start }], documents: [{ email, key, name, size, uploadedAt }] }
+ * data = { today, employees: [{ email, name, empNo, dept, title, status, start, pan, aadhaar }], documents: [{ email, key, name, size, uploadedAt }] }
  * Returns the workbook's buffer.
  */
 export async function buildDocumentsWorkbook(data, meta = {}) {
@@ -54,27 +55,30 @@ export async function buildDocumentsWorkbook(data, meta = {}) {
   for (const d of documents) { const k = lc(d.email); (filesOf.get(k) || filesOf.set(k, []).get(k)).push(d); }
   const nameOf = new Map(employees.map((e) => [lc(e.email), e.name]));
   const current = employees.filter((e) => e.status !== "offboarded").sort((a, b) => a.name.localeCompare(b.name));
-  const stamp = `Prepared ${data.today}${meta.generatedBy ? ` by ${meta.generatedBy}` : ""}. Names and dates only: the files themselves are opened in Wohlig One.`;
+  const stamp = `Prepared ${data.today}${meta.generatedBy ? ` by ${meta.generatedBy}` : ""}. The PAN and Aadhaar numbers are in this file, so keep it safe. The documents themselves are opened in Wohlig One.`;
 
   const statusRows = current.map((e) => {
     const mine = filesOf.get(lc(e.email)) || [];
     const row = { empNo: e.empNo || "", name: e.name, email: e.email, dept: e.dept || "", title: e.title || "", status: e.status === "onboarding" ? "Onboarding" : "Active", start: day(e.start) };
+    row.panNo = e.pan || ""; row.aadhaarNo = e.aadhaar || "";
+    const number = { pan: e.pan, aadhaar: e.aadhaar };   // the masked number counts as "on file" even when no scan has been uploaded
     let have = 0;
     for (const t of DOC_TYPES) {
       const n = mine.filter((f) => f.key === t.key).length;
-      if (n) have++;
-      row[t.key] = n ? (t.multi ? `${n} file${n === 1 ? "" : "s"}` : "Uploaded") : "Missing";
+      if (n || number[t.key]) have++;
+      row[t.key] = n ? (t.multi ? `${n} file${n === 1 ? "" : "s"}` : "Uploaded") : number[t.key] ? "Number on file" : "Missing";
     }
     row.have = `${have} of ${DOC_TYPES.length}`;
     row.files = mine.length;
     row.last = mine.map((f) => day(f.uploadedAt)).filter(Boolean).sort().pop() || "";
     return row;
   });
-  sheet(wb, "Document status", `${stamp} ${statusRows.filter((r) => r.files > 0).length} of ${statusRows.length} people have uploaded at least one document.`, [
+  sheet(wb, "Document status", `${stamp} ${statusRows.filter((r) => r.files > 0).length} of ${statusRows.length} people have uploaded a file; ${statusRows.filter((r) => r.panNo || r.aadhaarNo).length} have a PAN or Aadhaar number on file.`, [
     { header: "Employee Number", key: "empNo" }, { header: "Employee Name", key: "name", width: 26 }, { header: "Work email", key: "email", width: 30 },
     { header: "Department", key: "dept" }, { header: "Job Title", key: "title" }, { header: "Status", key: "status" }, { header: "Joined", key: "start" },
+    { header: "PAN", key: "panNo", width: 16 }, { header: "Aadhaar", key: "aadhaarNo", width: 18 },
     ...DOC_TYPES.map((t) => ({ header: t.name, key: t.key, width: 16 })),
-    { header: "Document types uploaded", key: "have" }, { header: "Files", key: "files" }, { header: "Last upload", key: "last" },
+    { header: "Document types on record", key: "have" }, { header: "Files", key: "files" }, { header: "Last upload", key: "last" },
   ], statusRows, (cell, col, r) => { if (DOC_TYPES.some((t) => t.key === col.key)) cell.fill = r[col.key] === "Missing" ? MISSING_FILL : OK_FILL; });
 
   const typeName = new Map(DOC_TYPES.map((t) => [t.key, t.name]));

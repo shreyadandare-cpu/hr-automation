@@ -135,7 +135,10 @@ export function computeLine({ period, employee = {}, structure, inputs = {}, lea
   if (lopDays) calc.push(`Loss of pay ${lopDays} day${lopDays === 1 ? "" : "s"} (${leaveLopDays || 0} from approved leave, ${inputs.lopDays || 0} entered): ${inr(fullGrossP)} ÷ ${lopDivisor} × ${lopDays} = ${inr(lopP)}.`);
 
   // 4. PF. Entered amount (prorated in a partial month), or 12% of earned Basic up to the wage ceiling.
-  const pfApplicable = s.pfApplicable ?? Number(s.pfEmployee) > 0;
+  // An intern is paid a stipend with nothing taken off: no PF, ESIC, professional tax or TDS, whatever an old structure says. When they become an employee,
+  // the type is changed on their profile and the next salary structure carries the usual deductions.
+  const intern = employee.employmentType === "Intern";
+  const pfApplicable = !intern && (s.pfApplicable ?? Number(s.pfEmployee) > 0);
   let pfP = 0, employerPfP = 0;
   if (pfApplicable && w.days) {
     const ceilingP = P(PF_WAGE_CEILING);
@@ -149,11 +152,11 @@ export function computeLine({ period, employee = {}, structure, inputs = {}, lea
   }
 
   // 4b. ESIC (employee): the amount entered on the salary structure, prorated in a partial month like PF. No rate is assumed.
-  const esicP = Number(s.esicEmployee) > 0 && w.days ? (share === 1 ? P(s.esicEmployee) : rupee(P(s.esicEmployee) * share)) : 0;
+  const esicP = !intern && Number(s.esicEmployee) > 0 && w.days ? (share === 1 ? P(s.esicEmployee) : rupee(P(s.esicEmployee) * share)) : 0;
   if (esicP) calc.push(`ESIC (employee) as set on the salary structure: ${inr(esicP)}.`);
 
   // 5. Professional tax, as set on the structure (state slab amount; Maharashtra takes ₹300 instead of ₹200 in February).
-  const ptApplicable = s.ptApplicable ?? Number(s.professionalTax) > 0;
+  const ptApplicable = !intern && (s.ptApplicable ?? Number(s.professionalTax) > 0);
   const ptMonthly = period.slice(5) === "02" && Number(s.ptFebruary) > 0 ? s.ptFebruary : s.professionalTax;
   const ptP = ptApplicable && w.days ? P(ptMonthly) : 0;
   if (ptApplicable && !ptP && structure && w.days) warnings.push("Professional tax applies but no amount is set.");
@@ -192,7 +195,9 @@ export function computeLine({ period, employee = {}, structure, inputs = {}, lea
   const yearIncomeP = fullGrossP * 12 + elsewhereP;
   const yearIncomeText = elsewhereP ? `${inr(yearIncomeP)} (this salary ${inr(fullGrossP * 12)} + earned elsewhere this year ${inr(elsewhereP)})` : inr(yearIncomeP);
   if (structure && w.days) {
-    if (s.tdsApplicable === false) {
+    if (intern) {
+      calc.push("TDS: none for an intern (stipend, nothing is deducted).");
+    } else if (s.tdsApplicable === false) {
       calc.push("TDS: not applicable for this employee (set on the salary structure).");
     } else if (mode === "manual") {
       const m = manualTds({ annualIncome: R(yearIncomeP), structure: s, always: oldRegime });

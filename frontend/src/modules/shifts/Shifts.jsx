@@ -29,7 +29,7 @@ export default function Shifts() {
   if (!views.length) return <section className="section"><SectionHead title="Shifts and overtime" /><div className="empty">Only the people given shift management or overtime approval can use this page.</div></section>;
   return (
     <section className="section">
-      <SectionHead title="Shifts and overtime" sub="The hours people work, who is on which shift, and the overtime to approve. Late arrival is marked on attendance only; nothing is deducted."
+      <SectionHead title="Shifts and overtime" sub="The hours people work, who is on which shift, and the overtime to approve. Late arrival and early leaving are not marked or deducted."
         tabs={views.length > 1 ? <ViewTabs label="Shifts and overtime" view={tab} onView={setTab} views={views} /> : null} />
       {tab === "shifts" ? <ShiftList /> : tab === "roster" ? <Roster /> : tab === "overtime" ? <Overtime /> : tab === "clockin" ? <ClockIn /> : <PaidStaff />}
     </section>

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api, apiMsg } from "../api.js";
-import { ListSkeleton, Pill, TableSkeletonRow } from "./ui.jsx";
+import { ListSkeleton, TableSkeletonRow } from "./ui.jsx";
 import Modal from "./Modal.jsx";
 
 /* The employee's attendance page, laid out like a standard HR attendance screen: stats, today's shift and the punch button on top,
@@ -8,14 +8,10 @@ import Modal from "./Modal.jsx";
 export const SHIFT = { start: "09:30", end: "18:30" };   // the default office shift, for days the server sent without one
 /** The shift of a day as the server worked it out (the roster or the default shift), or the default. */
 const shiftOf = (d) => (d && d.shift) || SHIFT;
-/* Late arrival, early leaving and overtime on a day, as marks only: nothing is deducted (company decision, 2026-11-24). */
-export function DayMarks({ d }) {
-  if (!d || !(d.late || d.early || d.overtimeMinutes)) return null;
-  return <span className="inline-flex flex-wrap gap-1 align-middle">
-    {d.late && <Pill tone="warn">{`Late ${d.lateBy} min`}</Pill>}
-    {d.early && <Pill tone="warn">{`Left ${d.earlyBy} min early`}</Pill>}
-    {d.overtimeMinutes > 0 && <Pill tone="info">{`Overtime ${dur(d.overtimeMinutes)}`}</Pill>}
-  </span>;
+/* Nothing is marked against a day any more: late arrival, early leaving and overtime are not shown on attendance (company decision, 2026-11-24). The callers keep
+   this component so a mark can be brought back here, in one place. Approved overtime for staff paid overtime is still handled in Shifts and payroll. */
+export function DayMarks() {
+  return null;
 }
 const MON = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"];
 const MONTH_LONG = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
@@ -211,8 +207,8 @@ const POLICY = {
     ["Bio-Metric & Web Clock-In", "Your attendance is automatically tracked using biometric device(s)."],
     ["On-duty (OD)", "You can request for only full day OD."],
     ["How days are counted", `Each day is counted against your shift (the default shift is ${clock(SHIFT.start)} to ${clock(SHIFT.end)}, with Saturday and Sunday off). Hours come from your punches, each IN with the next OUT. Six hours or more is a present day and three to six hours is a half day. Your shift's days off and holidays are not expected working days.`],
-    ["Late arrival and early leaving", "Arriving after your shift starts plus its grace period (15 minutes on the default shift) is marked Late, and leaving before it ends is marked Left early. They are shown to you, your manager and HR only; nothing is deducted."],
-    ["Overtime", "Time worked beyond your shift on a working day is shown as overtime. For staff paid overtime, HR or your manager approves it each month and payroll adds the payment to your payslip. Work on a day off earns a comp-off instead."],
+    ["Late arrival and early leaving", "Late arrival and early leaving are not marked or penalised: nothing is shown against your days and nothing is deducted."],
+    ["Overtime", "Time worked beyond your shift is not marked on your days. For staff paid overtime, HR or your manager approves it each month and payroll adds the payment to your payslip. Work on a day off earns a comp-off instead."],
   ] },
 };
 export function PolicyModal({ onClose }) {

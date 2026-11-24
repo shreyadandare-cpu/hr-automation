@@ -6,6 +6,7 @@ import { can, canAll, isSuper, mayDecide, need, needAll, scopeOf, treeOf } from 
 import { approverOf, approverMap, coveredBy, hrLeaveApprovers, reportsOf } from "./teams.js";
 import { tellLeave } from "./leave-mail.js";
 import { buildLeaveWorkbook } from "./leave-export.js";
+import { previewOf } from "./excel-preview.js";
 import { compare, parseHolidays, readTable, templateXlsx } from "./holiday-import.js";
 
 const num = (v) => (v === null || v === undefined ? null : Number(v));
@@ -511,6 +512,7 @@ export function leaveRouter(wrap) {
         manager: e.manager, location: e.work_location, casualOpening: num(e.casual_opening), openings: e.leave_opening || null })),
       requests: reqs.rows.map(toRequest), compOffs: comps.rows.map(toCompOff), holidays: hols.rows,
     }, { generatedBy: req.user.email });
+    if (req.query.preview) return res.json(await previewOf(Buffer.from(buffer)));   // ?preview=1: what the file holds, to look at before downloading
     res.set({ "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "Content-Disposition": `attachment; filename="Leave-${year}.xlsx"`, "Cache-Control": "no-store" });
     res.send(Buffer.from(buffer));
   }));

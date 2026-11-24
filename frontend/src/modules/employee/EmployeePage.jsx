@@ -6,7 +6,8 @@ import { useAuth } from "../../auth.jsx";
 import { useData } from "../../data.jsx";
 import ConfirmDialog from "../../components/ConfirmDialog.jsx";
 import Modal from "../../components/Modal.jsx";
-import { Avatar, Icon, pill, PageSkeleton, LineSkeleton } from "../../components/ui.jsx";
+import { Avatar, Icon, pill, PageSkeleton, LineSkeleton, RevealValue } from "../../components/ui.jsx";
+import { tenureText } from "../../lib/tenure.js";
 import { useToast } from "../../components/toast.jsx";
 import { NEW_FROM, TOOLS, isTop, leaving, mgrOf, toolIds } from "../../lib/people.js";
 import { inr, lc, useLeave } from "../../lib/useLeave.js";
@@ -35,6 +36,12 @@ function EmpPill({ e }) {
 
 /* Edit details ("Edit people", people.edit): the reporting manager and employee ID are saved on the server, which checks the person again.
    Name, work email, job title, joining date and department have no server record yet, so they stay on this page (as in the old one). */
+const openId = async (email, field) => {
+  const r = await api("POST", "/api/employees/ids/reveal", { email, field });
+  if (!r.ok) throw new Error((r.data && r.data.error) || "It could not be opened. Please try again.");
+  return r.data.value;   // null when only the masked number is held
+};
+
 function EditModal({ e, people, onClose, onPayroll }) {
   const toast = useToast();
   const { can, canAll } = useAuth();
@@ -139,7 +146,7 @@ function EmployeeView({ p }) {
   // What this viewer may do here. The server checks each action again, for this person.
   const edits = can("people.edit"), runsOn = canAll("onboarding.manage"), runsOff = canAll("offboarding.manage");
   const tools = canAll("tools.manage"), logins = canAll("users.manage"), setsPay = canAll("leave.manage");
-  const { people, docs, records, reload, claudeMode } = useData();
+  const { people, docs, records, profile, reload, claudeMode } = useData();
   const lv = useLeave();
   const toast = useToast();
   const loc = useLocal(p.email);
@@ -169,6 +176,10 @@ function EmployeeView({ p }) {
   const e = { ...p, ...(loc.edits || {}), baseEmail: p.email, status, grants, errors, laptop: loc.laptop, lastDay: rec && rec.lastDay ? String(rec.lastDay).slice(0, 10) : p.lastDay };
   const scheduled = !!(rec && rec.status === "scheduled");
   const isMe = lc(user.email) === lc(p.email);
+  // Masked PAN and Aadhaar: the person themselves and company-wide HR only (the server decides; people from the old system have no onboarding record, so this is read directly).
+  const [idNums, setIdNums] = useState(null);
+  const seesIds = isMe || canAll("people.view") || canAll("documents.view") || canAll("onboarding.manage");
+  useEffect(() => { if (!seesIds) return; let live = true; api("GET", `/api/employees/ids?email=${encodeURIComponent(p.email)}`).then((r) => { if (live) setIdNums(r.ok ? r.data : false); }); return () => { live = false; }; }, [seesIds, p.email]);
 
   /* The checklist: tool steps are automatic, the rest are ticked by hand. */
   const phase = status === "offboarding" || status === "offboarded" ? "off" : "on";
@@ -259,6 +270,13 @@ function EmployeeView({ p }) {
           <div><dt>Reporting manager</dt><dd>{mgrOf(e) || "—"}</dd></div>
           <div><dt>Works from</dt><dd>{e.location || "—"}</dd></div>
           <div><dt>{status === "offboarded" ? "Left on" : "Last working day"}</dt><dd>{status === "offboarded" ? fdate(e.lastDay) : e.lastDay ? fdate(e.lastDay) : "Not set"}</dd></div>
+          <div><dt>Time at Wohlig</dt><dd>{tenureText(e.start, status === "offboarded" ? e.lastDay : null) || "—"}</dd></div>
+          <div><dt>Phone number</dt><dd>{e.phone || <span className="muted">Not on file</span>}</dd></div>
+          {/* PAN and Aadhaar, masked: only the person themselves and HR (the server sends the HR records to people who run onboarding) see them here. */}
+          {seesIds && idNums !== false && <>
+            <div><dt>PAN</dt><dd>{idNums === null ? <LineSkeleton width="w-24" /> : <RevealValue value={idNums.pan} label={isMe ? "your PAN" : "PAN"} fetchFull={() => openId(p.email, "pan")} />}</dd></div>
+            <div><dt>Aadhaar</dt><dd>{idNums === null ? <LineSkeleton width="w-28" /> : <RevealValue value={idNums.aadhaar} label={isMe ? "your Aadhaar" : "Aadhaar"} fetchFull={() => openId(p.email, "aadhaar")} />}</dd></div>
+          </>}
         </dl>
       </div>
       <div className="grid g-main">

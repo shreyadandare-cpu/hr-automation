@@ -530,7 +530,7 @@ R.get("/joiners", hrOnly, wrap(async (req, res) => {
 R.get("/profile/:email", hrOnly, wrap(async (req, res) => {
   const email = lc(req.params.email), month = istMonth();
   const { rows: [e] } = await pool.query(
-    "SELECT name, emp_no, title, dept, start_date, last_day, status, pan_masked, employment_type, onboarded_at FROM employees WHERE lower(work_email)=$1", [email]);
+    "SELECT name, emp_no, title, dept, start_date, last_day, status, pan_masked, employment_type, onboarded_at, to_char(converted_on, 'YYYY-MM-DD') AS converted_on FROM employees WHERE lower(work_email)=$1", [email]);
   if (!e) return res.status(404).json({ error: "Employee not found." });
   const [{ rows: all }, { rows: [b] }] = await Promise.all([
     pool.query("SELECT * FROM salary_structures WHERE lower(work_email)=$1 ORDER BY effective_from", [email]),
@@ -539,7 +539,7 @@ R.get("/profile/:email", hrOnly, wrap(async (req, res) => {
   const inForce = [...all].reverse().find((x) => x.effective_from <= month) || all[0] || null, st = inForce ? toStructure(inForce) : null;
   const joinMonth = e.start_date ? String(e.start_date).slice(0, 7) : null;
   res.json({
-    name: e.name, empNo: e.emp_no, title: e.title, dept: deptOf(e.dept, e.title), employmentType: e.employment_type || "Employee", start: e.start_date, lastDay: e.last_day, status: e.status,
+    name: e.name, empNo: e.emp_no, title: e.title, dept: deptOf(e.dept, e.title), employmentType: e.employment_type || "Employee", convertedOn: e.converted_on || null, start: e.start_date, lastDay: e.last_day, status: e.status,
     onboarding: e.status === "onboarding" && !e.onboarded_at, paidFrom: joinMonth, joinsLater: !!joinMonth && joinMonth > month, leaving: !!e.last_day,
     profile: payrollProfile({ hasSalary: !!st, hasBank: !!b, pan: e.pan_masked }),
     salary: st ? { effectiveFrom: st.effectiveFrom, monthlyGross: st.earnings.reduce((n, x) => n + Number(x.amount || 0), 0), annualCtc: st.annualCtc, revisions: all.length } : null,

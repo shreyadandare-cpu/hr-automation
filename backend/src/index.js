@@ -63,10 +63,11 @@ app.use(timing);   // Server-Timing on every response, and a log line for slow /
 app.use(securityHeaders);
 app.use(sameOriginWrites);   // a form on another website cannot change anything here
 app.use(loadSession);
-// Payroll keeps its own copy of the staff list when it runs on its own database: bring it up to date before Payroll and payslip pages are read, and right after
+// Payroll keeps its own copy of the staff list when it runs on its own database: bring it up to date in the background when Payroll and payslip pages are read, and right after
 // any change made through the app (an employee ID, a name, a joiner), so what was just edited shows on every page (payroll/employee-sync.js).
 app.use("/api", (req, res, next) => {
-  if (req.method === "GET") { if (/^\/(payroll|payslips)(\/|$)/.test(req.path)) return syncEmployees().then(() => next(), () => next()); return next(); }
+  // A page read never waits for the copy: changes made through the app are copied right after they are saved (below), so this is only a safety net.
+  if (req.method === "GET") { if (/^\/(payroll|payslips)(\/|$)/.test(req.path)) syncEmployees().catch(() => {}); return next(); }
   res.on("finish", () => { if (res.statusCode < 400) syncEmployees({ force: true }); });
   next();
 });

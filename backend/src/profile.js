@@ -91,6 +91,12 @@ const ownDob = async (email) => {
   return rows[0] && rows[0].dob ? rows[0].dob : "";
 };
 
+/** The masked PAN and Aadhaar on the employee record. Shown on the person's own profile, read only: the app never keeps the full numbers, and HR corrects them. */
+const ownIds = async (email) => {
+  const { rows } = await pool.query("SELECT pan_masked, aadhaar_masked FROM employees WHERE lower(work_email)=$1", [email.toLowerCase()]);
+  return { pan: (rows[0] && rows[0].pan_masked) || "", aadhaar: (rows[0] && rows[0].aadhaar_masked) || "" };
+};
+
 const photoVersion = async (email) => {
   const { rows } = await pool.query("SELECT updated_at FROM profile_photos WHERE lower(email)=$1", [email.toLowerCase()]);
   return rows[0] ? new Date(rows[0].updated_at).getTime() : null;
@@ -98,7 +104,7 @@ const photoVersion = async (email) => {
 
 profileRouter.get("/", wrap(async (req, res) => {
   const { rows } = await pool.query("SELECT data FROM profiles WHERE lower(email)=$1", [req.user.email.toLowerCase()]);
-  res.json({ ...(rows[0]?.data || {}), photoV: await photoVersion(req.user.email), employeeDob: await ownDob(req.user.email) });
+  res.json({ ...(rows[0]?.data || {}), photoV: await photoVersion(req.user.email), employeeDob: await ownDob(req.user.email), ids: await ownIds(req.user.email) });
 }));
 
 profileRouter.put("/", wrap(async (req, res) => {
@@ -121,7 +127,7 @@ profileRouter.put("/", wrap(async (req, res) => {
     await pool.query(`UPDATE employees SET ${cols.map((k, i) => `${k}=$${i + 2}`).join(", ")} WHERE lower(work_email)=$1`, [mine, ...cols.map((k) => shared[k])]);
     await pool.query("INSERT INTO audit_log (action, work_email) VALUES ($1,$2)", [`Profile saved: ${cols.map((k) => k.replace("_", " ")).join(", ")} updated on the employee record`, mine]);
   }
-  res.json({ ...data, photoV: await photoVersion(req.user.email), employeeDob: await ownDob(req.user.email) });
+  res.json({ ...data, photoV: await photoVersion(req.user.email), employeeDob: await ownDob(req.user.email), ids: await ownIds(req.user.email) });
 }));
 
 /* Profile photo: one picture per person. The page crops it square before sending, so it is small. */

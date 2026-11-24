@@ -3,6 +3,7 @@ import { DropdownMenu } from "radix-ui";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { api, apiMsg } from "../api.js";
 import { useAuth } from "../auth.jsx";
+import ExcelPreview from "../components/ExcelPreview.jsx";
 import { useToast } from "../components/toast.jsx";
 import { useData } from "../data.jsx";
 import { PageTabs, PersonCell, Pill, SectionHead, ToolIcon, shortDate, pill, PageSkeleton } from "../components/ui.jsx";
@@ -59,6 +60,8 @@ export default function Employees() {
   // people.edit: Edit on a row for the people in scope (everyone for the whole company); moving anyone between managers
   // and seeing former employees are company-wide; the Claude status refresh belongs to tool access.
   const editsAll = canAll("people.edit"), seesFormer = canAll("people.view") || editsAll, managesTools = canAll("tools.manage");
+  const downloads = canAll("people.view") || canAll("documents.view") || canAll("onboarding.manage");   // everyone's details as Excel, for company-wide HR
+  const excel = downloads && <ExcelPreview url="/api/employees/export" title="Employee details" />;
   const { people, reload, claudeMode } = useData();
   const presence = usePresence();
   const toast = useToast();
@@ -114,7 +117,7 @@ export default function Employees() {
     const shown = all.filter((p) => !dept || p.dept === dept);
     return (
       <section className="section">
-        <SectionHead title="Employees" sub="Everyone at Wohlig. Select a person to open their page." tabs={views} />
+        <SectionHead title="Employees" sub="Everyone at Wohlig. Select a person to open their page." tabs={views} actions={excel} />
         <div className="card">
           <div className="filters">
             <select className="input" aria-label="Department" value={dept} onChange={(e) => setDept(e.target.value)}><option value="">All departments</option>{depts.map((d) => <option key={d}>{d}</option>)}</select>
@@ -146,6 +149,7 @@ export default function Employees() {
     <section className="section">
       <SectionHead title="Employees" sub="Everyone with a record here, and which tools they can use right now." tabs={views}
         actions={<>
+          {excel}
           {managesTools && claudeMode !== "simulated" && <button type="button" className="btn glass sm" disabled={refreshing} onClick={refreshClaude}>{refreshing ? "Checking…" : "Refresh Claude status"}</button>}
           {seesFormer && formerCount > 0 && <label className="former-toggle"><input type="checkbox" checked={former} onChange={(e) => { setFormer(e.target.checked); setPage(1); }} />Show exited employees ({formerCount})</label>}
           <input className="input" placeholder="Search by name, ID, project, location or email" aria-label="Search employees" value={q} onChange={(e) => { setQ(e.target.value); setPage(1); }} />

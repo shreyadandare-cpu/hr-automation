@@ -4,9 +4,16 @@ import { api, apiMsg } from "../api.js";
 import { useAuth } from "../auth.jsx";
 import { useData } from "../data.jsx";
 import { useToast } from "../components/toast.jsx";
-import { Avatar, Icon, Person, Pill, SectionHead, ToolIcon, initials, shortDate, pill, PageSkeleton } from "../components/ui.jsx";
+import { Avatar, Icon, Person, Pill, SectionHead, ToolIcon, initials, shortDate, pill, PageSkeleton, RevealValue } from "../components/ui.jsx";
 import { Card as IdCardPreview } from "../modules/idcard/IdCard.jsx";
 import { STATUS, TOOLS, chainOf, leaving, docCount, mgrOf, toolIds } from "../lib/people.js";
+
+// The full PAN or Aadhaar, opened one at a time when the eye is pressed (null when only the masked number is held).
+const openId = async (email, field) => {
+  const r = await api("POST", "/api/employees/ids/reveal", { email, field });
+  if (!r.ok) throw new Error((r.data && r.data.error) || "It could not be opened. Please try again.");
+  return r.data.value;
+};
 
 const OPTS = {
   gender: ["", "Female", "Male", "Other", "Prefer not to say"],
@@ -81,6 +88,7 @@ export default function Profile() {
   const d = profileData(me, profile, record);
   const photo = profile.photoV ? `/api/profile/photo?v=${profile.photoV}` : "";
   const nDocs = docCount(docs, me.email);
+  const ids = (profile && profile.ids) || {};   // masked PAN and Aadhaar from the employee record (read only)
   const steps = [!!photo, !!d.about, !!d.primary.dob, !!d.addresses.current.line, d.education.length > 0, nDocs > 0];
   const pct = Math.round(steps.filter(Boolean).length / steps.length * 100);
   const city = [d.addresses.current.city, d.addresses.current.state].filter(Boolean).join(", ");
@@ -210,6 +218,11 @@ export default function Profile() {
           <div id="pf-sec-contact" style={{ display: "flex", flexDirection: "column", gap: 22 }}>
             {section("contact")}<div className="pf2-pair">{section("current")}{section("permanent")}</div>
           </div>
+          <div className="card" id="pf-sec-ids"><div className="card-h"><h3>Identity</h3><span className="muted">Only you and the HR team can see this</span></div><div className="card-b">
+            <dl className="rv"><div><dt>PAN</dt><dd><RevealValue value={ids.pan} label="your PAN" fetchFull={() => openId(me.email, "pan")} /></dd></div>
+              <div><dt>Aadhaar</dt><dd><RevealValue value={ids.aadhaar} label="your Aadhaar" fetchFull={() => openId(me.email, "aadhaar")} /></dd></div></dl>
+            <div className="muted" style={{ marginTop: 10 }}>These come from your records. If one is missing or wrong, please ask the HR team to correct it.</div>
+          </div></div>
           <div className="card" id="pf-sec-work"><div className="card-h"><h3>Work</h3><span className="muted">Set by HR</span></div><div className="card-b">
             <dl className="rv"><div><dt>Employee no.</dt><dd className="mono">{me.no || "Not assigned"}</dd></div><div><dt>Work email</dt><dd className="mono">{me.email}</dd></div>
               <div><dt>Department</dt><dd>{me.dept || "—"}</dd></div><div><dt>Date of joining</dt><dd>{me.start ? shortDate(me.start) : "—"}</dd></div></dl>

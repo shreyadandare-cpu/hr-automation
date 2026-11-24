@@ -1,4 +1,5 @@
 /* Small building blocks shared by every page. Styled with Tailwind classes (the Wohlig theme is in styles.css). */
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { Tabs } from "radix-ui";
 
@@ -20,6 +21,40 @@ export const DownloadIcon = () => (
 export const ViewIcon = () => (
   <svg className="dl-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z" /><circle cx="12" cy="12" r="3" /></svg>
 );
+
+/** A private value (a PAN or an Aadhaar number) that stays hidden until the eye is pressed. `value` is the masked form HR holds (its presence means "on file");
+ *  `fetchFull` (optional) is asked for the full number when the eye is pressed, one number at a time, and the full number is dropped again on hide and after
+ *  30 seconds. If only the masked form is stored, that is shown. Only the person and HR are ever sent either. `label` names it for screen readers.
+ *  The eye is a 44px button; the icons carry their own size so they never stretch. */
+export function RevealValue({ value, label, fetchFull, empty = "Not on file" }) {
+  const [full, setFull] = useState(null), [shown, setShown] = useState(false), [busy, setBusy] = useState(false), [problem, setProblem] = useState("");
+  useEffect(() => { if (!shown) return undefined; const t = setTimeout(() => { setShown(false); setFull(null); }, 30000); return () => clearTimeout(t); }, [shown]);
+  if (!value) return <span className="muted">{empty}</span>;
+  const toggle = async () => {
+    if (shown) { setShown(false); setFull(null); return; }
+    setProblem("");
+    if (fetchFull) {
+      setBusy(true);
+      try { setFull(await fetchFull()); } catch (e) { setProblem(e && e.message ? e.message : "It could not be opened. Please try again."); setBusy(false); return; }
+      setBusy(false);
+    }
+    setShown(true);
+  };
+  return (
+    <span className="inline-flex flex-wrap items-center gap-x-1">
+      <span className="font-mono" aria-live="polite">{shown ? full || value : "••••••••••"}</span>
+      <button type="button" aria-pressed={shown} aria-label={`${shown ? "Hide" : "Show"} ${label}`} title={`${shown ? "Hide" : "Show"} ${label}`} disabled={busy}
+        className="-my-2.5 inline-grid size-11 shrink-0 cursor-pointer place-items-center rounded-field border-0 bg-transparent p-0 text-ink-dim hover:bg-tint hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-0 focus-visible:outline-accent disabled:opacity-50"
+        onClick={toggle}>
+        <svg className="size-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+          {shown ? <><path d="M3 3l18 18" /><path d="M10.6 5.1A10.7 10.7 0 0 1 12 5c6.4 0 10 7 10 7a17 17 0 0 1-3.2 4M6.5 6.6C3.7 8.4 2 12 2 12s3.6 7 10 7c1.5 0 2.9-.4 4.1-1" /><path d="M9.9 9.9a3 3 0 0 0 4.2 4.2" /></>
+            : <><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z" /><circle cx="12" cy="12" r="3" /></>}
+        </svg>
+      </button>
+      {problem && <span className="w-full text-sm text-bad" role="alert">{problem}</span>}
+    </span>
+  );
+}
 
 export const Smile = () => (
   <svg className="smile" viewBox="0 0 34 10" fill="none" aria-hidden="true">

@@ -11,8 +11,11 @@ export function toolAccessRouter(wrap) {
   // The audit log: every recorded action, newest first. "Audit log" (audit.view) only.
   r.get("/api/audit", needAll("audit.view"), wrap(async (req, res) => {
     const limit = Math.min(Number(req.query.limit) || 200, 1000);
+    // ?email= gives one person's history (their profile page), read on the server instead of fetching everyone's and filtering in the browser.
+    const who = String(req.query.email || "").trim().toLowerCase();
     const { rows } = await pool.query(
-      `SELECT a.id, a.ts, a.action, a.work_email, e.name FROM audit_log a LEFT JOIN employees e ON lower(e.work_email)=lower(a.work_email) ORDER BY a.ts DESC, a.id DESC LIMIT $1`, [limit]);
+      `SELECT a.id, a.ts, a.action, a.work_email, e.name FROM audit_log a LEFT JOIN employees e ON lower(e.work_email)=lower(a.work_email)
+        ${who ? "WHERE lower(a.work_email)=$2" : ""} ORDER BY a.ts DESC, a.id DESC LIMIT $1`, who ? [limit, who] : [limit]);
     res.json(rows.map((r) => ({ id: r.id, ts: r.ts, action: r.action, email: r.work_email, name: r.name || null })));
   }));
 

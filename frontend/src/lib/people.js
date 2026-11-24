@@ -42,7 +42,7 @@ export function buildPerson(r, i, toolRows, offs) {
   const errors = {};
   for (const t of toolRows) if (String(t.email).toLowerCase() === String(r.email).toLowerCase()) { grants[t.tool] = t.status; if (t.status === "failed") errors[t.tool] = t.detail; }
   return {
-    id: r.id, no: r.no || "Not assigned", name: r.name, email: r.email, start, title, dept: deptOf(title), manager: r.manager || "", managerEmail: String(r.managerEmail || "").toLowerCase(),
+    id: r.id, no: r.no || "Not assigned", name: r.name, email: r.email, phone: r.phone || "", start, title, dept: deptOf(title), manager: r.manager || "", managerEmail: String(r.managerEmail || "").toLowerCase(),
     lastDay, intern: r.employmentType === "Intern", mailPlan: r.mailPlan || (isTop({ title }) ? "Business" : "Starter"), location: r.location || "", projects: r.projects || [], photoV: r.photoV || 0, status, grants, errors, color: AVATAR_COLORS[i % AVATAR_COLORS.length],
   };
 }

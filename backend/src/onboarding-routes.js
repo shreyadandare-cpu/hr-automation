@@ -56,7 +56,8 @@ const RECORD_SQL = `SELECT e.*, EXISTS (SELECT 1 FROM users u WHERE lower(u.emai
 const loadRecord = async (email) =>
   (await pool.query(`${RECORD_SQL} WHERE lower(e.work_email)=$1`, [email.toLowerCase()])).rows[0];
 const draftId = (req) => req.user.email.toLowerCase(); // each HR user has their own draft
-const kindOf = (d) => (d && d.kind === "Intern" ? "Intern" : "Employee");
+// Intern when HR chose it, or when the job title says so (for example "GenAI Interns"): an intern is paid a stipend with nothing deducted.
+const kindOf = (d) => (d && (d.kind === "Intern" || /\bintern/i.test(String(d.title || ""))) ? "Intern" : "Employee");
 
 
 /*

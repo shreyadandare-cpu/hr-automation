@@ -69,7 +69,7 @@ try {
   ok("Test 1: Asha requests ₹20,000 for 2 months", r.s === 201 && /^LN-\d{4}-\d{4}$/.test(r.d.loanNo), JSON.stringify(r.d));
   const loanA = r.d.id;
   r = await call(a, "GET", "/api/loans/mine");
-  ok("it is Pending HR approval with an estimated instalment of ₹10,000, and nothing approved yet", r.d.loans[0].status === "pending" && r.d.loans[0].estimatedMonthly === 10000 && r.d.loans[0].approvedAmount === null);
+  ok("it is Pending HR approval with an estimated installment of ₹10,000, and nothing approved yet", r.d.loans[0].status === "pending" && r.d.loans[0].estimatedMonthly === 10000 && r.d.loans[0].approvedAmount === null);
   ok("a second request while one is waiting is refused (409)", (await call(a, "POST", "/api/loans", { amount: 5000, months: 1, reason: "Another" })).s === 409);
   ok("no deduction exists yet: requesting does not start salary deductions", (await db.query("SELECT 1 FROM employee_advances WHERE lower(work_email)=$1", [A])).rowCount === 0);
 
@@ -89,14 +89,14 @@ try {
   r = await call(hr, "GET", `/api/loans/${loanA}/review?amount=20000&months=2&first=${PERIOD}`);
   ok("Test 3: the breakdown is ₹10,000 a month for 2 months, total ₹20,000", r.s === 200 && r.d.plan.monthly === 10000 && r.d.plan.count === 2 && r.d.schedule.length === 2 && r.d.schedule.reduce((n, x) => n + x.amount, 0) === 20000, JSON.stringify(r.d));
   r = await call(hr, "GET", `/api/loans/${loanA}/review?amount=10000&months=3&first=${PERIOD}`);
-  ok("an uneven amount: ₹3,333.34, ₹3,333.34 and a last instalment of ₹3,333.32", r.d.schedule.map((x) => x.amount).join() === "3333.34,3333.34,3333.32", JSON.stringify(r.d.schedule));
+  ok("an uneven amount: ₹3,333.34, ₹3,333.34 and a last installment of ₹3,333.32", r.d.schedule.map((x) => x.amount).join() === "3333.34,3333.34,3333.32", JSON.stringify(r.d.schedule));
   r = await call(hr, "GET", `/api/loans/${loanA}/review?amount=70000&months=1&first=${PERIOD}`);
-  ok("an instalment above the salary is blocked with a plain message, never a negative net", r.d.blocked && /salary/.test(r.d.blocked), JSON.stringify(r.d));
+  ok("an installment above the salary is blocked with a plain message, never a negative net", r.d.blocked && /salary/.test(r.d.blocked), JSON.stringify(r.d));
 
   // ---- activation checks, then Test 2 ----
   const ok20 = { amount: 20000, months: 2, firstMonth: PERIOD, disbursedOn: TODAY, remarks: "Approved", confirmPaid: true };
   ok("activating needs the payment confirmation (400)", (await call(hr, "POST", `/api/loans/${loanA}/activate`, { ...ok20, confirmPaid: false })).s === 400);
-  ok("an instalment above the salary cannot be activated (400)", (await call(hr, "POST", `/api/loans/${loanA}/activate`, { ...ok20, amount: 70000, months: 1 })).s === 400);
+  ok("an installment above the salary cannot be activated (400)", (await call(hr, "POST", `/api/loans/${loanA}/activate`, { ...ok20, amount: 70000, months: 1 })).s === 400);
   ok("a payment date in the future is refused (400)", (await call(hr, "POST", `/api/loans/${loanA}/activate`, { ...ok20, disbursedOn: month(3) + "-01" })).s === 400);
   ok("still not active after the refused attempts: no deduction exists", (await db.query("SELECT 1 FROM employee_advances WHERE lower(work_email)=$1", [A])).rowCount === 0 && (await call(hr, "GET", `/api/loans/${loanA}`)).d.loan.status === "pending");
   r = await call(hr, "POST", `/api/loans/${loanA}/activate`, ok20);
@@ -110,7 +110,7 @@ try {
   r = await call(b, "POST", "/api/loans", { amount: 50000, months: 2, reason: "House deposit" });
   const loanB = r.d.id;
   r = await call(hr, "POST", `/api/loans/${loanB}/activate`, { amount: 30000, months: 3, firstMonth: PERIOD, disbursedOn: TODAY, confirmPaid: true });
-  ok("Test 4/5: HR approves ₹30,000 instead of ₹50,000 over 3 months: the instalment is recalculated to ₹10,000", r.s === 200, JSON.stringify(r.d));
+  ok("Test 4/5: HR approves ₹30,000 instead of ₹50,000 over 3 months: the installment is recalculated to ₹10,000", r.s === 200, JSON.stringify(r.d));
   r = await call(b, "GET", `/api/loans/${loanB}`);
   ok("the approved amount, not the requested one, is what counts (₹30,000, ₹10,000 a month, total ₹30,000)", r.d.loan.requestedAmount === 50000 && r.d.loan.approvedAmount === 30000 && r.d.loan.monthly === 10000 && r.d.schedule.reduce((n, x) => n + x.amount, 0) === 30000 && r.d.events.some((e) => /changed amount/.test(e.action)), JSON.stringify(r.d.loan));
   r = await call(b, "POST", "/api/loans", { amount: 8000, months: 2, reason: "Gadget" });
@@ -152,11 +152,11 @@ try {
   ok("payroll for the month is generated and approved", r.s === 200, JSON.stringify(r.d));
   await new Promise((ok2) => setTimeout(ok2, 800));
   const rec = await db.query("SELECT r.amount, r.payroll_period FROM advance_recoveries r JOIN employee_advances a ON a.id = r.advance_id WHERE a.loan_id = $1", [loanA]);
-  ok("Test 8: the first instalment is recorded once for that month and reduces the balance", rec.rowCount === 1 && Number(rec.rows[0].amount) === 10000 && rec.rows[0].payroll_period === PERIOD, JSON.stringify(rec.rows));
+  ok("Test 8: the first installment is recorded once for that month and reduces the balance", rec.rowCount === 1 && Number(rec.rows[0].amount) === 10000 && rec.rows[0].payroll_period === PERIOD, JSON.stringify(rec.rows));
   r = await call(a, "GET", `/api/loans/${loanA}`);
   ok("outstanding ₹10,000, repaid ₹10,000 (50%), installment 1 paid, 1 remaining, still active", r.d.loan.repaid === 10000 && r.d.loan.outstanding === 10000 && r.d.loan.percent === 50 && r.d.paidCount === 1 && r.d.remainingCount === 1 && r.d.loan.status === "active" && r.d.schedule[0].status === "paid", JSON.stringify([r.d.loan, r.d.schedule]));
   ok("Test 11: after approval, recalculating that month still shows one ₹10,000 deduction", (await loanDed(PERIOD, A))[0].amount === 10000 && (await loanDed(PERIOD, A)).length === 1);
-  ok("the next month's instalment is ₹10,000", (await loanDed(P2, A))[0].amount === 10000);
+  ok("the next month's installment is ₹10,000", (await loanDed(P2, A))[0].amount === 10000);
   r = await call(hr, "GET", `/api/loans/${loanA2}/review?amount=5000&months=1&first=${PERIOD}`);
   ok("a first deduction month in a month that is already approved is refused", r.d.firstMonthError && /already approved/.test(r.d.firstMonthError), JSON.stringify(r.d));
   const l4 = await call(c, "POST", "/api/loans", { amount: 5000, months: 1, reason: "Test" });

@@ -1,9 +1,9 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { checkPunch, distanceM, farText, nearestSite, readPoint, readSite, selfieType } from "../src/clockin-rules.js";
+import { checkPunch, distanceM, farText, nearestSite, readPoint, readPolicy, readSite } from "../src/clockin-rules.js";
 
 const office = { id: 1, name: "Mumbai office", lat: 19.0760, lng: 72.8777, radius: 150 };
-const on = { enabled: true, needLocation: true, needSelfie: false, allowOutside: false };
+const on = { enabled: true, needLocation: true, allowOutside: false };
 
 test("distance: zero at the same point, about 1.11 km for 0.01 degree of latitude", () => {
   assert.equal(distanceM(office, office), 0);
@@ -23,30 +23,25 @@ test("office: name, position and a radius from 30 to 5,000 m", () => {
   assert.ok(e.name && e.lat && e.lng && e.radius);
 });
 test("punch: inside the office is matched to it", () => {
-  const r = checkPunch(on, [office], { lat: 19.0765, lng: 72.8777, accuracy: 20 }, false);
+  const r = checkPunch(on, [office], { lat: 19.0765, lng: 72.8777, accuracy: 20 });
   assert.equal(r.ok, true); assert.equal(r.siteId, 1); assert.equal(r.outside, false); assert.ok(r.distance < 150);
 });
 test("punch: outside every office is refused, or kept and flagged when HR allows it", () => {
   const far = { lat: 19.2, lng: 72.9, accuracy: 20 };
-  const no = checkPunch(on, [office], far, false);
+  const no = checkPunch(on, [office], far);
   assert.equal(no.ok, false); assert.match(no.error, /km from Mumbai office/);
-  const yes = checkPunch({ ...on, allowOutside: true }, [office], far, false);
+  const yes = checkPunch({ ...on, allowOutside: true }, [office], far);
   assert.equal(yes.ok, true); assert.equal(yes.outside, true);
 });
-test("punch: location, precision and selfie when asked", () => {
-  assert.match(checkPunch(on, [office], null, false).error, /allow location/);
-  assert.match(checkPunch(on, [office], { lat: 19.0760, lng: 72.8777, accuracy: 5000 }, false).error, /not precise/);
-  assert.match(checkPunch({ ...on, needSelfie: true }, [office], { lat: 19.0760, lng: 72.8777, accuracy: 5 }, false).error, /selfie/);
-  assert.equal(checkPunch({ ...on, needLocation: false }, [office], null, false).ok, true, "location not asked: fine without it");
-  assert.equal(checkPunch(on, [], { lat: 1, lng: 1, accuracy: 5 }, false).ok, true, "no offices listed: the location is only recorded");
+test("punch: location and precision when asked; never a selfie", () => {
+  assert.match(checkPunch(on, [office], null).error, /allow location/);
+  assert.match(checkPunch(on, [office], { lat: 19.0760, lng: 72.8777, accuracy: 5000 }).error, /not precise/);
+  assert.equal(checkPunch({ ...on, needLocation: false }, [office], null).ok, true, "location not asked: fine without it");
+  assert.equal(checkPunch(on, [], { lat: 1, lng: 1, accuracy: 5 }).ok, true, "no offices listed: the location is only recorded");
+  assert.ok(!("needSelfie" in readPolicy({ enabled: true, needSelfie: true })), "a selfie setting is ignored");
+  assert.equal(checkPunch({ ...on, needSelfie: true }, [office], { lat: 19.0760, lng: 72.8777, accuracy: 5 }).ok, true, "a stray selfie setting never blocks a punch");
 });
 test("nearest office of several", () => {
   const pune = { id: 2, name: "Pune office", lat: 18.5204, lng: 73.8567, radius: 200 };
   assert.equal(nearestSite([office, pune], { lat: 18.521, lng: 73.857 }).site.id, 2);
-});
-test("selfie: only JPEG or WebP, by the first bytes", () => {
-  assert.equal(selfieType(Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0, 0, 0, 0, 0, 0, 0, 0])).mime, "image/jpeg");
-  assert.equal(selfieType(Buffer.from("RIFF0000WEBPVP8 ")).mime, "image/webp");
-  assert.equal(selfieType(Buffer.from("<svg onload=alert(1)></svg>")), null);
-  assert.equal(selfieType(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0, 0, 0, 0, 0, 0, 0, 0])), null, "PNG is not accepted");
 });

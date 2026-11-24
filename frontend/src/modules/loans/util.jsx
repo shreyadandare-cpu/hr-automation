@@ -19,5 +19,5 @@ export const monthName = (p) => { if (!p) return "—"; const [y, m] = p.split("
 export const thisMonth = () => new Date(Date.now() + 5.5 * 3600e3).toISOString().slice(0, 7);
 export const nextMonth = () => { const [y, m] = thisMonth().split("-").map(Number); return m === 12 ? `${y + 1}-01` : `${y}-${String(m + 1).padStart(2, "0")}`; };
 export const today = () => new Date(Date.now() + 5.5 * 3600e3).toISOString().slice(0, 10);
-/* The same rounding as the server (loans-rules.js): the instalment is rounded up to the paisa so the last one is the exact remainder. The server's figure is the one that counts. */
+/* The same rounding as the server (loans-rules.js): the installment is rounded up to the paisa so the last one is the exact remainder. The server's figure is the one that counts. */
 export const monthlyOf = (amount, months) => (Number(amount) > 0 && Number(months) >= 1 ? Math.ceil(Math.round((Number(amount) / Math.floor(Number(months))) * 1e6) / 1e4) / 100 : 0);

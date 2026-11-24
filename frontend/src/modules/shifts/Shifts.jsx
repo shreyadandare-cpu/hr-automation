@@ -239,12 +239,11 @@ function PaidStaff() {
   );
 }
 
-/* ---------- clock-in: web punching, location and selfie, and the offices ---------- */
+/* ---------- clock-in: web punching, location, and the offices ---------- */
 const SWITCHES = [
   ["enabled", "Let everyone punch in and out from the app", "The button appears on Home. The office machine keeps working as before."],
   ["needLocation", "Ask for the person's location", "The punch is checked against the offices below. With no office listed, the location is only recorded."],
   ["allowOutside", "Keep punches made outside every office, and flag them", "When this is off, a punch outside every office is refused and the person asks HR to add it."],
-  ["needSelfie", "Ask for a selfie", "A small picture is taken with the punch. You and the manager can open it; it is deleted after 90 days."],
 ];
 function ClockIn() {
   const { data, error, reload } = useList("/api/attendance/clock-in");
@@ -255,7 +254,7 @@ function ClockIn() {
   if (!data || !data.sites) return <div className="card"><ListSkeleton faces={false} rows={4} /></div>;
   const save = async () => {
     setBusy(true);
-    const r = await api("PUT", "/api/attendance/clock-in", { enabled: !!cur.enabled, needLocation: !!cur.needLocation, needSelfie: !!cur.needSelfie, allowOutside: !!cur.allowOutside });
+    const r = await api("PUT", "/api/attendance/clock-in", { enabled: !!cur.enabled, needLocation: !!cur.needLocation, allowOutside: !!cur.allowOutside });
     setBusy(false);
     if (!r.ok) { toast(apiMsg(r)); return; }
     setF(null); toast("Clock-in settings saved."); reload();

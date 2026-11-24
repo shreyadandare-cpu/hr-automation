@@ -6,11 +6,7 @@ import { can, canAll, need, needAll, scopeOf } from "./access.js";
 import { managerMap } from "./teams.js";
 import { dayMarks, isWeeklyOff, minutesOf, shiftOn, statusFromMinutes } from "./shift-rules.js";
 import { shiftsFor } from "./shifts.js";
-import crypto from "node:crypto";
-import fs from "node:fs/promises";
-import path from "node:path";
-import { UPLOAD_DIR } from "./documents.js";
-import { checkPunch, farText, readPoint, readPolicy, readSite, SELFIE_KEEP_DAYS, SELFIE_MAX, selfieType } from "./clockin-rules.js";
+import { checkPunch, farText, readPoint, readPolicy, readSite } from "./clockin-rules.js";
 
 /* A reporting manager sees their own team (the people HR set under them); there is no separate manager login role. */
 const teamEmails = async (email) => Object.entries(await managerMap(pool)).filter(([, rm]) => rm === email).map(([e]) => e);
@@ -30,10 +26,9 @@ const nowIst = async (db) => (await db.query(
   `SELECT to_char(now() AT TIME ZONE '${IST}','YYYY-MM-DD') AS day, to_char(now() AT TIME ZONE '${IST}','HH24:MI:SS') AS time`)).rows[0];
 const audit = (db, action, email) => db.query("INSERT INTO audit_log (action, work_email) VALUES ($1,$2)", [action, email]);
 
-// A punch from the app may say where it was made (the nearest office, how far, outside every office) and have a selfie.
+// A punch from the app may say where it was made (the nearest office, how far, outside every office).
 const toPunch = (p) => ({ id: p.id, date: p.work_date, time: hhmm(p.punch_time), direction: p.direction, source: p.source, note: p.note,
-  place: p.site_name || p.distance_m !== null && p.distance_m !== undefined ? { site: p.site_name || null, distance: p.distance_m, outside: !!p.outside } : null,
-  selfie: p.selfie_id || null });
+  place: p.site_name || p.distance_m !== null && p.distance_m !== undefined ? { site: p.site_name || null, distance: p.distance_m, outside: !!p.outside } : null });
 
 /** Minutes worked from a day's punches in time order: each IN pairs with the next OUT. An IN with no OUT counts to `until` (today) or nothing. */
 function worked(punches, until) {
@@ -108,7 +103,7 @@ const monthRange = (month) => {
 async function monthOf(emp, month) {
   const [from, to] = monthRange(month);
   const [p, l, h, now, sh] = await Promise.all([
-    pool.query(`SELECT id, to_char(work_date,'YYYY-MM-DD') AS work_date, punch_time, direction, source, note, site_name, distance_m, outside, selfie_id FROM attendance_punches
+    pool.query(`SELECT id, to_char(work_date,'YYYY-MM-DD') AS work_date, punch_time, direction, source, note, site_name, distance_m, outside FROM attendance_punches
                 WHERE employee_id=$1 AND work_date BETWEEN $2 AND $3 ORDER BY work_date, punch_time, id`, [emp.id, from, to]),
     pool.query(`SELECT to_char(from_date,'YYYY-MM-DD') AS f, to_char(to_date,'YYYY-MM-DD') AS t, half FROM leave_requests
                 WHERE lower(work_email)=$1 AND status='approved' AND from_date<=$3 AND to_date>=$2`, [emp.work_email.toLowerCase(), from, to]),
@@ -132,7 +127,7 @@ export async function monthsFor(month, emails = null) {
     pool.query(`SELECT id, emp_no, name, work_email, title, start_date, last_day, work_location FROM employees
                 WHERE (status <> 'offboarded' OR last_day >= $1) AND (start_date IS NULL OR start_date <= $2) AND (last_day IS NULL OR last_day >= $1)
                 ${list ? "AND lower(work_email) = ANY($3)" : ""}`, list ? [from, to, list] : [from, to]),
-    pool.query(`SELECT p.employee_id, p.id, to_char(p.work_date,'YYYY-MM-DD') AS work_date, p.punch_time, p.direction, p.source, p.note, p.site_name, p.distance_m, p.outside, p.selfie_id FROM attendance_punches p
+    pool.query(`SELECT p.employee_id, p.id, to_char(p.work_date,'YYYY-MM-DD') AS work_date, p.punch_time, p.direction, p.source, p.note, p.site_name, p.distance_m, p.outside FROM attendance_punches p
                 ${list ? "JOIN employees e ON e.id = p.employee_id AND lower(e.work_email) = ANY($3)" : ""}
                 WHERE p.work_date BETWEEN $1 AND $2 ORDER BY p.work_date, p.punch_time, p.id`, list ? [from, to, list] : [from, to]),
     pool.query(`SELECT lower(work_email) AS e, to_char(from_date,'YYYY-MM-DD') AS f, to_char(to_date,'YYYY-MM-DD') AS t, half FROM leave_requests
@@ -158,16 +153,9 @@ export async function monthsFor(month, emails = null) {
 export const webClockOn = () => String(process.env.WEB_CLOCK_IN || "").toLowerCase() === "true";
 /** HR's clock-in settings (Shifts > Clock-in). Web punching is on when HR switched it on there, or WEB_CLOCK_IN=true. */
 export async function clockPolicy(db = pool) {
-  const { rows: [x] } = await db.query("SELECT enabled, need_location, need_selfie, allow_outside FROM clock_in_policy WHERE id=1");
-  return { enabled: webClockOn() || !!(x && x.enabled), needLocation: !!(x && x.need_location), needSelfie: !!(x && x.need_selfie), allowOutside: !!(x && x.allow_outside),
+  const { rows: [x] } = await db.query("SELECT enabled, need_location, allow_outside FROM clock_in_policy WHERE id=1");
+  return { enabled: webClockOn() || !!(x && x.enabled), needLocation: !!(x && x.need_location), allowOutside: !!(x && x.allow_outside),
     fromEnv: webClockOn() };
-}
-/** Selfies older than SELFIE_KEEP_DAYS, and ones never used for a punch, are deleted with their files (jobs.js, hourly). */
-export async function purgeSelfies() {
-  const { rows } = await pool.query(`DELETE FROM attendance_selfies WHERE created_at < now() - make_interval(days => $1)
-    OR (punch_id IS NULL AND created_at < now() - interval '1 day') RETURNING stored`, [SELFIE_KEEP_DAYS]);
-  for (const x of rows) await fs.rm(path.join(UPLOAD_DIR, path.basename(x.stored)), { force: true }).catch(() => {});
-  return { removed: rows.length };
 }
 
 export function attendanceRouter(wrap) {
@@ -180,12 +168,12 @@ export function attendanceRouter(wrap) {
     const emp = await employeeByEmail(pool, me(req));
     if (!emp) return res.status(404).json({ error: "Your employee record was not found. Ask HR to check your work email." });
     const now = await nowIst(pool);
-    const ps = (await pool.query(`SELECT id, to_char(work_date,'YYYY-MM-DD') AS work_date, punch_time, direction, source, note, site_name, distance_m, outside, selfie_id FROM attendance_punches
+    const ps = (await pool.query(`SELECT id, to_char(work_date,'YYYY-MM-DD') AS work_date, punch_time, direction, source, note, site_name, distance_m, outside FROM attendance_punches
       WHERE employee_id=$1 AND work_date=$2 ORDER BY punch_time, id`, [emp.id, now.day])).rows.map(toPunch);
     const w = worked(ps, mins(now.time));
     const pol = await clockPolicy();
     res.json({ date: now.day, time: hhmm(now.time), punches: ps, state: ps.length && ps[ps.length - 1].direction === "IN" ? "in" : "out", minutes: w.minutes,
-      canPunch: pol.enabled, needLocation: pol.enabled && pol.needLocation, needSelfie: pol.enabled && pol.needSelfie });
+      canPunch: pol.enabled, needLocation: pol.enabled && pol.needLocation });
   }));
 
   // Who is in right now, for the directory and the dashboard (everyone signed in may read it). People who work away from the
@@ -210,17 +198,13 @@ export function attendanceRouter(wrap) {
   r.post("/api/attendance/punch", wrap(async (req, res) => {
     const pol = await clockPolicy();
     if (!pol.enabled && !canAll(req, "attendance.edit")) return res.status(403).json({ error: "Attendance is recorded by the office machine. If a punch is missing, please ask HR to add it." });
-    // Location and selfie: checked against HR's offices only when web clock-in is on (HR's own fix-up punches skip it).
+    // Location: checked against HR's offices only when web clock-in is on (HR's own fix-up punches skip it). No selfie is ever asked for.
     const { point, error: pointError } = readPoint(req.body || {});
     if (pointError) return res.status(400).json({ error: pointError });
-    const selfieKey = String((req.body && req.body.selfieKey) || "");
-    const selfie = selfieKey ? (await pool.query("SELECT id FROM attendance_selfies WHERE upload_key=$1 AND lower(email)=$2 AND punch_id IS NULL AND created_at > now() - interval '15 minutes'",
-      [selfieKey, me(req)])).rows[0] : null;
-    if (selfieKey && !selfie) return res.status(400).json({ error: "Your selfie has expired. Please take it again." });
     let where = { siteId: null, distance: null, outside: false };
     if (pol.enabled) {
       const sites = (await pool.query("SELECT id, name, lat::float8 AS lat, lng::float8 AS lng, radius_m AS radius FROM clock_in_sites WHERE deleted_at IS NULL LIMIT 200")).rows;
-      const check = checkPunch(pol, sites, point, !!selfie);
+      const check = checkPunch(pol, sites, point);
       if (!check.ok) return res.status(400).json({ error: check.error });
       where = { ...check, siteName: check.siteId ? sites.find((x) => x.id === check.siteId).name : null };
     }
@@ -235,58 +219,30 @@ export function attendanceRouter(wrap) {
         "SELECT direction, punch_time FROM attendance_punches WHERE employee_id=$1 AND work_date=$2 ORDER BY punch_time DESC, id DESC LIMIT 1", [emp.id, now.day])).rows[0];
       if (last && mins(now.time) - mins(last.punch_time) < 1) { await client.query("ROLLBACK"); return res.status(429).json({ error: "You just punched. Wait a minute before punching again." }); }
       const direction = last && last.direction === "IN" ? "OUT" : "IN";
-      const { rows: [made] } = await client.query(
-        `INSERT INTO attendance_punches (employee_id, work_date, punch_time, direction, source, created_by, lat, lng, accuracy_m, site_name, distance_m, outside, selfie_id)
-         VALUES ($1,$2,$3,$4,'web',$5,$6,$7,$8,$9,$10,$11,$12) RETURNING id`,
+      await client.query(
+        `INSERT INTO attendance_punches (employee_id, work_date, punch_time, direction, source, created_by, lat, lng, accuracy_m, site_name, distance_m, outside)
+         VALUES ($1,$2,$3,$4,'web',$5,$6,$7,$8,$9,$10,$11)`,
         [emp.id, now.day, now.time, direction, me(req), point ? point.lat : null, point ? point.lng : null, point ? point.accuracy : null,
-          where.siteName || null, where.distance, !!where.outside, selfie ? selfie.id : null]);
-      if (selfie) await client.query("UPDATE attendance_selfies SET punch_id=$2, upload_key=NULL WHERE id=$1", [selfie.id, made.id]);
+          where.siteName || null, where.distance, !!where.outside]);
       await client.query("COMMIT");
       res.json({ direction, time: hhmm(now.time), place: where.siteName ? { site: where.siteName, distance: where.distance, outside: !!where.outside } : null,
         note: where.outside ? `Recorded ${farText(where.distance)} from ${where.siteName}. HR can see this.` : "" });
     } catch (err) { await client.query("ROLLBACK"); throw err; } finally { client.release(); }
   }));
 
-  /* The selfie for a punch: sent first (a small JPEG or WebP the browser made), then named in the punch within 15 minutes. */
-  r.post("/api/attendance/selfie", express.raw({ type: () => true, limit: SELFIE_MAX + 1024 }), wrap(async (req, res) => {
-    const pol = await clockPolicy();
-    if (!pol.enabled) return res.status(403).json({ error: "Web clock-in is not switched on." });
-    const buf = req.body;
-    if (!Buffer.isBuffer(buf) || !buf.length) return res.status(400).json({ error: "Please take a selfie first." });
-    if (buf.length > SELFIE_MAX) return res.status(400).json({ error: "The selfie is too large. Please take it again." });
-    const type = selfieType(buf);
-    if (!type) return res.status(400).json({ error: "The selfie must be a JPEG or WebP picture." });
-    const stored = `selfie-${crypto.randomUUID()}.${type.ext}`, key = crypto.randomBytes(24).toString("hex");
-    await fs.mkdir(UPLOAD_DIR, { recursive: true });
-    await fs.writeFile(path.join(UPLOAD_DIR, stored), buf);
-    await pool.query("INSERT INTO attendance_selfies (email, stored, mime, size, upload_key) VALUES ($1,$2,$3,$4,$5)", [me(req), stored, type.mime, buf.length, key]);
-    res.status(201).json({ key });
-  }));
-  /* A punch's selfie: the person's own, or for whoever may see their attendance (attendance.view in scope, or their manager). */
-  r.get("/api/attendance/selfies/:id", wrap(async (req, res) => {
-    const { rows: [x] } = await pool.query("SELECT email, stored, mime FROM attendance_selfies WHERE id=$1 AND punch_id IS NOT NULL", [Number(req.params.id) || 0]);
-    const email = x ? x.email.toLowerCase() : "";
-    if (!x || (email !== me(req) && !(await can(req, "attendance.view", email)) && !(await teamEmails(me(req))).includes(email)))
-      return res.status(404).json({ error: "This picture was not found. Selfies are kept for 90 days." });
-    const file = path.join(UPLOAD_DIR, path.basename(x.stored));
-    try { await fs.access(file); } catch { return res.status(404).json({ error: "This picture was not found. Selfies are kept for 90 days." }); }
-    res.set({ "Content-Type": x.mime, "X-Content-Type-Options": "nosniff", "Cache-Control": "private, max-age=31536000, immutable" });
-    res.sendFile(file);
-  }));
-
   /* ---------- HR: clock-in settings and offices (shifts.manage for the whole company) ---------- */
   const settingsOut = async () => {
     const [pol, sites] = await Promise.all([clockPolicy(), pool.query(
       "SELECT id, name, lat::float8 AS lat, lng::float8 AS lng, radius_m AS radius FROM clock_in_sites WHERE deleted_at IS NULL ORDER BY name LIMIT 200")]);
-    return { ...pol, sites: sites.rows, keepDays: SELFIE_KEEP_DAYS };
+    return { ...pol, sites: sites.rows };
   };
   r.get("/api/attendance/clock-in", needAll("shifts.manage"), wrap(async (_req, res) => res.json(await settingsOut())));
   r.put("/api/attendance/clock-in", needAll("shifts.manage"), wrap(async (req, res) => {
     const x = readPolicy(req.body);
-    await pool.query(`INSERT INTO clock_in_policy (id, enabled, need_location, need_selfie, allow_outside, updated_by, updated_at) VALUES (1,$1,$2,$3,$4,$5,now())
-      ON CONFLICT (id) DO UPDATE SET enabled=$1, need_location=$2, need_selfie=$3, allow_outside=$4, updated_by=$5, updated_at=now()`,
-      [x.enabled, x.needLocation, x.needSelfie, x.allowOutside, me(req)]);
-    await audit(pool, `Clock-in settings: ${x.enabled ? "on" : "off"}, location ${x.needLocation ? "needed" : "not needed"}, selfie ${x.needSelfie ? "needed" : "not needed"}`, me(req));
+    await pool.query(`INSERT INTO clock_in_policy (id, enabled, need_location, allow_outside, updated_by, updated_at) VALUES (1,$1,$2,$3,$4,now())
+      ON CONFLICT (id) DO UPDATE SET enabled=$1, need_location=$2, allow_outside=$3, updated_by=$4, updated_at=now()`,
+      [x.enabled, x.needLocation, x.allowOutside, me(req)]);
+    await audit(pool, `Clock-in settings: ${x.enabled ? "on" : "off"}, location ${x.needLocation ? "needed" : "not needed"}`, me(req));
     res.json(await settingsOut());
   }));
   r.post("/api/attendance/clock-in/sites", needAll("shifts.manage"), wrap(async (req, res) => {
@@ -331,7 +287,7 @@ export function attendanceRouter(wrap) {
     if (!L.validDate(date)) return res.status(400).json({ error: "Date must look like 2026-10-21." });
     const [emps, ps, lv, hol, sh] = await Promise.all([
       pool.query("SELECT id, name, work_email, title, start_date, last_day, work_location FROM employees WHERE status <> 'offboarded' ORDER BY name"),
-      pool.query(`SELECT employee_id, to_char(work_date,'YYYY-MM-DD') AS work_date, punch_time, direction, source, note, site_name, distance_m, outside, selfie_id, id FROM attendance_punches WHERE work_date=$1 ORDER BY punch_time, id`, [date]),
+      pool.query(`SELECT employee_id, to_char(work_date,'YYYY-MM-DD') AS work_date, punch_time, direction, source, note, site_name, distance_m, outside, id FROM attendance_punches WHERE work_date=$1 ORDER BY punch_time, id`, [date]),
       pool.query("SELECT lower(work_email) AS e, half FROM leave_requests WHERE status='approved' AND from_date<=$1 AND to_date>=$1", [date]),
       pool.query("SELECT name FROM holidays WHERE day=$1", [date]),
       shiftsFor(pool, date, date),

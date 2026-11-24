@@ -62,3 +62,13 @@ export function onboardingErrors({ d = {}, ids = {}, apps }) {
   if (!Array.isArray(apps)) e.apps = "Say whether this person needs Claude access.";   // an empty list is fine: no access needed for now
   return e;
 }
+
+// PAN and Aadhaar. A PAN is five letters, four digits and a letter. An Aadhaar is 12 digits whose last digit is a Verhoeff check digit, so a mistyped digit is caught.
+const VD = [[0,1,2,3,4,5,6,7,8,9],[1,2,3,4,0,6,7,8,9,5],[2,3,4,0,1,7,8,9,5,6],[3,4,0,1,2,8,9,5,6,7],[4,0,1,2,3,9,5,6,7,8],[5,9,8,7,6,0,4,3,2,1],[6,5,9,8,7,1,0,4,3,2],[7,6,5,9,8,2,1,0,4,3],[8,7,6,5,9,3,2,1,0,4],[9,8,7,6,5,4,3,2,1,0]];
+const VP = [[0,1,2,3,4,5,6,7,8,9],[1,5,7,6,2,8,3,0,9,4],[5,8,0,3,7,9,6,1,4,2],[8,9,1,6,0,4,3,5,2,7],[9,4,5,3,1,2,6,8,7,0],[4,2,8,6,5,7,3,9,0,1],[2,7,9,3,8,0,6,4,1,5],[7,0,4,6,9,1,3,2,5,8]];
+export const verhoeff = (s) => { let c = 0; [...String(s)].reverse().forEach((ch, i) => { c = VD[c][VP[i % 8][Number(ch)]]; }); return c === 0; };
+export const cleanPan = (v) => String(v || "").replace(/\s+/g, "").toUpperCase();
+export const validPan = (v) => /^[A-Z]{5}[0-9]{4}[A-Z]$/.test(cleanPan(v));
+export const cleanAadhaar = (v) => String(v || "").replace(/\D/g, "");
+export const validAadhaar = (v) => cleanAadhaar(v).length === 12 && verhoeff(cleanAadhaar(v));
+export const formatAadhaar = (v) => cleanAadhaar(v).replace(/(\d{4})(?=\d)/g, "$1 ");

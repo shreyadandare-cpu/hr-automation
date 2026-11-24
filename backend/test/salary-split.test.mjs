@@ -47,3 +47,13 @@ test("TDS under the old regime is worked out below 12 lakh too, as Keka does (th
   assert.equal(fixed("old"), 2500, "a fixed amount is deducted under the old regime whatever the income");
   assert.equal(fixed("new"), 0, "and under the new regime only above 12 lakh");
 });
+
+test("TDS above 12 lakh: the new regime's tax on the full year, one twelfth a month, even for a September joiner", () => {
+  // 15 lakh a year: taxable 14,50,000 (₹50,000 standard deduction) → tax 97,500 + 4% cess = 1,01,400 → ₹8,450 a month
+  assert.equal(tdsFor(125000, "new", "2026-10"), 8450);
+  const joined = computeLine({ period: "2026-10", employee: { start: "2026-09-01" }, structure: { earnings: [{ name: "Basic", amount: 125000 }] },
+    tax: { rules: rules("new"), regime: "new", declaration: {}, paidSoFar: { taxable: 0, tds: 0, pt: 0 } } });
+  assert.equal(joined.summary.tds, 8450);
+  assert.equal(tdsFor(100000, "new", "2026-10"), 0);          // 12 lakh: none
+  assert.equal(tdsFor(150000, "new", "2026-10"), 13000);      // 18 lakh a year: the company sample payslip
+});

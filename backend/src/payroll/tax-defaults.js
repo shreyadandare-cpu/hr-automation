@@ -8,7 +8,7 @@
  */
 const NEW_REGIME = {
   label: "New regime (115BAC) – default",
-  standardDeduction: 75000,
+  standardDeduction: 50000,   // as on Wohlig's sample payslip (₹1,50,000 a month → ₹13,000 TDS): the new-regime slabs with a ₹50,000 standard deduction
   slabs: [
     { upTo: 400000, rate: 0 }, { upTo: 800000, rate: 5 }, { upTo: 1200000, rate: 10 }, { upTo: 1600000, rate: 15 },
     { upTo: 2000000, rate: 20 }, { upTo: 2400000, rate: 25 }, { upTo: null, rate: 30 },
@@ -33,8 +33,8 @@ const OLD_REGIME = {
 };
 
 export const DEFAULT_TAX_RULES = [
-  { fy: "2025-26", regime: "new", rules: NEW_REGIME, source: "Finance Act 2025" },
+  { fy: "2025-26", regime: "new", rules: NEW_REGIME, source: "Finance Act 2025 slabs; standard deduction ₹50,000 as on the company payslip" },
   { fy: "2025-26", regime: "old", rules: OLD_REGIME, source: "Finance Act 2025" },
-  { fy: "2026-27", regime: "new", rules: NEW_REGIME, source: "Finance Act 2026: no change to slabs, rebate or standard deduction" },
+  { fy: "2026-27", regime: "new", rules: NEW_REGIME, source: "Finance Act 2026 slabs; standard deduction ₹50,000 as on the company payslip" },
   { fy: "2026-27", regime: "old", rules: OLD_REGIME, source: "Finance Act 2026: no change to slabs, rebate or standard deduction" },
 ];

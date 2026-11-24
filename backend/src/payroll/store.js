@@ -167,7 +167,7 @@ export async function buildLines(db, period, runId = null, existing = []) {
     const slip = computeLine({
       period,
       employee: { name: e.name, empNo: e.emp_no, title: e.title, dept: deptOf(e.dept, e.title), start: e.start_date, lastDay: e.last_day, pan: e.pan_masked || "", dob: e.dob,
-        pfNumber: e.pf_number, paymentMode: bank || e.acct_masked ? "Bank Transfer" : null },
+        pfNumber: e.pf_number, employmentType: e.employment_type, paymentMode: bank || e.acct_masked ? "Bank Transfer" : null },
       structure, inputs, leaveLopDays: lopOf.get(k) || 0, overtimeApprovedMinutes: overtime.get(k) || 0, advanceRecoveries: hold ? [] : instalments.get(k) || [], claims: R(myClaims.reduce((n, c) => n + P(pay(c)), 0)), adjustments: myAdj,
       tax: { rules: rulesOf[regime] || null, regime, declaration: decl ? decl.declaration : {}, paidSoFar: withOpening(paid.get(k), decl && decl.declaration),
         source: declOf.get(k) ? "payroll" : fromOwn ? "employee" : "none", hra: fromOwn ? fromOwn.hra : null, lta: fromOwn ? fromOwn.lta : null },

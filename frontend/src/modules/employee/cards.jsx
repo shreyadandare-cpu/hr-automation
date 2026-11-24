@@ -361,17 +361,22 @@ export function ReimbCard({ e }) {
 
 /* ---------- history (the real server audit, filtered to this person) ---------- */
 export function HistoryCard({ email }) {
-  const [rows, setRows] = useState(null);
+  const [rows, setRows] = useState(null), [all, setAll] = useState(false);
+  const SHOWN = 5;   // the latest few; the rest open on request, and the whole log is on the Audit page
   useEffect(() => {
-    api("GET", "/api/audit?limit=1000").then((r) => setRows(r.ok ? r.data.filter((a) => lc(a.email) === lc(email)) : []));
+    setAll(false);
+    api("GET", `/api/audit?email=${encodeURIComponent(email)}&limit=100`).then((r) => setRows(r.ok ? r.data : []));
   }, [email]);
+  const list = rows && !all ? rows.slice(0, SHOWN) : rows;
   return (
     <div className="card"><div className="card-h"><h3>History</h3><Link className="btn link" to="/app/audit">Full audit log</Link></div>
       <div style={{ paddingBottom: 12 }}>
-        {rows === null ? <ListSkeleton /> : rows.length ? rows.map((a) => (
+        {rows === null ? <ListSkeleton /> : rows.length ? <>{list.map((a) => (
           <div className="tl" key={a.id}><span className="dot" style={{ background: /failed/i.test(a.action) ? "var(--bad)" : "var(--ok)" }} /><div style={{ minWidth: 0 }}>
-            <div style={{ fontSize: 14 }}><b style={{ fontWeight: 600 }}>{a.name || a.email}</b> · {a.action}</div><div className="meta">{fts(new Date(a.ts))}</div></div></div>
-        )) : <div className="empty">No recorded actions yet.</div>}
+            <div style={{ fontSize: 14 }}>{a.action}</div><div className="meta">{fts(new Date(a.ts))}</div></div></div>
+        ))}
+          {rows.length > SHOWN && <div className="px-6 pt-2"><button type="button" className="btn link" onClick={() => setAll(!all)}>{all ? "Show fewer" : `Show all ${rows.length}`}</button></div>}
+        </> : <div className="empty">No recorded actions yet.</div>}
       </div></div>
   );
 }

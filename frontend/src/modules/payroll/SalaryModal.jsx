@@ -42,6 +42,7 @@ export default function SalaryModal({ email, onClose }) {
   const [f, setF] = useState(null);
   const [er, setEr] = useState({});
   const [gross, setGross] = useState("");
+  const [stipend, setStipend] = useState(null);   // an intern: the one amount a month, null until typed
   const [auto, setAuto] = useState(false);   // the lines were filled by the format and not edited since, so a new CTC may refill them
   const [busy, setBusy] = useState(false);
   const [read, setRead] = useState(null);   // what was read from an uploaded payslip, shown for HR to check
@@ -114,6 +115,37 @@ export default function SalaryModal({ email, onClose }) {
     if (!r.ok) { setEr((r.data && r.data.errors) || {}); toast(apiMsg(r)); return; }
     toast(`Salary structure saved for ${info.name}.`); reloadLeave(); onClose(true);
   };
+
+  // An intern is paid one amount, the stipend, and nothing is deducted (no PF, professional tax or TDS): a short form with that single option. When they are
+  // taken on as an employee, the type is changed on their profile and the full form below is used for the new salary.
+  if (info.employmentType === "Intern") {
+    const amount = stipend === null ? (monthly ? String(monthly) : "") : stipend;
+    const saveStipend = async (e) => {
+      e.preventDefault();
+      if (!(Number(amount) > 0)) return setEr({ stipend: "Enter the monthly stipend in rupees." });
+      if (revision && f.reason.trim().length < 3) return setEr({ reason: "Say why the stipend is revised." });
+      setBusy(true);
+      const r = await api("PUT", `/api/payroll/structures/${encodeURIComponent(email)}`, { effectiveFrom: f.effectiveFrom, reason: f.reason, earnings: [{ name: "Stipend", amount }] });
+      setBusy(false);
+      if (!r.ok) { setEr((r.data && r.data.errors) || {}); toast(apiMsg(r)); return; }
+      toast(`Stipend saved for ${info.name}.`); reloadLeave(); onClose(true);
+    };
+    return (
+      <Modal onClose={() => onClose()}><form onSubmit={saveStipend} noValidate className="sal-form">
+        <div className="card-h" style={{ paddingTop: 24 }}><h3>Stipend: {info.name}</h3><Pill tone="info">Intern</Pill></div>
+        <div className="card-b form">
+          <Callout>An intern is paid one amount a month and nothing is deducted: no PF, professional tax or TDS. If {info.name.split(" ")[0]} is taken on as an employee, change their type on their profile and set a full salary.</Callout>
+          <Field id="sal-from" label="Applies from" hint="This month and later use it." error={er.effectiveFrom}>
+            <input className="input" id="sal-from" type="month" value={f.effectiveFrom} onChange={set("effectiveFrom")} /></Field>
+          <Field id="sal-stipend" label="Monthly stipend (₹)" error={er.stipend || er.earnings}>
+            <input className="input" id="sal-stipend" type="number" min="0" step="1" inputMode="decimal" value={amount} onChange={(e) => setStipend(e.target.value)} /></Field>
+          {(revision || (latest && f.effectiveFrom === latest.effectiveFrom)) && <Field id="sal-why" label={revision ? "Reason for the change (required)" : "Reason for the change"} error={er.reason}>
+            <input className="input" id="sal-why" maxLength={300} value={f.reason} onChange={set("reason")} placeholder="Stipend revised, correction…" /></Field>}
+        </div>
+        <div className="modal-f"><button type="button" className="btn glass" onClick={() => onClose()}>Cancel</button><button type="submit" className="btn primary" disabled={busy}>{busy ? "Saving…" : "Save stipend"}</button></div>
+      </form></Modal>
+    );
+  }
 
   return (
     <Modal wide onClose={() => onClose()}><form onSubmit={submit} noValidate className="sal-form">

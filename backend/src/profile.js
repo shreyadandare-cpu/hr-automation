@@ -63,6 +63,23 @@ export function cleanProfile(input = {}) {
   return { data, errors };
 }
 
+/**
+ * What a saved profile writes onto the employee record, so the rest of Wohlig One (Employees, the employee page, letters, payroll lists, the ID card)
+ * shows the same details the person just entered: personal email, mobile number, date of birth and the current address as one line. Only fields the
+ * person filled in are written, so saving a profile never blanks something HR entered. The name is not copied: it is HR's, because payroll, the
+ * bank file and reporting lines use it.
+ */
+export function employeeFieldsFrom(data) {
+  const out = {};
+  const c = data.contact || {}, p = data.primary || {}, cur = (data.addresses || {}).current || {};
+  if (c.personalEmail) out.personal_email = c.personalEmail;
+  if (c.phone) out.phone = c.phone;
+  if (p.dob && isDate(p.dob)) out.dob = p.dob;
+  const line = [cur.line, cur.city, cur.state, cur.pin, cur.country].map((x) => String(x || "").trim()).filter(Boolean).join(", ");
+  if (line) out.address = line;
+  return out;
+}
+
 export const profileRouter = express.Router();
 profileRouter.use(requireAuth);
 
@@ -74,6 +91,12 @@ const ownDob = async (email) => {
   return rows[0] && rows[0].dob ? rows[0].dob : "";
 };
 
+/** The masked PAN and Aadhaar on the employee record. Shown on the person's own profile, read only: the app never keeps the full numbers, and HR corrects them. */
+const ownIds = async (email) => {
+  const { rows } = await pool.query("SELECT pan_masked, aadhaar_masked FROM employees WHERE lower(work_email)=$1", [email.toLowerCase()]);
+  return { pan: (rows[0] && rows[0].pan_masked) || "", aadhaar: (rows[0] && rows[0].aadhaar_masked) || "" };
+};
+
 const photoVersion = async (email) => {
   const { rows } = await pool.query("SELECT updated_at FROM profile_photos WHERE lower(email)=$1", [email.toLowerCase()]);
   return rows[0] ? new Date(rows[0].updated_at).getTime() : null;
@@ -81,7 +104,7 @@ const photoVersion = async (email) => {
 
 profileRouter.get("/", wrap(async (req, res) => {
   const { rows } = await pool.query("SELECT data FROM profiles WHERE lower(email)=$1", [req.user.email.toLowerCase()]);
-  res.json({ ...(rows[0]?.data || {}), photoV: await photoVersion(req.user.email), employeeDob: await ownDob(req.user.email) });
+  res.json({ ...(rows[0]?.data || {}), photoV: await photoVersion(req.user.email), employeeDob: await ownDob(req.user.email), ids: await ownIds(req.user.email) });
 }));
 
 profileRouter.put("/", wrap(async (req, res) => {
@@ -98,7 +121,13 @@ profileRouter.put("/", wrap(async (req, res) => {
   await pool.query(
     `INSERT INTO profiles (email, data) VALUES ($1,$2)
      ON CONFLICT (email) DO UPDATE SET data=$2, updated_at=now()`, [req.user.email.toLowerCase(), data]);
-  res.json({ ...data, photoV: await photoVersion(req.user.email), employeeDob: await ownDob(req.user.email) });
+  // The same details go onto the employee record, so the rest of Wohlig One shows what was just entered (see employeeFieldsFrom).
+  const shared = employeeFieldsFrom(data), cols = Object.keys(shared);
+  if (cols.length) {
+    await pool.query(`UPDATE employees SET ${cols.map((k, i) => `${k}=$${i + 2}`).join(", ")} WHERE lower(work_email)=$1`, [mine, ...cols.map((k) => shared[k])]);
+    await pool.query("INSERT INTO audit_log (action, work_email) VALUES ($1,$2)", [`Profile saved: ${cols.map((k) => k.replace("_", " ")).join(", ")} updated on the employee record`, mine]);
+  }
+  res.json({ ...data, photoV: await photoVersion(req.user.email), employeeDob: await ownDob(req.user.email), ids: await ownIds(req.user.email) });
 }));
 
 /* Profile photo: one picture per person. The page crops it square before sending, so it is small. */

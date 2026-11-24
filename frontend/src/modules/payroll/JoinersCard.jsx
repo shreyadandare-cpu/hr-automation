@@ -26,6 +26,7 @@ export default function JoinersCard({ period, again }) {
             <td>{e.start ? date(e.start) : "No date yet"}</td>
             <td>{!e.inThisPayroll ? <span className="muted">Joins after {monthLabel(period)}</span>
               : d.runStarted && !e.inRun ? <><Pill tone="warn">Not in the run yet</Pill><div className="muted">Recalculate to add them</div></>
+              : d.runStarted && e.missing && e.missing.includes("Salary structure") ? <><Pill tone="warn">In the run, not paid yet</Pill><div className="muted">Add a salary structure to pay them</div></>
               : <Pill tone="ok">{d.runStarted ? "In the run" : "Will be included"}</Pill>}</td>
             <td>{e.missing.length ? <><Pill tone="warn">Incomplete</Pill><div className="muted">Needs: {e.missing.join(", ")}</div></> : <Pill tone="ok">Ready</Pill>}</td>
             <td className="num"><Link className="btn glass sm" to={`/app/employees/${encodeURIComponent(e.email)}`}>Open profile</Link></td>

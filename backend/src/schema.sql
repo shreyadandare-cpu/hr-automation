@@ -588,6 +588,18 @@ UPDATE employee_project_allocations a SET status='Ended', end_date=coalesce(a.en
 
 -- Whether someone joined as a regular employee or an intern.
 ALTER TABLE employees ADD COLUMN IF NOT EXISTS employment_type TEXT NOT NULL DEFAULT 'Employee';
+-- Full PAN and Aadhaar numbers, encrypted (AES-256-GCM with PAYROLL_ENCRYPTION_KEY). Never sent in a list or a page of people: the person and company-wide HR open
+-- one at a time (employee-ids routes in people.js), and every opening is written to the audit log. The masked forms stay on `employees`.
+CREATE TABLE IF NOT EXISTS employee_ids (
+  work_email  TEXT NOT NULL,
+  pan_enc     TEXT,
+  aadhaar_enc TEXT,
+  updated_by  TEXT NOT NULL DEFAULT 'system',
+  updated_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE UNIQUE INDEX IF NOT EXISTS employee_ids_email_key ON employee_ids (lower(work_email));
+-- The day an intern was taken on as an employee (their start_date stays the day they first joined).
+ALTER TABLE employees ADD COLUMN IF NOT EXISTS converted_on DATE;
 
 -- The company feed on the dashboard: HR posts, everyone likes and comments.
 CREATE TABLE IF NOT EXISTS posts (

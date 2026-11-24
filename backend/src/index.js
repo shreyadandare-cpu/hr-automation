@@ -40,6 +40,7 @@ import { loansRouter } from "./loans.js";
 import { payrollRouter } from "./payroll.js";
 import { payslipAutoRouter } from "./payslip-auto.js";
 import { payrollWorkflowRouter, initPayroll, warmPayrollPreview } from "./payroll/routes.js";
+import { syncEmployees } from "./payroll/employee-sync.js";
 import { requirePayrollAccess, hrOnly } from "./payroll/access.js";
 import { notificationsRouter, emailMode } from "./notify.js";
 import { securityHeaders, sameOriginWrites } from "./security.js";
@@ -63,6 +64,14 @@ app.use(timing);   // Server-Timing on every response, and a log line for slow /
 app.use(securityHeaders);
 app.use(sameOriginWrites);   // a form on another website cannot change anything here
 app.use(loadSession);
+// Payroll keeps its own copy of the staff list when it runs on its own database: bring it up to date in the background when Payroll and payslip pages are read, and right after
+// any change made through the app (an employee ID, a name, a joiner), so what was just edited shows on every page (payroll/employee-sync.js).
+app.use("/api", (req, res, next) => {
+  // A page read never waits for the copy: changes made through the app are copied right after they are saved (below), so this is only a safety net.
+  if (req.method === "GET") { if (/^\/(payroll|payslips)(\/|$)/.test(req.path)) syncEmployees().catch(() => {}); return next(); }
+  res.on("finish", () => { if (res.statusCode < 400) syncEmployees({ force: true }); });
+  next();
+});
 app.use("/api/documents", requireAuth, documentsRouter); // raw file bodies, so it goes before the JSON parser
 app.use("/api/digital-kit", requireAuth, digitalKitRouter); // employees: only their own kit; HR: the /admin part (it reads raw uploads itself, so it also goes before the JSON parser)
 app.use(express.json({ limit: "100kb" }));
@@ -127,6 +136,7 @@ await initDb();
 if (payPool !== pool) { await initDb(payPool, PAY_SCHEMA); console.log("Payroll and payslips use their own database (PAYROLL_DATABASE_URL)"); }
 await loadLeavePolicy();   // the leave policy numbers HR has saved
 await initPayroll(payPool);   // payroll workflow tables and starting tax rules (payroll/schema.sql)
+await syncEmployees({ force: true });   // payroll's copy of the staff list matches the company's from the first request
 warmPayrollPreview();   // the month's payroll preview, worked out in the background so the first visit is quick
 await bootstrapAuth();
 await bootstrapAccess();   // the first super admins, and grants that match each login's access from before (src/access.js)

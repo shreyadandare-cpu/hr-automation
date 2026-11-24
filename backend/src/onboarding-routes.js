@@ -6,6 +6,7 @@ import { createGoogleUser as createLogin } from "./auth.js";
 import { invalidateTree, mayActOnLogin, needAll, canAll } from "./access.js";
 import { saveOnboardingSalary } from "./payroll.js";
 import { payrollChanged } from "./payroll/preview-cache.js";
+import { syncEmployees } from "./payroll/employee-sync.js";
 import { checkManager } from "./people.js";
 import { createInvite, INVITE_MINUTES } from "./invites.js";
 import { linkDeviceUserByEmployeeNo } from "./device.js";
@@ -57,7 +58,8 @@ const RECORD_SQL = `SELECT e.*, EXISTS (SELECT 1 FROM users u WHERE lower(u.emai
 const loadRecord = async (email) =>
   (await pool.query(`${RECORD_SQL} WHERE lower(e.work_email)=$1`, [email.toLowerCase()])).rows[0];
 const draftId = (req) => req.user.email.toLowerCase(); // each HR user has their own draft
-const kindOf = (d) => (d && d.kind === "Intern" ? "Intern" : "Employee");
+// Intern when HR chose it, or when the job title says so (for example "GenAI Interns"): an intern is paid a stipend with nothing deducted.
+const kindOf = (d) => (d && (d.kind === "Intern" || /\bintern/i.test(String(d.title || ""))) ? "Intern" : "Employee");
 
 
 /*
@@ -267,6 +269,7 @@ export function onboardingRouter(wrap) {
       invalidateTree();   // a manager or new joiner may have changed the reporting tree
       // Payroll: a salary entered here becomes the person's first salary structure on this same employee record (payroll.js). Only someone who
       // prepares payroll may do this; the rest of onboarding is saved either way, and the answer says what happened to the salary.
+      await syncEmployees({ force: true });   // payroll holds its own copy of the staff list: the new joiner must be in it before a salary is saved
       let salary = null;
       const sal = req.body.salary;
       if (sal && String(sal.monthlyGross || "").trim() !== "") {

@@ -74,11 +74,11 @@ test("a let-out house: rent less municipal tax, less 30%, less interest; a loss 
 test("no PAN on file: TDS is at least 20% of the taxable salary once tax is due; never when the PAN was not looked up", () => {
   const structure = { earnings: [{ name: "Basic", amount: 75000 }, { name: "HRA", amount: 37500 }, { name: "Special Allowance", amount: 37500 }], professionalTax: 0, tdsMode: "auto" };
   const tds = (pan) => computeLine({ period: "2026-04", employee: { start: "2020-01-01", pan }, structure, tax: { rules: NEW, regime: "new", declaration: {} } });
-  assert.equal(tds("ABCDE1234F").summary.tds, 12567, "₹18L − 75,000 = 17,25,000 → 1,45,000 + 4% = 1,50,800 / 12");
+  assert.equal(tds("ABCDE1234F").summary.tds, 13000, "₹18L − 50,000 = 17,50,000 → 1,50,000 + 4% = 1,56,000 / 12");
   const none = tds("");
   assert.equal(none.summary.tds, 30000, "20% of ₹1,50,000");
   assert.ok(none.warnings.some((w) => /No PAN/.test(w)));
-  assert.equal(tds(undefined).summary.tds, 12567);
+  assert.equal(tds(undefined).summary.tds, 13000);
   const low = computeLine({ period: "2026-04", employee: { start: "2020-01-01", pan: "" }, structure: { earnings: [{ name: "Basic", amount: 50000 }], professionalTax: 0, tdsMode: "auto" }, tax: { rules: NEW, regime: "new", declaration: {} } });
   assert.equal(low.summary.tds, 0, "no tax due, so nothing even without a PAN");
 });

@@ -4,6 +4,11 @@ import { pool } from "./db.js";
 import { requireAuth } from "./auth.js";
 import { mailPlanOf } from "./mail-plan.js";
 import { can, canAll, invalidateTree, need, scopeOf } from "./access.js";
+import { seal, open as unseal } from "./payroll/access.js";
+import { buildEmployeeWorkbook } from "./employee-export.js";
+import { previewOf } from "./excel-preview.js";
+import { fullIdsOf, withFull } from "./id-numbers.js";
+import { cleanAadhaar, cleanPan, formatAadhaar, maskAadhaar, maskPan, validAadhaar, validPan } from "./validate.js";
 
 /**
  * Checks and saves one reporting-manager change (an empty manager clears it). The manager is found by email when one is given,
@@ -67,12 +72,12 @@ export function peopleRouter(wrap) {
       start: r.start_date, status: r.status, apps: r.apps })));
   }));
 
-  // The company roster, for everyone signed in. Only non-personal fields are sent, so this is safe for employees too.
+  // The company roster, for everyone signed in. Only non-personal fields are sent, plus the work phone number, which colleagues share (HR's decision, 2026-11-24).
   r.get("/api/roster", wrap(async (req, res) => {
     const scope = (await scopeOf(req, "people.view")), offs = canAll(req, "offboarding.manage"), me = req.user.email.toLowerCase();
     const sees = (email) => offs || !scope || scope.has(String(email).toLowerCase()) || String(email).toLowerCase() === me;
     const { rows } = await pool.query(
-      `SELECT e.id, e.emp_no, e.name, e.work_email, e.title, e.sub_title, e.work_location, e.manager, e.manager_email, e.start_date, e.last_day, e.status, e.onboarding_closed_at, e.employment_type,
+      `SELECT e.id, e.emp_no, e.name, e.work_email, e.phone, e.title, e.sub_title, e.work_location, e.manager, e.manager_email, e.start_date, e.last_day, e.status, e.onboarding_closed_at, e.employment_type,
          (SELECT COALESCE(json_agg(json_build_object('project', p.name, 'lead', a.project_lead, 'location', a.location,
                                                      'status', a.status, 'start', a.start_date, 'end', a.end_date)
                                    ORDER BY (a.status = 'Active') DESC, p.name), '[]'::json)
@@ -80,7 +85,7 @@ export function peopleRouter(wrap) {
          (SELECT extract(epoch FROM ph.updated_at)::bigint FROM profile_photos ph WHERE lower(ph.email) = lower(e.work_email)) AS photo_v,
          EXISTS (SELECT 1 FROM users u WHERE lower(u.email) = lower(e.work_email) AND u.login_blocked) AS login_off
        FROM employees e ORDER BY e.id`);
-    res.json(rows.map((r) => ({ id: r.id, no: r.emp_no, name: r.name, email: r.work_email, title: r.title, subTitle: r.sub_title,
+    res.json(rows.map((r) => ({ id: r.id, no: r.emp_no, name: r.name, email: r.work_email, phone: r.phone || "", title: r.title, subTitle: r.sub_title,
       location: r.work_location, manager: r.manager, managerEmail: r.manager_email || "", start: r.start_date,
       // Who is leaving, and when, is shown only to people who may see personal details for that person (and to the person).
       lastDay: sees(r.work_email) ? r.last_day : null, status: r.status === "offboarding" && !sees(r.work_email) ? "active" : r.status, onboarded: !!r.onboarding_closed_at, employmentType: r.employment_type, mailPlan: mailPlanOf(r.title), projects: r.projects, photoV: r.photo_v, loginOff: r.login_off })));
@@ -126,6 +131,108 @@ export function peopleRouter(wrap) {
     await pool.query("UPDATE employees SET emp_no=$2 WHERE id=$1", [emp.id, no]);
     await pool.query("INSERT INTO audit_log (action, work_email) VALUES ($1,$2)", [`Employee ID of ${emp.name} changed from ${emp.emp_no || "none"} to ${no} by ${req.user.email}`, email]);
     res.json({ email, number: no });
+  }));
+
+  // Everyone's details as an Excel file, for company-wide HR (people, documents or onboarding access): the details at the top of a person's page, on one sheet,
+  // with the full PAN and Aadhaar (HR's decision, 2026-11-24: only HR downloads these files). Each preview or download is written to the audit log.
+  r.get("/api/employees/export", requireAuth, wrap(async (req, res) => {
+    if (!(canAll(req, "people.view") || canAll(req, "documents.view") || canAll(req, "onboarding.manage"))) return res.status(403).json({ error: "You are not allowed to download everyone's details." });
+    const { rows } = await pool.query(
+      `SELECT emp_no, name, work_email, title, dept, employment_type, status, start_date, last_day, manager, work_location, phone, pan_masked, aadhaar_masked
+         FROM employees ORDER BY name LIMIT 5000`);
+    const today = new Date(Date.now() + 330 * 60000).toISOString().slice(0, 10);
+    const full = await fullIdsOf(pool);
+    const buffer = await buildEmployeeWorkbook({ today, employees: rows.map((e) => ({ no: e.emp_no, name: e.name, email: e.work_email, title: e.title, dept: e.dept, type: e.employment_type, status: e.status,
+      start: e.start_date, lastDay: e.last_day, manager: e.manager, location: e.work_location, phone: e.phone, ...withFull(full, e.work_email, { pan: e.pan_masked, aadhaar: e.aadhaar_masked }) })) }, { generatedBy: req.user.email });
+    await pool.query("INSERT INTO audit_log (action, work_email) VALUES ($1,$2)", [`Employee details with full PAN and Aadhaar ${req.query.preview ? "previewed" : "downloaded"} by ${req.user.email} (${rows.length} people)`, req.user.email.toLowerCase()]);
+    if (req.query.preview) return res.json(await previewOf(Buffer.from(buffer)));   // ?preview=1: what the file holds, to look at before downloading
+    res.set({ "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "Content-Disposition": `attachment; filename="Employees-${today}.xlsx"`, "Cache-Control": "no-store" });
+    res.send(Buffer.from(buffer));
+  }));
+
+  // One person's masked PAN and Aadhaar for their page: the person themselves, or HR (company-wide people, documents or onboarding access). Managers with a team
+  // scope do not get them. Only the masked forms are ever stored, so only those can be shown.
+  r.get("/api/employees/ids", requireAuth, wrap(async (req, res) => {
+    const email = String(req.query.email || "").trim().toLowerCase();
+    if (!email) return res.status(400).json({ error: "Choose a person." });
+    const mine = email === req.user.email.toLowerCase();
+    if (!mine && !(canAll(req, "people.view") || canAll(req, "documents.view") || canAll(req, "onboarding.manage"))) return res.status(403).json({ error: "You are not allowed to see this." });
+    const { rows } = await pool.query("SELECT pan_masked, aadhaar_masked FROM employees WHERE lower(work_email)=$1", [email]);
+    if (!rows[0]) return res.status(404).json({ error: "Employee not found." });
+    res.json({ pan: rows[0].pan_masked || "", aadhaar: rows[0].aadhaar_masked || "" });
+  }));
+
+  // The full PAN or Aadhaar of one person, when the eye is pressed: the person themselves or company-wide HR. Decrypted here, one number per request, and written to the audit log
+  // every time ("PAN viewed by …"), so HR can see who opened what. Nothing in any list or page of people carries a full number.
+  const mayOpenIds = (req, email) => email === req.user.email.toLowerCase() || canAll(req, "people.view") || canAll(req, "documents.view") || canAll(req, "onboarding.manage");
+  r.post("/api/employees/ids/reveal", requireAuth, wrap(async (req, res) => {
+    const email = String(req.body?.email || "").trim().toLowerCase(), field = String(req.body?.field || "");
+    if (!email || (field !== "pan" && field !== "aadhaar")) return res.status(400).json({ error: "Choose a person and PAN or Aadhaar." });
+    if (!mayOpenIds(req, email)) return res.status(403).json({ error: "You are not allowed to see this." });
+    const { rows } = await pool.query("SELECT pan_enc, aadhaar_enc FROM employee_ids WHERE lower(work_email)=$1", [email]);
+    const sealed = rows[0] && rows[0][field === "pan" ? "pan_enc" : "aadhaar_enc"];
+    if (!sealed) return res.json({ value: null });   // only the masked number is held
+    let value;
+    try { value = unseal(sealed).toString("utf8"); }
+    catch (err) { console.error("ID decrypt:", err.message); return res.status(503).json({ error: "The number cannot be opened right now. Please ask the person who looks after the server." }); }
+    await pool.query("INSERT INTO audit_log (action, work_email) VALUES ($1,$2)", [`${field === "pan" ? "PAN" : "Aadhaar"} viewed by ${req.user.email}${email === req.user.email.toLowerCase() ? " (own)" : ""}`, email]);
+    res.json({ value: field === "aadhaar" ? formatAadhaar(value) : value });
+  }));
+
+  // Company-wide HR (edit people) saves or corrects a person's PAN and/or Aadhaar. Checked (a PAN's form, an Aadhaar's check digit), encrypted, and the masked forms
+  // are updated to match. An empty field is left as it is. Recorded in the audit log without the number.
+  r.put("/api/employees/ids", need("people.edit"), wrap(async (req, res) => {
+    if (!canAll(req, "people.edit")) return res.status(403).json({ error: "You are not allowed to change this." });
+    const email = String(req.body?.email || "").trim().toLowerCase();
+    const pan = cleanPan(req.body?.pan), aad = cleanAadhaar(req.body?.aadhaar);
+    if (pan && !validPan(pan)) return res.status(400).json({ error: "That PAN is not in the usual form: five letters, four digits, one letter." });
+    if (aad && !validAadhaar(aad)) return res.status(400).json({ error: "That Aadhaar number does not look right. Please check the 12 digits." });
+    if (!pan && !aad) return res.status(400).json({ error: "Enter a PAN or an Aadhaar number." });
+    const emp = (await pool.query("SELECT id, name FROM employees WHERE lower(work_email)=$1", [email])).rows[0];
+    if (!emp) return res.status(404).json({ error: "Employee not found." });
+    try {
+      await pool.query(
+        `INSERT INTO employee_ids (work_email, pan_enc, aadhaar_enc, updated_by) VALUES ($1,$2,$3,$4)
+         ON CONFLICT (lower(work_email)) DO UPDATE SET pan_enc=COALESCE($2, employee_ids.pan_enc), aadhaar_enc=COALESCE($3, employee_ids.aadhaar_enc), updated_by=$4, updated_at=now()`,
+        [email, pan ? seal(pan) : null, aad ? seal(aad) : null, req.user.email]);
+    } catch (err) { if (err.status === 503) return res.status(503).json({ error: "Numbers cannot be stored until the server's encryption key is set." }); throw err; }
+    await pool.query("UPDATE employees SET pan_masked=COALESCE($2, pan_masked), aadhaar_masked=COALESCE($3, aadhaar_masked) WHERE id=$1", [emp.id, pan ? maskPan(pan) : null, aad ? maskAadhaar(aad) : null]);
+    await pool.query("INSERT INTO audit_log (action, work_email) VALUES ($1,$2)", [`${[pan && "PAN", aad && "Aadhaar"].filter(Boolean).join(" and ")} saved by ${req.user.email}`, email]);
+    res.json({ email, pan: pan ? maskPan(pan) : undefined, aadhaar: aad ? maskAadhaar(aad) : undefined });
+  }));
+
+  // Someone with "Edit people" for this person corrects their full name, job title and joining date. Saved on the server, so every page, the payroll list,
+  // letters and the ID card show it and it survives a reload. The work email is not changed here: it is the person's sign-in and the key of their records.
+  // People who report to them keep showing the right manager name.
+  r.put("/api/employees/details", need("people.edit"), wrap(async (req, res) => {
+    const email = String(req.body?.email || "").trim().toLowerCase();
+    if (!(await can(req, "people.edit", email))) return res.status(403).json({ error: "This person is not in a team you look after." });
+    const name = String(req.body?.name || "").trim().replace(/\s+/g, " "), title = String(req.body?.title || "").trim(), start = String(req.body?.start || "").trim();
+    if (name.length < 2 || name.length > 120) return res.status(400).json({ error: "Enter the employee's full name." });
+    if (title.length > 120) return res.status(400).json({ error: "The job title is too long." });
+    if (start && !(/^\d{4}-\d{2}-\d{2}$/.test(start) && !isNaN(new Date(`${start}T00:00:00`)))) return res.status(400).json({ error: "Enter a valid date of joining." });
+    const emp = (await pool.query("SELECT id, name, title, to_char(start_date, 'YYYY-MM-DD') AS start FROM employees WHERE lower(work_email)=$1", [email])).rows[0];
+    if (!emp) return res.status(404).json({ error: "Employee not found." });
+    await pool.query("UPDATE employees SET name=$2, title=$3, start_date=$4 WHERE id=$1", [emp.id, name, title && title !== "—" ? title : null, start || null]);
+    if (name !== emp.name) await pool.query("UPDATE employees SET manager=$2 WHERE lower(manager_email)=$1", [email, name]);
+    invalidateTree();
+    const changed = [name !== emp.name && `name ${emp.name} → ${name}`, (title || "") !== (emp.title || "") && "job title", (start || "") !== (emp.start || "") && "date of joining"].filter(Boolean);
+    if (changed.length) await pool.query("INSERT INTO audit_log (action, work_email) VALUES ($1,$2)", [`Details changed by ${req.user.email}: ${changed.join(", ")}`, email]);
+    res.json({ email, name, title: title || "", start });
+  }));
+
+  // Someone with "Edit people" for this person changes them between Intern and Employee (an intern becomes an employee when they are taken on). An intern's pay is a
+  // single stipend with nothing deducted; after the change, their next salary structure carries the usual deductions. Recorded in the audit log.
+  r.put("/api/employees/type", need("people.edit"), wrap(async (req, res) => {
+    const email = String(req.body?.email || "").trim().toLowerCase(), type = String(req.body?.type || "");
+    if (!(await can(req, "people.edit", email))) return res.status(403).json({ error: "This person is not in a team you look after." });
+    if (type !== "Intern" && type !== "Employee") return res.status(400).json({ error: "Choose Intern or Employee." });
+    const emp = (await pool.query("SELECT id, name, employment_type FROM employees WHERE lower(work_email)=$1", [email])).rows[0];
+    if (!emp) return res.status(404).json({ error: "Employee not found." });
+    if ((emp.employment_type || "Employee") === type) return res.json({ email, type });
+    await pool.query("UPDATE employees SET employment_type=$2 WHERE id=$1", [emp.id, type]);
+    await pool.query("INSERT INTO audit_log (action, work_email) VALUES ($1,$2)", [`${emp.name} changed from ${emp.employment_type || "Employee"} to ${type} by ${req.user.email}`, email]);
+    res.json({ email, type });
   }));
 
   // Someone with "Edit people" for this person marks them, while still onboarding, as active. It is saved on the server, so

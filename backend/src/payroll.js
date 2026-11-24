@@ -1,13 +1,15 @@
 import { payrollChanged } from "./payroll/preview-cache.js";
 import express from "express";
-import { payPool as pool, PAYROLL_SEPARATE } from "./db.js";   // payroll may use its own database (PAYROLL_DATABASE_URL)
+import { payPool as pool, pool as mainPool, PAYROLL_SEPARATE } from "./db.js";   // payroll may use its own database (PAYROLL_DATABASE_URL)
 import { event } from "./reimbursements.js";
 import { notify as notifyAll } from "./notify.js";
 const notify = (to, n) => (PAYROLL_SEPARATE ? Promise.resolve(console.log(`Payroll on its own database, notice not sent to ${to}: ${n.title}`)) : notifyAll(to, n));
-import { cleanStructure, grossOf, splitGross, structureFromRow } from "./payroll-calc.js";
+import { cleanStructure, grossOf, splitGross, stipendBody, structureFromRow } from "./payroll-calc.js";
 import { structuresFor, toStructure, monthName, recalcRun } from "./payroll/store.js";
 import { audit } from "./payroll/routes.js";
 import { hrOnly } from "./payroll/access.js";
+import { can } from "./access.js";
+import { syncEmployees } from "./payroll/employee-sync.js";
 
 /*
  * Salary structures (HR only). A person's breakdown applies from a month on; a revision is a new row from a later month,
@@ -69,13 +71,41 @@ async function saveStructure(client, emp, email, v, actor) {
 
 export const payrollRouter = express.Router();
 
+/**
+ * An intern is taken on as an employee. One step, for someone who prepares payroll and may edit people: the date they join as an employee, and their salary from
+ * that month (HR's breakup format, with PF, professional tax and TDS). Their bank account stays as it is: they already work here. Their start_date stays the day they
+ * first joined, the new date is kept as converted_on, and their stipend keeps applying to the months before. If the salary cannot be saved, the type is put back.
+ */
+payrollRouter.post("/convert-intern", hrOnly, wrap(async (req, res) => {
+  const email = String(req.body?.email || "").trim().toLowerCase(), joinDate = String(req.body?.joinDate || "").trim();
+  if (!(await can(req, "people.edit", email))) return res.status(403).json({ error: "You are not allowed to change this person's details." });
+  if (!(/^\d{4}-\d{2}-\d{2}$/.test(joinDate) && !isNaN(new Date(`${joinDate}T00:00:00`)))) return res.status(400).json({ error: "Enter the date they join as an employee." });
+  const gross = Math.round(Number(req.body?.monthlyGross));
+  if (!(gross > 0) || gross >= 1e8) return res.status(400).json({ error: "Enter the monthly gross salary in rupees." });
+  const { rows: [emp] } = await mainPool.query("SELECT id, name, employment_type FROM employees WHERE lower(work_email)=$1", [email]);
+  if (!emp) return res.status(404).json({ error: "Employee not found." });
+  if (emp.employment_type !== "Intern") return res.status(409).json({ error: `${emp.name} is not an intern.` });
+  await mainPool.query("UPDATE employees SET employment_type='Employee', converted_on=$2 WHERE id=$1", [emp.id, joinDate]);
+  await syncEmployees({ force: true });   // payroll's copy of the staff list must show the new type before the salary is saved
+  let out;
+  try { out = await saveOnboardingSalary(email, { annualCtc: req.body?.annualCtc ?? null, monthlyGross: gross, startDate: joinDate, replace: true, reason: "Intern taken on as an employee" }, req.user.email); }
+  catch (err) { out = { error: err.status === 409 ? err.message : "The salary could not be saved." }; if (err.status !== 409) console.error("Convert intern:", err.message); }
+  if (!out || !out.saved) {
+    await mainPool.query("UPDATE employees SET employment_type='Intern', converted_on=NULL WHERE id=$1", [emp.id]);
+    await syncEmployees({ force: true });
+    return res.status(409).json({ error: (out && out.error) || "The salary could not be saved." });
+  }
+  await mainPool.query("INSERT INTO audit_log (action, work_email) VALUES ($1,$2)", [`${emp.name} taken on as an employee from ${joinDate} (salary from ${out.from}) by ${req.user.email}`, email]);
+  res.json({ email, type: "Employee", convertedOn: joinDate, salaryFrom: out.from, monthlyGross: out.monthlyGross });
+}));
+
 // One person's salary breakdowns, newest first, and their PF number.
 payrollRouter.get("/structures/:email", hrOnly, wrap(async (req, res) => {
   const email = String(req.params.email).toLowerCase();
-  const { rows: [emp] } = await pool.query("SELECT name, pf_number, monthly_gross, start_date FROM employees WHERE lower(work_email)=$1", [email]);
+  const { rows: [emp] } = await pool.query("SELECT name, pf_number, monthly_gross, start_date, employment_type FROM employees WHERE lower(work_email)=$1", [email]);
   if (!emp) return res.status(404).json({ error: "Employee not found." });
   const { rows } = await pool.query("SELECT * FROM salary_structures WHERE lower(work_email)=$1 ORDER BY effective_from DESC", [email]);
-  res.json({ name: emp.name, start: emp.start_date, pfNumber: emp.pf_number, monthlyGross: num(emp.monthly_gross), structures: rows.map(toStructure) });
+  res.json({ name: emp.name, employmentType: emp.employment_type || "Employee", start: emp.start_date, pfNumber: emp.pf_number, monthlyGross: num(emp.monthly_gross), structures: rows.map(toStructure) });
 }));
 
 const saving = async (fn) => {
@@ -100,19 +130,23 @@ const saving = async (fn) => {
  * "Fill the lines" button on the salary screen: Basic 50% of gross, HRA 50% of Basic, the lines follow HR's salary breakup format for the size of the salary (splitGross in payroll-calc.js).
  * A structure that already exists for that month is left as it is, so running it twice never overwrites HR's edits. Returns { saved } or { error }.
  */
-export async function saveOnboardingSalary(email, { annualCtc, monthlyGross, startDate }, actor) {
+export async function saveOnboardingSalary(email, { annualCtc, monthlyGross, startDate, replace = false, reason = null }, actor) {
   const gross = Math.round(Number(monthlyGross)), ctc = annualCtc === "" || annualCtc === null || annualCtc === undefined ? null : Number(annualCtc);
   if (!(gross > 0) || gross >= 1e8) return { error: "Enter the monthly gross in rupees." };
   if (ctc !== null && !(ctc >= 0 && ctc < 1e9)) return { error: "Enter the annual CTC in rupees." };
   const month = /^\d{4}-\d{2}/.test(String(startDate || "")) ? String(startDate).slice(0, 7) : null;
   if (!month) return { error: "The joining date is needed to say which month the salary starts." };
-  const { errors, value } = cleanStructure({ effectiveFrom: month, annualCtc: ctc, reason: "Entered at onboarding", pfEmployee: 3000, professionalTax: 200, earnings: splitGross(gross) });
-  if (errors) return { error: Object.values(errors)[0] };
   return saving(async (client) => {
-    const { rows: [emp] } = await client.query("SELECT id, name FROM employees WHERE lower(work_email)=$1 FOR UPDATE", [email.toLowerCase()]);
+    const { rows: [emp] } = await client.query("SELECT id, name, employment_type FROM employees WHERE lower(work_email)=$1 FOR UPDATE", [email.toLowerCase()]);
     if (!emp) return { rollback: true, error: "Employee not found." };
+    // An intern has one salary line, the stipend, and nothing is deducted; everyone else gets HR's breakup format with PF, professional tax and TDS.
+    const intern = emp.employment_type === "Intern";
+    const { errors, value } = cleanStructure(intern
+      ? { effectiveFrom: month, annualCtc: null, reason: reason || "Entered at onboarding (intern)", ...stipendBody(gross) }
+      : { effectiveFrom: month, annualCtc: ctc, reason: reason || "Entered at onboarding", pfEmployee: 3000, professionalTax: 200, earnings: splitGross(gross) });
+    if (errors) return { rollback: true, error: Object.values(errors)[0] };
     const { rows: [has] } = await client.query("SELECT 1 FROM salary_structures WHERE lower(work_email)=$1 AND effective_from=$2", [email.toLowerCase(), month]);
-    if (has) return { rollback: true, saved: false, error: "A salary structure already exists for that month. Open the person's Salary in Payroll to change it." };
+    if (has && !replace) return { rollback: true, saved: false, error: "A salary structure already exists for that month. Open the person's Salary in Payroll to change it." };
     await saveStructure(client, emp, email.toLowerCase(), value, actor);
     return { saved: true, from: month, monthlyGross: gross };
   });
@@ -121,12 +155,17 @@ export async function saveOnboardingSalary(email, { annualCtc, monthlyGross, sta
 // Save the breakdown that applies from a month on. Months already calculated keep their payslips.
 payrollRouter.put("/structures/:email", hrOnly, wrap(async (req, res) => {
   const email = String(req.params.email).toLowerCase();
-  const { errors, value: v } = cleanStructure(req.body || {});
-  if (errors) return res.status(400).json({ error: "Please check the highlighted fields.", errors });
+  const first = cleanStructure(req.body || {});
+  if (first.errors) return res.status(400).json({ error: "Please check the highlighted fields.", errors: first.errors });
   try {
     const out = await saving(async (client) => {
-      const { rows: [emp] } = await client.query("SELECT id, name FROM employees WHERE lower(work_email)=$1 FOR UPDATE", [email]);
+      const { rows: [emp] } = await client.query("SELECT id, name, employment_type FROM employees WHERE lower(work_email)=$1 FOR UPDATE", [email]);
       if (!emp) return { rollback: true, missing: true };
+      let v = first.value;
+      if (emp.employment_type === "Intern") {   // an intern has one line, the stipend, and nothing is deducted: whatever was sent is reduced to that
+        const stipend = v.earnings.reduce((n, x) => n + x.amount, 0);
+        v = cleanStructure({ effectiveFrom: v.effectiveFrom, reason: v.reason, annualCtc: null, ...stipendBody(stipend) }).value;
+      }
       await saveStructure(client, emp, email, v, req.user.email);
     });
     if (out && out.missing) return res.status(404).json({ error: "Employee not found." });

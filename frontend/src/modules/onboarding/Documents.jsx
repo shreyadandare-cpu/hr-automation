@@ -17,7 +17,7 @@ function DocsHr() {
   const waiting = people.filter((e) => e.status === "onboarding" && !docCount(mine(e))).sort((a, b) => a.name.localeCompare(b.name));
   return (
     <section className="section">
-      <SectionHead title="Onboarding" sub="Employees upload their own documents after signing in. You can open or save every file here." tabs={<ObTabs cur="docs" />} />
+      <SectionHead title="Onboarding" sub="Employees upload their own documents after signing in. You can open or save every file here." tabs={<ObTabs cur="docs" />} actions={<a className="btn glass" href="/api/documents/export" download>Download Excel</a>} />
       {withDocs.length ? withDocs.map((e) => { const m = mine(e), n = docCount(m); return (
         <div className="card" key={e.id}><div className="card-h"><h3>{e.name}</h3><span className="muted">{e.email} · {n} file{n === 1 ? "" : "s"}</span></div><DocRows m={m} /></div>
       ); }) : <div className="card"><div className="card-b muted">No employee has uploaded a document yet.</div></div>}

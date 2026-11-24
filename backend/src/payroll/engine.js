@@ -212,10 +212,18 @@ export function computeLine({ period, employee = {}, structure, inputs = {}, lea
       // months to come and income from elsewhere. Under the new regime the rebate brings the tax to nil when taxable income is
       // ₹12,00,000 or less, so most such salaries still get no TDS; a bonus or a higher salary earlier in the year can still make tax due.
       const lastMonth = employee.lastDay ? String(employee.lastDay).slice(0, 7) : null;
-      let after = monthsLeft(period) - 1;
-      if (lastMonth && lastMonth > period && fyOf(lastMonth) === fy) after = Math.min(after, monthsBetween(period, lastMonth));
-      if (lastMonth && lastMonth <= period) after = 0;
-      const paid = tax.paidSoFar || { taxable: 0, tds: 0, pt: 0 };
+      const leaving = Boolean(lastMonth) && fyOf(lastMonth) === fy;
+      const known = tax.paidSoFar || { taxable: 0, tds: 0, pt: 0 };
+      // Earlier months of the year are known once payroll has run here (or HR has entered them): the tax then follows the year's actual figures, as above.
+      // When nothing is recorded yet (the first payroll in Wohlig One, a joiner, a person paid in the old system until now), the company rule applies:
+      // above ₹12,00,000 a year, the tax on the full year at the person's yearly run rate (this month's pay plus eleven more at the regular monthly
+      // salary), taken level, one twelfth a month. Someone leaving this year always keeps the months-left calculation, so their last payroll settles the tax.
+      const recorded = Number(known.taxable) > 0 || Number(known.tds) > 0;
+      const level = !leaving && !recorded;
+      let after = level ? 11 : monthsLeft(period) - 1;
+      if (leaving && lastMonth > period) after = Math.min(after, monthsBetween(period, lastMonth));
+      if (leaving && lastMonth <= period) after = 0;
+      const paid = level ? { taxable: 0, tds: 0, pt: 0 } : known;
       const annualPt = R(P(paid.pt || 0) + ptP * (after + 1));
       const annualPf = R(P(paid.pf || 0) + pfP + P(monthlyPfOf(s)) * after);   // the employee's PF counts under 80C (old regime)
       // Basic for the months employed this year, for the employer NPS limit (a share of Basic).

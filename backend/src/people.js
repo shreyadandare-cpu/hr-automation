@@ -128,6 +128,26 @@ export function peopleRouter(wrap) {
     res.json({ email, number: no });
   }));
 
+  // Someone with "Edit people" for this person corrects their full name, job title and joining date. Saved on the server, so every page, the payroll list,
+  // letters and the ID card show it and it survives a reload. The work email is not changed here: it is the person's sign-in and the key of their records.
+  // People who report to them keep showing the right manager name.
+  r.put("/api/employees/details", need("people.edit"), wrap(async (req, res) => {
+    const email = String(req.body?.email || "").trim().toLowerCase();
+    if (!(await can(req, "people.edit", email))) return res.status(403).json({ error: "This person is not in a team you look after." });
+    const name = String(req.body?.name || "").trim().replace(/\s+/g, " "), title = String(req.body?.title || "").trim(), start = String(req.body?.start || "").trim();
+    if (name.length < 2 || name.length > 120) return res.status(400).json({ error: "Enter the employee's full name." });
+    if (title.length > 120) return res.status(400).json({ error: "The job title is too long." });
+    if (start && !(/^\d{4}-\d{2}-\d{2}$/.test(start) && !isNaN(new Date(`${start}T00:00:00`)))) return res.status(400).json({ error: "Enter a valid date of joining." });
+    const emp = (await pool.query("SELECT id, name, title, to_char(start_date, 'YYYY-MM-DD') AS start FROM employees WHERE lower(work_email)=$1", [email])).rows[0];
+    if (!emp) return res.status(404).json({ error: "Employee not found." });
+    await pool.query("UPDATE employees SET name=$2, title=$3, start_date=$4 WHERE id=$1", [emp.id, name, title && title !== "—" ? title : null, start || null]);
+    if (name !== emp.name) await pool.query("UPDATE employees SET manager=$2 WHERE lower(manager_email)=$1", [email, name]);
+    invalidateTree();
+    const changed = [name !== emp.name && `name ${emp.name} → ${name}`, (title || "") !== (emp.title || "") && "job title", (start || "") !== (emp.start || "") && "date of joining"].filter(Boolean);
+    if (changed.length) await pool.query("INSERT INTO audit_log (action, work_email) VALUES ($1,$2)", [`Details changed by ${req.user.email}: ${changed.join(", ")}`, email]);
+    res.json({ email, name, title: title || "", start });
+  }));
+
   // Someone with "Edit people" for this person marks them, while still onboarding, as active. It is saved on the server, so
   // everyone sees it and it survives a page reload.
   r.put("/api/employees/status", need("people.edit"), wrap(async (req, res) => {

@@ -96,7 +96,7 @@ function TaxModal({ email, name, fixedTds, onClose }) {
   return (
     <Modal wide onClose={() => onClose()}><form onSubmit={save} noValidate>
       {/* Inside a form, so the dialog's own title-row spacing does not reach it: room for the close button is set here. */}
-      <div className="card-h flex-wrap gap-3 pt-6 pr-16"><h3>Tax regime and declarations: {name}</h3>
+      <div className="card-h flex-wrap gap-3 pt-6! pr-16! pl-7!"><h3>Tax regime and declarations: {name}</h3>
         <select className="input w-auto min-w-36" aria-label="Financial year" value={fy} onChange={(e) => setFy(e.target.value)}>
           {[y - 1, y, y + 1].map((s) => { const v = `${s}-${String((s + 1) % 100).padStart(2, "0")}`; return <option key={v} value={v}>FY {v}</option>; })}</select></div>
       {!f ? <div className="card-b"><span className="skel" style={{ width: "60%" }} /></div> : <>

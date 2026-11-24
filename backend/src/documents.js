@@ -4,7 +4,8 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import express from "express";
 import { pool } from "./db.js";
-import { can, scopeOf } from "./access.js";
+import { can, canAll, scopeOf } from "./access.js";
+import { buildDocumentsWorkbook } from "./documents-export.js";
 
 export const UPLOAD_DIR = path.resolve(process.env.UPLOAD_DIR || fileURLToPath(new URL("../uploads", import.meta.url)));
 const MAX_BYTES = 5 * 1024 * 1024;
@@ -39,6 +40,23 @@ documentsRouter.get("/", wrap(async (req, res) => {
     ? await pool.query("SELECT * FROM documents ORDER BY id")
     : await pool.query("SELECT * FROM documents WHERE lower(work_email) = ANY($1::text[]) ORDER BY id", [[me, ...scope]]);
   res.json(rows.map(toApi));
+}));
+
+// Who has uploaded which document, as an Excel workbook (documents-export.js). Whole-company "See documents" only. Names and dates only, never the files.
+documentsRouter.get("/export", wrap(async (req, res) => {
+  if (!canAll(req, "documents.view")) return res.status(403).json({ error: "You are not authorised to download everyone's documents." });
+  const [emps, docs] = await Promise.all([
+    pool.query("SELECT work_email, name, emp_no, dept, title, status, start_date FROM employees ORDER BY name LIMIT 5000"),
+    pool.query("SELECT work_email, doc_key, filename, size, uploaded_at FROM documents ORDER BY id LIMIT 50000"),
+  ]);
+  const today = new Date(Date.now() + 330 * 60000).toISOString().slice(0, 10);
+  const buffer = await buildDocumentsWorkbook({
+    today,
+    employees: emps.rows.map((e) => ({ email: e.work_email, name: e.name, empNo: e.emp_no, dept: e.dept, title: e.title, status: e.status, start: e.start_date })),
+    documents: docs.rows.map((d) => ({ email: d.work_email, key: d.doc_key, name: d.filename, size: d.size, uploadedAt: d.uploaded_at })),
+  }, { generatedBy: req.user.email });
+  res.set({ "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "Content-Disposition": `attachment; filename="Documents-${today}.xlsx"`, "Cache-Control": "no-store" });
+  res.send(Buffer.from(buffer));
 }));
 
 // One file per request: the raw file is the body. ?email=<work email>&name=<original file name>

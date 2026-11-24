@@ -21,10 +21,10 @@ test("a template filled back in gives the same rules (Excel)", async () => {
 });
 
 test("changes are described, and the uploaded rules are the ones used", async () => {
-  const csv = templateCsv(saved).replace("2026-27,New,Standard deduction,,,75000", "2026-27,New,Standard deduction,,,80000").replace("2026-27,New,Cess,,4,", "2026-27,New,Cess,,5,");
+  const csv = templateCsv(saved).replace("2026-27,New,Standard deduction,,,50000", "2026-27,New,Standard deduction,,,80000").replace("2026-27,New,Cess,,4,", "2026-27,New,Cess,,5,");
   const out = await previewFromFile(Buffer.from(csv), saved);
   const s = out.sets.find((x) => x.fy === "2026-27" && x.regime === "new");
-  assert.deepEqual(s.changes, ["Standard deduction ₹75,000 → ₹80,000", "Cess 4% → 5%"]);
+  assert.deepEqual(s.changes, ["Standard deduction ₹50,000 → ₹80,000", "Cess 4% → 5%"]);
   assert.equal(s.rules.standardDeduction, 80000);
   assert.equal(s.rules.cessRate, 5);
   assert.ok(annualTax(s.rules, 1500000).total > 0);

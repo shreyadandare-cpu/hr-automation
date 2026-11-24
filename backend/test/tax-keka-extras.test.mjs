@@ -76,9 +76,9 @@ test("the return's figures: salary less deductions, the tax, and what is still t
   const statement = { totals: { salary: 1500000, taxable: 1500000, pt: 2500, tds: 100000 } };
   const f = returnFigures({ statement, regime: "new", rules: NEW, declaration: { previousEmployerIncome: 0, otherIncome: 25000 } });
   assert.equal(f.grossIncome, 1525000);
-  assert.equal(f.totalDeductions, 75000, "the new regime keeps the standard deduction only");
-  assert.equal(f.taxableIncome, 1450000);
-  assert.equal(f.annualTax, 101400);   // 5% of 4L + 10% of 4L + 15% of 2.5L = 97,500, plus 4% cess
+  assert.equal(f.totalDeductions, 50000, "the new regime keeps the standard deduction only (₹50,000, as on the company payslip)");
+  assert.equal(f.taxableIncome, 1475000);
+  assert.equal(f.annualTax, 105300);   // 5% of 4L + 10% of 4L + 15% of 2.75L = 1,01,250, plus 4% cess
   assert.equal(f.balance, f.annualTax - 100000);
   const o = returnFigures({ statement, regime: "old", rules: OLD, declaration: { section80C: 150000, ltaExemption: 30000, previousEmployerTds: 5000 } });
   assert.deepEqual(o.deductions.map((l) => l.name).slice(0, 3), ["Standard deduction", "Professional tax (16(iii))", "Leave travel exemption (10(5))"]);
@@ -108,12 +108,12 @@ test("new regime: TDS comes from the year's actual figures, so a bonus or an ear
   const { computeLine } = await import("../src/payroll/engine.js");
   const st = (g) => ({ earnings: [{ name: "Basic", amount: g / 2 }, { name: "HRA", amount: g / 4 }, { name: "Special Allowance", amount: g / 4 }], professionalTax: 200, ptApplicable: true, tdsMode: "auto" });
   const tds = (o) => computeLine({ employee: { start: "2020-01-01" }, ...o }).summary.tds;
-  // ₹95,000 a month (₹11.4L) and a ₹2.5L bonus in March: ₹13.9L − 75,000 = 13,15,000 → 77,250 + 4% = 80,340, all in March.
-  assert.equal(tds({ period: "2027-03", structure: st(95000), inputs: { bonus: 250000 }, tax: { rules: NEW, regime: "new", declaration: {}, paidSoFar: { taxable: 1045000, tds: 0, pt: 2200 } } }), 80340);
-  // ₹9L paid April to September, then ₹90,000 a month: ₹14.4L − 75,000 → 84,750 + 4% = 88,140, less 60,000 deducted, over 6 months.
-  assert.equal(tds({ period: "2026-10", structure: st(90000), tax: { rules: NEW, regime: "new", declaration: {}, paidSoFar: { taxable: 900000, tds: 60000, pt: 1200 } } }), 4690);
+  // ₹95,000 a month (₹11.4L) and a ₹2.5L bonus in March: ₹13.9L − 50,000 = 13,40,000 → 81,000 + 4% = 84,240, all in March.
+  assert.equal(tds({ period: "2027-03", structure: st(95000), inputs: { bonus: 250000 }, tax: { rules: NEW, regime: "new", declaration: {}, paidSoFar: { taxable: 1045000, tds: 0, pt: 2200 } } }), 84240);
+  // ₹9L paid April to September, then ₹90,000 a month: ₹14.4L − 50,000 = 13,90,000 → 88,500 + 4% = 92,040, less 60,000 deducted, over 6 months.
+  assert.equal(tds({ period: "2026-10", structure: st(90000), tax: { rules: NEW, regime: "new", declaration: {}, paidSoFar: { taxable: 900000, tds: 60000, pt: 1200 } } }), 5340);
   assert.equal(tds({ period: "2026-04", structure: st(100000), tax: { rules: NEW, regime: "new", declaration: {} } }), 0, "₹12L a year still owes nothing");
-  assert.equal(tds({ period: "2026-04", structure: st(105000), tax: { rules: NEW, regime: "new", declaration: {} } }), 0, "₹12.6L: ₹11.85L taxable, nothing");
+  assert.equal(tds({ period: "2026-04", structure: st(105000), tax: { rules: NEW, regime: "new", declaration: {} } }), 867, "₹12.6L: ₹12.1L taxable (₹50,000 standard deduction), so tax is limited to the ₹10,000 over ₹12L, plus cess, over 12 months");
   assert.equal(tds({ period: "2026-04", structure: st(100000), tax: { rules: null, regime: "new", declaration: {} } }), 0, "no rules set up: ₹12L still needs nothing");
 });
 

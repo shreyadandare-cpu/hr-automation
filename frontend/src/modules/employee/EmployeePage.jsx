@@ -40,7 +40,7 @@ function EditModal({ e, people, onClose, onPayroll }) {
   const { can, canAll } = useAuth();
   const edits = can("people.edit");                                     // manager and employee ID
   const salaryAccess = canAll("payroll.prepare"), bankAccess = canAll("payroll.bank");   // the payroll shortcuts below
-  const { setRoster } = useData();
+  const { setRoster, reload } = useData();
   const [saving, setSaving] = useState(false);
   const curMgr = mgrOf(e), top = isTop(e);
   const [manager, setManager] = useState(curMgr);
@@ -68,8 +68,8 @@ function EditModal({ e, people, onClose, onPayroll }) {
     ev.preventDefault();
     const v = { name: f.name.trim(), email: f.email.trim().toLowerCase(), title: f.title.trim() || "—", start: f.start, dept: f.dept };
     if (!v.name) { document.getElementById("e-name").focus(); toast("Add the employee's full name."); return; }
-    const bad = problem(v.email); if (bad) { setEmailErr(bad); document.getElementById("e-email").focus(); return; }
-    const diff = Object.keys(v).filter((k) => (e[k] || "") !== v[k]);
+    v.email = (e.baseEmail || e.email || "").toLowerCase();   // the work email is the sign-in and the key of every record, so it is not changed here
+    const diff = ["name", "title", "start"].filter((k) => (e[k] || "") !== v[k]);
     const mgrChanged = edits && manager !== curMgr;
     const noChanged = edits && empNo.trim() !== (e.no && e.no !== "Not assigned" ? e.no : "");
     if (!diff.length && !mgrChanged && !noChanged) { onClose(); toast("No changes to save."); return; }
@@ -88,7 +88,14 @@ function EditModal({ e, people, onClose, onPayroll }) {
       if (!r.ok) { toast(apiMsg(r)); return; }
       setRoster((rs) => rs.map((x) => (x.email === e.baseEmail ? { ...x, manager } : x)));
     }
-    if (diff.length) patchLocal(e.baseEmail, { edits: { ...(getLocal(e.baseEmail).edits || {}), ...Object.fromEntries(diff.map((k) => [k, v[k]])) } });
+    if (diff.length) {   // name, job title and date of joining are saved on the server, so every page and every person's browser shows them
+      setSaving(true);
+      const r = await api("PUT", "/api/employees/details", { email: e.baseEmail, name: v.name, title: v.title === "—" ? "" : v.title, start: v.start });
+      setSaving(false);
+      if (!r.ok) { toast(apiMsg(r)); return; }
+      patchLocal(e.baseEmail, { edits: {} });
+    }
+    await reload();
     onClose(); toast(mgrChanged && !noChanged ? (manager ? `${e.name} now reports to ${manager}.` : `${e.name} has no reporting manager now.`) : `Saved changes for ${e.name}.`);
   };
   const F = [["name", "Full name", "text"], ["email", "Work email", "email"], ["title", "Job title", "text"], ["start", "Date of joining", "date"]];
@@ -101,8 +108,8 @@ function EditModal({ e, people, onClose, onPayroll }) {
           <span className="hint">Saved for everyone. It must be different from every other employee's ID. Device IDs are matched to people by this number.</span></div>}
         {F.map(([k, l, ty]) => (
           <div className="field" key={k}><label htmlFor={`e-${k}`}>{l}</label>
-            <input className={`input${k === "email" ? " mono" : ""}`} id={`e-${k}`} type={ty} value={f[k]} onChange={set(k)} {...(k === "email" ? { "aria-describedby": "e-email-err", "aria-invalid": !!emailErr } : {})} />
-            {k === "email" && <span className="ferr" id="e-email-err" role="alert" hidden={!emailErr}>{emailErr}</span>}</div>
+            <input className={`input${k === "email" ? " mono" : ""}`} id={`e-${k}`} type={ty} value={f[k]} onChange={set(k)} {...(k === "email" ? { disabled: true, "aria-describedby": "e-email-hint" } : {})} />
+            {k === "email" && <span className="hint" id="e-email-hint">This is their sign-in, so it can't be changed here.</span>}</div>
         ))}
         <div className="field"><label htmlFor="e-mgr">Reporting manager</label>
           {/* A director or VP reports only to another top person, such as the CEO. */}

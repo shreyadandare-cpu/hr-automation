@@ -66,7 +66,7 @@ function squareJpeg(file, size) {
 
 export default function Profile() {
   const { user } = useAuth();
-  const { people, docs, profile, records, setProfile } = useData();
+  const { people, docs, profile, records, setProfile, reload } = useData();
   const toast = useToast();
   const [editing, setEditing] = useState(null);   // a section key, or "edu"
   const [vals, setVals] = useState({});
@@ -107,7 +107,7 @@ export default function Profile() {
     const r = await api("PUT", "/api/profile", next);
     if (r.status === 400) { setErrors((r.data && r.data.errors) || {}); toast(Object.values((r.data && r.data.errors) || {})[0] || "Check the highlighted fields."); return; }
     if (!r.ok) { toast(apiMsg(r)); return; }
-    setProfile(r.data); toast("Saved."); cancel();
+    setProfile(r.data); reload(); toast("Saved."); cancel();   // reload: the staff list and records hold these details too, so every page shows what was just saved
   };
 
   const changePhoto = async (file) => {

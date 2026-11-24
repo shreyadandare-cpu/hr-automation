@@ -1,10 +1,11 @@
+import { localOnly } from "./live-services.js";
 import { pool } from "./db.js";
 
 /* Claude access through Anthropic's Admin API: invite someone to the organization, or remove them.
    Needs an Admin API key (starts with sk-ant-admin) in ANTHROPIC_ADMIN_KEY. Without it, calls are simulated so
    the screens can still be tried, and every result says so. */
 const API = (process.env.ANTHROPIC_API_URL || "https://api.anthropic.com") + "/v1/organizations";   // the override is for testing against a local stand-in
-export const claudeMode = () => (process.env.ANTHROPIC_ADMIN_KEY ? "live" : "simulated");
+export const claudeMode = () => (process.env.ANTHROPIC_ADMIN_KEY && !localOnly() ? "live" : "simulated");   // never live against a local database
 
 async function call(method, path, body) {
   const res = await fetch(API + path, {

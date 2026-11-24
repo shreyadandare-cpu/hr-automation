@@ -13,6 +13,7 @@ import { Icon, Pill, ToolIcon, shortDate, PageSkeleton } from "../components/ui.
 import { usePresence, presenceLabel } from "../lib/usePresence.js";
 import { AVATAR_COLORS, TOOLS, docCount, mgrOf } from "../lib/people.js";
 import { R } from "../lib/leave.js";
+import InstallApp from "../components/InstallApp.jsx";
 import { FestivalArt, festivalFrom, festivalGreeting, festivalTheme, festivalWhen, useFestivalLook } from "../components/FestivalLook.jsx";
 
 const diff = (a, b) => Math.round((Date.parse(b + "T00:00:00Z") - Date.parse(a + "T00:00:00Z")) / 86400000);
@@ -91,6 +92,7 @@ function HrDashboard() {
             <span className="btn link">Open</span>
           </Link>
           <TimeToday />
+          <InstallApp />
           <TodayCards only="leave" />
           <RemoteToday />
           <FestivalTile />
@@ -158,6 +160,7 @@ function EmployeeDashboard() {
           {bal || <div className="card-b muted">Your leave balances show here once the leave data has loaded.</div>}
         </div>
         <TimeToday />
+        <InstallApp />
         <TodayCards only="leave" />
         <RemoteToday />
         </div>

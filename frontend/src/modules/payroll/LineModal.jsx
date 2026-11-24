@@ -97,7 +97,7 @@ export default function LineModal({ runId, line, editable, onClose }) {
             <h4 className="lv-h" style={{ margin: "4px 0 0" }}>This month's inputs</h4>
             <div className="muted">Saving recalculates the whole month on the server and moves the payroll back to draft, so the report has to be generated again.</div>
             <div className="sal-grid">
-              {AMOUNTS.map(([k, label]) => <div key={k}>{money2(k, `${label} (₹)`)}</div>)}
+              {AMOUNTS.map(([k, label]) => <div key={k}>{money2(k, `${label} (₹)`)}{k === "overtime" && line.overtime && line.overtime.approvedMinutes > 0 && <span className="hint">Approved this month: {Math.floor(line.overtime.approvedMinutes / 60)} h {line.overtime.approvedMinutes % 60} min. Nothing is paid until you enter the amount.</span>}</div>)}
               {money2("otherEarnings", "Other earnings (₹)")}{reason("otherEarningsReason", "Other earnings: what for")}
               {money2("adjustment", "Salary adjustment (₹, − to reduce)")}{reason("adjustmentReason", "Adjustment: reason")}
               {money2("additionalDeductions", "Additional deductions (₹)")}{reason("additionalDeductionsReason", "Deduction: what for")}

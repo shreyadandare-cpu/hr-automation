@@ -8,6 +8,7 @@ import { mailConfigured, publicUrl, sendMail } from "./mail.js";
 import { mailSkipped, notify } from "./notify.js";
 import { COMPANY_LEGAL } from "./brand.js";
 import { needAll } from "./access.js";
+import { postToChat } from "./chat.js";
 
 /*
  * Celebrations: birthday and welcome posters. HR picks the person (birthdays come from the date of birth on file, new joiners
@@ -175,13 +176,16 @@ export async function runCelebrationAlerts() {
   const once = async (e, key) => (await pool.query(
     "INSERT INTO celebration_alerts (employee_email, alert_key) VALUES ($1,$2) ON CONFLICT DO NOTHING RETURNING 1", [e.email.toLowerCase(), key])).rowCount > 0;
   for (const b of c.birthdaysToday.filter((x) => !x.announced)) {
-    if (await once(b, `birthday:${c.today}`)) { told.push(b.name); await notify("perm:celebrations.manage", { title: `Today is ${b.name}'s birthday`, body: "", link: "/app/celebrations" }); }
+    if (await once(b, `birthday:${c.today}`)) { told.push(b.name); await notify("perm:celebrations.manage", { title: `Today is ${b.name}'s birthday`, body: "", link: "/app/celebrations" });
+      await postToChat("celebrations", { title: `Happy birthday, ${b.name}`, text: "Wishing you a wonderful year ahead.", link: "/app/dashboard" }); }
   }
   for (const a of c.anniversariesToday.filter((x) => !x.announced)) {
-    if (await once(a, `anniversary:${c.today}`)) { told.push(a.name); await notify("perm:celebrations.manage", { title: `${a.name}'s ${a.years}-year work anniversary is today`, body: "", link: "/app/celebrations" }); }
+    if (await once(a, `anniversary:${c.today}`)) { told.push(a.name); await notify("perm:celebrations.manage", { title: `${a.name}'s ${a.years}-year work anniversary is today`, body: "", link: "/app/celebrations" });
+      await postToChat("celebrations", { title: `${a.name} completes ${a.years} ${a.years === 1 ? "year" : "years"} with us today`, text: "Thank you for all your work.", link: "/app/dashboard" }); }
   }
   for (const j of c.joiners.filter((x) => !x.announced)) {
-    if (await once(j, "welcome")) { told.push(j.name); await notify("perm:celebrations.manage", { title: `${j.name} joined the team`, body: j.title || "", link: "/app/celebrations" }); }
+    if (await once(j, "welcome")) { told.push(j.name); await notify("perm:celebrations.manage", { title: `${j.name} joined the team`, body: j.title || "", link: "/app/celebrations" });
+      await postToChat("celebrations", { title: `Please welcome ${j.name}`, text: j.title ? `${j.name} joins us as ${j.title}.` : "", link: "/app/dashboard" }); }
   }
   return { told };
 }

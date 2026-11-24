@@ -12,7 +12,7 @@ import pg from "pg";
 const DB = process.env.DATABASE_URL || "", BASE = process.env.BASE || "http://localhost:3190";
 if (!/@?(localhost|127\.0\.0\.1)[:/]/.test(DB) || !/^http:\/\/(localhost|127\.0\.0\.1)/.test(BASE)) { console.error("Refusing: a local database and a local server only."); process.exit(2); }
 const db = new pg.Pool({ connectionString: DB }), sha = (s) => crypto.createHash("sha256").update(s).digest("hex");
-const HR = "po.hr@wohlig.com", EMP = "po.emp@wohlig.com", NEW1 = "pnow.joiner@wohlig.com", NEW2 = "pnext.joiner@wohlig.com";
+const HR = "test.onboarding.admin@wohlig.com", EMP = "test.onboarding.employee@wohlig.com", NEW1 = "test.joiner.today@wohlig.com", NEW2 = "test.joiner.tomorrow@wohlig.com";   // clearly named test people; a local server sends no email
 let pass = 0, fail = 0;
 const ok = (name, cond, extra = "") => { cond ? pass++ : fail++; console.log(`${cond ? "PASS" : "FAIL"}  ${name}${cond ? "" : "  " + extra}`); };
 const login = async (email, superAdmin) => {
@@ -34,7 +34,7 @@ const finish = (hr, email, first, last, start) => call(hr, "POST", "/api/onboard
 try {
   for (const e of [NEW1, NEW2, HR, EMP]) await db.query("DELETE FROM employees WHERE work_email=$1", [e]);
   const hr = await login(HR, true), emp = await login(EMP, false);
-  await db.query("INSERT INTO employees (name, work_email, status, start_date, onboarded_at) VALUES ('Po Emp',$1,'active','2022-01-01',now())", [EMP]);
+  await db.query("INSERT INTO employees (name, work_email, status, start_date, onboarded_at) VALUES ('Test Onboarding Employee',$1,'active','2022-01-01',now())", [EMP]);
 
   // two joiners, created the way onboarding creates them (work email, login), then finished
   for (const [email, first, start] of [[NEW1, "Pnow", day(0)], [NEW2, "Pnext", day(1)]]) {

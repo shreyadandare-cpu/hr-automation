@@ -9,12 +9,15 @@ import { inr } from "../../lib/useLeave.js";
 const TONE = { Outstanding: "bad", "Partially recovered": "warn", "Fully recovered": "ok" };
 const todayIst = () => new Date(Date.now() + 330 * 60000).toISOString().slice(0, 10);
 
-/* Money paid to the employee ahead of time and what has been recovered. The offboarding financial clearance deducts
-   whatever is still outstanding from the final salary. HR only (the server checks too). */
+/* Money paid to the employee ahead of time (a salary advance or loan) and what has been recovered. With instalments, payroll
+   deducts the monthly amount from the month given until it is repaid, and records each one when the month is approved (as Keka
+   does). The offboarding financial clearance deducts whatever is still outstanding from the final salary. HR only (the server checks too). */
+const monthLabel = (m) => (m ? new Date(`${m}-01T00:00:00`).toLocaleDateString("en-IN", { month: "long", year: "numeric" }) : "");
+const nextMonth = () => { const d = new Date(Date.now() + 330 * 60000); d.setUTCDate(1); d.setUTCMonth(d.getUTCMonth() + 1); return d.toISOString().slice(0, 7); };
 export function AdvancesCard({ email, name }) {
   const toast = useToast();
   const [list, setList] = useState(null);
-  const [form, setForm] = useState(null);   // { kind: "advance" } | { kind: "recovery", a }
+  const [form, setForm] = useState(null);   // { kind: "advance" } | { kind: "recovery", a } | { kind: "plan", a }
   const [remove, setRemove] = useState(null);
   const load = () => api("GET", `/api/advances?email=${encodeURIComponent(email)}`).then((r) => setList(r.ok ? r.data : []));
   useEffect(() => { load(); }, [email]);   // eslint-disable-line react-hooks/exhaustive-deps
@@ -27,16 +30,19 @@ export function AdvancesCard({ email, name }) {
       {!list ? <div className="card-b"><span className="skel" /><span className="skel" style={{ width: "60%" }} /></div>
         : !list.length ? <div className="card-b muted">No advances recorded for {name.split(" ")[0]}. Record one when money is paid ahead of time (a travel or salary advance); it is recovered at offboarding if still outstanding.</div>
         : <div className="tbl-wrap"><table>
-            <thead><tr><th>Date</th><th>Reason</th><th className="num">Amount</th><th className="num">Recovered</th><th className="num">Outstanding</th><th>Status</th><th><span className="sr">Actions</span></th></tr></thead>
+            <thead><tr><th>Date</th><th>Reason</th><th className="num">Amount</th><th className="num">Recovered</th><th className="num">Outstanding</th><th>Instalments</th><th>Status</th><th><span className="sr">Actions</span></th></tr></thead>
             <tbody>{list.map((a) => (
               <tr key={a.id}><td>{shortDate(a.date)}</td><td>{a.reason}</td><td className="num">{inr(a.amount)}</td><td className="num">{inr(a.recovered)}</td>
-                <td className="num"><b>{inr(a.outstanding)}</b></td><td><Pill tone={TONE[a.status]}>{a.status}</Pill></td>
+                <td className="num"><b>{inr(a.outstanding)}</b></td>
+                <td>{a.monthly ? <>{inr(a.monthly)} a month from {monthLabel(a.fromMonth)}{a.monthsLeft > 0 && <div className="text-[13px] text-ink-faint">{a.monthsLeft === 1 ? "1 month left" : `${a.monthsLeft} months left`}</div>}</> : <span className="text-ink-faint">None</span>}</td>
+                <td><Pill tone={TONE[a.status]}>{a.status}</Pill></td>
                 <td className="num" style={{ whiteSpace: "nowrap" }}>
+                  {a.outstanding > 0 && <button type="button" className="btn link" onClick={() => setForm({ kind: "plan", a })}>{a.monthly ? "Change instalments" : "Set instalments"}</button>}
                   {a.outstanding > 0 && <button type="button" className="btn link" onClick={() => setForm({ kind: "recovery", a })}>Record recovery</button>}
                   {a.recovered === 0 && <button type="button" className="btn glass sm" style={{ marginLeft: 8 }} onClick={() => setRemove(a)}>Remove</button>}
                 </td></tr>))}</tbody>
           </table></div>}
-      {form && <AdvanceForm email={email} kind={form.kind} a={form.a} onClose={() => setForm(null)} onSaved={(d) => { setList(d); setForm(null); toast(form.kind === "advance" ? "Advance recorded." : "Recovery recorded."); }} />}
+      {form && <AdvanceForm email={email} kind={form.kind} a={form.a} onClose={() => setForm(null)} onSaved={(d) => { setList(d); setForm(null); toast(form.kind === "advance" ? "Advance recorded." : form.kind === "plan" ? "The instalments were saved." : "Recovery recorded."); }} />}
       {remove && <ConfirmDialog danger title="Remove this advance?" confirmLabel="Remove" onClose={() => setRemove(null)} onConfirm={async () => {
         const r = await api("DELETE", `/api/advances/${remove.id}`);
         if (!r.ok) { toast((r.data && r.data.error) || "Could not remove it."); } else { setList(r.data); toast("Advance removed."); }
@@ -47,7 +53,8 @@ export function AdvancesCard({ email, name }) {
 }
 
 function AdvanceForm({ email, kind, a, onClose, onSaved }) {
-  const [v, setV] = useState({ date: todayIst(), reason: "", amount: kind === "recovery" ? String(a.outstanding) : "", note: "" });
+  const [v, setV] = useState({ date: todayIst(), reason: "", amount: kind === "recovery" ? String(a.outstanding) : "", note: "",
+    monthly: a && a.monthly ? String(a.monthly) : "", fromMonth: (a && a.fromMonth) || nextMonth() });
   const [errors, setErrors] = useState({});
   const [busy, setBusy] = useState(false);
   const set = (k) => (e) => { setV({ ...v, [k]: e.target.value }); setErrors({}); };
@@ -55,7 +62,8 @@ function AdvanceForm({ email, kind, a, onClose, onSaved }) {
     e.preventDefault();
     setBusy(true);
     const r = kind === "advance"
-      ? await api("POST", "/api/advances", { email, date: v.date, reason: v.reason, amount: Number(v.amount) })
+      ? await api("POST", "/api/advances", { email, date: v.date, reason: v.reason, amount: Number(v.amount), monthly: v.monthly, fromMonth: v.monthly ? v.fromMonth : "" })
+      : kind === "plan" ? await api("PUT", `/api/advances/${a.id}/plan`, { monthly: v.monthly, fromMonth: v.monthly ? v.fromMonth : "" })
       : await api("POST", `/api/advances/${a.id}/recoveries`, { date: v.date, amount: Number(v.amount), note: v.note });
     setBusy(false);
     if (!r.ok) { setErrors((r.data && r.data.errors) || { amount: (r.data && r.data.error) || "Could not save." }); return; }
@@ -64,12 +72,17 @@ function AdvanceForm({ email, kind, a, onClose, onSaved }) {
   return (
     <Modal onClose={onClose}>
       <form onSubmit={save} noValidate>
-        <div className="card-h"><h3>{kind === "advance" ? "Record an advance" : `Record a recovery · ${a.reason}`}</h3></div>
+        <div className="card-h"><h3>{kind === "advance" ? "Record an advance" : kind === "plan" ? `Instalments: ${a.reason}` : `Record a recovery: ${a.reason}`}</h3></div>
         <div className="card-b">
+          {kind === "plan" && <p className="muted" style={{ margin: 0 }}>{inr(a.outstanding)} still owed of {inr(a.amount)}. Payroll deducts the instalment each month from the month below until it is repaid. Leave the amount empty to stop the instalments.</p>}
           {kind === "recovery" && <p className="muted" style={{ margin: 0 }}>{inr(a.outstanding)} outstanding of {inr(a.amount)}.</p>}
-          <Field id="adv-date" label={kind === "advance" ? "Date paid" : "Date recovered"} error={errors.date}><input className="input" type="date" id="adv-date" max={todayIst()} value={v.date} onChange={set("date")} /></Field>
+          {kind !== "plan" && <Field id="adv-date" label={kind === "advance" ? "Date paid" : "Date recovered"} error={errors.date}><input className="input" type="date" id="adv-date" max={todayIst()} value={v.date} onChange={set("date")} /></Field>}
           {kind === "advance" && <Field id="adv-reason" label="Reason" error={errors.reason}><input className="input" id="adv-reason" maxLength={200} placeholder="e.g. Travel advance for client visit" value={v.reason} onChange={set("reason")} /></Field>}
-          <Field id="adv-amount" label="Amount (₹)" error={errors.amount}><input className="input" id="adv-amount" type="number" min="0.01" step="0.01" inputMode="decimal" value={v.amount} onChange={set("amount")} /></Field>
+          {kind !== "plan" && <Field id="adv-amount" label="Amount (₹)" error={errors.amount}><input className="input" id="adv-amount" type="number" min="0.01" step="0.01" inputMode="decimal" value={v.amount} onChange={set("amount")} /></Field>}
+          {kind !== "recovery" && <div className="grid grid-cols-2 gap-4 max-xs:grid-cols-1">
+            <Field id="adv-monthly" label={kind === "advance" ? "Monthly instalment (₹, optional)" : "Monthly instalment (₹)"} error={errors.monthly}><input className="input" id="adv-monthly" type="number" min="1" step="0.01" inputMode="decimal" placeholder="For example 5000" value={v.monthly} onChange={set("monthly")} /></Field>
+            <Field id="adv-from" label="First month deducted" error={errors.fromMonth}><input className="input" id="adv-from" type="month" value={v.fromMonth} onChange={set("fromMonth")} disabled={!v.monthly} /></Field>
+          </div>}
           {kind === "recovery" && <Field id="adv-note" label="Note (optional)" error={errors.note}><input className="input" id="adv-note" maxLength={200} placeholder="e.g. Deducted from October salary" value={v.note} onChange={set("note")} /></Field>}
         </div>
         <div className="modal-f"><button type="button" className="btn glass" onClick={onClose}>Cancel</button><button type="submit" className="btn primary" disabled={busy}>{busy ? "Saving…" : "Save"}</button></div>

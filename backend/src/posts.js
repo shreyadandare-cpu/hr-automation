@@ -7,6 +7,7 @@ import { requireAuth } from "./auth.js";
 import { canAll } from "./access.js";
 import { UPLOAD_DIR } from "./documents.js";
 import { notify } from "./notify.js";
+import { postToChat } from "./chat.js";
 
 /*
  * Posts: the company feed. People with "Company posts and pages" write, edit and remove posts (with an optional title and up to 4 photos); everyone
@@ -152,6 +153,7 @@ export function postsRouter(wrap) {
       await client.query("COMMIT");
     } catch (err) { await client.query("ROLLBACK"); throw err; } finally { client.release(); }
     res.status(201).json(await one(req, id));
+    postToChat("announcements", { title: title || "New announcement", text: body.length > 300 ? `${body.slice(0, 297)}…` : body, link: "/app/posts" });   // after the response
   }));
 
   // Edit: title, text and photos (keep, remove or add). Removed photos are deleted from disk.

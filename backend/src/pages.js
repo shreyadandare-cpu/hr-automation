@@ -20,7 +20,11 @@ export function pagesRouter() {
   app.use("/invite", inviteRouter);     // the link in the invite email
   app.use("/p", posterPictureRouter);   // the poster picture inside celebration emails (public, long random address)
   app.use("/l", emailLinkRouter);       // short-lived links in automatic emails
-  for (const f of ["wohlig-logo.svg", "wohlig-logo-dark.svg", "wohlig-logo.png", "wohlig-logo-dark.png", "wohlig-smile-mark.svg", "wohlig-smile-mark.png", "wohlig-premier-partner-badge.png", "wohlig-logos.zip", "favicon.svg", "favicon.ico", "apple-touch-icon.png"]) app.get("/" + f, (_req, res) => res.sendFile(path.join(frontendDir, "public", f), { maxAge: "1h" }));
+  for (const f of ["wohlig-logo.svg", "wohlig-logo-dark.svg", "wohlig-logo.png", "wohlig-logo-dark.png", "wohlig-smile-mark.svg", "wohlig-smile-mark.png", "wohlig-premier-partner-badge.png", "wohlig-logos.zip", "favicon.svg", "favicon.ico", "apple-touch-icon.png",
+    "app-icon-192.png", "app-icon-512.png", "app-icon-maskable-512.png", "offline.html"]) app.get("/" + f, (_req, res) => res.sendFile(path.join(frontendDir, "public", f), { maxAge: "1h" }));
+  // The installable app (PWA): its manifest, and the service worker, which browsers must always check for a newer copy.
+  app.get("/manifest.webmanifest", (_req, res) => res.type("application/manifest+json").sendFile(path.join(frontendDir, "public", "manifest.webmanifest"), { maxAge: "1h" }));
+  app.get("/sw.js", (_req, res) => res.set({ "Cache-Control": "no-cache", "Content-Type": "text/javascript; charset=utf-8" }).sendFile(path.join(frontendDir, "public", "sw.js"), { cacheControl: false }));
   app.use("/sig", express.static(path.join(frontendDir, "public", "sig"), { maxAge: "1h" }));   // small icon pictures used by the email signature (public: mail programs fetch them)
   // The whole interface is React (frontend/src), built into frontend/dist with `npm run build:ui`.
   const distDir = path.join(frontendDir, "dist");
@@ -43,6 +47,8 @@ export function pagesRouter() {
     res.redirect(p || "/app/dashboard");
   };
   app.get("/app/*", (req, res) => (!req.user ? toLogin(req, res) : hasDist() ? res.sendFile(path.join(distDir, "index.html")) : notBuilt(res)));
+  // The public pages, open to anyone: the careers page and signing a letter (site.html; nginx serves the same file in Docker).
+  app.get(["/careers", "/careers/*", "/sign/*"], (_req, res) => (hasDist() ? res.sendFile(path.join(distDir, "site.html")) : notBuilt(res)));
   app.get("/login", (req, res) => (req.user ? home(req, res) : hasDist() ? res.sendFile(path.join(distDir, "login.html")) : notBuilt(res)));
   app.get("/", (req, res) => (req.user ? home(req, res) : res.redirect("/login")));
   // Leave rules shared by the page and the server (no personal data in it).

@@ -8,6 +8,9 @@ import { money, when } from "./util.jsx";
 const nextFy = (fy) => { const y = Number(fy.slice(0, 4)) + 1; return `${y}-${String((y + 1) % 100).padStart(2, "0")}`; };
 const n = (v) => (v === "" || v === null || v === undefined ? null : Number(v));
 
+/* The deduction limits in plain words: rupees a year, except employer NPS, a share of Basic. */
+const CAP_LABEL = { section80C: "80C (₹ a year)", section80D: "80D (₹ a year)", homeLoanInterest: "Home loan interest (₹ a year)", nps80CCD1B: "80CCD(1B) own NPS (₹ a year)",
+  employerNpsPercent: "Employer NPS, 80CCD(2) (% of Basic)" };
 /* Edits one financial year and regime: slabs, standard deduction, 87A rebate, surcharge, cess, deduction caps. */
 function RulesModal({ row, onClose }) {
   const toast = useToast();
@@ -65,8 +68,8 @@ function RulesModal({ row, onClose }) {
             <button type="button" className="btn glass sm" aria-label="Remove surcharge band" onClick={() => setF({ ...f, surcharge: f.surcharge.filter((_, j) => j !== i) })}>×</button>
           </div>))}
           <div><button type="button" className="btn link" onClick={() => setF({ ...f, surcharge: [...f.surcharge, { above: "", rate: "" }] })}>+ Add a band</button></div></div>
-        {Object.keys(f.caps).length > 0 && <><h4 className="lv-h" style={{ margin: "12px 0 8px" }}>Deduction caps (₹ a year)</h4>
-          <div className="sal-grid">{Object.keys(f.caps).map((k) => <Field key={k} id={`tr-c-${k}`} label={k}><input className="input" id={`tr-c-${k}`} type="number" min="0" value={f.caps[k] ?? ""} onChange={(e) => setF({ ...f, caps: { ...f.caps, [k]: e.target.value } })} /></Field>)}</div></>}
+        {Object.keys(f.caps).length > 0 && <><h4 className="lv-h" style={{ margin: "12px 0 8px" }}>Deduction limits</h4>
+          <div className="sal-grid">{Object.keys(f.caps).map((k) => <Field key={k} id={`tr-c-${k}`} label={CAP_LABEL[k] || k}><input className="input" id={`tr-c-${k}`} type="number" min="0" value={f.caps[k] ?? ""} onChange={(e) => setF({ ...f, caps: { ...f.caps, [k]: e.target.value } })} /></Field>)}</div></>}
         <Field id="tr-src" label="Source of this change (required)" hint="e.g. Finance Act 2026, or the CA's note of 2 April 2026."><input className="input" id="tr-src" maxLength={200} value={f.source} onChange={(e) => setF({ ...f, source: e.target.value })} /></Field>
       </div>
       <div className="modal-f"><button type="button" className="btn glass" onClick={() => onClose()}>Cancel</button><button type="submit" className="btn primary" disabled={busy || f.source.trim().length < 3}>{busy ? "Saving…" : "Save rules"}</button></div>

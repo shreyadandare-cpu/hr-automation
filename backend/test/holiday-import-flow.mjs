@@ -17,14 +17,17 @@ if (!/^http:\/\/(localhost|127\.0\.0\.1)/.test(BASE)) { console.error("Refusing:
 const db = new pg.Pool({ connectionString: DB }), sha = (s) => crypto.createHash("sha256").update(s).digest("hex");
 let pass = 0, fail = 0;
 const ok = (name, cond, extra = "") => { cond ? pass++ : fail++; console.log(`${cond ? "PASS" : "FAIL"}  ${name}${cond ? "" : "  " + extra}`); };
-const login = async (email, role) => { await db.query("INSERT INTO users (email, password_hash, role) VALUES ($1,'x',$2) ON CONFLICT DO NOTHING", [email, role]); const t = crypto.randomBytes(32).toString("hex"); await db.query("INSERT INTO sessions (token_hash,email,expires_at) VALUES ($1,$2,now()+interval '1 hour')", [sha(t), email]); return t; };
+// users.role is only a label: access comes from grants (access.js), so HR is given leave.manage for the holiday list.
+const login = async (email, role) => { await db.query("INSERT INTO users (email, password_hash, role) VALUES ($1,'x',$2) ON CONFLICT DO NOTHING", [email, role]);
+  if (role === "hr") await db.query("INSERT INTO access_grants (email, permission, scope, granted_by, note) VALUES ($1,'leave.manage','company','test','flow-test')", [email]);
+  const t = crypto.randomBytes(32).toString("hex"); await db.query("INSERT INTO sessions (token_hash,email,expires_at) VALUES ($1,$2,now()+interval '1 hour')", [sha(t), email]); return t; };
 const call = async (t, method, path, body, raw) => {
   const r = await fetch(BASE + path, { method, headers: { cookie: `sid=${t}`, ...(raw ? { "content-type": "application/octet-stream" } : body ? { "content-type": "application/json" } : {}) }, body: raw || (body ? JSON.stringify(body) : undefined) });
   const type = r.headers.get("content-type") || "";
   return { status: r.status, type, data: type.includes("json") ? await r.json().catch(() => null) : Buffer.from(await r.arrayBuffer()) };
 };
 const sheet = async (rows) => { const wb = new ExcelJS.Workbook(), ws = wb.addWorksheet("Holidays"); ws.addRow(["Date", "Holiday", "Type"]); rows.forEach((r) => ws.addRow(r)); return Buffer.from(await wb.xlsx.writeBuffer()); };
-const HR = "hr.test@wohlig.com", EMP = "hol.emp@wohlig.com";
+const HR = "test.holiday.admin@wohlig.com", EMP = "test.holiday.employee@wohlig.com";   // clearly named test people; a local server sends no email
 try {
   await db.query("DELETE FROM holidays WHERE day >= '2027-01-01' AND day < '2028-01-01'");
   const hr = await login(HR, "hr"), emp = await login(EMP, "employee");
@@ -71,7 +74,8 @@ try {
 finally {
   await db.query("DELETE FROM holidays WHERE day >= '2027-01-01' AND day < '2028-01-01'");
   await db.query("DELETE FROM sessions WHERE lower(email) IN ($1,$2)", [HR, EMP]);
-  await db.query("DELETE FROM users WHERE email=$1", [EMP]);
+  await db.query("DELETE FROM access_grants WHERE lower(email)=$1 AND note='flow-test'", [HR]);
+  await db.query("DELETE FROM users WHERE email IN ($1,$2)", [EMP, HR]);   // the HR test user too, or a later access check picks it up
   await db.query("DELETE FROM audit_log WHERE action ILIKE 'Holiday list uploaded%'");
   await db.end();
 }

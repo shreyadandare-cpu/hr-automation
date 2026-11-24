@@ -8,6 +8,9 @@ import { DataProvider } from "./data.jsx";
 import { applyTheme, currentTheme } from "./theme.js";
 import "./styles.css";
 import { applyBrand } from "./brand.js";
+import { startApp } from "./lib/pwa.js";
+
+startApp();   // the installable app: service worker and install offer (built site only)
 
 applyBrand();   // colours, fonts and the page title from brand.config.json
 

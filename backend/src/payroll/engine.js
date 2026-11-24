@@ -14,7 +14,7 @@
  * employee's payslip and PDF keep working, and adds `summary`, `tds.breakdown` and `calc` for the payroll screens.
  */
 import { payWindow, calculateTds as manualTds, TDS_THRESHOLD } from "../payroll-calc.js";
-import { fyOf, monthsLeft, monthlyTds } from "./tax.js";
+import { ageInYear, fyMonths, fyOf, monthsLeft, monthlyTds } from "./tax.js";
 
 export const P = (rupees) => Math.round(Number(rupees || 0) * 100);   // rupees → paise
 export const R = (paise) => paise / 100;                              // paise → rupees
@@ -24,6 +24,13 @@ const inr = (paise) => "₹" + R(paise).toLocaleString("en-IN", { minimumFractio
 
 export const PF_WAGE_CEILING = 15000;   // EPF wage ceiling used when PF is worked out rather than entered
 export const PF_RATE = 12;
+/** A full month's employee PF from a salary structure, in rupees: the amount set on it, or 12% of Basic up to the wage ceiling. */
+export function monthlyPfOf(s = {}) {
+  if (!(s.pfApplicable ?? Number(s.pfEmployee) > 0)) return 0;
+  if (Number(s.pfEmployee) > 0) return Number(s.pfEmployee);
+  const basic = (s.earnings || []).filter((e) => kindOf(e.name) === "basic").reduce((n, e) => n + (Number(e.amount) || 0), 0);
+  return Math.round(Math.min(basic, PF_WAGE_CEILING) * PF_RATE) / 100;
+}
 
 /** Which payroll-table column an earning belongs to. */
 export const kindOf = (name) => (/^\s*basic/i.test(name) ? "basic" : /^\s*(hra|house rent)/i.test(name) ? "hra" : "allowance");
@@ -80,8 +87,10 @@ export function cleanInputs(body = {}, maxDays = 31) {
  *   adjustments    [{ id, kind: 'earning'|'deduction', amount, reason, sourcePeriod }] corrections to earlier months
  *   tax            { rules, regime, declaration, paidSoFar: { taxable, tds, pt } } (rules null = not configured)
  *   lopDivisor     days in the loss-of-pay divisor (leave policy: 30)
+ *   overtimeApprovedMinutes  overtime approved for the month (shifts.js). Shown only: overtime is paid as HR enters it, never by itself.
+ *   advanceRecoveries  this month's instalments of advances and loans [{ id, reason, amount }] (clearance.js advanceInstalments)
  */
-export function computeLine({ period, employee = {}, structure, inputs = {}, leaveLopDays = 0, claims = 0, adjustments = [], tax = {}, lopDivisor = 30 }) {
+export function computeLine({ period, employee = {}, structure, inputs = {}, leaveLopDays = 0, claims = 0, adjustments = [], tax = {}, lopDivisor = 30, overtimeApprovedMinutes = 0, advanceRecoveries = [] }) {
   const calc = [], incomplete = [], warnings = [];
   const w = payWindow(period, employee.start, employee.lastDay);
   if (!structure || !structure.earnings || !structure.earnings.length) incomplete.push("Salary breakdown is not set.");
@@ -101,6 +110,12 @@ export function computeLine({ period, employee = {}, structure, inputs = {}, lea
   addVar("Incentives", inputs.incentives);
   addVar("Bonus", inputs.bonus);
   addVar("Overtime", inputs.overtime);
+  // Approved overtime is told to payroll, not paid: the company pays it only as HR types the amount (decision, 2026-11-24).
+  if (overtimeApprovedMinutes > 0) {
+    const h = Math.floor(overtimeApprovedMinutes / 60), m = overtimeApprovedMinutes % 60, text = h && m ? `${h} h ${m} min` : h ? `${h} h` : `${m} min`;
+    calc.push(`Overtime approved for this month: ${text}. It is paid only as entered under Overtime${Number(inputs.overtime) > 0 ? `: ${inr(P(inputs.overtime))}` : "; nothing is entered, so nothing is paid"}.`);
+    if (!(Number(inputs.overtime) > 0)) warnings.push(`${text} of overtime was approved for this month. Enter the amount under Overtime to pay it, or leave it empty to pay nothing.`);
+  }
   addVar(inputs.otherEarningsReason ? `Other earnings: ${inputs.otherEarningsReason}` : "Other earnings", inputs.otherEarnings);
   if (Number(inputs.adjustment) > 0) addVar(`Salary adjustment: ${inputs.adjustmentReason}`, inputs.adjustment);
   for (const a of adjustments) if (a.kind === "earning") addVar(`Arrears for ${a.sourcePeriod}: ${a.reason}`, a.amount);
@@ -149,6 +164,11 @@ export function computeLine({ period, employee = {}, structure, inputs = {}, lea
   if (P(inputs.additionalDeductions)) other.push({ name: `Additional deduction: ${inputs.additionalDeductionsReason}`, p: P(inputs.additionalDeductions) });
   if (Number(inputs.adjustment) < 0) other.push({ name: `Salary adjustment: ${inputs.adjustmentReason}`, p: -P(inputs.adjustment) });
   for (const a of adjustments) if (a.kind === "deduction") other.push({ name: `Recovery for ${a.sourcePeriod}: ${a.reason}`, p: P(a.amount) });
+  // Advance and loan instalments, as Keka deducts them: the month's instalment or what is still owed, recorded when the month is approved.
+  for (const a of advanceRecoveries) if (P(a.amount) > 0) {
+    other.push({ name: `Advance recovery: ${a.reason}`, p: P(a.amount), advanceId: a.id });
+    calc.push(`Advance recovery ${inr(P(a.amount))} for "${a.reason}" (the monthly instalment, or what is still owed if less).`);
+  }
   const otherP = sumP(other);
 
   // 7. TDS.
@@ -157,31 +177,65 @@ export function computeLine({ period, employee = {}, structure, inputs = {}, lea
   let tds = { applicable: false, mode: s.tdsMode || "auto", amount: 0, calculated: 0, override: null, breakdown: null };
   const mode = s.tdsMode || (s.tdsMonthly !== null && s.tdsMonthly !== undefined && s.tdsMonthly !== "" ? "manual" : "auto");
   tds.mode = mode;
+  // The year's income for the ₹12,00,000 rule: this salary for a year, plus what was earned elsewhere in the year (a previous
+  // employer's salary and other income the person declared). Without the second part a mid-year joiner pays no TDS here
+  // although the year as a whole is taxable. The rule is the new regime's: there, income up to ₹12,00,000 carries no tax. Under
+  // the old regime tax is owed well below it (the rebate stops at ₹5,00,000), so TDS is always worked out, as Keka does.
+  const oldRegime = tax.regime === "old";
+  const decl = tax.declaration || {};
+  if (tax.source === "employee") {
+    calc.push("Tax details: from the employee's own declaration (Pay > Tax declaration), with HR's proof decisions applied; payroll has not entered tax details for this person.");
+    if (tax.hra && tax.hra.exemption) calc.push(`HRA exemption ${inr(P(tax.hra.exemption))}: the least of HRA received ${inr(P(tax.hra.received))}, rent ${inr(P(tax.hra.rent))} less 10% of Basic ${inr(P(tax.hra.basic))}, and ${tax.hra.metro ? "50" : "40"}% of Basic.`);
+    if (tax.lta && tax.lta.exemption) calc.push(`Leave travel exemption ${inr(P(tax.lta.exemption))}: the fares claimed ${inr(P(tax.lta.fares))}, up to the leave travel allowance for the year ${inr(P(tax.lta.received))}.`);
+  }
+  const elsewhereP = P(Number(decl.previousEmployerIncome) || 0) + P(Number(decl.otherIncome) || 0);
+  const yearIncomeP = fullGrossP * 12 + elsewhereP;
+  const yearIncomeText = elsewhereP ? `${inr(yearIncomeP)} (this salary ${inr(fullGrossP * 12)} + earned elsewhere this year ${inr(elsewhereP)})` : inr(yearIncomeP);
   if (structure && w.days) {
     if (s.tdsApplicable === false) {
       calc.push("TDS: not applicable for this employee (set on the salary structure).");
     } else if (mode === "manual") {
-      const annual = R(fullGrossP) * 12;
-      const m = manualTds({ annualIncome: annual, structure: s });
+      const m = manualTds({ annualIncome: R(yearIncomeP), structure: s, always: oldRegime });
       tds = { ...tds, applicable: m.applicable, calculated: P(m.amount) };
       if (m.missing) incomplete.push("Income above ₹12,00,000 a year, but the monthly TDS has not been entered.");
-      calc.push(m.applicable ? `TDS: monthly amount entered on the salary structure, ${inr(P(m.amount))}.` : `TDS: annual income ${inr(fullGrossP * 12)} is not above ${inr(P(TDS_THRESHOLD))}, so none.`);
-    } else if (R(fullGrossP) * 12 <= TDS_THRESHOLD) {
-      // Company rule: a yearly income of ₹12,00,000 or less pays no TDS. Above it, the tax is worked out under the employee's regime below.
-      calc.push(`TDS: annual income ${inr(fullGrossP * 12)} is not above ${inr(P(TDS_THRESHOLD))}, so none.`);
+      calc.push(m.applicable ? `TDS: monthly amount entered on the salary structure, ${inr(P(m.amount))}.` : `TDS: annual income ${yearIncomeText} is not above ${inr(P(TDS_THRESHOLD))}, so none.`);
+      // A fixed amount is not worked out from the declaration, so the previous employer's figures change nothing. Say so.
+      if (["previousEmployerIncome", "previousEmployerTds", "openingTaxable", "openingTds"].some((k) => Number(decl[k]) > 0)) {
+        warnings.push("TDS is a fixed monthly amount on the salary structure, so the previous employer's salary and TDS (and any opening figures) declared for this year are not used. Change the structure to calculated TDS to use them.");
+      }
     } else if (!tax.rules) {
-      incomplete.push(`Tax rules for FY ${fy} (${tax.regime || "new"} regime) are not configured.`);
+      // Without the year's rules nothing can be worked out; under the new regime a salary of ₹12,00,000 a year or less owes nothing anyway.
+      if (!oldRegime && yearIncomeP <= P(TDS_THRESHOLD)) calc.push(`TDS: annual income ${yearIncomeText} is not above ${inr(P(TDS_THRESHOLD))}, which is tax-free under the new regime, so none.`);
+      else incomplete.push(`Tax rules for FY ${fy} (${tax.regime || "new"} regime) are not configured.`);
     } else {
+      // Always worked out from the year's actual figures, as Keka does: salary paid so far, this month with any bonus or arrears, the
+      // months to come and income from elsewhere. Under the new regime the rebate brings the tax to nil when taxable income is
+      // ₹12,00,000 or less, so most such salaries still get no TDS; a bonus or a higher salary earlier in the year can still make tax due.
       const lastMonth = employee.lastDay ? String(employee.lastDay).slice(0, 7) : null;
       let after = monthsLeft(period) - 1;
       if (lastMonth && lastMonth > period && fyOf(lastMonth) === fy) after = Math.min(after, monthsBetween(period, lastMonth));
       if (lastMonth && lastMonth <= period) after = 0;
       const paid = tax.paidSoFar || { taxable: 0, tds: 0, pt: 0 };
       const annualPt = R(P(paid.pt || 0) + ptP * (after + 1));
+      const annualPf = R(P(paid.pf || 0) + pfP + P(monthlyPfOf(s)) * after);   // the employee's PF counts under 80C (old regime)
+      // Basic for the months employed this year, for the employer NPS limit (a share of Basic).
+      const startMonth = employee.start ? String(employee.start instanceof Date ? employee.start.toISOString() : employee.start).slice(0, 7) : null;
+      const monthsBefore = fyMonths(fy).filter((m) => m < period && (!startMonth || m >= startMonth)).length;
+      const annualBasic = R(sumP(fixedFull.filter((e) => e.kind === "basic")) * (monthsBefore + 1 + after));
+      const age = ageInYear(employee.dob, fy);   // a senior citizen's slabs under the old regime, and 80TTB instead of 80TTA
       const t = monthlyTds({ rules: tax.rules, regime: tax.regime, fy, period, paidSoFar: paid, thisMonthTaxable: R(taxableP), regularMonthly: R(fullGrossP),
-        monthsAfter: after, declaration: tax.declaration || {}, annualProfessionalTax: annualPt });
+        monthsAfter: after, declaration: tax.declaration || {}, annualProfessionalTax: annualPt, annualPf, annualBasic, age });
       tds = { ...tds, applicable: t.breakdown.annualTax > 0, calculated: P(t.amount), breakdown: t.breakdown };
       calc.push(`TDS (${tax.regime} regime, FY ${fy}): projected taxable income ${inr(P(t.breakdown.taxableIncome))}, tax for the year ${inr(P(t.breakdown.annualTax))}, already deducted ${inr(P(t.breakdown.tdsDeductedSoFar + t.breakdown.previousEmployerTds))}, spread over ${t.breakdown.monthsIncludingThis} month${t.breakdown.monthsIncludingThis === 1 ? "" : "s"} = ${inr(P(t.amount))}.`);
+      if (!oldRegime && !t.breakdown.annualTax) calc.push(`No tax for the year: under the new regime taxable income up to ${inr(P(TDS_THRESHOLD))} carries none.`);
+      if (oldRegime && age >= 60) calc.push(`Senior citizen (${age} by 31 March): nothing is taxed up to ${age >= 80 ? "₹5,00,000" : "₹3,00,000"} under the old regime.`);
+      // No PAN on file: the Act (section 206AA, now 397) takes at least 20% of the salary paid when tax is due, as Keka does.
+      // Only when the PAN is known to be missing (an empty value), never when it was not looked up.
+      if (employee.pan !== undefined && !employee.pan && t.breakdown.annualTax > 0) {
+        const floorP = rupee(taxableP * 0.2);
+        if (floorP > P(t.amount)) { tds = { ...tds, calculated: floorP, noPan: true }; calc.push(`No PAN on file: TDS is 20% of this month's taxable salary, ${inr(floorP)}, instead of ${inr(P(t.amount))}.`); }
+        warnings.push("No PAN on file for this person, so TDS is at least 20% of the taxable salary. Add the PAN to their profile to return to the normal rate.");
+      }
     }
     tds.amount = tds.calculated;
     if (inputs.tdsOverride !== undefined && inputs.tdsOverride !== null) {
@@ -196,7 +250,7 @@ export function computeLine({ period, employee = {}, structure, inputs = {}, lea
   const deductionLines = [];
   if (ptP) deductionLines.push({ name: "Professional Tax", p: ptP, code: "pt" });
   if (tds.amount) deductionLines.push({ name: "Total Income Tax", p: tds.amount, code: "tds" });
-  for (const o of other) deductionLines.push({ ...o, code: "other" });
+  for (const o of other) deductionLines.push({ ...o, code: o.advanceId ? "advance" : "other" });
   if (lopP) deductionLines.push({ name: `Loss of Pay (${lopDays} day${lopDays === 1 ? "" : "s"})`, p: lopP, code: "lop" });
   const dedP = sumP(deductionLines);
   const totalDedP = pfP + esicP + dedP;
@@ -208,9 +262,9 @@ export function computeLine({ period, employee = {}, structure, inputs = {}, lea
   else if (structure && w.days && netP === 0) incomplete.push("Net pay is zero this month: put this salary on hold.");
   if (!w.days && structure) warnings.push("Not employed on any day of this month.");
 
-  const out = (l) => l.map((x) => ({ name: x.name, amount: R(x.p), ...(x.kind ? { kind: x.kind } : {}), ...(x.code ? { code: x.code } : {}) }));
+  const out = (l) => l.map((x) => ({ name: x.name, amount: R(x.p), ...(x.kind ? { kind: x.kind } : {}), ...(x.code ? { code: x.code } : {}), ...(x.advanceId ? { advanceId: x.advanceId } : {}) }));
   return {
-    v: 2, period, fy, employee, structureId: structure && structure.id ? structure.id : null,
+    v: 2, period, fy, employee, overtime: overtimeApprovedMinutes > 0 ? { approvedMinutes: overtimeApprovedMinutes } : null, structureId: structure && structure.id ? structure.id : null,
     days: { total: w.total, actual: w.days, lop: lopDays, payable: Math.max(0, w.days - lopDays) },
     earnings: out(earnings),
     contributions: [...(pfP ? [{ name: "PF Employee", amount: R(pfP) }] : []), ...(esicP ? [{ name: "ESIC Employee", amount: R(esicP) }] : [])],

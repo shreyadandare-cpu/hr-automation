@@ -10,7 +10,10 @@ import { can, canAll, mayDecide, need, scopeOf } from "./access.js";
 import { notify } from "./notify.js";
 import { readProof } from "./finance-rules.js";
 import { reportsOf } from "./teams.js";
-import { financialYear, readAdvance, readAppLink, readArticle, readAttendanceRequest, readDecision, readGoal, readPoll, readPraise, readTaxDeclaration, tally } from "./engage-rules.js";
+import { financialYear, readAdvance, readAppLink, readArticle, readAttendanceRequest, readDecision, readGoal, readPoll, readPraise, readLateDecision, readLateRequest, readTaxDeclaration, readTaxDates, readUnlock, tally, windowOpen, joinerUntil, BOTH_REGIMES } from "./engage-rules.js";
+import { form124Pdf } from "./tax-forms.js";
+import { estimateTax, yearForReturn } from "./tax-estimate.js";
+import { postToChat } from "./chat.js";
 
 /*
  * Engage and requests: polls, praise, articles, app links, advance requests and attendance requests.
@@ -100,7 +103,8 @@ export function engageRouter(wrap) {
   }));
   r.delete("/api/polls/:id", wrap(async (req, res) => {
     if (!mayManage(req)) return res.status(403).json(NO_ACCESS);
-    await pool.query("UPDATE polls SET deleted_at = now() WHERE id=$1 AND deleted_at IS NULL", [idOf(req.params.id)]);
+    const { rowCount } = await pool.query("UPDATE polls SET deleted_at = now() WHERE id=$1 AND deleted_at IS NULL", [idOf(req.params.id)]);
+    if (!rowCount) return res.status(404).json({ error: "This poll was not found. It may already have been removed." });
     res.json({ ok: true });
   }));
 
@@ -120,6 +124,7 @@ export function engageRouter(wrap) {
     const { rows: [row] } = await pool.query("INSERT INTO praises (from_email, to_email, message, badge) VALUES ($1,$2,$3,$4) RETURNING id", [me(req), to, message, badge]);
     const person = await namesFor([me(req)]);
     res.status(201).json({ id: row.id });
+    namesFor([to]).then((p2) => postToChat("praise", { title: `${person(me(req)).name} praised ${p2(to).name}`, text: message.slice(0, 300), link: "/app/praise" })).catch(() => {});
     notify(to, { title: `${person(me(req)).name} praised you`, body: message.slice(0, 140), link: "/app/praise" }).catch(() => {});   // after the response; a failed notice never fails the praise
   }));
   r.delete("/api/praise/:id", wrap(async (req, res) => {
@@ -162,7 +167,8 @@ export function engageRouter(wrap) {
   }));
   r.delete("/api/articles/:id", wrap(async (req, res) => {
     if (!mayManage(req)) return res.status(403).json(NO_ACCESS);
-    await pool.query("UPDATE articles SET deleted_at = now() WHERE id=$1 AND deleted_at IS NULL", [idOf(req.params.id)]);
+    const { rowCount } = await pool.query("UPDATE articles SET deleted_at = now() WHERE id=$1 AND deleted_at IS NULL", [idOf(req.params.id)]);
+    if (!rowCount) return res.status(404).json({ error: "This article was not found. It may already have been removed." });
     res.json({ ok: true });
   }));
 
@@ -196,7 +202,8 @@ export function engageRouter(wrap) {
   }));
   r.delete("/api/apps/:id", wrap(async (req, res) => {
     if (!mayManage(req)) return res.status(403).json(NO_ACCESS);
-    await pool.query("UPDATE app_links SET deleted_at = now() WHERE id=$1 AND deleted_at IS NULL", [idOf(req.params.id)]);
+    const { rowCount } = await pool.query("UPDATE app_links SET deleted_at = now() WHERE id=$1 AND deleted_at IS NULL", [idOf(req.params.id)]);
+    if (!rowCount) return res.status(404).json({ error: "This app link was not found. It may already have been removed." });
     res.json({ ok: true });
   }));
 
@@ -271,16 +278,29 @@ export function engageRouter(wrap) {
     return rows.length;
   };
   const taxOut = (x, fy, files = [], fallback = "new") => ({ financialYear: fy, regime: x ? x.regime : fallback, status: x ? x.status : "draft", submittedAt: x ? x.submitted_at : null,
-    items: x ? x.items.map((i, n) => { const pr = (x.proofs || {})[n]; return { section: i.section, description: i.description, amount: Number(i.amountMinor) / 100, proof: pr ? { status: pr.status, note: pr.note || "", at: pr.at } : null, file: (() => { const f = files.find((y) => y.line_index === n); return f ? { name: f.name, size: f.size } : null; })() }; }) : [] });
+    items: x ? x.items.map((i, n) => { const pr = (x.proofs || {})[n]; return { section: i.section, description: i.description, amount: Number(i.amountMinor) / 100, party: i.party || null, proof: pr ? { status: pr.status, note: pr.note || "", at: pr.at, approved: pr.approvedMinor != null ? Number(pr.approvedMinor) / 100 : null } : null, file: (() => { const f = files.find((y) => y.line_index === n); return f ? { name: f.name, size: f.size } : null; })() }; }) : [] });
   /* ---------- Regime policy: which regime a declaration starts on, and the policy document behind it. ----------
      payroll.prepare (company-wide) sets the default (New or Old) for a financial year and uploads the policy document. It carries over
      to the next year until it is changed. Everyone sees it on their declaration, which starts on that regime; they can still change it.
      It never changes a declaration someone has saved, and it does not touch payroll's own tax_declarations (which the calculation uses). */
   const policyOf = async (fy) => {
-    const { rows: [p] } = await pool.query("SELECT financial_year, default_regime, doc_name, doc_size, updated_by, updated_at FROM tax_regime_policies WHERE financial_year <= $1 ORDER BY financial_year DESC LIMIT 1", [fy]);
-    if (!p) return { financialYear: fy, defaultRegime: "new", set: false, document: null, updatedBy: null, updatedAt: null };
+    const { rows: [p] } = await pool.query(`SELECT financial_year, default_regime, doc_name, doc_size, updated_by, updated_at, to_char(declaration_due,'YYYY-MM-DD') AS declaration_due,
+      to_char(proof_due,'YYYY-MM-DD') AS proof_due, joiner_days FROM tax_regime_policies WHERE financial_year <= $1 ORDER BY financial_year DESC LIMIT 1`, [fy]);
+    if (!p) return { financialYear: fy, defaultRegime: "new", set: false, document: null, updatedBy: null, updatedAt: null, declarationDue: null, proofDue: null, joinerDays: null };
     const who = await namesFor([p.updated_by]);
-    return { financialYear: fy, setForYear: p.financial_year, defaultRegime: p.default_regime, set: true, document: p.doc_name ? { name: p.doc_name, size: p.doc_size } : null, updatedBy: who(p.updated_by).name, updatedAt: p.updated_at };
+    const own = p.financial_year === fy;   // due dates belong to their own year only
+    return { financialYear: fy, setForYear: p.financial_year, defaultRegime: p.default_regime, set: true, document: p.doc_name ? { name: p.doc_name, size: p.doc_size } : null, updatedBy: who(p.updated_by).name, updatedAt: p.updated_at,
+      declarationDue: own ? p.declaration_due : null, proofDue: own ? p.proof_due : null, joinerDays: p.joiner_days };   // the joiner period carries over
+  };
+  /** Whether this person may still change their declaration and their proofs: the due dates, unless payroll reopened it for them. */
+  const windowFor = async (email, fy, pol, day) => {
+    const [{ rows }, { rows: [emp] }] = await Promise.all([
+      pool.query("SELECT kind, to_char(until,'YYYY-MM-DD') AS until FROM tax_declaration_unlocks WHERE lower(email)=$1 AND financial_year=$2", [email, fy]),
+      pool.query("SELECT to_char(start_date,'YYYY-MM-DD') AS start FROM employees WHERE lower(work_email)=$1", [email])]);
+    const until = (k) => { const u = rows.find((x) => x.kind === k); return u ? u.until : null; };
+    const joiner = joinerUntil(emp && emp.start, pol.joinerDays);   // a new joiner's own period, for both the declaration and the proofs
+    const one = (k, due) => ({ due, unlockedUntil: until(k), joinerUntil: joiner, open: windowOpen({ today: day, due, unlockedUntil: until(k), joinerUntil: joiner }) });
+    return { today: day, declaration: one("declaration", pol.declarationDue), proof: one("proof", pol.proofDue) };
   };
   const mayManagePolicy = (req, res) => (canAll(req, "payroll.prepare") ? true : (res.status(403).json(NO_ACCESS), false));
   const noteAudit = (req, text) => pool.query("INSERT INTO audit_log (action, work_email) VALUES ($1,$2)", [text, me(req)]).catch(() => {});
@@ -290,8 +310,8 @@ export function engageRouter(wrap) {
     if (mine) return mine;
     const { rows: [prev] } = await pool.query("SELECT * FROM tax_regime_policies WHERE financial_year < $1 ORDER BY financial_year DESC LIMIT 1", [fy]);
     const { rows: [made] } = await pool.query(
-      "INSERT INTO tax_regime_policies (financial_year, default_regime, doc_name, doc_mime, doc_size, doc_stored, updated_by) VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *",
-      [fy, prev ? prev.default_regime : "new", prev ? prev.doc_name : null, prev ? prev.doc_mime : null, prev ? prev.doc_size : null, prev ? prev.doc_stored : null, email]);
+      "INSERT INTO tax_regime_policies (financial_year, default_regime, doc_name, doc_mime, doc_size, doc_stored, updated_by, joiner_days) VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *",
+      [fy, prev ? prev.default_regime : "new", prev ? prev.doc_name : null, prev ? prev.doc_mime : null, prev ? prev.doc_size : null, prev ? prev.doc_stored : null, email, prev ? prev.joiner_days : null]);
     return made;
   };
   const stillUsed = async (stored, fy) => stored && (await pool.query("SELECT 1 FROM tax_regime_policies WHERE doc_stored=$1 AND financial_year <> $2 LIMIT 1", [stored, fy])).rowCount > 0;
@@ -338,18 +358,145 @@ export function engageRouter(wrap) {
     res.sendFile(file);
   }));
 
+  /* Due dates for the year's declarations and proofs (payroll.prepare, company-wide). Empty clears a date. */
+  r.put("/api/tax-declaration/policy/dates", wrap(async (req, res) => {
+    if (!mayManagePolicy(req, res)) return;
+    const fy = financialYear(await today());
+    const { declarationDue, proofDue, joinerDays, errors } = readTaxDates(req.body, fy);
+    if (Object.keys(errors).length) return res.status(400).json({ errors });
+    await rowForYear(fy, me(req));
+    await pool.query("UPDATE tax_regime_policies SET declaration_due=$2, proof_due=$3, joiner_days=$5, updated_by=$4, updated_at=now() WHERE financial_year=$1", [fy, declarationDue, proofDue, me(req), joinerDays]);
+    await noteAudit(req, `Tax declaration due dates for ${fy}-${String(fy + 1).slice(2)}: declarations ${declarationDue || "no date"}, proofs ${proofDue || "no date"}`);
+    res.json({ ...(await policyOf(fy)), canManage: true });
+  }));
+  /* Reopening the declaration or the proofs for one person after the due date (payroll.prepare, company-wide). */
+  r.get("/api/tax-declaration/unlocks", wrap(async (req, res) => {
+    if (!mayManagePolicy(req, res)) return;
+    const fy = financialYear(await today());
+    const { rows } = await pool.query("SELECT email, kind, to_char(until,'YYYY-MM-DD') AS until FROM tax_declaration_unlocks WHERE financial_year=$1 AND until >= (now() AT TIME ZONE 'Asia/Kolkata')::date ORDER BY until, email LIMIT 200", [fy]);
+    const person = await namesFor(rows.map((x) => x.email));
+    res.json({ unlocks: rows.map((x) => ({ person: person(x.email), kind: x.kind, until: x.until })) });
+  }));
+  r.post("/api/tax-declaration/unlocks", wrap(async (req, res) => {
+    if (!mayManagePolicy(req, res)) return;
+    const day = await today(), fy = financialYear(day);
+    const { email, kind, until, errors } = readUnlock(req.body, day);
+    if (Object.keys(errors).length) return res.status(400).json({ errors });
+    await pool.query(`INSERT INTO tax_declaration_unlocks (email, financial_year, kind, until, granted_by) VALUES ($1,$2,$3,$4,$5)
+      ON CONFLICT (lower(email), financial_year, kind) DO UPDATE SET until=EXCLUDED.until, granted_by=EXCLUDED.granted_by, granted_at=now()`, [email, fy, kind, until, me(req)]);
+    await noteAudit(req, `Tax ${kind === "proof" ? "proofs" : "declaration"} reopened for ${email} until ${until}`);
+    notify(email, { title: kind === "proof" ? "You can add your tax proofs again" : "You can change your tax declaration again", body: `The payroll team reopened it until ${until}.`, link: "/app/tax" }).catch(() => {});
+    res.status(201).json({ ok: true });
+  }));
+  r.delete("/api/tax-declaration/unlocks/:email/:kind", wrap(async (req, res) => {
+    if (!mayManagePolicy(req, res)) return;
+    const fy = financialYear(await today()), email = String(req.params.email || "").toLowerCase();
+    const { rowCount } = await pool.query("DELETE FROM tax_declaration_unlocks WHERE lower(email)=$1 AND financial_year=$2 AND kind=$3", [email, fy, req.params.kind]);
+    if (!rowCount) return res.status(404).json({ error: "This reopening was not found." });
+    await noteAudit(req, `Tax ${req.params.kind === "proof" ? "proofs" : "declaration"} closed again for ${email}`);
+    res.json({ ok: true });
+  }));
+
+  /* Late changes, as Keka takes a late declaration for approval: after the declaration or proof date, the person asks with a reason;
+     payroll (payroll.prepare, company-wide) approves it until a date, which reopens it for them, or declines it with a note. Never
+     your own request. */
+  const lateOut = (x, person = null) => ({ id: x.id, kind: x.kind, reason: x.reason, status: x.status, until: x.until, note: x.note || "", createdAt: x.created_at, decidedAt: x.decided_at, ...(person ? { person } : {}) });
+  const LATE_COLS = "id, email, kind, reason, status, to_char(until,'YYYY-MM-DD') AS until, note, created_at, decided_at";
+  r.post("/api/tax-declaration/late-requests", wrap(async (req, res) => {
+    const { kind, reason, errors } = readLateRequest(req.body);
+    if (Object.keys(errors).length) return res.status(400).json({ errors });
+    const day = await today(), fy = financialYear(day), win = await windowFor(me(req), fy, await policyOf(fy), day);
+    if (win[kind].open) return res.status(409).json({ error: kind === "proof" ? "Your proofs are still open, so you can add them now." : "Your declaration is still open, so you can change it now." });
+    const { rows: [x] } = await pool.query(`INSERT INTO tax_late_requests (email, financial_year, kind, reason) VALUES ($1,$2,$3,$4)
+      ON CONFLICT (lower(email), financial_year, kind) WHERE status = 'pending' DO NOTHING RETURNING ${LATE_COLS}`, [me(req), fy, kind, reason]);
+    if (!x) return res.status(409).json({ error: "You have already asked. The payroll team will reply soon." });
+    const name = (await namesFor([me(req)]))(me(req)).name;
+    notify("perm:payroll.prepare", { title: `${name} asked to change their tax ${kind === "proof" ? "proofs" : "declaration"} after the due date`, body: reason.slice(0, 160), link: "/app/tax" }).catch(() => {});
+    res.status(201).json(lateOut(x));
+  }));
+  r.get("/api/tax-declaration/late-requests", wrap(async (req, res) => {
+    if (!mayManagePolicy(req, res)) return;
+    const fy = financialYear(await today());
+    const { rows } = await pool.query(`SELECT ${LATE_COLS} FROM tax_late_requests WHERE financial_year=$1 AND (status='pending' OR decided_at > now() - interval '30 days')
+      ORDER BY status='pending' DESC, created_at DESC LIMIT 100`, [fy]);
+    const who = await namesFor(rows.map((x) => x.email));
+    res.json({ requests: rows.map((x) => lateOut(x, who(x.email))) });
+  }));
+  r.put("/api/tax-declaration/late-requests/:id", wrap(async (req, res) => {
+    const id = Number(req.params.id);
+    const { rows: [x] } = Number.isInteger(id) ? await pool.query("SELECT id, email, financial_year, kind, status FROM tax_late_requests WHERE id=$1", [id]) : { rows: [] };
+    if (!x) return res.status(404).json({ error: "This request was not found." });
+    if (!canAll(req, "payroll.prepare") || !(await mayDecide(req, "payroll.prepare", x.email.toLowerCase()))) return res.status(403).json(NO_ACCESS);
+    if (x.status !== "pending") return res.status(409).json({ error: "This request has already been answered." });
+    const day = await today();
+    const { decision, until, note, errors } = readLateDecision(req.body, day);
+    if (Object.keys(errors).length) return res.status(400).json({ errors });
+    const what = x.kind === "proof" ? "proofs" : "declaration";
+    if (decision === "approved") await pool.query(`INSERT INTO tax_declaration_unlocks (email, financial_year, kind, until, granted_by) VALUES ($1,$2,$3,$4,$5)
+      ON CONFLICT (lower(email), financial_year, kind) DO UPDATE SET until=EXCLUDED.until, granted_by=EXCLUDED.granted_by, granted_at=now()`, [x.email.toLowerCase(), x.financial_year, x.kind, until, me(req)]);
+    const { rows: [row] } = await pool.query(`UPDATE tax_late_requests SET status=$2, until=$3, note=$4, decided_by=$5, decided_at=now() WHERE id=$1 AND status='pending' RETURNING ${LATE_COLS}`,
+      [id, decision, until, note || null, me(req)]);
+    if (!row) return res.status(409).json({ error: "This request has already been answered." });
+    await noteAudit(req, `Late tax ${what} request from ${x.email} ${decision}${until ? ` until ${until}` : ""}`);
+    notify(x.email, decision === "approved"
+      ? { title: `You can change your tax ${what} again`, body: `The payroll team approved your request until ${until}.${note ? ` ${note}` : ""}`.slice(0, 180), link: "/app/tax" }
+      : { title: `Your request to change your tax ${what} was declined`, body: note.slice(0, 180), link: "/app/tax" }).catch(() => {});
+    res.json(lateOut(row, (await namesFor([x.email]))(x.email)));
+  }));
+
+  /* The year's figures for filing the income tax return, from the person's approved payslips. Their own only. */
+  r.get("/api/tax-declaration/year-summary", wrap(async (req, res) => {
+    const day = await today(), current = financialYear(day);
+    const fy = req.query.fy ? Number(req.query.fy) : current;
+    if (!Number.isInteger(fy) || fy < current - 3 || fy > current) return res.status(400).json({ error: "Please choose one of the last four financial years." });
+    const [{ rows: [own] }, pol] = await Promise.all([
+      pool.query("SELECT regime, items, proofs FROM tax_declaration_requests WHERE lower(email)=$1 AND financial_year=$2 AND status='submitted'", [me(req), fy]),
+      policyOf(fy),
+    ]);
+    res.json({ ...(await yearForReturn({ email: me(req), fy, own, proofsFinal: fy < current || (!!pol.proofDue && day > pol.proofDue) })), current });
+  }));
+
+  /* Form 124 (earlier Form 12BB): the person's statement of claims for the year, as a PDF to sign. The person, or payroll.view
+     for the people in scope. */
+  r.get("/api/tax-declaration/form-124", wrap(async (req, res) => {
+    const asked = req.query.email ? String(req.query.email).toLowerCase() : me(req);
+    if (asked !== me(req) && !(await can(req, "payroll.view", asked))) return res.status(404).json({ error: "This declaration was not found." });
+    const fy = financialYear(await today());
+    const [{ rows: [x] }, { rows: [e] }] = await Promise.all([
+      pool.query("SELECT regime, items, status, submitted_at, proofs FROM tax_declaration_requests WHERE lower(email)=$1 AND financial_year=$2", [asked, fy]),
+      pool.query("SELECT name, address, phone, pan_masked FROM employees WHERE lower(work_email)=$1", [asked]),
+    ]);
+    if (!x) return res.status(404).json({ error: "Please save your declaration first, then download the form." });
+    const pdf = await form124Pdf({ fy, email: asked, person: e || { name: asked.split("@")[0] }, declaration: x });
+    res.set({ "Content-Type": "application/pdf", "Content-Disposition": `attachment; filename="Form-${fy >= 2026 ? "124" : "12BB"}-${fy}-${String(fy + 1).slice(2)}.pdf"`,
+      "X-Content-Type-Options": "nosniff", "Cache-Control": "private, no-store" });
+    res.send(pdf);
+  }));
+
+  /* The person's own tax for the year under both regimes, from their salary in payroll and the lines on the page (not yet saved). */
+  r.post("/api/tax-declaration/estimate", wrap(async (req, res) => {
+    const { items } = readTaxDeclaration({ regime: "old", items: req.body && req.body.items });   // every line, checked the same way
+    res.json(await estimateTax({ email: me(req), items }));
+  }));
+
   r.get("/api/tax-declaration", wrap(async (req, res) => {
     const asked = req.query.email ? String(req.query.email).toLowerCase() : me(req);
     const target = asked === me(req) || (await can(req, "payroll.view", asked)) ? asked : me(req);
     const fy = financialYear(await today());
     const { rows: [x] } = await pool.query("SELECT id, regime, items, status, submitted_at, proofs FROM tax_declaration_requests WHERE lower(email)=$1 AND financial_year=$2", [target, fy]);
-    const pol = await policyOf(fy);
-    res.json({ ...taxOut(x, fy, await filesOf(x && x.id), pol.defaultRegime), policy: pol });   // someone who has not saved a declaration starts on the company's default regime
+    const [pol, { rows: late }] = await Promise.all([policyOf(fy),
+      pool.query(`SELECT DISTINCT ON (kind) ${LATE_COLS} FROM tax_late_requests WHERE lower(email)=$1 AND financial_year=$2 ORDER BY kind, created_at DESC`, [target, fy])]);
+    res.json({ ...taxOut(x, fy, await filesOf(x && x.id), pol.defaultRegime), policy: pol, window: await windowFor(target, fy, pol, await today()), lateRequests: late.map((y) => lateOut(y)) });   // someone who has not saved a declaration starts on the company's default regime
   }));
   r.put("/api/tax-declaration", wrap(async (req, res) => {
-    const { regime, items, submit, errors } = readTaxDeclaration(req.body);
+    const day = await today(), fy = financialYear(day);
+    // Leave travel journeys claimed in the four years before (two per block of four calendar years), unless HR rejected the proof.
+    const { rows: earlier } = await pool.query("SELECT items, proofs FROM tax_declaration_requests WHERE lower(email)=$1 AND financial_year BETWEEN $2 AND $3 AND status='submitted'", [me(req), fy - 4, fy - 1]);
+    const earlierJourneys = earlier.flatMap((y) => y.items.map((i, n) => (i.section === "Leave travel" && i.party && !((y.proofs || {})[n] && y.proofs[n].status === "rejected") ? i.party : null)).filter(Boolean));
+    const { regime, items, submit, errors } = readTaxDeclaration(req.body, { fy, earlierJourneys });
     if (Object.keys(errors).length) return res.status(400).json({ errors });
-    const fy = financialYear(await today());
+    const win = await windowFor(me(req), fy, await policyOf(fy), day);
+    if (!win.declaration.open) return res.status(409).json({ error: `Declarations for this year closed on ${win.declaration.due}. Please ask the payroll team to reopen yours if something needs to change.` });
     // Changed lines: the proof notes and the uploaded documents no longer belong to them, so both are cleared.
     const { rows: [old] } = await pool.query("SELECT id, items FROM tax_declaration_requests WHERE lower(email)=$1 AND financial_year=$2", [me(req), fy]);
     const same = (list) => JSON.stringify(list.map((i) => [i.section, i.description, Number(i.amountMinor)]));   // key order differs once stored
@@ -359,7 +506,7 @@ export function engageRouter(wrap) {
        ON CONFLICT (lower(email), financial_year) DO UPDATE SET regime=EXCLUDED.regime, status=EXCLUDED.status, submitted_at=EXCLUDED.submitted_at, updated_at=now(),
          proofs = CASE WHEN tax_declaration_requests.items = EXCLUDED.items THEN tax_declaration_requests.proofs ELSE '{}'::jsonb END, items=EXCLUDED.items
        RETURNING id, regime, items, status, submitted_at, proofs`, [me(req), fy, regime, JSON.stringify(items), submit ? "submitted" : "draft", submit ? new Date() : null]);
-    res.json(taxOut(x, fy, await filesOf(x.id)));
+    res.json({ ...taxOut(x, fy, await filesOf(x.id)), window: win });
   }));
   r.get("/api/tax-declarations", requireAuth, need("payroll.view"), wrap(async (req, res) => {
     const fy = financialYear(await today()), scope = await scopeOf(req, "payroll.view");
@@ -367,7 +514,7 @@ export function engageRouter(wrap) {
       ${scope ? "AND lower(email) = ANY($2)" : ""} ORDER BY submitted_at DESC LIMIT 200`, scope ? [fy, [...scope]] : [fy]);
     const { rows: allFiles } = rows.length ? await pool.query("SELECT request_id, line_index, name, size FROM tax_proof_files WHERE request_id = ANY($1)", [rows.map((x) => x.id)]) : { rows: [] };
     const person = await namesFor(rows.map((x) => x.email));
-    res.json({ financialYear: fy, declarations: rows.map((x) => ({ person: person(x.email), ...taxOut(x, fy, allFiles.filter((f) => f.request_id === x.id)), total: x.items.reduce((n, i) => n + Number(i.amountMinor), 0) / 100 })) });
+    res.json({ financialYear: fy, declarations: rows.map((x) => ({ person: person(x.email), ...taxOut(x, fy, allFiles.filter((f) => f.request_id === x.id)), total: x.items.filter((i) => !BOTH_REGIMES.includes(i.section)).reduce((n, i) => n + Number(i.amountMinor), 0) / 100 })) });
   }));
 
   /* Payroll (payroll.prepare) notes what happened with the proof for one line: waiting (clears the note), received, verified or rejected.
@@ -377,21 +524,31 @@ export function engageRouter(wrap) {
     if (!(await mayDecide(req, "payroll.prepare", target))) return res.status(403).json(NO_ACCESS);
     const { rows: [x] } = await pool.query("SELECT id, items, proofs FROM tax_declaration_requests WHERE lower(email)=$1 AND financial_year=$2 AND status='submitted'", [target, fy]);
     if (!x) return res.status(404).json({ error: "This declaration was not found. It may have been changed back to a draft." });
-    const { index, status, note, errors } = readProof(req.body, x.items.length);
+    const { index, status, note, approvedMinor, errors } = readProof(req.body, x.items.length, x.items.map((i) => Number(i.amountMinor)));
     if (Object.keys(errors).length) return res.status(400).json({ errors });
     const proofs = { ...(x.proofs || {}) };
-    if (status === "waiting") delete proofs[index]; else proofs[index] = { status, note, by: me(req), at: new Date().toISOString() };
+    if (status === "waiting") delete proofs[index]; else proofs[index] = { status, note, by: me(req), at: new Date().toISOString(), ...(approvedMinor != null ? { approvedMinor } : {}) };
     const { rows: [row] } = await pool.query("UPDATE tax_declaration_requests SET proofs=$2, updated_at=now() WHERE id=$1 RETURNING id, regime, items, status, submitted_at, proofs", [x.id, JSON.stringify(proofs)]);
     const line = `${x.items[index].section}${x.items[index].description ? `, ${x.items[index].description}` : ""}`;
     if (status === "rejected") notify(target, { title: "A tax proof needs another look", body: `${line}: ${note}`.slice(0, 180), link: "/app/tax" }).catch(() => {});
-    if (status === "verified") notify(target, { title: "A tax proof was verified", body: line.slice(0, 180), link: "/app/tax" }).catch(() => {});
+    if (status === "verified") notify(target, approvedMinor != null
+      ? { title: "A tax claim was approved for a lower amount", body: `${line}: ₹${(approvedMinor / 100).toLocaleString("en-IN")} approved. ${note}`.slice(0, 180), link: "/app/tax" }
+      : { title: "A tax proof was verified", body: line.slice(0, 180), link: "/app/tax" }).catch(() => {});
     res.json(taxOut(row, fy, await filesOf(row.id)));
   }));
 
   /* The proof document for one line: the person uploads it (PDF, JPG or PNG, one per line), and they and HR can open it. */
   const ownRequest = async (req) => { const fy = financialYear(await today()); return { fy, x: (await pool.query("SELECT id, items FROM tax_declaration_requests WHERE lower(email)=$1 AND financial_year=$2", [me(req), fy])).rows[0] }; };
+  /** Proofs can be added or removed until the proof due date, or until the date payroll reopened them for this person. */
+  const proofClosed = async (req, res) => {
+    const day = await today(), fy = financialYear(day), win = await windowFor(me(req), fy, await policyOf(fy), day);
+    if (win.proof.open) return false;
+    res.status(409).json({ error: `Proofs for this year closed on ${win.proof.due}. Please ask the payroll team to reopen them for you.` });
+    return true;
+  };
   const lineOf = (x, v) => { const n = Number(v); return x && Number.isInteger(n) && n >= 0 && n < x.items.length ? n : -1; };
   r.put("/api/tax-declaration/proofs/:index/file", express.raw({ type: () => true, limit: MAX_BYTES }), wrap(async (req, res) => {
+    if (await proofClosed(req, res)) return;
     const { x } = await ownRequest(req), index = lineOf(x, req.params.index);
     if (index < 0) return res.status(404).json({ error: "Please save your declaration first, then add the proof to its line." });
     const file = await checkFile(req.body);
@@ -405,6 +562,7 @@ export function engageRouter(wrap) {
     res.json({ file: { name, size: req.body.length } });
   }));
   r.delete("/api/tax-declaration/proofs/:index/file", wrap(async (req, res) => {
+    if (await proofClosed(req, res)) return;
     const { x } = await ownRequest(req), index = lineOf(x, req.params.index);
     if (index < 0 || !(await dropFiles(x.id, index))) return res.status(404).json({ error: "This document was not found." });
     res.json({ ok: true });

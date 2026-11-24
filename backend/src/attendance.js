@@ -4,15 +4,22 @@ import { pool } from "./db.js";
 import { requireAuth } from "./auth.js";
 import { can, canAll, need, needAll, scopeOf } from "./access.js";
 import { managerMap } from "./teams.js";
+import { dayMarks, isWeeklyOff, minutesOf, shiftOn, statusFromMinutes } from "./shift-rules.js";
+import { shiftsFor } from "./shifts.js";
+import crypto from "node:crypto";
+import fs from "node:fs/promises";
+import path from "node:path";
+import { UPLOAD_DIR } from "./documents.js";
+import { checkPunch, farText, readPoint, readPolicy, readSite, SELFIE_KEEP_DAYS, SELFIE_MAX, selfieType } from "./clockin-rules.js";
 
 /* A reporting manager sees their own team (the people HR set under them); there is no separate manager login role. */
 const teamEmails = async (email) => Object.entries(await managerMap(pool)).filter(([, rm]) => rm === email).map(([e]) => e);
 
 /* Attendance: people punch in and out on the web page; "See attendance" (attendance.view) sees the people in scope and
    "Correct attendance" (attendance.edit) adds or removes their punches with a reason.
-   Days are counted in Indian time. A day is Present from 6 hours worked, a Half day from 3 hours. */
-const PRESENT_MIN = 360, HALF_MIN = 180;
-const SHIFT_END_MIN = 18 * 60 + 30;   // until the shift ends, today is still in progress, so it is "Working", never Half day or Short hours yet
+   Days are counted in Indian time, against each person's shift for the day (shift-rules.js; the default shift is 9:30 to 6:30
+   with Saturday and Sunday off): a day is Present from the shift's full-day minutes (6 hours) and a Half day from its half-day
+   minutes (3 hours); until the shift ends, today is "Working". Late arrival, early leaving and overtime are marked on each day. */
 const IST = "Asia/Kolkata";
 /** People who work from a place other than the office (a client site, another city) do not use the office machine, so no punches is not absent for them. */
 const offSite = (loc) => !!loc && !/office/i.test(String(loc));
@@ -23,7 +30,10 @@ const nowIst = async (db) => (await db.query(
   `SELECT to_char(now() AT TIME ZONE '${IST}','YYYY-MM-DD') AS day, to_char(now() AT TIME ZONE '${IST}','HH24:MI:SS') AS time`)).rows[0];
 const audit = (db, action, email) => db.query("INSERT INTO audit_log (action, work_email) VALUES ($1,$2)", [action, email]);
 
-const toPunch = (p) => ({ id: p.id, date: p.work_date, time: hhmm(p.punch_time), direction: p.direction, source: p.source, note: p.note });
+// A punch from the app may say where it was made (the nearest office, how far, outside every office) and have a selfie.
+const toPunch = (p) => ({ id: p.id, date: p.work_date, time: hhmm(p.punch_time), direction: p.direction, source: p.source, note: p.note,
+  place: p.site_name || p.distance_m !== null && p.distance_m !== undefined ? { site: p.site_name || null, distance: p.distance_m, outside: !!p.outside } : null,
+  selfie: p.selfie_id || null });
 
 /** Minutes worked from a day's punches in time order: each IN pairs with the next OUT. An IN with no OUT counts to `until` (today) or nothing. */
 function worked(punches, until) {
@@ -44,8 +54,9 @@ function deriveDay(ps) {
   return { punches, minutes: n < 2 ? 0 : Math.max(0, mins(ps[n - 1].time) - mins(ps[0].time)), missingOut: n < 2, missingSwipe: false };
 }
 
-/** One person's days for a month. Past days get a status; days before they joined and in the future get none. */
-function monthDays(month, punches, leave, holidays, emp, today, nowMin) {
+/** One person's days for a month. Past days get a status; days before they joined and in the future get none. `shiftFor(date)` is the
+    person's shift that day (the roster, or the default). */
+function monthDays(month, punches, leave, holidays, emp, today, nowMin, shiftFor) {
   const [y, m] = month.split("-").map(Number);
   const last = new Date(Date.UTC(y, m, 0)).getUTCDate();
   const hol = new Map(holidays.map((h) => [h.day, h.name]));
@@ -57,27 +68,33 @@ function monthDays(month, punches, leave, holidays, emp, today, nowMin) {
     const dd = date !== today && ps.some((p) => p.source === "device") ? deriveDay(ps) : null;
     if (dd) ps = dd.punches;
     const ins = ps.filter((p) => p.direction === "IN"), outs = ps.filter((p) => p.direction === "OUT");
+    const shift = shiftFor(date), shiftEnd = minutesOf(shift.end);
     const w = dd ? { minutes: dd.minutes, missingOut: dd.missingOut } : worked(ps, date === today ? nowMin : null);
     // Forgot to punch out: once the day is over (midnight has passed), the hours are counted up to the end of the shift instead of being lost.
     const forgot = date < today && ps.length > 0 && w.missingOut;
-    if (forgot) w.minutes = Math.max(0, SHIFT_END_MIN - mins(ps[0].time));
+    if (forgot) w.minutes = Math.max(0, shiftEnd - mins(ps[0].time));
     const lv = leave.find((r) => r.from <= date && r.to >= date);
-    const off = L.isWeekend(date) ? "Weekend" : hol.has(date) ? "Holiday" : null;
+    const off = isWeeklyOff(shift, date) ? "Weekend" : hol.has(date) ? "Holiday" : null;
     let status = null;
     if (date > today || (emp.start && date < emp.start) || (emp.lastDay && date > emp.lastDay)) status = null;
-    else if (ps.length) status = date === today && nowMin < SHIFT_END_MIN ? "Working" : w.minutes >= PRESENT_MIN ? "Present" : w.minutes >= HALF_MIN ? "Half day" : (date === today ? "Working" : "Short hours");
+    else if (ps.length) status = date === today && nowMin < shiftEnd ? "Working" : date === today && w.minutes < shift.halfDayMinutes ? "Working" : statusFromMinutes(shift, w.minutes);
     else if (lv) status = lv.half ? "Half day leave" : "On leave";
     else status = off || (offSite(emp.location) ? "Off-site" : "No punch");   // only an approved leave is shown as On leave; no punch and no leave is just No punch
     if (status === "Present" && off) status = "Worked on " + off.toLowerCase();
-    days.push({ date, status, off, holiday: hol.get(date) || null, firstIn: ins[0] ? ins[0].time : null, lastOut: outs.length ? outs[outs.length - 1].time : null,
-      minutes: w.minutes, missingOut: w.missingOut && date !== today && !forgot, forgotOut: forgot, countedTo: forgot ? "18:30" : null, missingSwipe: !!(dd && dd.missingSwipe), site: status === "Off-site" ? emp.location : null, punches: ps });
+    const firstIn = ins[0] ? ins[0].time : ps.length ? ps[0].time : null, lastOut = outs.length ? outs[outs.length - 1].time : null;
+    // Late, early and overtime on a working day; a forgotten punch out says nothing about leaving early or staying late.
+    const marks = status ? dayMarks(shift, { firstIn, lastOut: forgot ? null : lastOut, minutes: forgot ? 0 : w.minutes, workingDay: !off, finished: date < today || (date === today && nowMin >= shiftEnd) }) : dayMarks(shift);
+    days.push({ date, status, off, holiday: hol.get(date) || null, firstIn: ins[0] ? ins[0].time : null, lastOut,
+      shift: { id: shift.id, name: shift.name, start: shift.start, end: shift.end, isDefault: !!shift.isDefault }, ...marks,
+      minutes: w.minutes, missingOut: w.missingOut && date !== today && !forgot, forgotOut: forgot, countedTo: forgot ? shift.end : null, missingSwipe: !!(dd && dd.missingSwipe), site: status === "Off-site" ? emp.location : null, punches: ps });
   }
   return days;
 }
 const summarize = (days) => {
   const c = (f) => days.filter(f).length;
   return { present: c((d) => /^(Present|Worked on)/.test(d.status || "")), half: c((d) => d.status === "Half day"), leave: c((d) => /leave$/i.test(d.status || "")),
-    absent: 0, offsite: c((d) => d.status === "Off-site"), short: c((d) => d.status === "Short hours"), minutes: days.reduce((n, d) => n + d.minutes, 0) };
+    absent: 0, offsite: c((d) => d.status === "Off-site"), short: c((d) => d.status === "Short hours"), minutes: days.reduce((n, d) => n + d.minutes, 0),
+    late: c((d) => d.late), early: c((d) => d.early), overtimeMinutes: days.reduce((n, d) => n + (d.overtimeMinutes || 0), 0) };
 };
 
 async function employeeByEmail(db, email) {
@@ -90,22 +107,68 @@ const monthRange = (month) => {
 };
 async function monthOf(emp, month) {
   const [from, to] = monthRange(month);
-  const [p, l, h, now] = await Promise.all([
-    pool.query(`SELECT id, to_char(work_date,'YYYY-MM-DD') AS work_date, punch_time, direction, source, note FROM attendance_punches
+  const [p, l, h, now, sh] = await Promise.all([
+    pool.query(`SELECT id, to_char(work_date,'YYYY-MM-DD') AS work_date, punch_time, direction, source, note, site_name, distance_m, outside, selfie_id FROM attendance_punches
                 WHERE employee_id=$1 AND work_date BETWEEN $2 AND $3 ORDER BY work_date, punch_time, id`, [emp.id, from, to]),
     pool.query(`SELECT to_char(from_date,'YYYY-MM-DD') AS f, to_char(to_date,'YYYY-MM-DD') AS t, half FROM leave_requests
                 WHERE lower(work_email)=$1 AND status='approved' AND from_date<=$3 AND to_date>=$2`, [emp.work_email.toLowerCase(), from, to]),
     pool.query("SELECT to_char(day,'YYYY-MM-DD') AS day, name FROM holidays WHERE day BETWEEN $1 AND $2", [from, to]),
     nowIst(pool),
+    shiftsFor(pool, from, to, [emp.work_email]),
   ]);
+  const mine = sh.of(emp.work_email);
   const days = monthDays(month, p.rows.map(toPunch), l.rows.map((r) => ({ from: r.f, to: r.t, half: r.half })), h.rows,
-    { start: emp.start_date && String(emp.start_date).slice(0, 10), lastDay: emp.last_day && String(emp.last_day).slice(0, 10), location: emp.work_location }, now.day, mins(now.time));
+    { start: emp.start_date && String(emp.start_date).slice(0, 10), lastDay: emp.last_day && String(emp.last_day).slice(0, 10), location: emp.work_location }, now.day, mins(now.time),
+    (date) => shiftOn(mine, sh.fallback, date));
   return { email: emp.work_email, name: emp.name, month, days, summary: summarize(days), today: now.day };
+}
+
+/** Everyone's month at once (or only `emails`): one query per kind of data, then matched in memory. Returns [{ emp, days, summary }]
+    for the people employed in the month. Used by the monthly report and by overtime (shifts.js). */
+export async function monthsFor(month, emails = null) {
+  const [from, to] = monthRange(month);
+  const list = emails ? emails.map((e) => String(e).toLowerCase()) : null;
+  const [emps, ps, lv, hol, now, sh] = await Promise.all([
+    pool.query(`SELECT id, emp_no, name, work_email, title, start_date, last_day, work_location FROM employees
+                WHERE (status <> 'offboarded' OR last_day >= $1) AND (start_date IS NULL OR start_date <= $2) AND (last_day IS NULL OR last_day >= $1)
+                ${list ? "AND lower(work_email) = ANY($3)" : ""}`, list ? [from, to, list] : [from, to]),
+    pool.query(`SELECT p.employee_id, p.id, to_char(p.work_date,'YYYY-MM-DD') AS work_date, p.punch_time, p.direction, p.source, p.note, p.site_name, p.distance_m, p.outside, p.selfie_id FROM attendance_punches p
+                ${list ? "JOIN employees e ON e.id = p.employee_id AND lower(e.work_email) = ANY($3)" : ""}
+                WHERE p.work_date BETWEEN $1 AND $2 ORDER BY p.work_date, p.punch_time, p.id`, list ? [from, to, list] : [from, to]),
+    pool.query(`SELECT lower(work_email) AS e, to_char(from_date,'YYYY-MM-DD') AS f, to_char(to_date,'YYYY-MM-DD') AS t, half FROM leave_requests
+                WHERE status='approved' AND from_date<=$2 AND to_date>=$1 ${list ? "AND lower(work_email) = ANY($3)" : ""}`, list ? [from, to, list] : [from, to]),
+    pool.query("SELECT to_char(day,'YYYY-MM-DD') AS day, name FROM holidays WHERE day BETWEEN $1 AND $2", [from, to]),
+    nowIst(pool),
+    shiftsFor(pool, from, to, list),
+  ]);
+  const punchesOf = new Map(), leaveOf = new Map();
+  for (const p of ps.rows) { if (!punchesOf.has(p.employee_id)) punchesOf.set(p.employee_id, []); punchesOf.get(p.employee_id).push(toPunch(p)); }
+  for (const x of lv.rows) { if (!leaveOf.has(x.e)) leaveOf.set(x.e, []); leaveOf.get(x.e).push({ from: x.f, to: x.t, half: x.half }); }
+  return emps.rows.map((e) => {
+    const mine = sh.of(e.work_email);
+    const days = monthDays(month, punchesOf.get(e.id) || [], leaveOf.get(e.work_email.toLowerCase()) || [], hol.rows,
+      { start: e.start_date && String(e.start_date).slice(0, 10), lastDay: e.last_day && String(e.last_day).slice(0, 10), location: e.work_location }, now.day, mins(now.time),
+      (date) => shiftOn(mine, sh.fallback, date));
+    return { emp: e, days, summary: summarize(days) };
+  });
 }
 
 /** Web clock-in: with WEB_CLOCK_IN=true everyone can punch in and out from the app. Off by default: the office machine
     records attendance, and only HR can punch from the app. Hours are counted the same way either way (each IN with the next OUT). */
 export const webClockOn = () => String(process.env.WEB_CLOCK_IN || "").toLowerCase() === "true";
+/** HR's clock-in settings (Shifts > Clock-in). Web punching is on when HR switched it on there, or WEB_CLOCK_IN=true. */
+export async function clockPolicy(db = pool) {
+  const { rows: [x] } = await db.query("SELECT enabled, need_location, need_selfie, allow_outside FROM clock_in_policy WHERE id=1");
+  return { enabled: webClockOn() || !!(x && x.enabled), needLocation: !!(x && x.need_location), needSelfie: !!(x && x.need_selfie), allowOutside: !!(x && x.allow_outside),
+    fromEnv: webClockOn() };
+}
+/** Selfies older than SELFIE_KEEP_DAYS, and ones never used for a punch, are deleted with their files (jobs.js, hourly). */
+export async function purgeSelfies() {
+  const { rows } = await pool.query(`DELETE FROM attendance_selfies WHERE created_at < now() - make_interval(days => $1)
+    OR (punch_id IS NULL AND created_at < now() - interval '1 day') RETURNING stored`, [SELFIE_KEEP_DAYS]);
+  for (const x of rows) await fs.rm(path.join(UPLOAD_DIR, path.basename(x.stored)), { force: true }).catch(() => {});
+  return { removed: rows.length };
+}
 
 export function attendanceRouter(wrap) {
   const r = express.Router();
@@ -117,10 +180,12 @@ export function attendanceRouter(wrap) {
     const emp = await employeeByEmail(pool, me(req));
     if (!emp) return res.status(404).json({ error: "Your employee record was not found. Ask HR to check your work email." });
     const now = await nowIst(pool);
-    const ps = (await pool.query(`SELECT id, to_char(work_date,'YYYY-MM-DD') AS work_date, punch_time, direction, source, note FROM attendance_punches
+    const ps = (await pool.query(`SELECT id, to_char(work_date,'YYYY-MM-DD') AS work_date, punch_time, direction, source, note, site_name, distance_m, outside, selfie_id FROM attendance_punches
       WHERE employee_id=$1 AND work_date=$2 ORDER BY punch_time, id`, [emp.id, now.day])).rows.map(toPunch);
     const w = worked(ps, mins(now.time));
-    res.json({ date: now.day, time: hhmm(now.time), punches: ps, state: ps.length && ps[ps.length - 1].direction === "IN" ? "in" : "out", minutes: w.minutes, canPunch: webClockOn() });
+    const pol = await clockPolicy();
+    res.json({ date: now.day, time: hhmm(now.time), punches: ps, state: ps.length && ps[ps.length - 1].direction === "IN" ? "in" : "out", minutes: w.minutes,
+      canPunch: pol.enabled, needLocation: pol.enabled && pol.needLocation, needSelfie: pol.enabled && pol.needSelfie });
   }));
 
   // Who is in right now, for the directory and the dashboard (everyone signed in may read it). People who work away from the
@@ -143,7 +208,22 @@ export function attendanceRouter(wrap) {
 
   // One tap: punches IN when you are out, OUT when you are in. The server's clock is used, never the browser's.
   r.post("/api/attendance/punch", wrap(async (req, res) => {
-    if (!webClockOn() && !canAll(req, "attendance.edit")) return res.status(403).json({ error: "Attendance is recorded by the office machine. If a punch is missing, please ask HR to add it." });
+    const pol = await clockPolicy();
+    if (!pol.enabled && !canAll(req, "attendance.edit")) return res.status(403).json({ error: "Attendance is recorded by the office machine. If a punch is missing, please ask HR to add it." });
+    // Location and selfie: checked against HR's offices only when web clock-in is on (HR's own fix-up punches skip it).
+    const { point, error: pointError } = readPoint(req.body || {});
+    if (pointError) return res.status(400).json({ error: pointError });
+    const selfieKey = String((req.body && req.body.selfieKey) || "");
+    const selfie = selfieKey ? (await pool.query("SELECT id FROM attendance_selfies WHERE upload_key=$1 AND lower(email)=$2 AND punch_id IS NULL AND created_at > now() - interval '15 minutes'",
+      [selfieKey, me(req)])).rows[0] : null;
+    if (selfieKey && !selfie) return res.status(400).json({ error: "Your selfie has expired. Please take it again." });
+    let where = { siteId: null, distance: null, outside: false };
+    if (pol.enabled) {
+      const sites = (await pool.query("SELECT id, name, lat::float8 AS lat, lng::float8 AS lng, radius_m AS radius FROM clock_in_sites WHERE deleted_at IS NULL LIMIT 200")).rows;
+      const check = checkPunch(pol, sites, point, !!selfie);
+      if (!check.ok) return res.status(400).json({ error: check.error });
+      where = { ...check, siteName: check.siteId ? sites.find((x) => x.id === check.siteId).name : null };
+    }
     const client = await pool.connect();
     try {
       await client.query("BEGIN");
@@ -155,11 +235,77 @@ export function attendanceRouter(wrap) {
         "SELECT direction, punch_time FROM attendance_punches WHERE employee_id=$1 AND work_date=$2 ORDER BY punch_time DESC, id DESC LIMIT 1", [emp.id, now.day])).rows[0];
       if (last && mins(now.time) - mins(last.punch_time) < 1) { await client.query("ROLLBACK"); return res.status(429).json({ error: "You just punched. Wait a minute before punching again." }); }
       const direction = last && last.direction === "IN" ? "OUT" : "IN";
-      await client.query("INSERT INTO attendance_punches (employee_id, work_date, punch_time, direction, source, created_by) VALUES ($1,$2,$3,$4,'web',$5)",
-        [emp.id, now.day, now.time, direction, me(req)]);
+      const { rows: [made] } = await client.query(
+        `INSERT INTO attendance_punches (employee_id, work_date, punch_time, direction, source, created_by, lat, lng, accuracy_m, site_name, distance_m, outside, selfie_id)
+         VALUES ($1,$2,$3,$4,'web',$5,$6,$7,$8,$9,$10,$11,$12) RETURNING id`,
+        [emp.id, now.day, now.time, direction, me(req), point ? point.lat : null, point ? point.lng : null, point ? point.accuracy : null,
+          where.siteName || null, where.distance, !!where.outside, selfie ? selfie.id : null]);
+      if (selfie) await client.query("UPDATE attendance_selfies SET punch_id=$2, upload_key=NULL WHERE id=$1", [selfie.id, made.id]);
       await client.query("COMMIT");
-      res.json({ direction, time: hhmm(now.time) });
+      res.json({ direction, time: hhmm(now.time), place: where.siteName ? { site: where.siteName, distance: where.distance, outside: !!where.outside } : null,
+        note: where.outside ? `Recorded ${farText(where.distance)} from ${where.siteName}. HR can see this.` : "" });
     } catch (err) { await client.query("ROLLBACK"); throw err; } finally { client.release(); }
+  }));
+
+  /* The selfie for a punch: sent first (a small JPEG or WebP the browser made), then named in the punch within 15 minutes. */
+  r.post("/api/attendance/selfie", express.raw({ type: () => true, limit: SELFIE_MAX + 1024 }), wrap(async (req, res) => {
+    const pol = await clockPolicy();
+    if (!pol.enabled) return res.status(403).json({ error: "Web clock-in is not switched on." });
+    const buf = req.body;
+    if (!Buffer.isBuffer(buf) || !buf.length) return res.status(400).json({ error: "Please take a selfie first." });
+    if (buf.length > SELFIE_MAX) return res.status(400).json({ error: "The selfie is too large. Please take it again." });
+    const type = selfieType(buf);
+    if (!type) return res.status(400).json({ error: "The selfie must be a JPEG or WebP picture." });
+    const stored = `selfie-${crypto.randomUUID()}.${type.ext}`, key = crypto.randomBytes(24).toString("hex");
+    await fs.mkdir(UPLOAD_DIR, { recursive: true });
+    await fs.writeFile(path.join(UPLOAD_DIR, stored), buf);
+    await pool.query("INSERT INTO attendance_selfies (email, stored, mime, size, upload_key) VALUES ($1,$2,$3,$4,$5)", [me(req), stored, type.mime, buf.length, key]);
+    res.status(201).json({ key });
+  }));
+  /* A punch's selfie: the person's own, or for whoever may see their attendance (attendance.view in scope, or their manager). */
+  r.get("/api/attendance/selfies/:id", wrap(async (req, res) => {
+    const { rows: [x] } = await pool.query("SELECT email, stored, mime FROM attendance_selfies WHERE id=$1 AND punch_id IS NOT NULL", [Number(req.params.id) || 0]);
+    const email = x ? x.email.toLowerCase() : "";
+    if (!x || (email !== me(req) && !(await can(req, "attendance.view", email)) && !(await teamEmails(me(req))).includes(email)))
+      return res.status(404).json({ error: "This picture was not found. Selfies are kept for 90 days." });
+    const file = path.join(UPLOAD_DIR, path.basename(x.stored));
+    try { await fs.access(file); } catch { return res.status(404).json({ error: "This picture was not found. Selfies are kept for 90 days." }); }
+    res.set({ "Content-Type": x.mime, "X-Content-Type-Options": "nosniff", "Cache-Control": "private, max-age=31536000, immutable" });
+    res.sendFile(file);
+  }));
+
+  /* ---------- HR: clock-in settings and offices (shifts.manage for the whole company) ---------- */
+  const settingsOut = async () => {
+    const [pol, sites] = await Promise.all([clockPolicy(), pool.query(
+      "SELECT id, name, lat::float8 AS lat, lng::float8 AS lng, radius_m AS radius FROM clock_in_sites WHERE deleted_at IS NULL ORDER BY name LIMIT 200")]);
+    return { ...pol, sites: sites.rows, keepDays: SELFIE_KEEP_DAYS };
+  };
+  r.get("/api/attendance/clock-in", needAll("shifts.manage"), wrap(async (_req, res) => res.json(await settingsOut())));
+  r.put("/api/attendance/clock-in", needAll("shifts.manage"), wrap(async (req, res) => {
+    const x = readPolicy(req.body);
+    await pool.query(`INSERT INTO clock_in_policy (id, enabled, need_location, need_selfie, allow_outside, updated_by, updated_at) VALUES (1,$1,$2,$3,$4,$5,now())
+      ON CONFLICT (id) DO UPDATE SET enabled=$1, need_location=$2, need_selfie=$3, allow_outside=$4, updated_by=$5, updated_at=now()`,
+      [x.enabled, x.needLocation, x.needSelfie, x.allowOutside, me(req)]);
+    await audit(pool, `Clock-in settings: ${x.enabled ? "on" : "off"}, location ${x.needLocation ? "needed" : "not needed"}, selfie ${x.needSelfie ? "needed" : "not needed"}`, me(req));
+    res.json(await settingsOut());
+  }));
+  r.post("/api/attendance/clock-in/sites", needAll("shifts.manage"), wrap(async (req, res) => {
+    const { value: v, errors } = readSite(req.body);
+    if (Object.keys(errors).length) return res.status(400).json({ errors });
+    const { rows: [x] } = await pool.query("INSERT INTO clock_in_sites (name, lat, lng, radius_m, created_by) VALUES ($1,$2,$3,$4,$5) RETURNING id", [v.name, v.lat, v.lng, v.radius, me(req)]);
+    res.status(201).json({ id: x.id });
+  }));
+  r.put("/api/attendance/clock-in/sites/:id", needAll("shifts.manage"), wrap(async (req, res) => {
+    const { value: v, errors } = readSite(req.body);
+    if (Object.keys(errors).length) return res.status(400).json({ errors });
+    const { rowCount } = await pool.query("UPDATE clock_in_sites SET name=$2, lat=$3, lng=$4, radius_m=$5 WHERE id=$1 AND deleted_at IS NULL", [Number(req.params.id) || 0, v.name, v.lat, v.lng, v.radius]);
+    if (!rowCount) return res.status(404).json({ error: "This office was not found." });
+    res.json({ ok: true });
+  }));
+  r.delete("/api/attendance/clock-in/sites/:id", needAll("shifts.manage"), wrap(async (req, res) => {
+    const { rowCount } = await pool.query("UPDATE clock_in_sites SET deleted_at=now() WHERE id=$1 AND deleted_at IS NULL", [Number(req.params.id) || 0]);
+    if (!rowCount) return res.status(404).json({ error: "This office was not found." });
+    res.json({ ok: true });
   }));
 
   // A month of days. Everyone reads their own; attendance.view the people in scope, and a manager their team, with ?email=.
@@ -183,31 +329,36 @@ export function attendanceRouter(wrap) {
     const now = await nowIst(pool);
     const date = String(req.query.date || now.day);
     if (!L.validDate(date)) return res.status(400).json({ error: "Date must look like 2026-10-21." });
-    const [emps, ps, lv, hol] = await Promise.all([
+    const [emps, ps, lv, hol, sh] = await Promise.all([
       pool.query("SELECT id, name, work_email, title, start_date, last_day, work_location FROM employees WHERE status <> 'offboarded' ORDER BY name"),
-      pool.query(`SELECT employee_id, to_char(work_date,'YYYY-MM-DD') AS work_date, punch_time, direction, source, note, id FROM attendance_punches WHERE work_date=$1 ORDER BY punch_time, id`, [date]),
+      pool.query(`SELECT employee_id, to_char(work_date,'YYYY-MM-DD') AS work_date, punch_time, direction, source, note, site_name, distance_m, outside, selfie_id, id FROM attendance_punches WHERE work_date=$1 ORDER BY punch_time, id`, [date]),
       pool.query("SELECT lower(work_email) AS e, half FROM leave_requests WHERE status='approved' AND from_date<=$1 AND to_date>=$1", [date]),
       pool.query("SELECT name FROM holidays WHERE day=$1", [date]),
+      shiftsFor(pool, date, date),
     ]);
-    const off = L.isWeekend(date) ? "Weekend" : hol.rows[0] ? "Holiday" : null;
+    const holidayOff = hol.rows[0] ? "Holiday" : null;
     const people = emps.rows.filter((e) => (!team || team.includes(e.work_email.toLowerCase())))
       .filter((e) => (!e.start_date || String(e.start_date).slice(0, 10) <= date) && (!e.last_day || String(e.last_day).slice(0, 10) >= date)).map((e) => {
+      const shift = shiftOn(sh.of(e.work_email), sh.fallback, date), shiftEnd = minutesOf(shift.end);
+      const off = isWeeklyOff(shift, date) ? "Weekend" : holidayOff;
       let mine = ps.rows.filter((p) => p.employee_id === e.id).map(toPunch);
       const dd = date !== now.day && mine.some((p) => p.source === "device") ? deriveDay(mine) : null;   // same in/out rule as a person's own month
       if (dd) mine = dd.punches;
       const w = dd ? { minutes: dd.minutes, missingOut: dd.missingOut } : worked(mine, date === now.day ? mins(now.time) : null), l = lv.rows.find((x) => x.e === e.work_email.toLowerCase());
       const forgot = date < now.day && mine.length > 0 && w.missingOut;   // forgot to punch out: counted to the end of the shift once the day is over
-      if (forgot) w.minutes = Math.max(0, SHIFT_END_MIN - mins(mine[0].time));
+      if (forgot) w.minutes = Math.max(0, shiftEnd - mins(mine[0].time));
       const ins = mine.filter((p) => p.direction === "IN"), outs = mine.filter((p) => p.direction === "OUT");
       let status;
       if (date > now.day) status = null;
-      else if (mine.length) status = date === now.day && mins(now.time) < SHIFT_END_MIN ? "Working" : w.minutes >= PRESENT_MIN ? "Present" : w.minutes >= HALF_MIN ? "Half day" : date === now.day ? "Working" : "Short hours";
+      else if (mine.length) status = date === now.day && mins(now.time) < shiftEnd ? "Working" : date === now.day && w.minutes < shift.halfDayMinutes ? "Working" : statusFromMinutes(shift, w.minutes);
       else status = l ? (l.half ? "Half day leave" : "On leave") : off || (offSite(e.work_location) ? "Off-site" : "No punch");
-      return { email: e.work_email, name: e.name, title: e.title, status, firstIn: ins[0] ? ins[0].time : mine.length ? mine[0].time : null, lastOut: outs.length ? outs[outs.length - 1].time : null,
+      const firstIn = ins[0] ? ins[0].time : mine.length ? mine[0].time : null, lastOut = outs.length ? outs[outs.length - 1].time : null;
+      const marks = status ? dayMarks(shift, { firstIn, lastOut: forgot ? null : lastOut, minutes: forgot ? 0 : w.minutes, workingDay: !off, finished: date < now.day || mins(now.time) >= shiftEnd }) : dayMarks(shift);
+      return { email: e.work_email, name: e.name, title: e.title, status, firstIn, lastOut, shift: { id: shift.id, name: shift.name, start: shift.start, end: shift.end, isDefault: !!shift.isDefault }, ...marks,
         lastPunch: mine.length ? mine[mine.length - 1].time : null, punchCount: mine.length,
         minutes: w.minutes, missingOut: w.missingOut && date !== now.day && !forgot, forgotOut: forgot, in: mine.length > 0 && mine[mine.length - 1].direction === "IN" };
     });
-    res.json({ date, today: now.day, off, holiday: hol.rows[0] ? hol.rows[0].name : null, people });
+    res.json({ date, today: now.day, off: L.isWeekend(date) ? "Weekend" : holidayOff, holiday: hol.rows[0] ? hol.rows[0].name : null, people });
   }));
 
   // One month for everyone, one row per person (attendance.edit for the whole company). ?format=csv downloads it as a spreadsheet file.
@@ -215,27 +366,17 @@ export function attendanceRouter(wrap) {
     const now = await nowIst(pool);
     const month = String(req.query.month || now.day.slice(0, 7));
     if (!MONTH.test(month)) return res.status(400).json({ error: "Month must look like 2026-10." });
-    const [from, to] = monthRange(month);
-    const [emps, ps, lv, hol] = await Promise.all([
-      pool.query(`SELECT id, emp_no, name, work_email, title, start_date, last_day, work_location FROM employees
-                  WHERE (status <> 'offboarded' OR last_day >= $1) AND (start_date IS NULL OR start_date <= $2) AND (last_day IS NULL OR last_day >= $1)`, [from, to]),
-      pool.query(`SELECT employee_id, id, to_char(work_date,'YYYY-MM-DD') AS work_date, punch_time, direction, source, note FROM attendance_punches WHERE work_date BETWEEN $1 AND $2 ORDER BY work_date, punch_time, id`, [from, to]),
-      pool.query(`SELECT lower(work_email) AS e, to_char(from_date,'YYYY-MM-DD') AS f, to_char(to_date,'YYYY-MM-DD') AS t, half FROM leave_requests WHERE status='approved' AND from_date<=$2 AND to_date>=$1`, [from, to]),
-      pool.query("SELECT to_char(day,'YYYY-MM-DD') AS day, name FROM holidays WHERE day BETWEEN $1 AND $2", [from, to]),
-    ]);
-    const rows = emps.rows.map((e) => {
-      const days = monthDays(month, ps.rows.filter((p) => p.employee_id === e.id).map(toPunch),
-        lv.rows.filter((x) => x.e === e.work_email.toLowerCase()).map((x) => ({ from: x.f, to: x.t, half: x.half })), hol.rows,
-        { start: e.start_date && String(e.start_date).slice(0, 10), lastDay: e.last_day && String(e.last_day).slice(0, 10), location: e.work_location }, now.day, mins(now.time));
-      const sum = summarize(days), c = (f) => days.filter(f).length;
+    const rows = (await monthsFor(month)).map(({ emp: e, days, summary: sum }) => {
+      const c = (f) => days.filter(f).length;
       return { no: e.emp_no || "", name: e.name, title: e.title || "", email: e.work_email,
         workingDays: c((d) => d.status && !d.off), present: sum.present, half: sum.half, short: sum.short, leave: c((d) => d.status === "On leave"), halfLeave: c((d) => d.status === "Half day leave"),
-        offsite: sum.offsite, noPunch: c((d) => d.status === "No punch"), forgotOut: c((d) => d.forgotOut), minutes: sum.minutes };
+        offsite: sum.offsite, noPunch: c((d) => d.status === "No punch"), forgotOut: c((d) => d.forgotOut), minutes: sum.minutes,
+        late: sum.late, early: sum.early, overtimeMinutes: sum.overtimeMinutes };
     }).sort((a, b) => String(a.no).localeCompare(String(b.no), undefined, { numeric: true }) || a.name.localeCompare(b.name));
     if (req.query.format !== "csv") return res.json({ month, rows });
     const safe = (v) => { const t = String(v ?? ""); const x = /^[=+\-@\t\r]/.test(t) ? `'${t}` : t; return /[",\n]/.test(x) ? `"${x.replace(/"/g, '""')}"` : x; };
-    const head = ["Employee ID", "Name", "Designation", "Email", "Working days", "Present", "Half days", "Under 3 hours", "On leave", "Half-day leave", "Off-site", "No punch", "Forgot punch out", "Hours worked"];
-    const lines = rows.map((x) => [x.no, x.name, x.title, x.email, x.workingDays, x.present, x.half, x.short, x.leave, x.halfLeave, x.offsite, x.noPunch, x.forgotOut, (x.minutes / 60).toFixed(1)].map(safe).join(","));
+    const head = ["Employee ID", "Name", "Designation", "Email", "Working days", "Present", "Half days", "Under 3 hours", "On leave", "Half-day leave", "Off-site", "No punch", "Forgot punch out", "Hours worked", "Late arrivals", "Left early", "Overtime hours"];
+    const lines = rows.map((x) => [x.no, x.name, x.title, x.email, x.workingDays, x.present, x.half, x.short, x.leave, x.halfLeave, x.offsite, x.noPunch, x.forgotOut, (x.minutes / 60).toFixed(1), x.late, x.early, (x.overtimeMinutes / 60).toFixed(1)].map(safe).join(","));
     res.setHeader("Content-Type", "text/csv; charset=utf-8");
     res.setHeader("Content-Disposition", `attachment; filename="attendance-${month}.csv"`);
     res.send("\ufeff" + [head.map(safe).join(","), ...lines].join("\r\n") + "\r\n");

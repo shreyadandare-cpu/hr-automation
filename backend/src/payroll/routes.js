@@ -1,11 +1,12 @@
 import fs from "node:fs";
 import express from "express";
-import { payPool as pool, PAYROLL_SEPARATE } from "../db.js";
+import { payPool as pool, pool as mainPool, PAYROLL_SEPARATE } from "../db.js";
 import { notify as notifyAll } from "../notify.js";
 import { event } from "../reimbursements.js";
 import { V } from "../validate.js";
 import { cleanInputs, INPUT_FIELDS } from "./engine.js";
-import { fyOf, rulesProblems, annualTax } from "./tax.js";
+import { fyOf, fyMonths as fyMonthsOf, rulesProblems, annualTax, payrollFieldsFrom } from "./tax.js";
+import { fromEmployee } from "./declared.js";
 import { STATUS, EDITABLE, FINAL, check, nextActions } from "./workflow.js";
 import { actorOf, approvers, bankOnly, hrOnly, seal, open, sha256, encryptionReady } from "./access.js";
 import { buildLines, recalcRun, loadRun, totalsOfLines, staffFor, joiningLater, payrollProfile, toStructure, structuresFor, seedTaxRules, deptOf, monthName } from "./store.js";
@@ -374,6 +375,11 @@ R.post("/runs/:id/actions/:action", wrap(async (req, res) => {
         const { rows: ready } = await client.query(
           "SELECT work_email FROM payroll_items WHERE run_id=$1 AND jsonb_array_length(slip->'incomplete') = 0 AND NOT coalesce((inputs->>'hold')::boolean, false)", [run.id]);
         after.claims = claims; after.period = run.period; after.ready = ready.map((r) => r.work_email);
+        // Advance and loan instalments in the approved lines, recorded as recovered once the month is final (after the commit).
+        const { rows: inst } = await client.query(
+          `SELECT i.work_email, d->>'advanceId' AS advance_id, (d->>'amount')::numeric AS amount FROM payroll_items i, jsonb_array_elements(coalesce(i.slip->'deductions','[]'::jsonb)) d
+            WHERE i.run_id=$1 AND d->>'code' = 'advance' AND jsonb_array_length(coalesce(i.slip->'incomplete','[]'::jsonb)) = 0 AND NOT coalesce((i.inputs->>'hold')::boolean, false)`, [run.id]);
+        after.instalments = inst; after.reviewer = req.user.email;
       }
       after.tell.push(["hr", { title: `Payroll for ${month} was ${verb} by ${req.user.email}.`, body: note || "", link: "/app/payroll" }]);
       return {};
@@ -424,6 +430,14 @@ R.post("/runs/:id/actions/:action", wrap(async (req, res) => {
   });
   if (out.error) return send(res, out);
   for (const [to, n] of after.tell) await notify(to, { ...n, email: { subject: n.title, body: `${n.title}\n\n${n.body}\n\nOpen Payroll in ${PRODUCT} to see it.` } });
+  if (after.instalments && after.instalments.length) {
+    const [y, m] = after.period.split("-").map(Number), lastDay = `${after.period}-${String(new Date(Date.UTC(y, m, 0)).getUTCDate()).padStart(2, "0")}`;
+    for (const x of after.instalments) {
+      await mainPool.query(`INSERT INTO advance_recoveries (advance_id, amount, recovered_on, note, recorded_by, payroll_period) VALUES ($1,$2,$3,$4,$5,$6)
+        ON CONFLICT (advance_id, payroll_period) WHERE payroll_period IS NOT NULL DO NOTHING`, [Number(x.advance_id), x.amount, lastDay, `Deducted in payroll for ${monthName(after.period)}`, after.reviewer, after.period])
+        .catch((err) => console.error("Advance instalment not recorded:", err.message));
+    }
+  }
   if (after.claims) { const { tellIncluded } = await import("../payroll.js"); await tellIncluded(after.claims, after.period); }
   if (after.ready) { const { tellReady } = await import("../payslip-auto.js"); await tellReady(after.ready, after.period); }
   if (after.paid) { const { tellPaid } = await import("../payroll.js"); await tellPaid(after.paid, after.period); }
@@ -461,11 +475,13 @@ R.post("/payslip-read", hrOnly, express.raw({ type: () => true, limit: 5 * 1024 
 R.get("/employees", hrOnly, wrap(async (req, res) => {
   const period = PERIOD.test(String(req.query.period || "")) ? String(req.query.period) : istMonth();
   const fy = fyOf(period);
-  const [onPayroll, later, structures, { rows: banks }, { rows: decls }] = await Promise.all([
+  const [onPayroll, later, structures, { rows: banks }, { rows: decls }, { rows: own }] = await Promise.all([
     staffFor(pool, period), joiningLater(pool, period), structuresFor(pool, period),
     pool.query("SELECT work_email, holder_name, bank_name, ifsc, acct_last4, updated_by, updated_at FROM payroll_bank_accounts"),
     pool.query("SELECT work_email, regime, updated_at FROM tax_declarations WHERE fy=$1", [fy]),
+    mainPool.query("SELECT lower(email) AS email, regime FROM tax_declaration_requests WHERE financial_year=$1 AND status='submitted'", [Number(fy.slice(0, 4))]),
   ]);
+  const ownOf = new Map(own.map((x) => [x.email, x]));   // employees' own submitted declarations: used when payroll has entered none
   // Someone who joins later has no salary structure in force this month; the one HR set from their joining month is theirs.
   const { rows: ahead } = later.length ? await pool.query(
     "SELECT DISTINCT ON (lower(work_email)) * FROM salary_structures WHERE lower(work_email) = ANY($1) ORDER BY lower(work_email), effective_from", [later.map((e) => lc(e.work_email))]) : { rows: [] };
@@ -477,7 +493,8 @@ R.get("/employees", hrOnly, wrap(async (req, res) => {
     return { email: e.work_email, name: e.name, empNo: e.emp_no, dept: deptOf(e.dept, e.title), title: e.title, start: e.start_date, lastDay: e.last_day, status: e.status, employmentType: e.employment_type || "Employee", onboarding: e.status === "onboarding" && !e.onboarded_at, joinsLater: laterSet.has(lc(e.work_email)),
       salary: s ? { effectiveFrom: s.effective_from, monthlyGross: gross, annualCtc: s.annual_ctc === null ? null : Number(s.annual_ctc), tdsMode: s.tds_mode || (s.tds_monthly !== null ? "manual" : "auto") } : null,
       bank: b ? { holder: b.holder_name, bankName: b.bank_name, ifsc: b.ifsc, last4: b.acct_last4, updatedAt: b.updated_at } : null,
-      onboardingIfsc: e.ifsc || null, regime: d ? d.regime : "new", declared: !!d,
+      onboardingIfsc: e.ifsc || null, regime: d ? d.regime : ownOf.has(lc(e.work_email)) ? ownOf.get(lc(e.work_email)).regime : "new", declared: !!d,
+      declaredBy: d ? "payroll" : ownOf.has(lc(e.work_email)) ? "employee" : null,
       // A payroll profile is complete with a salary structure, a salary bank account and a PAN. Until then the person shows as incomplete, and no salary is invented for them.
       missing: [!s && "Salary structure", !b && "Bank account", !e.pan_masked && "PAN"].filter(Boolean) };
   }) });
@@ -584,12 +601,25 @@ R.put("/bank/:email", bankOnly, wrap(async (req, res) => {
 }));
 
 // opening*: taxable salary, TDS and PT this employer paid earlier in the year, before payroll ran in this app.
-const DECL_FIELDS = ["openingTaxable", "openingTds", "openingPt", "hraExemption", "section80C", "section80D", "homeLoanInterest", "nps80CCD1B", "employerNps", "otherDeductions", "otherIncome", "previousEmployerIncome", "previousEmployerTds"];
+const DECL_FIELDS = ["openingTaxable", "openingTds", "openingPt", "hraExemption", "ltaExemption", "section80C", "section80D", "homeLoanInterest", "nps80CCD1B", "employerNps", "otherDeductions", "otherIncome", "previousEmployerIncome", "previousEmployerTds",
+  "rentWithoutHra", "savingsInterest", "educationLoan80E", "homeLoan80EEA", "donations80G", "disability80DD", "medical80DDB", "disability80U", "housePropertyIncome"];
 
 R.get("/declarations/:email", hrOnly, wrap(async (req, res) => {
   const email = lc(req.params.email), fy = FY.test(String(req.query.fy || "")) ? String(req.query.fy) : fyOf(istMonth());
-  const { rows: [d] } = await pool.query("SELECT regime, declaration, updated_by, updated_at FROM tax_declarations WHERE fy=$1 AND lower(work_email)=$2", [fy, email]);
-  res.json({ fy, regime: d ? d.regime : "new", declaration: d ? d.declaration : {}, updatedBy: d && d.updated_by, updatedAt: d && d.updated_at, fields: DECL_FIELDS });
+  // Payroll's own record, and what the employee submitted on Pay > Tax declaration (main database, read only), side by side.
+  const [{ rows: [d] }, { rows: [own] }] = await Promise.all([
+    pool.query("SELECT regime, declaration, updated_by, updated_at FROM tax_declarations WHERE fy=$1 AND lower(work_email)=$2", [fy, email]),
+    mainPool.query("SELECT regime, items, proofs, submitted_at FROM tax_declaration_requests WHERE lower(email)=$1 AND financial_year=$2 AND status='submitted'", [email, Number(fy.slice(0, 4))]),
+  ]);
+  // The employee's submission as payroll's fields, with HR's proof decisions and the HRA exemption worked out from the salary.
+  let submitted = null;
+  if (own) {
+    const [[s], { rows: [e] }] = await Promise.all([structuresFor(pool, fyMonthsOf(fy).at(-1), email), pool.query("SELECT start_date, last_day FROM employees WHERE lower(work_email)=$1", [email])]);
+    const got = fromEmployee({ request: own, structure: s ? toStructure(s) : null, fy, start: e && e.start_date, lastDay: e && e.last_day });
+    const { rentDeclared, metro } = payrollFieldsFrom(own.items, own.regime);
+    submitted = { regime: got.regime, submittedAt: own.submitted_at, fields: got.declaration, rentDeclared, metro, hra: got.hra, lta: got.lta };
+  }
+  res.json({ fy, regime: d ? d.regime : "new", declaration: d ? d.declaration : {}, updatedBy: d && d.updated_by, updatedAt: d && d.updated_at, fields: DECL_FIELDS, submitted });
 }));
 
 R.put("/declarations/:email", hrOnly, wrap(async (req, res) => {
@@ -602,7 +632,8 @@ R.put("/declarations/:email", hrOnly, wrap(async (req, res) => {
     const raw = body.declaration && body.declaration[k];
     if (raw === "" || raw === null || raw === undefined) continue;
     const n = Number(raw);
-    if (!Number.isFinite(n) || n < 0 || n >= 1e9) errors[k] = "Enter an amount in rupees, 0 or more.";
+    // Only a let-out house can be a loss (a negative amount).
+    if (k === "housePropertyIncome" ? !Number.isFinite(n) || n <= -1e9 || n >= 1e9 : !Number.isFinite(n) || n < 0 || n >= 1e9) errors[k] = k === "housePropertyIncome" ? "Enter the amount in rupees; a loss is a negative amount." : "Enter an amount in rupees, 0 or more.";
     else if (n) declaration[k] = Math.round(n);
   }
   if (Object.keys(errors).length) return res.status(400).json({ error: "Please check the highlighted fields.", errors });

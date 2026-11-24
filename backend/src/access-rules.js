@@ -26,9 +26,13 @@ export const PERMISSIONS = [
   { key: "leave.manage", group: "Time", team: false, label: "Manage leave settings", hint: "Holidays, leave policy, balances and salary cuts." },
   { key: "attendance.view", group: "Time", team: true, label: "See attendance", hint: "Punches and monthly attendance of the people in scope." },
   { key: "attendance.edit", group: "Time", team: true, label: "Correct attendance", hint: "Add or change punches and decide attendance requests." },
+  { key: "shifts.manage", group: "Time", team: false, label: "Manage shifts and clock-in", hint: "Create shifts, put people on them (the roster), choose who is paid overtime, and set web clock-in: the offices, location and selfie." },
+  { key: "overtime.approve", group: "Time", team: true, label: "Approve overtime", hint: "Approve or reject the monthly overtime of the people in scope. Payroll still types the amount on the payslip." },
   { key: "timesheets.approve", group: "Time", team: true, label: "Approve timesheets", hint: "Approve or return weekly timesheets." },
   { key: "reviews.manage", group: "Performance and hiring", team: true, label: "Run reviews", hint: "Start review cycles, write the final review and read colleague feedback." },
+  { key: "okrs.manage", group: "Performance and hiring", team: false, label: "Company OKRs", hint: "Set company objectives and key results, and change any team's." },
   { key: "goals.view", group: "Performance and hiring", team: true, label: "See goals", hint: "Read the goals of the people in scope." },
+  { key: "offers.approve", group: "Performance and hiring", team: false, label: "Approve offers", hint: "Approve or return an offer letter someone else prepared, before it goes to the candidate." },
   { key: "hiring.manage", group: "Performance and hiring", team: false, label: "Run hiring", hint: "Openings, candidates and interviews." },
   { key: "probation.manage", group: "Performance and hiring", team: true, label: "Decide probation", hint: "Confirm, extend or end probation." },
   { key: "exit.manage", group: "Performance and hiring", team: true, label: "Exit interviews and notice", hint: "Exit interviews, resignations and notice periods." },
@@ -60,7 +64,7 @@ export const PRESETS = {
   payroll: { label: "Payroll", scope: "company", perms: ["payroll.view", "payroll.approve", "finance.view"] },
   accountant: { label: "Accountant", scope: "company", perms: ["finance.view"] },
   it: { label: "IT", scope: "company", perms: ["assets.manage", "tools.manage"] },
-  teamHead: { label: "Team head (their team)", scope: "tree", perms: ["leave.approve", "attendance.view", "timesheets.approve", "goals.view", "reviews.manage"] },
+  teamHead: { label: "Team head (their team)", scope: "tree", perms: ["leave.approve", "attendance.view", "timesheets.approve", "goals.view", "reviews.manage", "overtime.approve"] },
 };
 
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;

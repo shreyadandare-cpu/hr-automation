@@ -14,13 +14,19 @@ import { idCardRouter } from "./id-card.js";
 import { leaveRouter, loadLeavePolicy } from "./leave.js";
 import { postsRouter } from "./posts.js";
 import { engageRouter } from "./engage.js";
+import { performanceRouter } from "./performance.js";
+import { careersRouter } from "./careers.js";
+import { offersRouter } from "./offers.js";
 import { hrToolsRouter } from "./hr-tools.js";
 import { financeRouter } from "./finance-reports.js";
 import { workforceRouter } from "./workforce.js";
 import { celebrationsRouter } from "./celebrations.js";
 import { festivalLookRouter, festivalsRouter } from "./festivals.js";
 import { leaveDigestRouter } from "./leave-digest.js";
-import { attendanceRouter } from "./attendance.js";
+import { attendanceRouter, monthsFor } from "./attendance.js";
+import { shiftsRouter } from "./shifts.js";
+import { reportBuilderRouter } from "./report-builder.js";
+import { chatRouter } from "./chat.js";
 import { assetsRouter } from "./assets.js";
 import { deviceRouter } from "./device.js";
 import { gmailIntelRouter, projectReportRouter } from "./gmail-intel-routes.js";
@@ -62,6 +68,11 @@ app.use(express.json({ limit: "100kb" }));
 app.use("/api", sessionRouter); // login and logout are public
 app.use("/api", festivalLookRouter);   // public: which festival is near, for the sign-in page's festival look
 app.use(deviceRouter()); // the office device posts punches with its own key (no session); the linking screens check for HR themselves
+// The careers page, applications and signing an offer are public, so they sit before the login-guarded routers; the staff and HR
+// routes in them check the sign-in themselves (careers.js, offers.js).
+const earlyWrap = (fn) => (req, res) => fn(req, res).catch((err) => { console.error(err); res.status(500).json({ error: "Server error" }); });
+app.use(careersRouter(earlyWrap));
+app.use(offersRouter(earlyWrap));   // offer letters: HR's routes check the sign-in; signing through /sign/<key> is public (offers.js)
 app.use(gmailIntelRouter());   // Gmail Intelligence Engine: each HR route checks for HR itself; Google's Pub/Sub push has no session and proves itself with a token, so this sits before the login-guarded routers (off until GMAIL_INTEL_ENABLED=true)
 app.use("/api", accountRouter);
 app.use("/api/users", usersRouter);
@@ -76,14 +87,18 @@ app.use(peopleRouter(wrap));       // directory, roster, reporting lines, employ
 app.use(projectsRouter(wrap));     // projects and allocations
 app.use(leaveRouter(wrap));
 app.use(postsRouter(wrap));
-app.use(engageRouter(wrap));
-app.use(hrToolsRouter(wrap));   // probation, helpdesk, exit interviews, hiring, performance reviews   // polls, praise, articles, app links, advance and attendance requests
+app.use(engageRouter(wrap));   // polls, praise, articles, app links, advance and attendance requests
+app.use(performanceRouter(wrap));   // OKRs and 1:1 meetings (performance.js)
+app.use(hrToolsRouter(wrap));   // probation, helpdesk, exit interviews, hiring, performance reviews
 app.use(workforceRouter(wrap));   // timesheets, surveys, training, notice periods, approval stand-ins
 app.use(accessRouter(wrap));
 app.use(toolsRouter(wrap));   // every paid tool (AI and others): seats and monthly cost (Manage > Tools)   // super admins: who may do what, for the company or a team (Company > Access)
 app.use(financeRouter(wrap));   // statutory dues, payroll journal, cost, gratuity, annual tax statements (read only)
 app.use(leaveDigestRouter(wrap));   // HR: preview or test the daily leave digest email
 app.use(attendanceRouter(wrap));
+app.use(chatRouter(wrap));   // Manage > Slack and Teams (chat.js)
+app.use(reportBuilderRouter(wrap));   // Manage > Report builder (report-builder.js)
+app.use(shiftsRouter(wrap, { monthsFor }));   // shifts, the roster and overtime (shifts.js; attendance reads people's shifts from it)
 app.use(idCardRouter(wrap));   // staff ID cards as CR80 PDFs: own for everyone, anyone's for people.view
 app.use(assetsRouter(wrap));   // IT admins only
 app.use(payslipsRouter(wrap));

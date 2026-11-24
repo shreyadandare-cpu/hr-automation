@@ -67,7 +67,7 @@ export default function ImportModal({ onClose }) {
       <div className="card-h" style={{ paddingTop: 24 }}><h3>Upload salary breakdowns</h3></div>
       <div className="card-b">
         <p className="muted" style={{ marginTop: 0 }}>One row per person. <b>Applies From</b> is the first month the salary counts for (for example 2026-11).
-          Every other column with an amount is an earning; name a column <b>Deduction: Canteen</b> for another deduction. Fill <b>Monthly TDS</b> for anyone above ₹12,00,000 a year.</p>
+          Every other column with an amount is an earning; name a column <b>Deduction: Canteen</b> for another deduction. Fill <b>Monthly TDS</b> for anyone above ₹12,00,000 a year, and for anyone on the old regime who owes tax.</p>
         <div className="row" style={{ gap: 8, flexWrap: "wrap", marginBottom: 14 }}>
           <button type="button" className="btn glass sm" onClick={template} aria-label="Download the template" title="Download the template"><DownloadIcon />Template</button>
         </div>

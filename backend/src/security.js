@@ -43,7 +43,7 @@ export function securityHeaders(_req, res, next) {
     "Referrer-Policy": "strict-origin-when-cross-origin",
     "X-Frame-Options": "SAMEORIGIN",
     "Cross-Origin-Opener-Policy": "same-origin",
-    "Permissions-Policy": "camera=(), microphone=(), geolocation=(), payment=()",
+    "Permissions-Policy": "camera=(self), microphone=(), geolocation=(self), payment=()",
   });
   next();
 }

@@ -189,7 +189,7 @@ later `/api` route require sign-in. The pages router comes last. The JSON body l
 | [onboarding-routes.js](backend/src/onboarding-routes.js) | `/api/onboarding/*`, `/api/work-email` (HR only) | New joiners: draft, work email, Google account, first login, final record |
 | [id-card.js](backend/src/id-card.js) | `/api/id-card.pdf`, `/api/id-cards.pdf` | Staff ID cards as CR80 PDFs (85.6 × 54 mm, front and back): own for everyone, anyone's in scope with `people.view`, all current staff for `people.view` company-wide |
 | [people.js](backend/src/people.js) | `/api/directory`, `/api/roster`, `/api/managers`, `/api/employees/{manager,number,status}`, `/api/team/members` | Who is at the company, reporting lines, employee IDs |
-| [projects.js](backend/src/projects.js) | `/api/allocations`, `/api/projects` | Projects and who works on them; handovers |
+| [projects.js](backend/src/projects.js) | `/api/allocations`, `/api/projects` | Projects and who works on them; handovers. HR and admins see every project; everyone else only the projects they are on or lead |
 | [tool-access.js](backend/src/tool-access.js) | `/api/audit`, `/api/tool-access` | The audit log and Claude access |
 | [pages.js](backend/src/pages.js) | `/`, `/login`, `/app/*`, `/auth`, `/invite`, `/l`, `/p`, `/sig`, logos, `/leave-rules.js` | The pages and public links; mounted last |
 | [jobs.js](backend/src/jobs.js) | none (timers) | Every scheduled job; started unless `BACKGROUND_JOBS=off` |

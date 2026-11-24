@@ -366,16 +366,15 @@ export function AttendanceLog({ months, today, canEdit = false, onRemove = () =>
 /** The 24 hour bar and times for one person on one day: used in the everyone-for-a-day table that HR sees. */
 export const DayCell = ({ x, h24 }) => (x.firstIn ? <DayBar firstIn={x.firstIn} lastOut={x.lastOut} open={!x.lastOut} /> : <span className="muted">—</span>);
 
-/* Where a punch from the app was made, and its selfie, when web clock-in asked for them. */
+/* Where a punch from the app was made, when web clock-in asked for the location. */
 const far = (m) => (m < 1000 ? `${m} m` : `${(m / 1000).toFixed(1)} km`);
 function PunchPlace({ p }) {
-  if (!p.place && !p.selfie) return null;
+  if (!p.place) return null;
   return (
     <>
       {p.place && (p.place.outside
         ? <span className="font-bold text-bad"> · outside the offices, {far(p.place.distance)} from {p.place.site}</span>
         : p.place.site ? <span className="text-ink-dim"> · at {p.place.site}</span> : null)}
-      {p.selfie && <> · <a className="font-bold text-accent" href={`/api/attendance/selfies/${p.selfie}`} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()}>Selfie</a></>}
     </>
   );
 }

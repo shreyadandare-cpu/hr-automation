@@ -1,1 +1,0 @@
-import{j as a}from"./styles-DQUj6R0r.js";import{r as s,v as e}from"./ui-CAE32k_w.js";import{o as n,S as m}from"./index-DaHVGG0O.js";import"./pwa-AmjHkjQE.js";function j({person:t}){if(t.status==="active"&&t.lastDay){const[r,l]=n(t);return a.jsxs(s,{tone:l,children:[r," ",e(t.lastDay)]})}const[i,o]=m[t.status];return a.jsx(s,{tone:o,children:i})}export{j as StatusPill};

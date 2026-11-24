@@ -1,13 +1,11 @@
 /*
- * Web clock-in with location and a selfie, as Keka's geo-fencing: the rules, without the database (clock-in routes are in
+ * Web clock-in with location, as Keka's geo-fencing: the rules, without the database (clock-in routes are in
  * attendance.js). HR lists the offices (a point and a radius); a punch made from the app carries the phone's location and,
- * when HR asks for it, a small selfie. Outside every office the punch is refused, or kept and flagged when HR allows it.
+ * Outside every office the punch is refused, or kept and flagged when HR allows it.
  */
 const text = (v) => (typeof v === "string" ? v.trim() : "");
 const num = (v) => (v === null || v === undefined || v === "" ? NaN : Number(v));
 
-export const SELFIE_MAX = 400 * 1024;          // the browser shrinks the picture to about 480px first; this is the hard limit
-export const SELFIE_KEEP_DAYS = 90;            // selfies are deleted after this many days
 export const WORST_ACCURACY_M = 1000;          // a reading less precise than this is not trusted
 export const RADIUS = { min: 30, max: 5000 };
 
@@ -42,7 +40,7 @@ export function readSite(b = {}) {
 
 /** HR's clock-in settings. */
 export function readPolicy(b = {}) {
-  return { enabled: b.enabled === true, needLocation: b.needLocation === true, needSelfie: b.needSelfie === true, allowOutside: b.allowOutside === true };
+  return { enabled: b.enabled === true, needLocation: b.needLocation === true, allowOutside: b.allowOutside === true };
 }
 
 /** The nearest office to a point, its distance, and whether the point is inside it. */
@@ -56,26 +54,17 @@ export function nearestSite(sites, point) {
 }
 
 /**
- * May this punch be saved? policy: readPolicy's shape; sites: the offices; point: readPoint's; hasSelfie: a selfie came with it.
+ * May this punch be saved? policy: readPolicy's shape; sites: the offices; point: readPoint's. No selfie is ever asked for.
  * Returns { ok, error } and, when there is a point, where it was: { siteId, distance, outside }.
  */
-export function checkPunch(policy, sites, point, hasSelfie) {
+export function checkPunch(policy, sites, point) {
   if (policy.needLocation && !point) return { ok: false, error: "Please allow location access in your browser, then punch again." };
   if (point && point.accuracy !== null && point.accuracy > WORST_ACCURACY_M && policy.needLocation)
     return { ok: false, error: "Your location is not precise enough. Please turn on precise location or step outside, then try again." };
-  if (policy.needSelfie && !hasSelfie) return { ok: false, error: "Please take a selfie to punch." };
   if (!point || !sites.length) return { ok: true, siteId: null, distance: null, outside: false };
   const near = nearestSite(sites, point);
   if (near.inside) return { ok: true, siteId: near.site.id, distance: near.distance, outside: false };
   if (policy.needLocation && !policy.allowOutside)
     return { ok: false, error: `You are ${farText(near.distance)} from ${near.site.name}. Please punch from an office, or ask HR to add a missing punch.` };
   return { ok: true, siteId: near.site.id, distance: near.distance, outside: true };
-}
-
-/** A selfie is a JPEG or WebP picture, checked by its first bytes. */
-export function selfieType(buf) {
-  if (!Buffer.isBuffer(buf) || buf.length < 12) return null;
-  if (buf[0] === 0xff && buf[1] === 0xd8 && buf[2] === 0xff) return { mime: "image/jpeg", ext: "jpg" };
-  if (buf.toString("ascii", 0, 4) === "RIFF" && buf.toString("ascii", 8, 12) === "WEBP") return { mime: "image/webp", ext: "webp" };
-  return null;
 }

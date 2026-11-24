@@ -36,6 +36,7 @@ import { offboardingRouter } from "./offboarding.js";
 import { clearanceRouter } from "./clearance.js";
 import { reimbursementsRouter } from "./reimbursements.js";
 import { budgetsRouter } from "./budgets.js";
+import { loansRouter } from "./loans.js";
 import { payrollRouter } from "./payroll.js";
 import { payslipAutoRouter } from "./payslip-auto.js";
 import { payrollWorkflowRouter, initPayroll, warmPayrollPreview } from "./payroll/routes.js";
@@ -105,6 +106,7 @@ app.use(payslipsRouter(wrap));
 app.use(toolAccessRouter(wrap));   // the audit log and Claude access
 app.use("/api/claude-requests", claudeRequestsRouter);   // HR and IT admins: who is waiting to be invited to Claude
 app.use("/api/reimbursements", requireAuth, reimbursementsRouter);   // own claims for everyone; review actions are HR-only inside
+app.use("/api/loans", requireAuth, loansRouter);   // company loans: own for everyone, all of them and the decisions for HR (advances.approve, whole company)
 app.use("/api/budget-requests", requireAuth, budgetsRouter);   // own requests for everyone; decisions are HR-only inside
 // Payroll: payroll.prepare holders prepare it and payroll.approve holders approve it; everything after the workflow router needs payroll.prepare.
 app.use("/api/payroll", requirePayrollAccess, payrollWorkflowRouter, hrOnly, payslipAutoRouter, payrollRouter);

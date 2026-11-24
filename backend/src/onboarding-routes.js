@@ -16,6 +16,8 @@ import { mailPlanOf } from "./mail-plan.js";
 import { employeeNoOwner, nextEmployeeNoFrom } from "./employee-no.js";
 import { mailConfigured, sendWorkAccountEmail } from "./mail.js";
 import { notify } from "./notify.js";
+import { registerDetailsSheet } from "./details-sheet.js";
+import { saveBankAccount } from "./payroll/routes.js";
 
 const DOMAIN = "wohlig.com";
 const clean = (s) =>
@@ -48,7 +50,7 @@ const toApi = (r) => ({
   ids: { dob: r.dob || "", aadhaar: r.aadhaar_masked || "", pan: r.pan_masked || "",
          acct: r.acct_masked || "", ifsc: r.ifsc || "" },
   apps: r.apps,
-  googleStatus: r.google_status, googleError: r.google_error, hasLogin: !!r.has_login,
+  googleStatus: r.google_status, googleError: r.google_error, hasLogin: !!r.has_login, workEmailManual: !!r.work_email_manual,
 });
 
 const RECORD_SQL = `SELECT e.*, EXISTS (SELECT 1 FROM users u WHERE lower(u.email)=lower(e.work_email)) AS has_login FROM employees e`;
@@ -86,9 +88,13 @@ export function onboardingRouter(wrap) {
   // The page merges them into its employee list so HR can pick up where they left off.
   r.get("/api/onboarding", wrap(async (_req, res) => {
     const { rows } = await pool.query(
-      `${RECORD_SQL} WHERE e.onboarded_at IS NOT NULL OR e.google_status IS NOT NULL ORDER BY e.created_at`);
+      `${RECORD_SQL} WHERE e.onboarded_at IS NOT NULL OR e.google_status IS NOT NULL OR e.dob IS NOT NULL OR e.aadhaar_masked IS NOT NULL OR e.pan_masked IS NOT NULL OR e.acct_masked IS NOT NULL
+        ORDER BY e.created_at`);   // the last four: details filled in from the employee details sheet for people who were never onboarded here
     res.json(rows.map(toApi));
   }));
+
+  // The employee details sheet: download it, fill it in, upload it, and the details go into each person's profile (details-sheet.js).
+  registerDetailsSheet(r, { wrap, base: "/api/onboarding/import", mode: "full", saveBankAccount });
 
   // Preview of the work email that would be issued, with the uniqueness check done against the database.
   r.get("/api/work-email", wrap(async (req, res) => {
@@ -170,6 +176,7 @@ export function onboardingRouter(wrap) {
         await client.query("INSERT INTO audit_log (action, work_email) VALUES ($1,$2)", [typed ? "Work email entered by HR" : "Work email reserved", email]);
       }
       await client.query("UPDATE employees SET employment_type=$1 WHERE lower(work_email)=$2", [kindOf(d), email.toLowerCase()]);
+      if (typed && !existingEmail) await client.query("UPDATE employees SET work_email_manual=true WHERE lower(work_email)=$1", [email.toLowerCase()]);   // typed by HR: no email about it goes to the personal address
       await client.query("COMMIT");
       invalidateTree();   // a manager or new joiner may have changed the reporting tree
     } catch (err) {
@@ -247,7 +254,7 @@ export function onboardingRouter(wrap) {
       if (stop) { await client.query("ROLLBACK"); return res.status(stop.status).json(stop.body); }
       await client.query(
         `UPDATE employees SET name=$1, dept=$2, title=$3, manager=$4, start_date=$5, personal_email=$6, phone=$7,
-         address=$8, dob=$9, aadhaar_masked=$10, pan_masked=$11, acct_masked=$12, ifsc=$13, apps=$14, onboarded_at=now()
+         address=$8, dob=COALESCE($9, dob), aadhaar_masked=COALESCE($10, aadhaar_masked), pan_masked=COALESCE($11, pan_masked), acct_masked=COALESCE($12, acct_masked), ifsc=COALESCE($13, ifsc), apps=$14, onboarded_at=now()
          WHERE lower(work_email)=$15`, [full, ...fields, row.work_email.toLowerCase()]);
       await client.query("UPDATE employees SET employment_type=$1 WHERE lower(work_email)=$2", [kindOf(d), row.work_email.toLowerCase()]);
       await client.query("INSERT INTO audit_log (action, work_email) VALUES ($1,$2)", [`Onboarding completed${kindOf(d) === "Intern" ? " (intern)" : ""}`, row.work_email]);

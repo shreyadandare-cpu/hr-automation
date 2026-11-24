@@ -76,6 +76,23 @@ ALTER TABLE payroll_items ADD COLUMN IF NOT EXISTS calculated_at TIMESTAMPTZ;
 ALTER TABLE payroll_items ADD COLUMN IF NOT EXISTS updated_by    TEXT;
 
 -- Corrections to a finalized month: never edit it, add an arrear (earning) or recovery (deduction) paid in a later run.
+-- The payroll master: what the bank-account table cannot hold. The full Aadhaar and PAN are kept encrypted (masked copies are on the employee profile), plus the bank branch.
+-- A bank account typed in part (say the bank name first) waits in the draft_ columns until holder, bank, IFSC and account number are all there, then moves to payroll_bank_accounts.
+CREATE TABLE IF NOT EXISTS payroll_master (
+  work_email       TEXT PRIMARY KEY,
+  branch           TEXT,
+  aadhaar_enc      TEXT,
+  pan_enc          TEXT,
+  draft_holder     TEXT,
+  draft_bank       TEXT,
+  draft_ifsc       TEXT,
+  draft_acct_enc   TEXT,
+  draft_acct_last4 TEXT,
+  updated_by       TEXT NOT NULL,
+  updated_at       TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE UNIQUE INDEX IF NOT EXISTS payroll_master_email ON payroll_master (lower(work_email));
+
 CREATE TABLE IF NOT EXISTS payroll_adjustments (
   id             SERIAL PRIMARY KEY,
   work_email     TEXT NOT NULL,

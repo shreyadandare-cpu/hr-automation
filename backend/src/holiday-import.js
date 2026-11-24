@@ -36,7 +36,7 @@ export function parseDate(v) {
   return null;
 }
 
-const cellValue = (v) => {
+export const cellValue = (v) => {
   if (v && typeof v === "object" && !(v instanceof Date)) { if ("result" in v) return cellValue(v.result); if ("richText" in v) return v.richText.map((t) => t.text).join(""); if ("text" in v) return v.text; }
   return v == null ? "" : v;
 };
@@ -54,15 +54,15 @@ function parseCsv(text) {
   return rows;
 }
 
-/** The cells of an uploaded Excel (.xlsx) or CSV file, row by row (the first sheet). */
-export async function readTable(buf) {
+/** The cells of an uploaded Excel (.xlsx) or CSV file, row by row (the first sheet), `width` columns wide. */
+export async function readTable(buf, width = 6) {
   if (buf.subarray(0, 2).toString("latin1") === "PK") {
     const wb = new ExcelJS.Workbook();
     try { await wb.xlsx.load(buf); } catch { throw new Error("That Excel file could not be opened. Please save it as .xlsx or .csv and try again."); }
     const ws = wb.worksheets[0];
     if (!ws) throw new Error("The Excel file has no sheet.");
     const rows = [];
-    ws.eachRow({ includeEmpty: true }, (row, n) => { rows[n - 1] = Array.from({ length: 6 }, (_, i) => cellValue(row.getCell(i + 1).value)); });
+    ws.eachRow({ includeEmpty: true }, (row, n) => { rows[n - 1] = Array.from({ length: width }, (_, i) => cellValue(row.getCell(i + 1).value)); });
     return Array.from(rows, (r) => r || []);
   }
   return parseCsv(buf.toString("utf8").replace(/^﻿/, ""));

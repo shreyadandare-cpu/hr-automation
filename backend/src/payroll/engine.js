@@ -166,8 +166,8 @@ export function computeLine({ period, employee = {}, structure, inputs = {}, lea
   for (const a of adjustments) if (a.kind === "deduction") other.push({ name: `Recovery for ${a.sourcePeriod}: ${a.reason}`, p: P(a.amount) });
   // Advance and loan instalments, as Keka deducts them: the month's instalment or what is still owed, recorded when the month is approved.
   for (const a of advanceRecoveries) if (P(a.amount) > 0) {
-    other.push({ name: `Advance recovery: ${a.reason}`, p: P(a.amount), advanceId: a.id });
-    calc.push(`Advance recovery ${inr(P(a.amount))} for "${a.reason}" (the monthly instalment, or what is still owed if less).`);
+    other.push({ name: a.loan ? "Company Loan Repayment" : `Advance recovery: ${a.reason}`, p: P(a.amount), advanceId: a.id });
+    calc.push(a.loan ? `Company loan repayment ${inr(P(a.amount))} (the monthly instalment of the approved loan, or what is still owed if less).` : `Advance recovery ${inr(P(a.amount))} for "${a.reason}" (the monthly instalment, or what is still owed if less).`);
   }
   const otherP = sumP(other);
 

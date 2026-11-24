@@ -22,7 +22,7 @@ import { postToChat } from "./chat.js";
  * HR only. The poster is a PNG made by the page, so what HR previews is exactly what is emailed.
  */
 const OCCASIONS = ["birthday", "welcome", "anniversary", "certified", "newrole"];
-const THEMES = { maroon: "wohlig-maroon", light: "wohlig-light" };
+const THEMES = { maroon: "wohlig-maroon", light: "wohlig-light", polaroid: "wohlig-birthday" };
 const NEW_JOINER_DAYS = 30, UPCOMING_DAYS = 30, CONCURRENCY = 5, MAX_POSTER = 8 * 1024 * 1024, STALE_SENDING_MIN = 10;
 const wrap = (fn) => (req, res, next) => fn(req, res, next).catch(next);
 const me = (req) => req.user.email.toLowerCase();

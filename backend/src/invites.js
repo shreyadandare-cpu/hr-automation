@@ -28,16 +28,17 @@ export async function createInvite(email, createdBy) {
 }
 
 /**
- * Who to write to. A new joiner who has never signed in gets it at their personal email (they may not use the work mailbox yet).
+ * Who to write to. A new joiner who has never signed in gets it at their personal email (they may not use the work mailbox yet), unless HR typed the
+ * work email themselves: then nothing goes to the personal address and the invitation goes to the work email.
  * Anyone who has signed in before gets it at their work email only, so changing someone's personal email on file can never
  * route a sign-in link for an existing login to someone else.
  */
 async function recipientFor(email) {
   const { rows } = await pool.query(
-    `SELECT e.name, e.personal_email, u.last_login FROM employees e LEFT JOIN users u ON lower(u.email)=lower(e.work_email)
+    `SELECT e.name, e.personal_email, e.work_email_manual, u.last_login FROM employees e LEFT JOIN users u ON lower(u.email)=lower(e.work_email)
       WHERE lower(e.work_email)=$1`, [email.toLowerCase()]);
   const r = rows[0];
-  return { to: (r && !r.last_login && r.personal_email) || email, name: r?.name || "" };
+  return { to: (r && !r.work_email_manual && !r.last_login && r.personal_email) || email, name: r?.name || "" };
 }
 
 const COMPANY = "Wohlig Transformations Private Limited";

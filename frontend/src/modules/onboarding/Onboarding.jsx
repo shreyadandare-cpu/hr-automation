@@ -6,6 +6,7 @@ import { useData } from "../../data.jsx";
 import { Callout, SectionHead, pill, PageSkeleton } from "../../components/ui.jsx";
 import BackButton from "../../components/BackButton.jsx";
 import { useToast } from "../../components/toast.jsx";
+import ProfileImport from "./ProfileImport.jsx";
 import { ACCESS_HELP, ACCESS_LABEL, DEPTS, DOMAIN, DocRows, ON_TOOLS, V, docCount, fdate, groupDocs, hrConfirm, makeWorkEmail, nameSplit } from "./shared.jsx";
 
 const OB_STEPS = ["Details and work email", "Create login", "Tools and review"];
@@ -82,7 +83,7 @@ function WorkEmailCard({ ob, taken, onCreate, onType, setTyped }) {
         <div className="input mono" style={{ background: "var(--paper-2)", fontSize: 18 }}>{w.email}</div>
         {w.google === "failed" ? <Callout>{w.error || "Google returned an error."} The address is reserved for this person. Retry when the problem is fixed.</Callout>
           : w.google === "simulated" ? <Callout>Google is not connected yet, so this account was only simulated. Add the Google credentials in backend/.env to create real accounts.</Callout>
-          : w.google === "existing" ? <Callout>This person already has a work email, so none is created.</Callout> : null}
+          : w.google === "existing" ? <Callout>{w.workEmailManual ? "You entered this work email yourself, so nothing is created in Google and nothing about it is sent to the employee's personal email. Their invitation goes to this work address." : "This person already has a work email, so none is created."}</Callout> : null}
         {w.account && (w.account.emailed
           ? <Callout>The email address and its password were sent to the employee's personal email.</Callout>
           : <Callout>Email is not set up, so the password was not sent. Give it to the employee yourself: <b className="mono">{w.account.password}</b>. It is shown only now.</Callout>)}
@@ -99,6 +100,7 @@ export default function Onboarding() {
   const toast = useToast(), nav = useNavigate();
   const [ob, setOb] = useState(newOb);
   const [pick, setPick] = useState("");
+  const [sheet, setSheet] = useState(false);
   const [restored, setRestored] = useState(false);
   const [focusTick, setFocusTick] = useState(0);
   const touched = useRef(false);
@@ -206,7 +208,7 @@ export default function Onboarding() {
       } else if (!r.ok) { toast(apiMsg(r)); patch({ busy: false }); }
       else {
         touched.current = true;
-        patch({ busy: false, email: r.data.email, work: { email: r.data.email, google: r.data.googleStatus, account: r.data.workAccount || null }, login: r.data.hasLogin ? { created: true, existing: true } : null });
+        patch({ busy: false, email: r.data.email, work: { email: r.data.email, google: r.data.googleStatus, account: r.data.workAccount || null, workEmailManual: !!r.data.workEmailManual }, login: r.data.hasLogin ? { created: true, existing: true } : null });
         toast(`${r.data.email} is ready${r.data.googleStatus === "active" ? " and active in Google" : ""}.`);
         reload();
       }
@@ -272,7 +274,7 @@ export default function Onboarding() {
   return (
     <section className="section">
       <BackButton to="/app/onboarding/progress" label="Onboarding" />
-      <SectionHead eyebrow="Onboarding" title="Add a new joiner" sub="HR enters the details and the work email is created in Google. HR then creates the login, and the employee uploads their own documents later." />
+      <SectionHead eyebrow="Onboarding" title="Add a new joiner" sub="HR enters the details and the work email is created in Google. HR then creates the login, and the employee uploads their own documents later." actions={<button type="button" className="btn glass" onClick={() => setSheet(true)}>Fill details from Excel</button>} />
       <Stepper step={ob.step} />
       {restored && <Callout>A saved draft was restored. It holds name, contact and job details only. <button type="button" className="btn link" onClick={cancel}>Start over</button></Callout>}
       <form className="grid" style={{ gap: 22 }} noValidate onSubmit={submit}>
@@ -363,6 +365,7 @@ export default function Onboarding() {
             : <button type="button" className="btn primary" onClick={next}>{ob.fromReview ? "Back to review" : "Continue"}</button>}
         </div>
       </form>
+      {sheet && <ProfileImport onClose={() => setSheet(false)} />}
     </section>
   );
 }

@@ -13,7 +13,7 @@ export function menuFor({ user, isManager, superAdmin, can = () => false, canAll
     { label: "My work", icon: "user", items: [
       [canAny("attendance.view", "attendance.edit") ? "/app/my-attendance" : "/app/attendance", "Attendance", "attendance"],
       ["/app/my-leave", "Leave", "luggage", ["/app/leave/apply"]],
-      !canAny("expenses.approve", "budgets.approve") && ["/app/reimbursements", "Expenses", "receipt", ["/app/budgets"]],
+      !canAny("expenses.approve", "budgets.approve") && ["/app/reimbursements", "Expenses", "receipt", ["/app/budgets", "/app/loans"]],
       ["/app/requests", "Requests", "send"],
       ["/app/timesheet", "Timesheet", "timer"],
       ["/app/performance", "OKRs and 1:1s", "target"],
@@ -57,7 +57,7 @@ export function menuFor({ user, isManager, superAdmin, can = () => false, canAll
       canAny("attendance.view", "attendance.edit") && ["/app/attendance", "Attendance", "attendance"],
       (canAll("shifts.manage") || can("overtime.approve")) && ["/app/shifts", "Shifts and overtime", "clock"],
       canAny("leave.approve", "leave.manage") && ["/app/leave", "Leave", "luggage", ["/app/leave/review"]],
-      canAny("expenses.approve", "budgets.approve") && ["/app/reimbursements", "Expenses", "receipt", ["/app/budgets"]],
+      canAny("expenses.approve", "budgets.approve") && ["/app/reimbursements", "Expenses", "receipt", ["/app/budgets", "/app/loans"]],
       canAny("advances.approve", "attendance.edit") && ["/app/hr-requests", "Requests", "send"],
       canAll("onboarding.manage") && ["/app/onboarding/progress", "Onboarding", "onboard", ["/app/onboarding", "/app/documents"]],
       canAll("offboarding.manage") && ["/app/offboarding/leavers", "Offboarding", "offboard", ["/app/offboarding"]],

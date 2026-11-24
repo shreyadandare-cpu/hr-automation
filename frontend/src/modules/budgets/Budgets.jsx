@@ -9,7 +9,7 @@ import { BQ_STATUS, BqPill, ClaimPill, Ico, SkelRows, fdate, money, useCats } fr
 /* The two views of Reimbursements: expense claims and budget requests. */
 export function Tabs({ cur }) {
   const { can } = useAuth();
-  return <PageTabs label="Expenses" current={cur} items={[["reimb", "Expense claims", "/app/reimbursements"], ["budgets", "Budget requests", "/app/budgets"], ["adv", "Advance requests", can("advances.approve") ? "/app/hr-requests?type=advance" : "/app/requests?type=advance"]]} />;
+  return <PageTabs label="Expenses" current={cur} items={[["reimb", "Expense claims", "/app/reimbursements"], ["budgets", "Budget requests", "/app/budgets"], ["loans", "Loan requests", "/app/loans"], ["adv", "Advance requests", can("advances.approve") ? "/app/hr-requests?type=advance" : "/app/requests?type=advance"]]} />;
 }
 
 const Stat = ({ lbl, val, sub, tone = "" }) => (

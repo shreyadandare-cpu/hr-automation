@@ -144,7 +144,9 @@ export function LeaveCard({ e, maySetPay }) {
   const lv = useLeave();
   const { leave } = useData();
   const [pay, setPay] = useState(false);
-  if (!R || !leave) return null;
+  const { user, canAll } = useAuth();
+  // Leave is private: a person sees their own, HR (leave for the whole company) sees everyone's. The server already sends no one else's requests; this also hides the card, whose balances would otherwise show a made-up full quota.
+  if (!R || !leave || !(lc(user.email) === lc(e.baseEmail) || canAll("leave.manage") || canAll("leave.approve"))) return null;
   const year = Number(lv.today.slice(0, 4)), p = lv.payOf(e.baseEmail);
   const mine = [...lv.reqsOf(e.baseEmail)].sort((a, c) => (a.from < c.from ? 1 : -1)).slice(0, 5);
   return (

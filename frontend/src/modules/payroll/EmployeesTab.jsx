@@ -6,51 +6,18 @@ import { Callout, Person, Pill, CardSkeleton } from "../../components/ui.jsx";
 import { useToast } from "../../components/toast.jsx";
 import SalaryModal from "./SalaryModal.jsx";
 import ImportModal from "./ImportModal.jsx";
+import { BankSheetView, MasterForm } from "./Master.jsx";
 import { fyOf, money, monthLabel, thisMonth, when } from "./util.jsx";
 
-/* Salary bank account. The full number is only sent to the server (stored encrypted); it never comes back. */
+/* Salary bank account and identity details of one person: the same form as under the payroll master table. The full numbers are only sent to the server (stored encrypted). */
 export function BankModal({ email, onClose }) {
-  const toast = useToast();
-  const [info, setInfo] = useState(null);
-  const [f, setF] = useState({ holder: "", bankName: "", ifsc: "", account: "", accountConfirm: "" });
-  const [er, setEr] = useState({});
-  const [busy, setBusy] = useState(false);
-  useEffect(() => {
-    api("GET", `/api/payroll/bank/${encodeURIComponent(email)}`).then((r) => {
-      if (!r.ok) { toast(apiMsg(r)); onClose(); return; }
-      setInfo(r.data);
-      const b = r.data.bank;
-      setF({ holder: b ? b.holder : r.data.name, bankName: b ? b.bankName : "", ifsc: b ? b.ifsc : r.data.onboarding.ifsc || "", account: "", accountConfirm: "" });
-    });
-  }, [email]);   // eslint-disable-line react-hooks/exhaustive-deps
-  if (!info) return <Modal onClose={onClose}><div className="card-b"><span className="skel" style={{ width: "60%" }} /></div></Modal>;
-  const set = (k) => (e) => setF({ ...f, [k]: e.target.value });
-  const save = async (e) => {
-    e.preventDefault();
-    setBusy(true);
-    const r = await api("PUT", `/api/payroll/bank/${encodeURIComponent(email)}`, f);
-    setBusy(false);
-    if (!r.ok) { setEr((r.data && r.data.errors) || {}); toast(apiMsg(r)); return; }
-    toast(`Bank account saved for ${info.name}.`); onClose(true);
-  };
+  const [saved, setSaved] = useState(false);
   return (
-    <Modal onClose={() => onClose()}><form onSubmit={save} noValidate autoComplete="off">
-      <div className="card-h" style={{ paddingTop: 24 }}><h3>Salary bank account: {info.name}</h3>{info.bank && <Pill tone="ok">On file ••{info.bank.last4}</Pill>}</div>
-      <div className="card-b form">
-        {!info.encryptionReady && <Callout>The server has no <code>PAYROLL_ENCRYPTION_KEY</code>, so bank details can't be saved yet.</Callout>}
-        {info.bank ? <div className="muted">Last changed by {info.bank.updatedBy} on {when(info.bank.updatedAt)}. Enter the full number again to change it.</div>
-          : info.onboarding.acctMasked && <div className="muted">Onboarding has account {info.onboarding.acctMasked} (masked). Enter the full number from the cancelled cheque or bank letter.</div>}
-        <Field id="bk-holder" label="Account holder name" error={er.holder}><input className="input" id="bk-holder" maxLength={80} value={f.holder} onChange={set("holder")} /></Field>
-        <div className="sal-grid">
-          <Field id="bk-bank" label="Bank name" error={er.bankName}><input className="input" id="bk-bank" maxLength={80} value={f.bankName} onChange={set("bankName")} /></Field>
-          <Field id="bk-ifsc" label="IFSC" error={er.ifsc}><input className="input" id="bk-ifsc" maxLength={11} value={f.ifsc} onChange={(e) => setF({ ...f, ifsc: e.target.value.toUpperCase() })} /></Field>
-          <Field id="bk-acct" label="Account number" error={er.account}><input className="input" id="bk-acct" inputMode="numeric" maxLength={18} value={f.account} onChange={set("account")} /></Field>
-          <Field id="bk-acct2" label="Account number again" error={er.accountConfirm}><input className="input" id="bk-acct2" inputMode="numeric" maxLength={18} value={f.accountConfirm} onChange={set("accountConfirm")} onPaste={(e) => e.preventDefault()} /></Field>
-        </div>
-        <div className="muted">Stored encrypted. Only HR's bank transfer file contains the full number; screens and the review report show the last four digits.</div>
-      </div>
-      <div className="modal-f"><button type="button" className="btn glass" onClick={() => onClose()}>Cancel</button><button type="submit" className="btn primary" disabled={busy || !info.encryptionReady}>{busy ? "Saving…" : "Save bank account"}</button></div>
-    </form></Modal>
+    <Modal onClose={() => onClose(saved)}>
+      <div className="card-h" style={{ paddingTop: 24 }}><h3>Bank and identity details</h3></div>
+      <div className="card-b"><MasterForm email={email} onSaved={() => setSaved(true)} /></div>
+      <div className="modal-f"><button type="button" className="btn primary" onClick={() => onClose(saved)}>Done</button></div>
+    </Modal>
   );
 }
 
@@ -144,7 +111,9 @@ export default function EmployeesTab() {
   return (
     <div className="card">
       <div className="card-h"><div><h3>Salary, bank and tax details</h3><div className="muted">{data.employees.filter((e) => !e.joinsLater).length} on the payroll for {monthLabel(data.period)}{data.employees.some((e) => e.joinsLater) && <> · {data.employees.filter((e) => e.joinsLater).length} joining later</>} · FY {data.fy}</div></div>
-        <button type="button" className="btn glass" onClick={() => setDlg({ kind: "import" })}>Upload salaries (CSV)</button></div>
+        <div className="row" style={{ gap: 8, flexWrap: "wrap" }}>
+          {bankAccess && <button type="button" className="btn glass" onClick={() => setDlg({ kind: "bankSheet" })}>View the sheet</button>}
+          <button type="button" className="btn glass" onClick={() => setDlg({ kind: "import" })}>Upload salaries (CSV)</button></div></div>
       {(missingSalary > 0 || missingBank > 0) && <div className="card-b" style={{ paddingTop: 0 }}><Callout>{missingSalary > 0 && <>{missingSalary} without a salary structure (their payroll line is incomplete). </>}{missingBank > 0 && <>{missingBank} without a salary bank account (they can't be in the bank file).</>}</Callout></div>}
       <div className="filters">
         <input className="input grow" type="search" placeholder="Search name or employee ID" aria-label="Search employees" value={q} onChange={(e) => setQ(e.target.value)} />
@@ -169,6 +138,7 @@ export default function EmployeesTab() {
       {dlg && dlg.kind === "bank" && <BankModal email={dlg.email} onClose={close} />}
       {dlg && dlg.kind === "tax" && <TaxModal email={dlg.email} name={dlg.name} fixedTds={dlg.fixedTds} onClose={close} />}
       {dlg && dlg.kind === "import" && <ImportModal onClose={close} />}
+      {dlg && dlg.kind === "bankSheet" && <BankSheetView onClose={close} />}
     </div>
   );
 }
@@ -187,7 +157,7 @@ export function BankPeopleTab() {
   const missing = data.employees.filter((e) => !e.bank).length;
   return (
     <div className="card">
-      <div className="card-h"><h3>Bank accounts</h3><input className="input" style={{ maxWidth: 280 }} type="search" placeholder="Search people…" aria-label="Search people" value={q} onChange={(e) => setQ(e.target.value)} /></div>
+      <div className="card-h"><h3>Bank accounts</h3><div className="row" style={{ gap: 8, flexWrap: "wrap" }}><input className="input" style={{ maxWidth: 280 }} type="search" placeholder="Search people…" aria-label="Search people" value={q} onChange={(e) => setQ(e.target.value)} /></div></div>
       {missing > 0 && <div className="card-b" style={{ paddingTop: 0 }}><Callout>{missing} without a salary bank account (they can&rsquo;t be in the bank file).</Callout></div>}
       <div className="tbl-wrap"><table className="pr-table"><thead><tr><th>Employee</th><th>Bank account</th><th /></tr></thead><tbody>
         {list.map((e) => (

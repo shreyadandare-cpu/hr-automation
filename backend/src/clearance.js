@@ -66,7 +66,7 @@ export function readPlan(b = {}, amount = Infinity) {
  */
 export async function advanceInstalments(db, period) {
   const { rows } = await db.query(
-    `SELECT a.id, lower(a.work_email) AS email, a.reason, a.amount, a.monthly_recovery,
+    `SELECT a.id, lower(a.work_email) AS email, a.reason, a.amount, a.monthly_recovery, (a.loan_id IS NOT NULL) AS loan,
             COALESCE((SELECT sum(r.amount) FROM advance_recoveries r WHERE r.advance_id = a.id AND (r.payroll_period IS NULL OR r.payroll_period <> $1)), 0) AS recovered
        FROM employee_advances a WHERE a.monthly_recovery IS NOT NULL AND a.recover_from <= $1`, [period]);
   const out = new Map();
@@ -74,7 +74,7 @@ export async function advanceInstalments(db, period) {
     const left = money(money(a.amount) - money(a.recovered)), amount = Math.min(money(a.monthly_recovery), left);
     if (!(amount > 0)) continue;
     if (!out.has(a.email)) out.set(a.email, []);
-    out.get(a.email).push({ id: a.id, reason: a.reason, amount });
+    out.get(a.email).push({ id: a.id, reason: a.reason, amount, loan: !!a.loan });
   }
   return out;
 }

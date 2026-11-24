@@ -94,6 +94,9 @@ ALTER TABLE employees ADD COLUMN IF NOT EXISTS casual_opening NUMERIC(5,1) NOT N
 -- Leave balances brought over from a previous leave system: { "asOf": "2026-11-23", "casual": 4, "sick": 1.5, "compoff": 0 }. For that year each balance
 -- starts from the figure on that day and only leave after it counts (leave-rules.cjs). Null = nothing brought over.
 ALTER TABLE employees ADD COLUMN IF NOT EXISTS leave_opening JSONB;
+-- True when HR typed the work email in onboarding instead of having it created in Google: nothing about it is sent to the person's personal email, and the invitation goes
+-- to the work address (invites.js).
+ALTER TABLE employees ADD COLUMN IF NOT EXISTS work_email_manual BOOLEAN NOT NULL DEFAULT false;
 
 CREATE TABLE IF NOT EXISTS leave_requests (
   id         SERIAL PRIMARY KEY,
@@ -1402,5 +1405,43 @@ CREATE TABLE IF NOT EXISTS chat_outbox (
   id SERIAL PRIMARY KEY, channel_id INT NOT NULL REFERENCES chat_channels(id) ON DELETE CASCADE, event TEXT NOT NULL, title TEXT NOT NULL,
   status TEXT NOT NULL CHECK (status IN ('sent','skipped','failed')), error TEXT NOT NULL DEFAULT '', created_at TIMESTAMPTZ NOT NULL DEFAULT now());
 CREATE INDEX IF NOT EXISTS chat_outbox_recent ON chat_outbox (id DESC);
+
+-- Company loans (2026-11-24): an employee asks, HR approves (the amount and the months may change), confirms the payment and activates it. Activating makes one
+-- employee_advances row with an instalment plan, which payroll already deducts each month as "Company Loan Repayment" and records once per month when the month is
+-- approved; the loan is repaid when that advance is. loan_events is the history of who did what.
+CREATE TABLE IF NOT EXISTS loans (
+  id               SERIAL PRIMARY KEY,
+  loan_no          TEXT UNIQUE,
+  work_email       TEXT NOT NULL,
+  requested_amount NUMERIC(12,2) NOT NULL CHECK (requested_amount > 0),
+  reason           TEXT NOT NULL,
+  requested_months INTEGER NOT NULL CHECK (requested_months BETWEEN 1 AND 60),
+  status           TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','active','rejected','completed','cancelled')),
+  approved_amount  NUMERIC(12,2) CHECK (approved_amount IS NULL OR approved_amount > 0),
+  months           INTEGER CHECK (months IS NULL OR months BETWEEN 1 AND 60),
+  monthly_amount   NUMERIC(12,2),
+  first_month      TEXT CHECK (first_month IS NULL OR first_month ~ '^\d{4}-(0[1-9]|1[0-2])$'),
+  disbursed_on     DATE,
+  hr_remarks       TEXT,
+  rejection_reason TEXT,
+  decided_by       TEXT,
+  decided_at       TIMESTAMPTZ,
+  advance_id       INTEGER,
+  completed_on     DATE,
+  created_at       TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS loans_email ON loans (lower(work_email));
+CREATE INDEX IF NOT EXISTS loans_status ON loans (status, created_at DESC);
+CREATE TABLE IF NOT EXISTS loan_events (
+  id      BIGSERIAL PRIMARY KEY,
+  loan_id INTEGER NOT NULL REFERENCES loans(id) ON DELETE CASCADE,
+  ts      TIMESTAMPTZ NOT NULL DEFAULT now(),
+  actor   TEXT NOT NULL,
+  action  TEXT NOT NULL,
+  detail  JSONB NOT NULL DEFAULT '{}'
+);
+CREATE INDEX IF NOT EXISTS loan_events_loan ON loan_events (loan_id, id);
+ALTER TABLE employee_advances ADD COLUMN IF NOT EXISTS loan_id INTEGER;
+CREATE UNIQUE INDEX IF NOT EXISTS employee_advances_loan ON employee_advances (loan_id) WHERE loan_id IS NOT NULL;
 
 COMMIT;

@@ -2,6 +2,7 @@
    a small label, a serif headline with an italic emphasis, the person's name, the Wohlig logo and the Google Cloud partner mark.
    One layout serves every occasion; the label and the wording change. What the preview shows is exactly the PNG that is emailed. */
 import { renderWelcome } from "./welcomePoster.js";
+import { renderBirthday } from "./birthdayPoster.js";
 export const POSTER_W = 1080, POSTER_H = 1080;
 
 const SERIF = (s, italic) => `${italic ? "italic " : ""}400 ${s}px "Playfair Display", "Source Serif 4", Georgia, serif`;
@@ -90,6 +91,7 @@ function flower(ctx, cx, cy, color) {   // eight thin overlapping petals, a fain
 
 /** Draws a poster. o: { occasion, theme, name, heading, emphasis, designation, detail, joiningDate, message, photo, logos: { dark, light }, mark } -> canvas */
 export async function renderPoster(o) {
+  if (o.occasion === "birthday" && o.theme === "polaroid") return renderBirthday(o);   // the Wohlig birthday card (birthdayPoster.js)
   if (o.occasion === "welcome") return renderWelcome(o);   // new joiners and freshers: the portrait welcome card (welcomePoster.js)
   await ensureFonts();
   const canvas = document.createElement("canvas");

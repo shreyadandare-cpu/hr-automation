@@ -12,6 +12,8 @@ import { actorOf, approvers, bankOnly, hrOnly, seal, open, sha256, encryptionRea
 import { buildLines, recalcRun, loadRun, totalsOfLines, staffFor, joiningLater, payrollProfile, toStructure, structuresFor, seedTaxRules, deptOf, monthName } from "./store.js";
 import { buildWorkbook } from "./excel.js";
 import { buildBankFile, buildBankWorkbook } from "./bank.js";
+import { registerMaster } from "./master.js";
+import { syncLoans } from "../loans.js";
 import { readPayslipPdf } from "./payslip-read.js";
 import { previewFromFile, templateCsv, templateXlsx } from "./tax-import.js";
 import { DEFAULT_TAX_RULES } from "./tax-defaults.js";
@@ -437,6 +439,7 @@ R.post("/runs/:id/actions/:action", wrap(async (req, res) => {
         ON CONFLICT (advance_id, payroll_period) WHERE payroll_period IS NOT NULL DO NOTHING`, [Number(x.advance_id), x.amount, lastDay, `Deducted in payroll for ${monthName(after.period)}`, after.reviewer, after.period])
         .catch((err) => console.error("Advance instalment not recorded:", err.message));
     }
+    await syncLoans().catch((err) => console.error("Loans not updated:", err.message));   // a loan whose last instalment was just recorded is completed
   }
   if (after.claims) { const { tellIncluded } = await import("../payroll.js"); await tellIncluded(after.claims, after.period); }
   if (after.ready) { const { tellReady } = await import("../payslip-auto.js"); await tellReady(after.ready, after.period); }
@@ -567,6 +570,31 @@ R.get("/bank/:email", bankOnly, wrap(async (req, res) => {
     bank: b ? { holder: b.holder_name, bankName: b.bank_name, ifsc: b.ifsc, last4: b.acct_last4, updatedBy: b.updated_by, updatedAt: b.updated_at } : null });
 }));
 
+/**
+ * Saves (or replaces) a person's salary bank account: the full number encrypted, only the last four digits readable. Used by the Bank form here and by the onboarding
+ * details sheet. v: { holder, bankName, ifsc, account } already cleaned. Returns {} or a failure ({ status, error }). Not while an approved month is waiting to be paid on the old account.
+ */
+export async function saveBankAccount(client, email, v, actor) {
+  const sealed = seal(v.account);   // throws 503 without PAYROLL_ENCRYPTION_KEY
+  const { rows: [emp] } = await client.query("SELECT id FROM employees WHERE lower(work_email)=$1", [email]);
+  if (!emp) return fail(404, "Employee not found.");
+  const { rows: [busy] } = await client.query(
+    `SELECT r.period FROM payroll_items i JOIN payroll_runs r ON r.id=i.run_id WHERE lower(i.work_email)=$1 AND r.workflow AND r.status IN ('approved','bank_ready') LIMIT 1`, [email]);
+  if (busy) return fail(409, `${monthName(busy.period)} is approved and its salary transfer isn't marked processed yet. Change the bank account after that, so the approved payment goes where the reviewer saw it.`);
+  const { rows: [old] } = await client.query("SELECT holder_name, bank_name, ifsc, acct_last4 FROM payroll_bank_accounts WHERE lower(work_email)=$1", [email]);
+  await client.query(
+    `INSERT INTO payroll_bank_accounts (work_email, holder_name, bank_name, ifsc, acct_enc, acct_last4, updated_by) VALUES ($1,$2,$3,$4,$5,$6,$7)
+     ON CONFLICT (work_email) DO UPDATE SET holder_name=EXCLUDED.holder_name, bank_name=EXCLUDED.bank_name, ifsc=EXCLUDED.ifsc, acct_enc=EXCLUDED.acct_enc,
+       acct_last4=EXCLUDED.acct_last4, updated_by=EXCLUDED.updated_by, updated_at=now()`,
+    [email, v.holder, v.bankName, v.ifsc, sealed, v.account.slice(-4), actor]);
+  await audit(client, actor, old ? "Salary bank account changed" : "Salary bank account added", { work_email: email,
+    detail: { before: old ? { holder: old.holder_name, bankName: old.bank_name, ifsc: old.ifsc, last4: old.acct_last4 } : null, after: { holder: v.holder, bankName: v.bankName, ifsc: v.ifsc, last4: v.account.slice(-4) } } });
+  return {};
+}
+
+// The payroll master: every employee's bank and identity details in one editable, downloadable table (master.js).
+registerMaster(R, { wrap, bankOnly, saveBankAccount, audit });
+
 R.put("/bank/:email", bankOnly, wrap(async (req, res) => {
   const email = lc(req.params.email), body = req.body || {};
   const errors = {};
@@ -580,23 +608,8 @@ R.put("/bank/:email", bankOnly, wrap(async (req, res) => {
   if (!/^\d{9,18}$/.test(account)) errors.account = "Bank account number must be 9 to 18 digits.";
   if (account && String(body.accountConfirm || "").replace(/[\s-]/g, "") !== account) errors.accountConfirm = "The two account numbers don't match.";
   if (Object.keys(errors).length) return res.status(400).json({ error: "Please check the highlighted fields.", errors });
-  const sealed = seal(account);   // throws 503 without PAYROLL_ENCRYPTION_KEY
-  const out = await tx(async (client) => {
-    const { rows: [emp] } = await client.query("SELECT id FROM employees WHERE lower(work_email)=$1", [email]);
-    if (!emp) return fail(404, "Employee not found.");
-    const { rows: [busy] } = await client.query(
-      `SELECT r.period FROM payroll_items i JOIN payroll_runs r ON r.id=i.run_id WHERE lower(i.work_email)=$1 AND r.workflow AND r.status IN ('approved','bank_ready') LIMIT 1`, [email]);
-    if (busy) return fail(409, `${monthName(busy.period)} is approved and its salary transfer isn't marked processed yet. Change the bank account after that, so the approved payment goes where the reviewer saw it.`);
-    const { rows: [old] } = await client.query("SELECT holder_name, bank_name, ifsc, acct_last4 FROM payroll_bank_accounts WHERE lower(work_email)=$1", [email]);
-    await client.query(
-      `INSERT INTO payroll_bank_accounts (work_email, holder_name, bank_name, ifsc, acct_enc, acct_last4, updated_by) VALUES ($1,$2,$3,$4,$5,$6,$7)
-       ON CONFLICT (work_email) DO UPDATE SET holder_name=EXCLUDED.holder_name, bank_name=EXCLUDED.bank_name, ifsc=EXCLUDED.ifsc, acct_enc=EXCLUDED.acct_enc,
-         acct_last4=EXCLUDED.acct_last4, updated_by=EXCLUDED.updated_by, updated_at=now()`,
-      [email, holder, bankName, ifsc, sealed, account.slice(-4), req.user.email]);
-    await audit(client, req.user.email, old ? "Salary bank account changed" : "Salary bank account added", { work_email: email,
-      detail: { before: old ? { holder: old.holder_name, bankName: old.bank_name, ifsc: old.ifsc, last4: old.acct_last4 } : null, after: { holder, bankName, ifsc, last4: account.slice(-4) } } });
-    return {};
-  });
+  seal("x");   // fails early (503) when the encryption key is missing
+  const out = await tx((client) => saveBankAccount(client, email, { holder, bankName, ifsc, account }, req.user.email));
   send(res, out, () => res.json({ ok: true }));
 }));
 

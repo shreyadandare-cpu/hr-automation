@@ -12,6 +12,7 @@ import { BRAND } from "../../brand.js";
 const STEPS = ["Occasion", "Employee photo", "Template", "Customize", "Preview", "Send"];
 const WELCOME_LOOK = [["maroon", "Wohlig welcome", "Maroon, grey and orange, with a round photo and the joining date."]];
 const THEMES_ALL = [["maroon", "Maroon", "Deep maroon with cream text."], ["light", "Warm light", "Warm ivory with maroon text."]];
+const BIRTHDAY_LOOK = [["polaroid", "Wohlig birthday", "Grey card with a framed photo, the name in script, maroon curves and leaves."], ...THEMES_ALL];
 const ORDER = ["welcome", "birthday", "anniversary", "certified", "newrole"];
 const shortDate = (iso) => { const [y, m, d] = String(iso).split("-").map(Number); return iso ? new Date(Date.UTC(y, m - 1, d)).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" }) : ""; };
 const SUBJECT = (occ, n) => ({ birthday: `Happy Birthday, ${n}!`, welcome: `Welcome to Wohlig, ${n}!`, anniversary: `Happy work anniversary, ${n}!`,
@@ -40,13 +41,14 @@ export default function Wizard({ overview, start, onClose, onDone }) {
   const [audience, setAudience] = useState("all"); // "all" employees, or only the people picked
   const [to, setTo] = useState([]);                 // the people picked
   const assets = useRef(null);
-  const THEMES = occasion === "welcome" ? WELCOME_LOOK : THEMES_ALL;   // new joiners have the one welcome card
+  const THEMES = occasion === "welcome" ? WELCOME_LOOK : occasion === "birthday" ? BIRTHDAY_LOOK : THEMES_ALL;   // new joiners have the one welcome card
+  const tallOf = (k) => occasion === "welcome" || (occasion === "birthday" && k === "polaroid");   // the portrait cards
 
   const profilePhoto = emp && emp.photoV ? `/api/profile/photo?email=${encodeURIComponent(emp.email)}&v=${emp.photoV}` : "";
 
   // Picking a person fills in everything from the employee record.
   const choose = useCallback((occ, e) => {
-    setOccasion(occ); setEmp(e); setErr(""); setDraft(0); setPoster(null); setMsgEdited(false); setTheme("maroon");
+    setOccasion(occ); setEmp(e); setErr(""); setDraft(0); setPoster(null); setMsgEdited(false); setTheme(occ === "birthday" ? "polaroid" : "maroon");
     setF(defaultsFor(occ, e, overview.today));
     setPhoto(e.photoV ? { url: `/api/profile/photo?email=${encodeURIComponent(e.email)}&v=${e.photoV}`, label: "Profile photo" } : null);
   }, [overview.today]);
@@ -95,6 +97,14 @@ export default function Wizard({ overview, start, onClose, onDone }) {
   useEffect(() => () => { if (poster) URL.revokeObjectURL(poster.url); }, []);   // eslint-disable-line react-hooks/exhaustive-deps
 
   /* ---- photo: the person's profile photo from My profile; HR can only crop it or leave it out ---- */
+  const upload = (file) => {
+    if (!file) return;
+    if (!/^image\/(jpeg|png|webp)$/.test(file.type)) { setErr("Please choose a JPG, PNG or WebP picture."); return; }
+    if (file.size > 12 * 1024 * 1024) { setErr("That picture is larger than 12 MB. Please choose a smaller one."); return; }
+    setErr("");
+    if (photo && photo.url.startsWith("blob:")) URL.revokeObjectURL(photo.url);
+    setPhoto({ url: URL.createObjectURL(file), label: "Uploaded photo" }); setPoster(null); setAdjust(true);   // opens the crop
+  };
   const adjusted = (url) => {
     if (photo && photo.url.startsWith("blob:")) URL.revokeObjectURL(photo.url);
     setPhoto({ url, label: "Adjusted photo" }); setPoster(null); setAdjust(false);
@@ -194,13 +204,14 @@ export default function Wizard({ overview, start, onClose, onDone }) {
 
         {step === 1 && emp && (
           <div style={{ display: "grid", gap: 18 }}>
-            <p style={{ margin: 0, color: "var(--ink-dim)" }}>The photo comes from <b>{emp.name}</b>'s profile in this platform. You can crop it or leave it out.</p>
+            <p style={{ margin: 0, color: "var(--ink-dim)" }}>The photo comes from <b>{emp.name}</b>'s profile when they have added one. You can also upload a different picture, crop it, or leave it out.</p>
             {photo ? (
               <div className="cel-photo">
                 <img src={photo.url} alt={`${emp.name}'s photo`} />
                 <div style={{ display: "grid", gap: 10 }}>
                   <span className="muted">{photo.label}</span>
                   <button type="button" className="btn glass sm" onClick={() => setAdjust(true)}>Adjust or crop</button>
+                  <label className="btn glass sm" style={{ cursor: "pointer", justifySelf: "start" }}>Upload a photo<input type="file" hidden accept="image/jpeg,image/png,image/webp" onChange={(e) => { upload(e.target.files[0]); e.target.value = ""; }} /></label>
                   <button type="button" className="btn glass sm" onClick={() => setPhoto(null)}>Leave the photo out</button>
                   {profilePhoto && photo.url !== profilePhoto && <button type="button" className="btn glass sm" onClick={() => { setPhoto({ url: profilePhoto, label: "Profile photo" }); setPoster(null); }}>Back to the original</button>}
                 </div>
@@ -208,12 +219,16 @@ export default function Wizard({ overview, start, onClose, onDone }) {
             ) : profilePhoto ? (
               <div className="cel-photo">
                 <div className="cel-drop" style={{ width: 280, cursor: "default" }}><b>No photo on the poster</b><span>It will be text only.</span></div>
-                <button type="button" className="btn glass sm" onClick={() => { setPhoto({ url: profilePhoto, label: "Profile photo" }); setPoster(null); }}>Use their profile photo</button>
+                <div style={{ display: "grid", gap: 10, alignContent: "start" }}>
+                  <button type="button" className="btn glass sm" onClick={() => { setPhoto({ url: profilePhoto, label: "Profile photo" }); setPoster(null); }}>Use their profile photo</button>
+                  <label className="btn glass sm" style={{ cursor: "pointer", justifySelf: "start" }}>Upload a photo<input type="file" hidden accept="image/jpeg,image/png,image/webp" onChange={(e) => { upload(e.target.files[0]); e.target.value = ""; }} /></label>
+                </div>
               </div>
             ) : (
               <div className="cel-drop" style={{ cursor: "default", maxWidth: 480 }}>
                 <b>{emp.name} has not added a profile photo yet</b>
-                <span>They can add one under My profile. Until then the poster is text only, and you can carry on.</span>
+                <span>They can add one under My profile, or you can upload a picture of them here. Without a photo the poster shows their initials.</span>
+                <label className="btn glass sm" style={{ cursor: "pointer", justifySelf: "start" }}>Upload a photo<input type="file" hidden accept="image/jpeg,image/png,image/webp" onChange={(e) => { upload(e.target.files[0]); e.target.value = ""; }} /></label>
               </div>
             )}
           </div>)}
@@ -224,7 +239,7 @@ export default function Wizard({ overview, start, onClose, onDone }) {
             <div className="cel-tpl">
               {THEMES.map(([k, name, note]) => (
                 <button key={k} type="button" className={theme === k ? "on" : ""} aria-pressed={theme === k} onClick={() => { setTheme(k); setPoster(null); }}>
-                  {thumbs && thumbs[k] ? <img className={`cel-thumb${occasion === "welcome" ? " tall" : ""}`} src={thumbs[k]} alt="" /> : <div className={`cel-thumb${occasion === "welcome" ? " tall" : ""}`} />}
+                  {thumbs && thumbs[k] ? <img className={`cel-thumb${tallOf(k) ? " tall" : ""}`} src={thumbs[k]} alt="" /> : <div className={`cel-thumb${tallOf(k) ? " tall" : ""}`} />}
                   <b>{name}</b><span className="muted">{note}</span>
                 </button>))}
             </div>
@@ -244,13 +259,13 @@ export default function Wizard({ overview, start, onClose, onDone }) {
                 <textarea id="cel-m" className="input" rows={3} maxLength={300} value={f.message} onChange={(e) => edit("message", e.target.value)} />
               </Field></div>
             </div>
-            <div className="cel-thumb-box">{poster ? <img className="cel-thumb" src={poster.url} alt="Live preview" /> : <div className={`cel-thumb${occasion === "welcome" ? " tall" : ""}`} />}</div>
+            <div className="cel-thumb-box">{poster ? <img className="cel-thumb" src={poster.url} alt="Live preview" /> : <div className={`cel-thumb${tallOf(theme) ? " tall" : ""}`} />}</div>
           </div>)}
 
         {step === 4 && (
           <div style={{ display: "grid", gap: 18 }}>
             <p style={{ margin: 0, color: "var(--ink-dim)" }}>This is exactly what the recipients will receive.</p>
-            <div className="cel-preview">{poster ? <img src={poster.url} alt={`${OCCASIONS[occasion].name} poster for ${f.name}`} /> : busy ? <Skeleton className={`${occasion === "welcome" ? "aspect-[1080/1528]" : "aspect-[4/5]"} w-full rounded-card`} /> : <div className="empty">No poster yet.</div>}</div>
+            <div className="cel-preview">{poster ? <img src={poster.url} alt={`${OCCASIONS[occasion].name} poster for ${f.name}`} /> : busy ? <Skeleton className={`${tallOf(theme) ? "aspect-[1080/1528]" : "aspect-[4/5]"} w-full rounded-card`} /> : <div className="empty">No poster yet.</div>}</div>
           </div>)}
 
         {step === 5 && (

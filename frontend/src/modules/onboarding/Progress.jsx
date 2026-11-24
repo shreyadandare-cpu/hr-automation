@@ -6,6 +6,7 @@ import { useData } from "../../data.jsx";
 import { Pill, Person, SectionHead, PageSkeleton } from "../../components/ui.jsx";
 import { useToast } from "../../components/toast.jsx";
 import { ObTabs } from "./shared.jsx";
+import ProfileImport from "./ProfileImport.jsx";
 
 const CLAUDE = {
   active: ["Has Claude access", "ok"],
@@ -19,7 +20,7 @@ export default function Progress() {
   const { canAll } = useAuth();
   const { people, reload, claudeMode } = useData();
   const toast = useToast();
-  const [refreshing, setRefreshing] = useState(false);
+  const [refreshing, setRefreshing] = useState(false), [sheet, setSheet] = useState(false);
   if (!canAll("onboarding.manage")) return <section className="section"><SectionHead eyebrow="Onboarding" title="Onboarding" /><div className="empty">Only the people who run onboarding can see who is being onboarded.</div></section>;
   if (!people) return <PageSkeleton />;
   const waiting = people.filter((x) => x.status === "onboarding").sort((a, b) => a.name.localeCompare(b.name));
@@ -38,7 +39,7 @@ export default function Progress() {
   return (
     <section className="section">
       <SectionHead title="Onboarding" sub="People whose onboarding is not finished, and whether they have Claude. Open a profile to ask for Claude access."
-        actions={<>{claudeMode !== "simulated" && <button type="button" className="btn glass" disabled={refreshing} onClick={refresh}>{refreshing ? "Checking…" : "Refresh Claude status"}</button>}<Link className="btn primary" to="/app/onboarding">Add a new joiner</Link></>}
+        actions={<>{claudeMode !== "simulated" && <button type="button" className="btn glass" disabled={refreshing} onClick={refresh}>{refreshing ? "Checking…" : "Refresh Claude status"}</button>}<button type="button" className="btn glass" onClick={() => setSheet(true)}>Fill details from Excel</button><Link className="btn primary" to="/app/onboarding">Add a new joiner</Link></>}
         tabs={<ObTabs cur="progress" />} />
       <div className="card"><div className="tbl-wrap"><table>
         <thead><tr><th>Employee</th><th>Claude access</th><th aria-label="Open" /></tr></thead>
@@ -54,6 +55,7 @@ export default function Progress() {
           }) : <tr><td colSpan="3"><div className="empty">No one is being onboarded right now.</div></td></tr>}
         </tbody>
       </table></div></div>
+      {sheet && <ProfileImport onClose={() => setSheet(false)} />}
     </section>
   );
 }

@@ -1095,6 +1095,8 @@ CREATE INDEX IF NOT EXISTS interviews_at ON interviews (at) WHERE cancelled_at I
 -- The reporting manager by email (expand step: employees.manager, the name, stays filled for older code until the contract step).
 ALTER TABLE employees ADD COLUMN IF NOT EXISTS manager_email TEXT;
 CREATE INDEX IF NOT EXISTS employees_manager_email ON employees (lower(manager_email));
+-- Names are compared the same way everywhere: case, spaces at the ends and doubled spaces do not matter ("Samay  Gada " = "samay gada").
+CREATE OR REPLACE FUNCTION norm_name(t TEXT) RETURNS TEXT AS $$ SELECT regexp_replace(lower(btrim(coalesce(t, ''))), '\s+', ' ', 'g') $$ LANGUAGE sql IMMUTABLE;
 -- Any write that changes the manager's NAME without giving the email works the email out: the one current employee with that
 -- name. Two current people with the same name leave it empty, so nobody gets the wrong team; HR then picks the person.
 CREATE OR REPLACE FUNCTION employees_manager_email_sync() RETURNS trigger AS $$
@@ -1105,23 +1107,34 @@ BEGIN
       NEW.manager_email := NULL;
     ELSE
       SELECT CASE WHEN count(*) = 1 THEN lower(min(m.work_email)) END INTO NEW.manager_email
-        FROM employees m WHERE lower(m.name) = lower(btrim(NEW.manager)) AND m.status <> 'offboarded' AND lower(m.work_email) <> lower(NEW.work_email);
+        FROM employees m WHERE norm_name(m.name) = norm_name(NEW.manager) AND m.status <> 'offboarded' AND lower(m.work_email) <> lower(NEW.work_email);
     END IF;
   END IF;
   RETURN NEW;
 END $$ LANGUAGE plpgsql;
 DROP TRIGGER IF EXISTS employees_manager_email_sync ON employees;
 CREATE TRIGGER employees_manager_email_sync BEFORE INSERT OR UPDATE ON employees FOR EACH ROW EXECUTE FUNCTION employees_manager_email_sync();
-DO $$
+-- The other way round: when a manager's own row is added (or renamed, or back from exited), the people whose manager name is
+-- theirs but who are not linked yet are linked now. Without this, a team member added before their manager stayed unlinked,
+-- and leave approval (which follows the email) went to the super admins although the org chart showed the manager.
+CREATE OR REPLACE FUNCTION employees_link_reports() RETURNS trigger AS $$
 BEGIN
-  IF NOT EXISTS (SELECT 1 FROM app_migrations WHERE key = 'manager-email-backfill') THEN
-    UPDATE employees e SET manager_email = (
-      SELECT CASE WHEN count(*) = 1 THEN lower(min(m.work_email)) END FROM employees m
-       WHERE lower(m.name) = lower(btrim(e.manager)) AND m.status <> 'offboarded' AND lower(m.work_email) <> lower(e.work_email))
-     WHERE e.manager IS NOT NULL AND btrim(e.manager) <> '' AND e.manager_email IS NULL;
-    INSERT INTO app_migrations (key) VALUES ('manager-email-backfill');
+  IF NEW.status <> 'offboarded' AND NEW.name IS NOT NULL
+     AND (SELECT count(*) FROM employees m WHERE norm_name(m.name) = norm_name(NEW.name) AND m.status <> 'offboarded') = 1 THEN
+    UPDATE employees SET manager_email = lower(NEW.work_email)
+     WHERE manager_email IS NULL AND manager IS NOT NULL AND norm_name(manager) = norm_name(NEW.name) AND lower(work_email) <> lower(NEW.work_email);
   END IF;
-END $$;
+  RETURN NULL;
+END $$ LANGUAGE plpgsql;
+DROP TRIGGER IF EXISTS employees_link_reports ON employees;
+CREATE TRIGGER employees_link_reports AFTER INSERT OR UPDATE OF name, status ON employees FOR EACH ROW EXECUTE FUNCTION employees_link_reports();
+-- On every start: anyone whose manager name points at exactly one current employee but whose link is empty, or points at an
+-- address no employee has, is linked to that person. A link to someone who has left is kept (HR moves those people on the org
+-- chart), and a name two people share stays unlinked. Safe to run again: it only fills links that are missing or broken.
+UPDATE employees e SET manager_email = x.email
+  FROM (SELECT norm_name(m.name) AS n, lower(min(m.work_email)) AS email FROM employees m WHERE m.status <> 'offboarded' GROUP BY 1 HAVING count(*) = 1) x
+ WHERE e.manager IS NOT NULL AND btrim(e.manager) <> '' AND norm_name(e.manager) = x.n AND lower(e.work_email) <> x.email
+   AND (e.manager_email IS NULL OR NOT EXISTS (SELECT 1 FROM employees d WHERE lower(d.work_email) = lower(e.manager_email)));
 
 -- Super admins have every permission and are the only people who give access. There is always at least one (src/access.js).
 ALTER TABLE users ADD COLUMN IF NOT EXISTS is_super_admin BOOLEAN NOT NULL DEFAULT false;

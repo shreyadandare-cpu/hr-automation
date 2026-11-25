@@ -49,16 +49,54 @@ export async function checkManager(email, manager, managerEmail = "") {
     if (boss.status === "offboarded") return { status: 400, error: `${boss.name} has left, so cannot be a manager.` };
     if (boss.email === email) return { status: 400, error: "Nobody can be their own reporting manager." };
     // Directors and the Vice President report only to someone at the top too (for example the CEO, also a director).
-    const top = (t) => /\b(director|vice president|ceo|chief executive)\b/i.test(t || "");
-    if (top(emp.title) && !top(boss.title)) return { status: 400, error: `${emp.name} is at the top of the company, so they can only report to another director or the CEO.` };
+    if (isTopTitle(emp.title) && !isTopTitle(boss.title)) return { status: 400, error: `${emp.name} is at the top of the company, so they can only report to another director or the CEO.` };
     // Walk up from the new manager: reaching this person again would make a loop.
     let cur = boss.email;
     for (let i = 0; cur && i < 60; i++) {
       if (cur === email) return { status: 400, error: `${boss.name} already reports up to ${emp.name}, so that would make a loop.` };
       cur = (await pool.query("SELECT lower(manager_email) AS m FROM employees WHERE lower(work_email)=$1", [cur])).rows[0]?.m || "";
     }
+  } else if (!isTopTitle(emp.title)) {
+    // As in Keka, the reporting manager is required: only the top of the company (directors, the VP, the CEO) has none.
+    return { status: 400, error: `${emp.name} needs a reporting manager. Only the top of the company has none, so please choose one.` };
   }
   return { boss };
+}
+
+/** The top of the company: directors, the Vice President and the CEO. Only they may have no reporting manager. */
+export const isTopTitle = (t) => /\b(director|vice president|ceo|chief executive)\b/i.test(t || "");
+
+/**
+ * When someone leaves, their direct reports move to a new manager so nobody is left without one (Keka asks for this in the
+ * exit too). `to` is the new manager's email; when it is empty, the team goes to the leaver's own manager. If `to` is one of
+ * the team (a team member steps up), that person reports to the leaver's own manager and the rest report to them.
+ * The top of the company is never put under someone below it: such a person goes to the leaver's own manager.
+ * Runs inside the caller's transaction (`db`). Returns the number of people moved.
+ */
+export async function moveTeam(db, leaverEmail, to, actor) {
+  const leaver = String(leaverEmail || "").toLowerCase();
+  const me = (await db.query("SELECT name, lower(manager_email) AS m FROM employees WHERE lower(work_email)=$1", [leaver])).rows[0];
+  if (!me) return 0;
+  const team = (await db.query(
+    "SELECT name, title, lower(work_email) AS email FROM employees WHERE lower(manager_email)=$1 AND status <> 'offboarded' ORDER BY name", [leaver])).rows;
+  if (!team.length) return 0;
+  const rows = (await db.query(
+    "SELECT name, title, status, lower(work_email) AS email FROM employees WHERE lower(work_email) = ANY($1)", [[String(to || "").toLowerCase(), me.m].filter(Boolean)])).rows;
+  const usable = (e) => rows.find((x) => x.email === e && !["offboarding", "offboarded"].includes(x.status) && x.email !== leaver) || null;
+  const above = usable(me.m), chosen = usable(String(to || "").toLowerCase()) || above;
+  let moved = 0;
+  for (const p of team) {
+    let boss = p.email === chosen?.email ? above : chosen;
+    if (boss && isTopTitle(p.title) && !isTopTitle(boss.title)) boss = above && isTopTitle(above.title) ? above : null;
+    if (boss && boss.email === p.email) boss = null;
+    await db.query("UPDATE employees SET manager=$1, manager_email=$2 WHERE lower(work_email)=$3", [boss ? boss.name : null, boss ? boss.email : null, p.email]);
+    await db.query("UPDATE reviews SET manager_email=$2 WHERE lower(email)=$1 AND status <> 'done'", [p.email, boss ? boss.email : null]);
+    await db.query("INSERT INTO audit_log (action, work_email) VALUES ($1,$2)",
+      [boss ? `Reporting manager moved from ${me.name} (leaving) to ${boss.name} (by ${actor})` : `Reporting manager ${me.name} left; no manager now (by ${actor})`, p.email]);
+    moved += 1;
+  }
+  invalidateTree();
+  return moved;
 }
 
 export function peopleRouter(wrap) {
@@ -262,7 +300,8 @@ export function peopleRouter(wrap) {
     if (!emp) return res.status(404).json({ error: "Employee not found." });
     if (emp.status === "offboarded") return res.status(400).json({ error: `${emp.name} has left, so cannot join a team.` });
     const company = (await scopeOf(req, "people.edit")) === null;
-    if (!company && (emp.manager || emp.manager_email)) return res.status(403).json({ error: `${emp.name} already reports to ${emp.manager}. Please ask HR to move them.` });
+    const hasBoss = !!emp.manager_email && (await pool.query("SELECT 1 FROM employees WHERE lower(work_email)=lower($1) AND status NOT IN ('offboarding','offboarded')", [emp.manager_email])).rowCount > 0;
+    if (!company && hasBoss) return res.status(403).json({ error: `${emp.name} already reports to ${emp.manager}. Please ask HR to move them.` });
     if (!company) {
       // Within a team: nobody with access of their own (or a super admin) can be pulled into it, since that would put them under
       // the caller's team permissions (salaries, documents, approvals).

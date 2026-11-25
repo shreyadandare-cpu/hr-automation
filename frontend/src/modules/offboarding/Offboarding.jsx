@@ -76,7 +76,7 @@ function newOw(person, today, people, startStep) {
   const e = person || null;
   const mgr = e ? people.find((m) => m.name === e.manager && m.id !== e.id) : null;
   return {
-    step: e ? 2 : 1, empId: e ? e.id : null, tools: e ? liveTools(e) : null, to: mgr ? mgr.email : "",
+    step: e ? 2 : 1, empId: e ? e.id : null, tools: e ? liveTools(e) : null, to: mgr ? mgr.email : "", teamTo: mgr && mgr.status !== "offboarded" ? mgr.email : "",
     lastDay: today, when: "now", reviewed: false, clearanceReviewed: false, ackPending: false, fromReview: false, errors: {}, q: "",
     assets: { laptop: { status: "pending", serial: "", date: today, condition: "Good", note: "" }, settlement: false }, ...(startStep ? { step: startStep } : {}),
   };
@@ -93,6 +93,8 @@ function Wizard({ people, offs, initial }) {
   const setLaptop = (patch) => setW((x) => ({ ...x, assets: { ...x.assets, laptop: { ...x.assets.laptop, ...patch } } }));
   const e = people.find((x) => x.id === w.empId) || null;
   const tools = w.tools || (e ? liveTools(e) : []);
+  // The people who report to the leaver: they need a new reporting manager, chosen here (the server asks for it too).
+  const team = e ? people.filter((p) => p.status !== "offboarded" && p.id !== e.id && (p.managerEmail ? lc(p.managerEmail) === lc(e.email) : p.manager === e.name)).sort((a, b) => a.name.localeCompare(b.name)) : [];
   const er = w.errors;
   // Financial clearance for the chosen last day, from the server (from step 3 on).
   const clr = useClearance({ email: w.step >= 3 && e ? e.email : null, lastDay: w.lastDay });
@@ -127,6 +129,7 @@ function Wizard({ people, offs, initial }) {
     if (w.step === 3) {
       if (!R.validDate(w.lastDay || "")) x.lastDay = "Enter the last working day.";
       else if (w.when === "later" && w.lastDay < today) x.lastDay = "That day has passed. Choose Now instead.";
+      if (team.length && !w.teamTo) x.teamTo = `Please choose who ${first}'s team will report to.`;
     }
     if (w.step === 4 && w.assets.laptop.status === "returned") {
       const l = w.assets.laptop;
@@ -152,7 +155,7 @@ function Wizard({ people, offs, initial }) {
     if (needsCheck && !w.clearanceReviewed) { toast("Tick that you have checked the financial clearance."); return; }
     if (settling && !fc) { toast("The financial clearance is still loading. Try again in a moment."); return; }
     const later = w.when === "later", day = w.lastDay;
-    const r = await api("POST", "/api/offboarding", { email: e.email, lastDay: day, transferTo: w.to, when: w.when, tools, checklist: w.assets,
+    const r = await api("POST", "/api/offboarding", { email: e.email, lastDay: day, transferTo: w.to, teamTo: team.length ? w.teamTo : "", when: w.when, tools, checklist: w.assets,
       clearanceReviewed: needsCheck ? w.clearanceReviewed : false,
       ...(settling && fc ? { confirm: true, expectedRecovery: fc.totals.totalRecovery, expectedNet: fc.totals.netSalary, acknowledgePending: w.ackPending } : {}) });
     if (!r.ok && r.status === 400 && r.data && r.data.errors && r.data.errors.clearance) clr.reload();
@@ -176,6 +179,8 @@ function Wizard({ people, offs, initial }) {
 
   const mgrs = people.filter((m) => m.status === "active" && (!e || m.id !== e.id)).sort((a, b) => (a.name < b.name ? -1 : 1));
   const toName = (people.find((p) => lc(p.email) === lc(w.to)) || {}).name || "";
+  const teamToName = (people.find((p) => lc(p.email) === lc(w.teamTo)) || {}).name || "";
+  const teamChoices = people.filter((m) => (m.status === "active" || m.status === "onboarding") && (!e || m.id !== e.id)).sort((a, b) => a.name.localeCompare(b.name));
   const first = e ? e.name.split(" ")[0] : "";
 
   let body = null;
@@ -233,6 +238,13 @@ function Wizard({ people, offs, initial }) {
         </div>
         <Info>{w.when === "later" ? <>Access is removed automatically at <b>6:00 pm</b> on the last working day. Until then HR can remove it early or call the offboarding off.</> : "Access is removed as soon as you submit."}</Info>
       </div></div>
+      {team.length > 0 && <div className="card" id="ow-team"><div className="card-h"><h3>Their team</h3><span className="muted">{team.length} {team.length === 1 ? "person reports" : "people report"} to {first}</span></div>
+        <div className="card-b" style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+          <p className="m-0 text-ink-dim">{team.map((p) => p.name).join(", ")}.</p>
+          <Field id="ow-team-to" label="New reporting manager for the team" error={er.teamTo} hint={`They move ${w.when === "later" ? `on ${shortDate(w.lastDay)}, when access is removed` : "when you submit"}. If you choose someone in the team, that person reports to ${first}'s own manager and the rest report to them.`}>
+            <select className="input" id="ow-team-to" value={w.teamTo} onChange={(x) => set({ teamTo: x.target.value })}><option value="">Choose…</option>
+              {teamChoices.map((m) => <option key={m.id} value={m.email}>{m.name}{team.includes(m) ? " (in the team)" : ""}{lc(m.email) === lc((people.find((x) => x.name === e.manager) || {}).email) ? ` (${first}'s manager)` : ""}</option>)}</select></Field>
+        </div></div>}
       <div className="card"><div className="card-h"><h3>Final settlement</h3><span className="muted">Leave only</span></div><div className="card-b" id="ow-settle"><SettlementSummary person={e} lastDay={w.lastDay} open /></div></div>
       <div className="card" id="ow-clearance"><div className="card-h"><h3>Financial clearance</h3>
         {fc && (fc.monthEndWindow ? <span className={pill("warn")}>Month-end exit · check required</span> : <span className="muted">Reimbursements and advances</span>)}</div>
@@ -265,7 +277,8 @@ function Wizard({ people, offs, initial }) {
         <Review title="Access" step={2} go={goStep}>
           <div className="chips" style={{ marginBottom: 14 }}>{tools.map((id) => <span key={id} className="chip"><ToolIcon tool={TOOLS[id]} state="active" />{TOOLS[id].name}</span>)}{!tools.length && <span className="muted">No tool access to remove</span>}</div>
           {OFF_TOOLS.includes("gws") && <Pairs pairs={[["Drive files and email go to", toName]]} />}</Review>
-        <Review title="Last working day" step={3} go={goStep}><Pairs pairs={[["Last working day", shortDate(w.lastDay)], ["Access removed", w.when === "later" ? `On ${shortDate(w.lastDay)} at 6:00 pm` : "Right away, when you submit"]]} /></Review>
+        <Review title="Last working day" step={3} go={goStep}><Pairs pairs={[["Last working day", shortDate(w.lastDay)], ["Access removed", w.when === "later" ? `On ${shortDate(w.lastDay)} at 6:00 pm` : "Right away, when you submit"],
+          ...(team.length ? [[`Their team (${team.length})`, `Reports to ${teamToName || "—"} from then on`]] : [])]} /></Review>
         <Review title="Final settlement" step={3} go={goStep}><SettlementSummary person={e} lastDay={w.lastDay} open /></Review>
         <Review title="Financial clearance" step={3} go={goStep}>
           {fc ? <>

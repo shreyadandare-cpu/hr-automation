@@ -12,6 +12,8 @@ import pg from "pg";
 const DB = process.env.DATABASE_URL || "", BASE = process.env.BASE || "http://localhost:3190";
 if (!/@?(localhost|127\.0\.0\.1)[:/]/.test(DB) || !/^http:\/\/(localhost|127\.0\.0\.1)/.test(BASE)) { console.error("Refusing: a local database and a local server only."); process.exit(2); }
 const db = new pg.Pool({ connectionString: DB }), sha = (s) => crypto.createHash("sha256").update(s).digest("hex");
+// Every joiner needs a reporting manager: any current employee whose name is unique (the top of the company has no manager).
+const MGR = (await db.query(`SELECT name FROM employees WHERE status='active' GROUP BY name HAVING count(*)=1 ORDER BY name LIMIT 1`)).rows[0]?.name || "";
 const HR = "test.onboarding.admin@wohlig.com", EMP = "test.onboarding.employee@wohlig.com", NEW1 = "test.joiner.today@wohlig.com", NEW2 = "test.joiner.tomorrow@wohlig.com";   // clearly named test people; a local server sends no email
 let pass = 0, fail = 0;
 const ok = (name, cond, extra = "") => { cond ? pass++ : fail++; console.log(`${cond ? "PASS" : "FAIL"}  ${name}${cond ? "" : "  " + extra}`); };
@@ -29,7 +31,7 @@ const month = (add = 0) => { const d = new Date(Date.now() + 330 * 60000); d.set
 const day = (add = 0) => `${month(add)}-05`;
 const ids = { dob: "2000-01-01", aadhaar: "234567890123", pan: "ABCDE1234F", acct: "123456789012", ifsc: "HDFC0001234" };
 const finish = (hr, email, first, last, start) => call(hr, "POST", "/api/onboarding", { existingEmail: email, ids, apps: [],
-  d: { first, last, pemail: `${first.toLowerCase()}@example.com`, phone: "9876543210", address: "12 Test Road, Mumbai", dept: "Engineering", title: "Software Developer Engineer", mgr: "", start, kind: "Employee" } });
+  d: { first, last, pemail: `${first.toLowerCase()}@example.com`, phone: "9876543210", address: "12 Test Road, Mumbai", dept: "Engineering", title: "Software Developer Engineer", mgr: MGR, em1n: "Test Contact", em1r: "Parent", em1p: "9123456780", start, kind: "Employee" } });
 
 try {
   for (const e of [NEW1, NEW2, HR, EMP]) await db.query("DELETE FROM employees WHERE work_email=$1", [e]);
@@ -38,7 +40,7 @@ try {
 
   // two joiners, created the way onboarding creates them (work email, login), then finished
   for (const [email, first, start] of [[NEW1, "Pnow", day(0)], [NEW2, "Pnext", day(1)]]) {
-    const r = await call(hr, "POST", "/api/onboarding/work-email", { d: { first, last: "Joiner", pemail: `${first.toLowerCase()}@example.com`, phone: "9876543210", address: "12 Test Road, Mumbai", dept: "Engineering", title: "Software Developer Engineer", mgr: "", start, kind: "Employee" } });
+    const r = await call(hr, "POST", "/api/onboarding/work-email", { d: { first, last: "Joiner", pemail: `${first.toLowerCase()}@example.com`, phone: "9876543210", address: "12 Test Road, Mumbai", dept: "Engineering", title: "Software Developer Engineer", mgr: MGR, em1n: "Test Contact", em1r: "Parent", em1p: "9123456780", start, kind: "Employee" } });
     if (r.s !== 201) throw new Error(`work email for ${first}: ${r.s} ${JSON.stringify(r.d)}`);
     await db.query("UPDATE employees SET work_email=$2 WHERE lower(work_email)=$1", [r.d.email, email]);
     await db.query("INSERT INTO users (email, password_hash, role) VALUES ($1,'x','employee') ON CONFLICT DO NOTHING", [email]);

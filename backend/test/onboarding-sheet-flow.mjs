@@ -13,6 +13,8 @@ import pg from "pg";
 const DB = process.env.DATABASE_URL || "", BASE = process.env.BASE || "http://localhost:3190";
 if (!/@?(localhost|127\.0\.0\.1)[:/]/.test(DB) || !/^http:\/\/(localhost|127\.0\.0\.1)/.test(BASE)) { console.error("Refusing: a local database and a local server only."); process.exit(2); }
 const db = new pg.Pool({ connectionString: DB }), sha = (s) => crypto.createHash("sha256").update(s).digest("hex");
+// Every joiner needs a reporting manager: any current employee whose name is unique (the top of the company has no manager).
+const MGR = (await db.query(`SELECT name FROM employees WHERE status='active' GROUP BY name HAVING count(*)=1 ORDER BY name LIMIT 1`)).rows[0]?.name || "";
 const HR = "os.hr@wohlig.com", NOBANK = "os.nobank@wohlig.com", EMP = "os.emp@wohlig.com";
 const P = ["os.one@wohlig.com", "os.two@wohlig.com", "os.gone@wohlig.com", "os.four@wohlig.com", "os.five@wohlig.com"], MANUAL = "os.manual@wohlig.com";
 let pass = 0, fail = 0;
@@ -115,10 +117,10 @@ try {
   const inc = await sheet([[P[1], "", "", "", "", "", "", "", "555566667777", "", "", "", ""]]);
   r = await call(hr, "POST", "/api/onboarding/import/apply", null, inc);
   ok("an account number without the holder and bank name is kept masked and flagged for payroll", r.s === 200 && r.d.bankAdded === 0 && /holder name, the bank name/.test(r.d.notes[0].message), JSON.stringify(r.d));
-  let w = await call(hr, "POST", "/api/onboarding/work-email", { d: { first: "Manny", last: "Manual", pemail: "manny.p@example.com", phone: "9876543210", address: "12 Test Road, Mumbai", dept: "Engineering", title: "Developer", mgr: "", start: "2026-12-07", kind: "Employee" }, typedEmail: MANUAL });
+  let w = await call(hr, "POST", "/api/onboarding/work-email", { d: { first: "Manny", last: "Manual", pemail: "manny.p@example.com", phone: "9876543210", address: "12 Test Road, Mumbai", dept: "Engineering", title: "Developer", mgr: MGR, em1n: "Test Contact", em1r: "Parent", em1p: "9123456780", start: "2026-12-07", kind: "Employee" }, typedEmail: MANUAL });
   await db.query("INSERT INTO users (email, password_hash, role) VALUES ($1,'x','employee') ON CONFLICT DO NOTHING", [MANUAL]);
   await call(hr, "POST", "/api/onboarding/import/apply", null, await sheet([[MANUAL, "", "", "05-May-1996", "", "PQRST1234U", "", "", "", "", "", "", ""]]));
-  w = await call(hr, "POST", "/api/onboarding", { existingEmail: MANUAL, ids: {}, apps: [], d: { first: "Manny", last: "Manual", pemail: "manny.p@example.com", phone: "9876543210", address: "12 Test Road, Mumbai", dept: "Engineering", title: "Developer", mgr: "", start: "2026-12-07", kind: "Employee" } });
+  w = await call(hr, "POST", "/api/onboarding", { existingEmail: MANUAL, ids: {}, apps: [], d: { first: "Manny", last: "Manual", pemail: "manny.p@example.com", phone: "9876543210", address: "12 Test Road, Mumbai", dept: "Engineering", title: "Developer", mgr: MGR, em1n: "Test Contact", em1r: "Parent", em1p: "9123456780", start: "2026-12-07", kind: "Employee" } });
   const fin = (await db.query("SELECT dob::text, pan_masked FROM employees WHERE work_email=$1", [MANUAL])).rows[0];
   ok("finishing onboarding with the ID boxes empty does not wipe what the sheet filled in", w.s === 201 && fin.dob === "1996-05-05" && fin.pan_masked === "PQ••••••4U", JSON.stringify([w.s, fin]));
 } catch (e) { fail++; console.log("ERROR  " + e.stack); }

@@ -144,6 +144,10 @@ export function onboardingRouter(wrap) {
     // HR may type the work email instead of having Google create one (for example while the Google credentials are not set up).
     const typed = String(req.body?.typedEmail || "").trim().toLowerCase();
     const errors = detailsErrors(d);
+    if (!errors.mgr && String(d.mgr || "").trim()) {
+      const n = (await pool.query("SELECT count(*)::int AS n FROM employees WHERE lower(name)=lower($1) AND status NOT IN ('offboarding','offboarded')", [String(d.mgr).trim()])).rows[0].n;
+      if (n !== 1) errors.mgr = n ? `Two people are called ${String(d.mgr).trim()}. Please ask the HR team to tell them apart first.` : `${String(d.mgr).trim()} is not a current employee. Please choose the reporting manager from the list.`;
+    }
     if (typed && !(/^[^\s@]+@wohlig\.com$/.test(typed))) errors.typedEmail = `Please enter a work email that ends in @${DOMAIN}.`;
     if (Object.keys(errors).length) return res.status(400).json({ errors });
 

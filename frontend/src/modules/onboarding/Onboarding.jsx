@@ -7,6 +7,7 @@ import { Callout, SectionHead, pill, PageSkeleton } from "../../components/ui.js
 import BackButton from "../../components/BackButton.jsx";
 import { useToast } from "../../components/toast.jsx";
 import ProfileImport from "./ProfileImport.jsx";
+import { isTop } from "../../lib/people.js";
 import { ACCESS_HELP, ACCESS_LABEL, DEPTS, DOMAIN, DocRows, ON_TOOLS, V, docCount, fdate, groupDocs, hrConfirm, makeWorkEmail, nameSplit } from "./shared.jsx";
 
 const OB_STEPS = ["Details and work email", "Create login", "Tools and review"];
@@ -39,6 +40,7 @@ function step1Errors(d) {
   });
   if (!d.title.trim()) e.title = "Enter the job title.";
   if (!d.start) e.start = "Pick the start date.";
+  if (!d.mgr && !isTop({ title: d.title })) e.mgr = "Choose the reporting manager. Only the top of the company has none.";
   return e;
 }
 
@@ -149,7 +151,7 @@ export default function Onboarding() {
   const lc = (s) => String(s || "").toLowerCase();
   const recOf = (email) => (records || []).find((r) => lc(r.email) === lc(email));
   const waiting = people.filter((e) => e.status === "onboarding").sort((a, b) => a.name.localeCompare(b.name));
-  const mgrs = people.filter((e) => e.status !== "offboarded");
+  const mgrs = people.filter((e) => e.status !== "offboarded" && e.status !== "offboarding");
   const picked = ob.email && people.find((x) => lc(x.email) === lc(ob.email));
   const taken = (x) => people.some((p) => lc(p.email) === lc(x));
   const { d } = ob, er = ob.errors;
@@ -321,7 +323,8 @@ export default function Onboarding() {
             <div className="field"><label htmlFor="ob-dept">Department</label><select className="input" id="ob-dept" value={d.dept} onChange={(e) => setD("dept", e.target.value)}>{DEPTS.map((x) => <option key={x}>{x}</option>)}</select></div>
             <div className="field"><label htmlFor="ob-kind">Joining as</label><select className="input" id="ob-kind" value={d.kind || "Employee"} onChange={(e) => setD("kind", e.target.value)}><option>Employee</option><option>Intern</option></select></div>
             <Fld label="Job title" id="title" value={d.title} onChange={(v) => setD("title", v)} err={er.title} ph="e.g. Software Development Engineer" />
-            <div className="field"><label htmlFor="ob-mgr">Reporting manager</label><select className="input" id="ob-mgr" value={d.mgr} onChange={(e) => setD("mgr", e.target.value)}><option value="">None</option>{mgrs.map((m) => <option key={m.id}>{m.name}</option>)}</select></div>
+            <div className="field"><label htmlFor="ob-mgr">Reporting manager</label><select className="input" id="ob-mgr" value={d.mgr} aria-invalid={!!er.mgr} aria-describedby="ob-mgr-h" onChange={(e) => setD("mgr", e.target.value)}><option value="">{isTop({ title: d.title }) ? "None (top of the company)" : "Choose…"}</option>{mgrs.map((m) => <option key={m.id}>{m.name}</option>)}</select>
+              {er.mgr ? <span className="ferr" role="alert" id="ob-mgr-h">{er.mgr}</span> : <span className="hint" id="ob-mgr-h">Approves their leave and timesheets. Only directors, the Vice President and the CEO have none.</span>}</div>
             <Fld label="Start date" id="start" type="date" value={d.start} onChange={(v) => setD("start", v)} err={er.start} />
             <Fld label="Employee ID" id="empNo" value={d.empNo} onChange={(v) => setD("empNo", v)} err={er.empNo} ph="e.g. WT/206" dis={!!ob.work} />
           </div></div>

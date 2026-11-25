@@ -5,6 +5,7 @@ import { needAll, invalidateTree } from "./access.js";
 import { TOOL_NAMES, removeAccess } from "./connectors.js";
 import { computeClearance, inMonthEndWindow, inr, latestClearance, leaveSettlement, money, saveClearance } from "./clearance.js";
 import { PRODUCT } from "./brand.js";
+import { moveTeam } from "./people.js";
 
 // Tools offboarding removes for now: Claude only. Add ids from connectors.js (gws, gemini, github, gcp) to bring others back.
 const TOOLS = ["claude"];
@@ -74,7 +75,7 @@ async function load(db, id) {
   const settlement = await leaveSettlement(db, o.work_email, o.last_day);
   const clearance = await latestClearance(db, id);
   return {
-    id: o.id, email: o.work_email, lastDay: o.last_day, transferTo: o.transfer_to, status: o.status, runAt: o.run_at,
+    id: o.id, email: o.work_email, lastDay: o.last_day, transferTo: o.transfer_to, teamTo: o.team_to || null, status: o.status, runAt: o.run_at,
     startedAt: o.started_at, completedAt: o.completed_at,
     steps: steps.rows.map((s) => ({ kind: s.kind, key: s.key, label: s.label, status: s.status, detail: s.detail, doneAt: s.done_at })),
     settlement, clearance, monthEndWindow: inMonthEndWindow(o.last_day),
@@ -93,6 +94,7 @@ async function settle(db, id) {
   await db.query("UPDATE offboardings SET status=$2, completed_at=$3 WHERE id=$1", [id, next, allDone ? new Date() : null]);
   if (allDone) {
     await db.query("UPDATE employees SET status='offboarded' WHERE lower(work_email)=$1", [o[0].work_email.toLowerCase()]);
+    await moveTeam(db, o[0].work_email, o[0].team_to, "offboarding");   // anyone still under them (set after the start) moves too
     invalidateTree();
     // Someone who has left is no longer on any project: their current allocations end, and stay in the history.
     await db.query(`UPDATE employee_project_allocations SET status='Ended', end_date=CURRENT_DATE, end_reason='Left the company'
@@ -132,6 +134,8 @@ export async function runRemoval(id) {
   const o = rows[0];
   try {
     await pool.query("UPDATE employees SET status='offboarding' WHERE lower(work_email)=$1", [o.work_email.toLowerCase()]);
+    // Their team moves to the manager HR chose, so nobody is left without a reporting manager.
+    await moveTeam(pool, o.work_email, o.team_to, "offboarding");
     invalidateTree();
     // Their Wohlig One login goes too (signing them out), unless they are the last HR account.
     const lc = o.work_email.toLowerCase();
@@ -180,7 +184,7 @@ export function offboardingRouter(wrap) {
 
   // Start offboarding now, or schedule it for 6 pm on the last working day.
   r.post("/api/offboarding", wrap(async (req, res) => {
-    const { email, lastDay, transferTo, when } = req.body || {};
+    const { email, lastDay, transferTo, teamTo, when } = req.body || {};
     const tools = Array.isArray(req.body && req.body.tools) ? [...new Set(req.body.tools)] : [];
     const [status, body] = await tx(null, async (db) => {
       const errors = {};
@@ -199,6 +203,26 @@ export function offboardingRouter(wrap) {
         else if (emp && t[0].work_email.toLowerCase() === emp.work_email.toLowerCase()) errors.transferTo = "Pick someone other than the person leaving.";
         else if (!["active", "onboarding"].includes(t[0].status)) errors.transferTo = `${t[0].name} is not an active employee.`;
       }
+      // As in Keka's exit, the people who report to them need a new reporting manager.
+      let teamBoss = null;
+      if (emp && !errors.email) {
+        const team = (await db.query("SELECT lower(work_email) AS e FROM employees WHERE lower(manager_email)=$1 AND status <> 'offboarded'", [emp.work_email.toLowerCase()])).rows.map((x) => x.e);
+        if (team.length) {
+          const want = String(teamTo || "").toLowerCase();
+          teamBoss = want ? (await db.query("SELECT name, status, lower(work_email) AS email, lower(manager_email) AS m FROM employees WHERE lower(work_email)=$1", [want])).rows[0] : null;
+          const n = `${team.length} ${team.length === 1 ? "person reports" : "people report"} to ${emp.name}`;
+          if (!teamBoss) errors.teamTo = `${n}. Please choose their new reporting manager.`;
+          else if (teamBoss.email === emp.work_email.toLowerCase()) errors.teamTo = "Please choose someone other than the person leaving.";
+          else if (!["active", "onboarding"].includes(teamBoss.status)) errors.teamTo = `${teamBoss.name} is not an active employee.`;
+          else if (!team.includes(teamBoss.email)) {
+            // Someone further down their team cannot take it over: the team would then report in a circle.
+            for (let cur = teamBoss.m, i = 0; cur && i < 60; i++) {
+              if (cur === emp.work_email.toLowerCase()) { errors.teamTo = `${teamBoss.name} works under ${emp.name}'s team. Please choose one of their direct reports or someone outside the team.`; break; }
+              cur = (await db.query("SELECT lower(manager_email) AS m FROM employees WHERE lower(work_email)=$1", [cur])).rows[0]?.m || "";
+            }
+          }
+        }
+      }
       if (emp && !errors.email) {
         const { rowCount } = await db.query("SELECT 1 FROM offboardings WHERE lower(work_email)=$1 AND status<>'cancelled'", [emp.work_email.toLowerCase()]);
         if (rowCount) errors.email = `${emp.name} is already being offboarded.`;
@@ -210,9 +234,9 @@ export function offboardingRouter(wrap) {
       if (Object.keys(errors).length) return [400, { errors }];
 
       const { rows: o } = await db.query(
-        `INSERT INTO offboardings (work_email, last_day, transfer_to, status, run_at)
-         VALUES ($1, $2, $3, $4, CASE WHEN $4='scheduled' THEN ($2::date + time '18:00') AT TIME ZONE 'Asia/Kolkata' ELSE now() END)
-         RETURNING id`, [emp.work_email, lastDay, t[0] ? t[0].work_email : null, when === "later" ? "scheduled" : "in_progress"]);
+        `INSERT INTO offboardings (work_email, last_day, transfer_to, status, run_at, team_to)
+         VALUES ($1, $2, $3, $4, CASE WHEN $4='scheduled' THEN ($2::date + time '18:00') AT TIME ZONE 'Asia/Kolkata' ELSE now() END, $5)
+         RETURNING id`, [emp.work_email, lastDay, t[0] ? t[0].work_email : null, when === "later" ? "scheduled" : "in_progress", teamBoss ? teamBoss.email : null]);
       const id = o[0].id;
       for (const k of tools) await db.query("INSERT INTO offboarding_steps (offboarding_id, kind, key, label) VALUES ($1,'tool',$2,$3)", [id, k, `Remove access: ${TOOL_NAMES[k]}`]);
       // Seats in tools tracked by hand (ChatGPT, Cursor...): a checklist item each, ticked once the seat is removed in the tool.
@@ -237,6 +261,7 @@ export function offboardingRouter(wrap) {
         `UPDATE leave_requests SET status='cancelled', decided_at=now()
          WHERE lower(work_email)=$1 AND status IN ('pending','approved') AND from_date > $2`, [emp.work_email.toLowerCase(), lastDay]);
       await audit(db, when === "later" ? `Offboarding scheduled for ${lastDay}, 6:00 pm` : `Offboarding started, last working day ${lastDay}`, emp.work_email);
+      if (teamBoss) await audit(db, `Their team moves to ${teamBoss.name} when access is removed`, emp.work_email);
       if (dropped) await audit(db, `${dropped} leave request${dropped === 1 ? "" : "s"} after the last working day cancelled`, emp.work_email);
       if (inMonthEndWindow(lastDay)) await audit(db, `Month-end exit (${lastDay}): HR confirmed the financial clearance was reviewed`, emp.work_email);
       // Final settlement ticked at the start: the clearance is confirmed now, from the records as they are.

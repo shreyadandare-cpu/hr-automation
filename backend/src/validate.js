@@ -71,6 +71,8 @@ export function detailsErrors(d = {}) {
   emergencyCheck(emergencyOfDetails(d), d.phone, true).forEach((x, i) => { for (const [k, f] of [["name", "n"], ["relation", "r"], ["phone", "p"]]) if (x[k]) e[`em${i + 1}${f}`] = x[k]; });
   if (!has(d.title)) e.title = "Enter a job title.";
   if (!/^\d{4}-\d{2}-\d{2}$/.test(d.start || "")) e.start = "Enter a start date.";
+  // As in Keka, every joiner has a reporting manager; only the top of the company (directors, the VP, the CEO) has none.
+  if (!has(d.mgr) && !/\b(director|vice president|ceo|chief executive)\b/i.test(String(d.title || ""))) e.mgr = "Choose the reporting manager. Only the top of the company has none.";
   if (has(d.empNo) && !/^[A-Za-z0-9][A-Za-z0-9/_-]{0,19}$/.test(String(d.empNo).trim())) e.empNo = "Employee ID can use letters, digits, / - and _ (up to 20 characters).";
   return e;
 }

@@ -138,21 +138,7 @@ function Branch({ person, org, ctx }) {
   return <li>{card}<ul>{team.map((k) => <Branch key={k.id} person={k} org={org} ctx={ctx} />)}</ul></li>;
 }
 
-/* The branch for people with no reporting manager yet, grouped by department. */
-function Unplaced({ org, ctx }) {
-  const open = !ctx.closed.has("loose");
-  return (
-    <li>
-      <div className="org-card w-[170px]! gap-1! bg-tint! px-2!">
-        <b className="text-center font-display text-[16px] leading-tight font-medium text-ink">No manager yet</b>
-        <span className="text-center text-[13px] text-ink-dim">{org.loose} {org.loose === 1 ? "person" : "people"} in {org.depts.length} {org.depts.length === 1 ? "department" : "departments"}</span>
-        <button type="button" className="org-toggle mt-1" aria-expanded={open} onClick={() => ctx.toggle("loose")} aria-label={`${open ? "Hide" : "Show"} people with no manager`}>{open ? "− Hide" : "+ Show"}</button>
-      </div>
-      {open && <ul>{org.depts.map((d) => <Dept key={d.name} d={d} ctx={ctx} />)}</ul>}
-    </li>
-  );
-}
-
+/* People with no reporting manager yet, under the company card by department until HR sets one (HR sees a banner to fix it). */
 function Dept({ d, ctx }) {
   const key = `dept:${d.name}`, open = !ctx.closed.has(key);
   return (
@@ -208,7 +194,7 @@ export default function OrgChart({ people }) {
   // The departments of people with no manager start closed, so the first view is the reporting lines.
   const deptKeys = org.depts.map((d) => `dept:${d.name}`);
   const [closed, setClosed] = useState(() => new Set(deptKeys));
-  const [setting, setSetting] = useState(null), [focus, setFocus] = useState(null);
+  const [setting, setSetting] = useState(null), [focus, setFocus] = useState(null), [bulk, setBulk] = useState(false);
   const [zoom, setZoom] = useState(() => (window.matchMedia("(max-width: 720px)").matches ? 0.65 : 1));   // phones start zoomed out
   useEffect(() => { api("GET", "/api/profile/photos").then((r) => r.ok && r.data && setPhotos(r.data)); }, []);
   const toggle = (id) => setClosed((s) => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; });
@@ -232,12 +218,20 @@ export default function OrgChart({ people }) {
   }, [focus, closed]);
   const ctx = { org, photos, closed, toggle, focus, me: lc(user.email), canEdit: editsAll, mayEdit: (p) => !editScope || editScope.has(lc(p.email)), setFor: (p) => setSetting({ people: [p] }), setForDept: (d) => setSetting({ people: d.list, dept: d.name }) };
   const zi = ZOOMS.indexOf(zoom);
+  // The people this person may fix who still have no reporting manager (only the top of the company may have none).
+  const missing = (can("people.edit") ? org.here.filter((p) => !isTop(p) && !org.parentOf.has(p.id) && ctx.mayEdit(p)) : []).sort(byName);
 
   return (
     <div className="card org-bleed">
       <div className="card-h flex-wrap gap-3"><h3>Who reports to whom</h3>
-        <span className="muted">{org.total} people · {org.managers} {org.managers === 1 ? "manager" : "managers"}{org.loose ? ` · ${org.loose} with no manager` : ""}</span>
+        <span className="muted">{org.total} people · {org.managers} {org.managers === 1 ? "manager" : "managers"}</span>
       </div>
+      {missing.length > 0 && <div className="mx-6 mb-3 flex flex-wrap items-center gap-3 rounded-field bg-tint px-4 py-3 max-sm:mx-4" role="status">
+        <p className="m-0 min-w-0 flex-1 basis-[260px] text-[14px] text-ink">
+          <b>{missing.length} {missing.length === 1 ? "person has" : "people have"} no reporting manager.</b>{" "}
+          <span className="text-ink-dim">Everyone except directors, the Vice President and the CEO needs one: their manager approves leave and timesheets. Until one is set, a super admin approves their leave.</span></p>
+        <button type="button" className="btn primary sm" onClick={() => setBulk(true)}>Assign managers</button>
+      </div>}
       <div className="flex flex-wrap items-center gap-2 px-6 pb-3 max-sm:px-4">
         <Finder org={org} onPick={show} />
         <div className="flex flex-wrap items-center gap-2">
@@ -259,15 +253,11 @@ export default function OrgChart({ people }) {
             <li>
               <div className="org-card org-root"><span className="org-txt"><span className="org-logo"><img className="lg lg-light" src={BRAND.logos.light} alt={BRAND.company.name} /><img className="lg lg-dark" src={BRAND.logos.dark} alt="" /></span>
                 <span>{org.total} people</span></span></div>
-              {org.leads.length > 0 && <ul>{org.leads.map((p) => <Branch key={p.id} person={p} org={org} ctx={ctx} />)}</ul>}
+              {(org.leads.length > 0 || org.depts.length > 0) && <ul>{org.leads.map((p) => <Branch key={p.id} person={p} org={org} ctx={ctx} />)}{org.depts.map((d) => <Dept key={d.name} d={d} ctx={ctx} />)}</ul>}
             </li>
           </ul>
       </div>
-      {org.loose > 0 && <div className="border-t border-line pt-5">
-        <div className="px-6 max-sm:px-4"><h4 className="m-0 font-display text-[18px] font-medium">No reporting manager yet</h4>
-          <p className="mt-1 mb-0 text-[14px] text-ink-dim">{editsAll ? "These people are not in the tree above until they have a manager. Set one from the menu on a card, or Set one manager for all on a department." : "These people are not in the tree above until the HR team sets their manager."}</p></div>
-        <div className="org" tabIndex={0} aria-label="People with no reporting manager"><ul style={{ zoom }}><Unplaced org={org} ctx={ctx} /></ul></div>
-      </div>}
+      {bulk && <AssignManagers list={missing} people={people} onClose={() => setBulk(false)} onDone={(n) => { setBulk(false); if (n) toast(`${n === 1 ? "1 person now has" : `${n} people now have`} a reporting manager.`); reload(); }} />}
       {setting && <SetManager set={setting} people={people} onClose={() => setSetting(null)} onDone={(n, name) => { setSetting(null); toast(name ? `${n === 1 ? "The reporting manager is" : `${n} people now report to`} ${name}.` : "The reporting manager was cleared."); reload(); }} toastError={toast} />}
     </div>
   );
@@ -299,9 +289,60 @@ function SetManager({ set, people, onClose, onDone, toastError }) {
         <Field id="om-b" label="Reporting manager" error={err}><PeoplePicker id="om-b" people={choices} value={boss} onChange={(v) => { setBoss(v || ""); setErr(""); }} /></Field>
       </div>
       <div className="modal-f">
-        {one && mgrOf(one) && <button type="button" className="btn glass mr-auto max-sheet:mr-0" onClick={() => save(true)} disabled={busy}>Clear manager</button>}
+        {one && mgrOf(one) && isTop(one) && <button type="button" className="btn glass mr-auto max-sheet:mr-0" onClick={() => save(true)} disabled={busy}>Clear manager</button>}
         <button type="button" className="btn glass" onClick={onClose} disabled={busy}>Cancel</button>
         <button type="button" className="btn primary" onClick={() => save(false)} disabled={busy}>{busy ? "Saving…" : "Save"}</button>
+      </div>
+    </Modal>
+  );
+}
+
+/* HR sets every missing reporting manager on one screen (as a Keka bulk update would). Each row starts with a suggestion:
+   when their manager has left, that manager's own manager. "Same for everyone" fills every row. Rows left empty are skipped. */
+function AssignManagers({ list, people, onClose, onDone }) {
+  const here = people.filter((p) => p.status !== "offboarded" && p.status !== "offboarding").sort(byName);
+  const byEmail = new Map(people.map((p) => [lc(p.email), p])), byNameMap = new Map(people.map((p) => [lc(p.name), p]));
+  const formerOf = (p) => (p.managerEmail && byEmail.get(lc(p.managerEmail))) || byNameMap.get(lc(mgrOf(p))) || null;
+  const suggest = (p) => { const old = formerOf(p), up = old && byNameMap.get(lc(mgrOf(old))); return up && up.status !== "offboarded" && up.status !== "offboarding" && up.id !== p.id ? up.email : ""; };
+  const [pick, setPick] = useState(() => Object.fromEntries(list.map((p) => [p.email, suggest(p)])));
+  const [errs, setErrs] = useState({}), [busy, setBusy] = useState(false), [all, setAll] = useState("");
+  const chosen = list.filter((p) => pick[p.email]);
+  const save = async () => {
+    if (!chosen.length) { setErrs({ _: "Please choose a manager for at least one person." }); return; }
+    setBusy(true);
+    const results = await Promise.all(chosen.map((p) => api("PUT", "/api/employees/manager", { email: p.email, managerEmail: pick[p.email] }).then((r) => [p.email, r])));
+    setBusy(false);
+    const bad = Object.fromEntries(results.filter(([, r]) => !r.ok).map(([email, r]) => [email, apiMsg(r)]));
+    const done = results.length - Object.keys(bad).length;
+    if (Object.keys(bad).length) { setErrs(bad); if (done) setPick((x) => Object.fromEntries(Object.entries(x).filter(([email]) => bad[email] || !chosen.some((p) => p.email === email)))); return; }
+    onDone(done);
+  };
+  return (
+    <Modal onClose={busy ? () => {} : onClose} wide>
+      <div className="card-h"><h3>Assign reporting managers</h3></div>
+      <div className="card-b">
+        <p className="m-0 text-ink-dim">Choose a manager for each person. Where their manager has left, their manager's own manager is suggested. Rows you leave empty stay as they are.</p>
+        <div className="mt-4 flex flex-wrap items-end gap-2">
+          <Field id="am-all" label="Same manager for everyone"><select className="input" id="am-all" value={all} onChange={(e) => setAll(e.target.value)}><option value="">Choose…</option>{here.map((m) => <option key={m.id} value={m.email}>{m.name}</option>)}</select></Field>
+          <button type="button" className="btn glass sm mb-1" disabled={!all} onClick={() => setPick(Object.fromEntries(list.map((p) => [p.email, p.email === all ? pick[p.email] : all])))}>Apply to all</button>
+        </div>
+        {errs._ && <p className="ferr mt-3 mb-0" role="alert">{errs._}</p>}
+        <ul className="m-0 mt-4 flex list-none flex-col gap-2.5 p-0">
+          {list.map((p) => { const old = formerOf(p); return (
+            <li key={p.id} className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)] items-center gap-3 rounded-field px-3 py-2.5 shadow-[inset_0_0_0_1px_var(--line)] max-sm:grid-cols-1">
+              <span className="flex min-w-0 flex-col"><b className="truncate text-[15px] text-ink">{p.name}</b>
+                <span className="text-[13px] text-ink-faint">{p.title}{old ? ` · was ${old.name}${old.status === "offboarded" ? ", who has left" : ""}` : " · never set"}</span></span>
+              <span className="flex min-w-0 flex-col gap-1">
+                <label className="sr-only" htmlFor={`am-${p.id}`}>Reporting manager for {p.name}</label>
+                <select className="input" id={`am-${p.id}`} value={pick[p.email] || ""} aria-invalid={!!errs[p.email]} onChange={(e) => { setPick((x) => ({ ...x, [p.email]: e.target.value })); setErrs((x) => ({ ...x, [p.email]: "", _: "" })); }}>
+                  <option value="">Choose…</option>{here.filter((m) => m.id !== p.id).map((m) => <option key={m.id} value={m.email}>{m.name}</option>)}</select>
+                {errs[p.email] && <span className="ferr" role="alert">{errs[p.email]}</span>}</span>
+            </li>); })}
+        </ul>
+      </div>
+      <div className="modal-f">
+        <button type="button" className="btn glass" onClick={onClose} disabled={busy}>Cancel</button>
+        <button type="button" className="btn primary" onClick={save} disabled={busy}>{busy ? "Saving…" : `Save ${chosen.length || ""}`.trim()}</button>
       </div>
     </Modal>
   );

@@ -12,6 +12,8 @@ import pg from "pg";
 const DB = process.env.DATABASE_URL || "", BASE = process.env.BASE || "http://localhost:3190";
 if (!/@?(localhost|127\.0\.0\.1)[:/]/.test(DB) || !/^http:\/\/(localhost|127\.0\.0\.1)/.test(BASE)) { console.error("Refusing: a local database and a local server only."); process.exit(2); }
 const db = new pg.Pool({ connectionString: DB }), sha = (s) => crypto.createHash("sha256").update(s).digest("hex");
+// Every joiner needs a reporting manager: any current employee whose name is unique (the top of the company has no manager).
+const MGR = (await db.query(`SELECT name FROM employees WHERE status='active' GROUP BY name HAVING count(*)=1 ORDER BY name LIMIT 1`)).rows[0]?.name || "";
 const HR = "oe.hr@wohlig.com", TYPED = "oe.manual@wohlig.com";
 let pass = 0, fail = 0;
 const ok = (name, cond, extra = "") => { cond ? pass++ : fail++; console.log(`${cond ? "PASS" : "FAIL"}  ${name}${cond ? "" : "  " + extra}`); };
@@ -19,7 +21,7 @@ const call = async (tok, method, path, body) => {
   const r = await fetch(BASE + path, { method, headers: { cookie: `sid=${tok}`, ...(body ? { "content-type": "application/json" } : {}) }, body: body ? JSON.stringify(body) : undefined });
   return { s: r.status, d: await r.json().catch(() => null) };
 };
-const details = (first, last, pemail) => ({ first, last, pemail, phone: "9876543210", address: "12 Test Road, Mumbai", dept: "Engineering", title: "Software Developer Engineer", mgr: "", start: "2026-12-07", kind: "Employee" });
+const details = (first, last, pemail) => ({ first, last, pemail, phone: "9876543210", address: "12 Test Road, Mumbai", dept: "Engineering", title: "Software Developer Engineer", mgr: MGR, em1n: "Test Contact", em1r: "Parent", em1p: "9123456780", start: "2026-12-07", kind: "Employee" });
 try {
   await db.query("INSERT INTO users (email, password_hash, role, is_super_admin) VALUES ($1,'x','hr',true) ON CONFLICT DO NOTHING", [HR]);
   const tok = crypto.randomBytes(32).toString("hex");

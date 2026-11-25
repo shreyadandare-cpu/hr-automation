@@ -176,6 +176,8 @@ CREATE TABLE IF NOT EXISTS offboardings (
   created_at   TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE UNIQUE INDEX IF NOT EXISTS offboardings_one_active ON offboardings (lower(work_email)) WHERE status <> 'cancelled';
+-- Who the leaver's direct reports move to when access is removed (Keka asks for this in the exit), so nobody is left without a manager.
+ALTER TABLE offboardings ADD COLUMN IF NOT EXISTS team_to TEXT;
 
 CREATE TABLE IF NOT EXISTS offboarding_steps (
   id             SERIAL PRIMARY KEY,

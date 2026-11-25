@@ -121,8 +121,8 @@ function EditModal({ e, people, onClose, onPayroll }) {
         <div className="field"><label htmlFor="e-mgr">Reporting manager</label>
           {/* A director or VP reports only to another top person, such as the CEO. */}
           <select className="input" id="e-mgr" value={manager} disabled={!edits} onChange={(ev) => setManager(ev.target.value)}>
-            <option value="">{top ? "No manager (top of the company)" : "No manager"}</option>{(top ? mgrNames.filter((n) => isTop((people || []).find((p) => p.name === n) || {})) : mgrNames).map((n) => <option key={n}>{n}</option>)}</select>
-          <span className="hint">{edits ? "Their manager approves their leave; with no manager, HR does. Saved for everyone." : "Only the people who edit staff details can change the reporting manager."}</span></div>
+            <option value="" disabled={!top}>{top ? "No manager (top of the company)" : "Choose the reporting manager"}</option>{(top ? mgrNames.filter((n) => isTop((people || []).find((p) => p.name === n) || {})) : mgrNames).map((n) => <option key={n}>{n}</option>)}</select>
+          <span className="hint">{edits ? (top ? "Directors, the Vice President and the CEO may have no manager. Saved for everyone." : "Required: their manager approves their leave and timesheets. Saved for everyone.") : "Only the people who edit staff details can change the reporting manager."}</span></div>
         <div className="field"><label htmlFor="e-dept">Department</label><select className="input" id="e-dept" value={f.dept} onChange={set("dept")}>{[...new Set([f.dept, ...DEPTS])].map((d) => <option key={d}>{d}</option>)}</select></div>
         {(salaryAccess || bankAccess) && (
           <div className="field"><span className="lab">Salary and bank account (payroll)</span>

@@ -14,8 +14,9 @@ export function deptOf(title) {
   return "Engineering";
 }
 
-/* Directors and the Vice President are at the top of the company: nobody is above them. */
-export const isTop = (p) => /\b(director|vice president)\b/i.test(p.title || "");
+/* Directors, the Vice President and the CEO are at the top of the company: nobody is above them, and only they may have no
+   reporting manager (the server uses the same rule, people.js isTopTitle). */
+export const isTop = (p) => /\b(director|vice president|ceo|chief executive)\b/i.test(p.title || "");
 
 export const TOOLS = { claude: { id: "claude", name: "Claude", sub: "Claude Team seat", mono: "Cl", color: "#c96442" } };
 export const SHOWN_TOOLS = ["claude"];

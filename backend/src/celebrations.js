@@ -19,6 +19,8 @@ import { postToChat } from "./chat.js";
  *   Retry     emails only the people the poster has not reached; nobody who already got it gets it twice.
  *   Once      a person gets one birthday poster a year and one welcome poster ever (unique index on celebrations).
  *   Daily     a background check tells HR (the bell) about a birthday today or a new joiner; it never sends anything itself.
+ *   Schedule  HR can instead pick a date and time (India time). The poster waits as 'scheduled' and a check every few minutes sends
+ *             it when it is due, on any day: weekends and company holidays included. A birthday defaults to the person's birthday.
  * HR only. The poster is a PNG made by the page, so what HR previews is exactly what is emailed.
  */
 const OCCASIONS = ["birthday", "welcome", "anniversary", "certified", "newrole"];
@@ -62,31 +64,39 @@ async function activeEmployees(db = pool) {
 const person = (e, extra = {}) => ({ email: e.email, name: e.name, title: e.title || "", dept: e.dept || "", employmentType: e.employment_type || "Employee",
   start: e.start_date || "", photoV: e.photo_v || null, ...extra });
 
-/** Posters already sent for these keys, as a map "email|key" -> id. */
+/** Posters already sent for these keys ("email|key" -> id), and posters waiting for their time ("email|key" -> { id, at }). */
 async function sentMap() {
-  const { rows } = await pool.query("SELECT id, lower(employee_email) AS email, occasion_key FROM celebrations WHERE status <> 'draft'");
-  return new Map(rows.map((r) => [`${r.email}|${r.occasion_key}`, r.id]));
+  const { rows } = await pool.query("SELECT id, lower(employee_email) AS email, occasion_key, status, scheduled_for FROM celebrations WHERE status <> 'draft'");
+  const sent = new Map(), due = new Map();
+  for (const r of rows) {
+    if (r.status === "scheduled") due.set(`${r.email}|${r.occasion_key}`, { id: r.id, at: r.scheduled_for });
+    else sent.set(`${r.email}|${r.occasion_key}`, r.id);
+  }
+  return { sent, due };
 }
 
 /** Today's and upcoming birthdays and recent joiners, each marked with whether a poster already went out. */
 export async function candidates() {
-  const day = today(), sent = await sentMap(), staff = await activeEmployees();
+  const day = today(), { sent, due } = await sentMap(), staff = await activeEmployees();
   const bKey = keyFor("birthday", day);
   const birthdays = staff.filter((e) => /^\d{4}-\d{2}-\d{2}/.test(e.dob || "")).map((e) => ({ e, date: nextBirthday(e.dob, day) }))
     .filter((b) => b.date <= addDays(day, UPCOMING_DAYS)).sort((a, b) => a.date.localeCompare(b.date) || a.e.name.localeCompare(b.e.name))
-    .map(({ e, date }) => person(e, { date, announced: sent.get(`${e.email.toLowerCase()}|${bKey}`) || null }));
+    .map(({ e, date }) => person(e, { date, announced: sent.get(`${e.email.toLowerCase()}|${keyFor("birthday", date)}`) || sent.get(`${e.email.toLowerCase()}|${bKey}`) || null,
+      scheduled: due.get(`${e.email.toLowerCase()}|${keyFor("birthday", date)}`) || due.get(`${e.email.toLowerCase()}|${bKey}`) || null }));
   const since = addDays(day, -NEW_JOINER_DAYS);
   const joiners = staff.filter((e) => e.start_date && e.start_date >= since && e.start_date <= day)
     .sort((a, b) => b.start_date.localeCompare(a.start_date))
-    .map((e) => person(e, { announced: sent.get(`${e.email.toLowerCase()}|welcome`) || null }));
+    .map((e) => person(e, { announced: sent.get(`${e.email.toLowerCase()}|welcome`) || null, scheduled: due.get(`${e.email.toLowerCase()}|welcome`) || null }));
   // work anniversaries: the next time the start date comes round, if that is a whole number of years (1 or more) after joining
   const annivs = staff.filter((e) => /^\d{4}-\d{2}-\d{2}/.test(e.start_date || "")).map((e) => ({ e, date: nextBirthday(e.start_date, day) }))
     .map((a) => ({ ...a, years: Number(a.date.slice(0, 4)) - Number(a.e.start_date.slice(0, 4)) }))
     .filter((a) => a.years >= 1 && a.date <= addDays(day, UPCOMING_DAYS)).sort((a, b) => a.date.localeCompare(b.date) || a.e.name.localeCompare(b.e.name))
-    .map(({ e, date, years }) => person(e, { date, years, announced: sent.get(`${e.email.toLowerCase()}|anniversary:${date.slice(0, 4)}`) || null }));
+    .map(({ e, date, years }) => person(e, { date, years, announced: sent.get(`${e.email.toLowerCase()}|anniversary:${date.slice(0, 4)}`) || null,
+      scheduled: due.get(`${e.email.toLowerCase()}|anniversary:${date.slice(0, 4)}`) || null }));
   const all = staff.map((e) => person(e, {
     birthdayAnnounced: sent.get(`${e.email.toLowerCase()}|${bKey}`) || null, welcomeAnnounced: sent.get(`${e.email.toLowerCase()}|welcome`) || null,
     anniversaryAnnounced: sent.get(`${e.email.toLowerCase()}|anniversary:${day.slice(0, 4)}`) || null,
+    scheduledOccasions: ["birthday", "welcome", "anniversary"].filter((o) => due.get(`${e.email.toLowerCase()}|${o === "welcome" ? "welcome" : keyFor(o, day)}`)),
     years: e.start_date ? Number(day.slice(0, 4)) - Number(e.start_date.slice(0, 4)) : 0 }));
   return { today: day, birthdaysToday: birthdays.filter((b) => b.date === day), upcoming: birthdays.filter((b) => b.date !== day), joiners,
     anniversariesToday: annivs.filter((a) => a.date === day), anniversariesUpcoming: annivs.filter((a) => a.date !== day), all };
@@ -175,15 +185,15 @@ export async function runCelebrationAlerts() {
   const c = await candidates(), told = [];
   const once = async (e, key) => (await pool.query(
     "INSERT INTO celebration_alerts (employee_email, alert_key) VALUES ($1,$2) ON CONFLICT DO NOTHING RETURNING 1", [e.email.toLowerCase(), key])).rowCount > 0;
-  for (const b of c.birthdaysToday.filter((x) => !x.announced)) {
+  for (const b of c.birthdaysToday.filter((x) => !x.announced && !x.scheduled)) {
     if (await once(b, `birthday:${c.today}`)) { told.push(b.name); await notify("perm:celebrations.manage", { title: `Today is ${b.name}'s birthday`, body: "", link: "/app/celebrations" });
       await postToChat("celebrations", { title: `Happy birthday, ${b.name}`, text: "Wishing you a wonderful year ahead.", link: "/app/dashboard" }); }
   }
-  for (const a of c.anniversariesToday.filter((x) => !x.announced)) {
+  for (const a of c.anniversariesToday.filter((x) => !x.announced && !x.scheduled)) {
     if (await once(a, `anniversary:${c.today}`)) { told.push(a.name); await notify("perm:celebrations.manage", { title: `${a.name}'s ${a.years}-year work anniversary is today`, body: "", link: "/app/celebrations" });
       await postToChat("celebrations", { title: `${a.name} completes ${a.years} ${a.years === 1 ? "year" : "years"} with us today`, text: "Thank you for all your work.", link: "/app/dashboard" }); }
   }
-  for (const j of c.joiners.filter((x) => !x.announced)) {
+  for (const j of c.joiners.filter((x) => !x.announced && !x.scheduled)) {
     if (await once(j, "welcome")) { told.push(j.name); await notify("perm:celebrations.manage", { title: `${j.name} joined the team`, body: j.title || "", link: "/app/celebrations" });
       await postToChat("celebrations", { title: `Please welcome ${j.name}`, text: j.title ? `${j.name} joins us as ${j.title}.` : "", link: "/app/dashboard" }); }
   }
@@ -218,12 +228,13 @@ const counts = async (id) => {
 };
 const shape = (c, n) => ({ id: c.id, occasion: c.occasion, status: c.status, employee: { email: c.employee_email, name: c.employee_name }, template: c.template, theme: c.theme || "maroon",
   heading: c.heading || "", emphasis: c.emphasis || "", detail: c.detail || "", designation: c.designation || "", joiningDate: c.joining_date || "", message: c.message || "", hasPoster: !!c.poster_file,
-  createdBy: c.created_by, createdAt: c.created_at, sentAt: c.sent_at, counts: n });
+  createdBy: c.created_by, createdAt: c.created_at, sentAt: c.sent_at, scheduledFor: c.scheduled_for || null, audienceCount: c.audience_to ? c.audience_to.length : null, counts: n });
 
 // Everything the Celebrations page shows, and what the recipients will be.
 celebrationsRouter.get("/overview", wrap(async (_req, res) => {
   const c = await candidates();
-  res.json({ today: c.today, birthdaysToday: c.birthdaysToday, upcoming: c.upcoming, joiners: c.joiners,
+  const { rows: hols } = await pool.query("SELECT to_char(day,'YYYY-MM-DD') AS day, name FROM holidays WHERE day BETWEEN $1 AND $2", [c.today, addDays(c.today, UPCOMING_DAYS)]);
+  res.json({ holidays: Object.fromEntries(hols.map((h) => [h.day, h.name])), today: c.today, birthdaysToday: c.birthdaysToday, upcoming: c.upcoming, joiners: c.joiners,
     anniversariesToday: c.anniversariesToday, anniversariesUpcoming: c.anniversariesUpcoming, employees: c.all,
     recipients: c.all.length - c.all.filter((e) => mailSkipped().includes(e.email.toLowerCase())).length, mailReady: mailConfigured() });
 }));
@@ -262,7 +273,7 @@ async function readDraft(b) {
 const LABEL = { birthday: "birthday", welcome: "welcome", anniversary: "work anniversary", certified: "certification", newrole: "new role" };
 const dupe = async (d, exceptId = 0) => {
   const { rows } = await pool.query("SELECT id FROM celebrations WHERE lower(employee_email)=lower($1) AND occasion_key=$2 AND status <> 'draft' AND id <> $3", [d.email, keyFor(d.occasion, today(), d), exceptId]);
-  return rows[0] ? `A ${LABEL[d.occasion]} poster for ${d.name} has already been sent.` : null;
+  return rows[0] ? `A ${LABEL[d.occasion]} poster for ${d.name} has already been sent or scheduled.` : null;
 };
 
 celebrationsRouter.post("/", wrap(async (req, res) => {
@@ -354,3 +365,66 @@ celebrationsRouter.post("/:id/retry", wrap(async (req, res) => {
   deliver(c.id);
   res.status(202).json({ status: "sending" });
 }));
+
+/* ---------- scheduling ---------- */
+const TIME = /^([01]\d|2[0-3]):[0-5]\d$/;
+const LATE_HOURS = 36;   // a wish more than this late is not sent on its own (HR is told); a birthday wish two days late reads oddly
+/** HR picks the date and time (India time) and who gets it; the poster must already be saved. Rescheduling a scheduled poster is allowed. */
+celebrationsRouter.post("/:id/schedule", wrap(async (req, res) => {
+  const c = await loadDraft(req, res); if (!c) return;
+  if (!mailConfigured()) return res.status(409).json({ error: "Email is not set up yet. Add SENDGRID_API_KEY and MAIL_FROM to the backend settings, then try again." });
+  if (!publicOk()) return res.status(409).json(NEEDS_PUBLIC);
+  const b = req.body || {}, at = String(b.date || ""), time = String(b.time || "");
+  if (!isDate(at) || !TIME.test(time)) return res.status(400).json({ error: "Choose the date and the time to send it." });
+  const when = new Date(`${at}T${time}:00+05:30`);
+  if (when.getTime() < Date.now() - 60_000) return res.status(400).json({ error: "That time has already passed. Please choose a time that is still to come." });
+  if (when.getTime() > Date.now() + 366 * 86400_000) return res.status(400).json({ error: "Please choose a date within the next year." });
+  let to = null;
+  if (b.audience === "selected") {
+    const asked = [...new Set((Array.isArray(b.to) ? b.to : []).map((e) => String(e).trim().toLowerCase()).filter(Boolean))];
+    if (!asked.length || asked.length > 200) return res.status(400).json({ error: "Choose between 1 and 200 people to send this to." });
+    const staff = new Set((await activeEmployees()).map((e) => e.email.toLowerCase()));
+    if (asked.some((e) => !staff.has(e))) return res.status(400).json({ error: "Everyone you choose must be a current employee." });
+    to = asked;
+  }
+  try {
+    const { rows } = await pool.query(
+      `UPDATE celebrations SET status='scheduled', scheduled_for=$2, scheduled_by=$3, audience_to=$4, occasion_key=$5
+       WHERE id=$1 AND poster_file IS NOT NULL AND status IN ('draft','scheduled') RETURNING id`,
+      [c.id, when, me(req), to, keyFor(c.occasion, at, { detail: c.detail, designation: c.designation })]);
+    if (!rows.length) return res.status(409).json({ error: "This poster has already been sent, or its picture was not saved." });
+  } catch (err) {
+    if (err.code === "23505") return res.status(409).json({ error: `A ${LABEL[c.occasion]} poster for ${c.employee_name} has already been sent or scheduled.` });
+    throw err;
+  }
+  res.json({ ok: true, scheduledFor: when });
+}));
+
+// Takes a scheduled poster back to a draft: nothing will be sent.
+celebrationsRouter.delete("/:id/schedule", wrap(async (req, res) => {
+  const c = await loadDraft(req, res); if (!c) return;
+  const { rows } = await pool.query("UPDATE celebrations SET status='draft', scheduled_for=NULL, scheduled_by=NULL, audience_to=NULL WHERE id=$1 AND status='scheduled' RETURNING id", [c.id]);
+  if (!rows.length) return res.status(409).json({ error: "This poster is not waiting to be sent." });
+  res.json({ ok: true });
+}));
+
+/** Sends every scheduled poster whose time has come. Called every few minutes; safe to run on several servers at once. */
+export async function runScheduledCelebrations() {
+  const { rows } = await pool.query(
+    `UPDATE celebrations SET status='sending', send_started_at=now()
+     WHERE id IN (SELECT id FROM celebrations WHERE status='scheduled' AND scheduled_for <= now() ORDER BY scheduled_for LIMIT 25 FOR UPDATE SKIP LOCKED)
+     RETURNING id, employee_name, created_by, scheduled_for, audience_to`);
+  const out = { sent: 0, missed: 0 };
+  for (const c of rows) {
+    const late = Date.now() - new Date(c.scheduled_for).getTime() > LATE_HOURS * 3600_000;
+    if (late || !mailConfigured() || !publicOk()) {
+      await pool.query("UPDATE celebrations SET status='failed' WHERE id=$1", [c.id]);
+      await notify(c.created_by, { title: `${c.employee_name}'s scheduled poster was not sent`,
+        body: late ? "The server was not running at the scheduled time. Open Celebrations to send it now." : "Email is not set up on the server. Open Celebrations to send it once it is.", link: "/app/celebrations" });
+      out.missed++; continue;
+    }
+    deliver(c.id, c.audience_to ? new Set(c.audience_to.map((e) => e.toLowerCase())) : null);   // in the background
+    out.sent++;
+  }
+  return out;
+}

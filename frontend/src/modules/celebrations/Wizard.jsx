@@ -8,6 +8,7 @@ import PeoplePicker from "../../components/PeoplePicker.jsx";
 import { useToast } from "../../components/toast.jsx";
 import { OCCASIONS, canvasToBlob, defaultsFor, loadImage, msgFor, renderPoster } from "./poster.js";
 import { BRAND } from "../../brand.js";
+import { DEFAULT_TIME, WhenFields, passed, whenText } from "./Schedule.jsx";
 
 const STEPS = ["Occasion", "Employee photo", "Template", "Customize", "Preview", "Send"];
 const WELCOME_LOOK = [["maroon", "Wohlig welcome", "Maroon, grey and orange, with a round photo and the joining date."]];
@@ -40,6 +41,10 @@ export default function Wizard({ overview, start, onClose, onDone }) {
   const [list, setList] = useState(null);          // recipients, when HR asks to review them
   const [audience, setAudience] = useState("all"); // "all" employees, or only the people picked
   const [to, setTo] = useState([]);                 // the people picked
+  const [mode, setMode] = useState("now");         // send "now", or "later" at a date and time
+  const [sDate, setSDate] = useState(start.date || overview.today);   // a birthday starts on the person's birthday
+  const [sTime, setSTime] = useState(DEFAULT_TIME);
+  const [scheduled, setScheduled] = useState(null);   // when it was scheduled for
   const assets = useRef(null);
   const THEMES = occasion === "welcome" ? WELCOME_LOOK : occasion === "birthday" ? BIRTHDAY_LOOK : THEMES_ALL;   // new joiners have the one welcome card
   const tallOf = (k) => occasion === "welcome" || (occasion === "birthday" && k === "polaroid");   // the portrait cards
@@ -146,6 +151,13 @@ export default function Wizard({ overview, start, onClose, onDone }) {
     await watch(draft);
     toast(retry ? "Retrying the emails that failed…" : audience === "all" ? "Sending to everyone…" : "Sending…");
   };
+  const schedule = async () => {
+    setBusy(true); setErr("");
+    const r = await api("POST", `/api/celebrations/${draft}/schedule`, { date: sDate, time: sTime, audience, to });
+    setBusy(false);
+    if (!r.ok) return setErr(apiMsg(r));
+    setScheduled(r.data.scheduledFor); toast("The announcement is scheduled."); onDone();
+  };
   const review = async () => {
     if (list) return setList(null);
     const r = await api("GET", "/api/celebrations/recipients");
@@ -163,7 +175,8 @@ export default function Wizard({ overview, start, onClose, onDone }) {
 
   const NEW_ONLY = occasion === "certified" || occasion === "newrole";
   const candidates = { birthday: overview.birthdaysToday, welcome: overview.joiners, anniversary: overview.anniversariesToday }[occasion] || [];
-  const taken = (e) => ({ birthday: e.birthdayAnnounced || e.announced, welcome: e.welcomeAnnounced || e.announced, anniversary: e.anniversaryAnnounced || e.announced }[occasion] || null);
+  const taken = (e) => ({ birthday: e.birthdayAnnounced || e.announced, welcome: e.welcomeAnnounced || e.announced, anniversary: e.anniversaryAnnounced || e.announced }[occasion]
+    || (e.scheduled || (e.scheduledOccasions || []).includes(occasion) ? "scheduled" : null));
   const others = overview.employees.filter((e) => !candidates.some((c) => c.email === e.email));
   const heading = { birthday: "Today's birthdays", welcome: "Recently joined (last 30 days)", anniversary: "Work anniversaries today" }[occasion];
   const none = { birthday: "Nobody has a birthday today.", welcome: "Nobody joined in the last 30 days.", anniversary: "Nobody has a work anniversary today." }[occasion];
@@ -277,10 +290,20 @@ export default function Wizard({ overview, start, onClose, onDone }) {
                 {f.detail && <><dt>Certification</dt><dd>{f.detail}</dd></>}
                 {f.joiningDate && <><dt>Joining date</dt><dd>{shortDate(f.joiningDate)}</dd></>}
                 <dt>Subject</dt><dd>{SUBJECT(occasion, emp.name)}</dd>
+                {scheduled && <><dt>Scheduled for</dt><dd>{whenText(scheduled)}</dd></>}
                 <dt>Recipients</dt><dd>{audience === "all" ? `${overview.recipients} people · all active employees` : `${to.length} ${to.length === 1 ? "person" : "people"} chosen`}</dd>
               </dl>
               {!overview.mailReady && !job && <div className="cel-warn">Email is not set up on this server, so nothing can be sent yet. Add <code>SENDGRID_API_KEY</code> and <code>MAIL_FROM</code> to the backend settings and restart.</div>}
-              {!job && (
+              {scheduled && <div className="row" style={{ display: "flex", gap: 10, alignItems: "center" }} aria-live="polite"><Pill tone="info">Scheduled</Pill><span className="muted">It will be emailed on {whenText(scheduled)}, whatever day it is. You can cancel it from the announcement history.</span></div>}
+              {!job && !scheduled && (
+                <div className="field">
+                  <span className="lab">When</span>
+                  <div className="fw-seg" role="group" aria-label="When to send">
+                    {[["now", "Send now"], ["later", "Schedule"]].map(([k, label]) => <button key={k} type="button" className={mode === k ? "on" : ""} aria-pressed={mode === k} onClick={() => setMode(k)}>{label}</button>)}
+                  </div>
+                  {mode === "later" && <WhenFields date={sDate} time={sTime} onDate={setSDate} onTime={setSTime} holidays={overview.holidays} />}
+                </div>)}
+              {!job && !scheduled && (
                 <div className="field">
                   <span className="lab">Send to</span>
                   <div className="fw-seg" role="group" aria-label="Send to">
@@ -288,7 +311,7 @@ export default function Wizard({ overview, start, onClose, onDone }) {
                   </div>
                   {audience === "selected" && <PeoplePicker id="cel-to" people={overview.employees.filter((e) => e.email !== emp.email)} value={to} onChange={(v) => setTo(v.slice(0, 200))} multi placeholder="Search by name…" />}
                 </div>)}
-              {!job && audience === "all" && <button type="button" className="btn link" style={{ justifySelf: "start" }} onClick={review}>{list ? "Hide recipient list" : "Review recipient list"}</button>}
+              {!job && !scheduled && audience === "all" && <button type="button" className="btn link" style={{ justifySelf: "start" }} onClick={review}>{list ? "Hide recipient list" : "Review recipient list"}</button>}
               {list && !job && audience === "all" && (
                 <div className="cel-problems" aria-label="Recipients">
                   {list.map((p) => <div key={p.email}><b style={{ fontWeight: 600 }}>{p.name}</b><span style={{ color: p.skipped ? "var(--ink-faint)" : "var(--ink-dim)" }}>{p.skipped ? "no email sent" : p.email}</span></div>)}
@@ -313,7 +336,7 @@ export default function Wizard({ overview, start, onClose, onDone }) {
       </div></div>
 
       <div className="cel-actions">
-        <button type="button" className="btn glass" onClick={onClose} disabled={sending}>{finished ? "Close" : "Cancel"}</button>
+        <button type="button" className="btn glass" onClick={onClose} disabled={sending}>{finished || scheduled ? "Close" : "Cancel"}</button>
         <div className="grp">
           {step > 0 && step < 5 && <button type="button" className="btn glass" onClick={() => { setErr(""); setStep(step - 1); }}>Back</button>}
           {step === 4 && <>
@@ -323,22 +346,22 @@ export default function Wizard({ overview, start, onClose, onDone }) {
           </>}
           {step === 4 && <button type="button" className="btn primary" disabled={!ready || busy} onClick={save}>{busy ? "Saving…" : "Continue"}</button>}
           {step < 4 && <button type="button" className="btn primary" disabled={!ready} onClick={() => { setErr(""); setStep(step + 1); }}>Next</button>}
-          {step === 5 && !job && <>
+          {step === 5 && !job && !scheduled && <>
             <button type="button" className="btn glass" onClick={() => setStep(4)}>Back</button>
-            <button type="button" className="btn primary" disabled={busy || !overview.mailReady || (audience === "selected" && !to.length)} onClick={() => setConfirm(true)}>{busy ? "Starting…" : "Send announcement"}</button>
+            <button type="button" className="btn primary" disabled={busy || !overview.mailReady || (audience === "selected" && !to.length) || (mode === "later" && passed(sDate, sTime))} onClick={() => setConfirm(true)}>{busy ? "Starting…" : mode === "later" ? "Schedule announcement" : "Send announcement"}</button>
           </>}
         </div>
       </div>
       {confirm && (
         <Modal onClose={() => !busy && setConfirm(false)}>
-          <div className="card-h" style={{ paddingTop: 24 }}><h3>Send announcement?</h3></div>
+          <div className="card-h" style={{ paddingTop: 24 }}><h3>{mode === "later" ? "Schedule announcement?" : "Send announcement?"}</h3></div>
           <div className="card-b" style={{ display: "grid", gap: 10 }}>
-            <p style={{ margin: 0 }}>Are you sure you want to send this announcement?</p>
-            <p className="muted" style={{ margin: 0 }}>{OCCASIONS[occasion].name} for <b>{f.name}</b> will be emailed to {audience === "all" ? `${overview.recipients} people` : `${to.length} chosen ${to.length === 1 ? "person" : "people"}`}. It cannot be taken back once it is sent.</p>
+            <p style={{ margin: 0 }}>{mode === "later" ? "Are you sure you want to schedule this announcement?" : "Are you sure you want to send this announcement?"}</p>
+            <p className="muted" style={{ margin: 0 }}>{OCCASIONS[occasion].name} for <b>{f.name}</b> will be emailed {mode === "later" ? `on ${whenText(new Date(`${sDate}T${sTime}:00+05:30`))} ` : ""}to {audience === "all" ? `${overview.recipients} people` : `${to.length} chosen ${to.length === 1 ? "person" : "people"}`}. {mode === "later" ? "You can cancel it before then." : "It cannot be taken back once it is sent."}</p>
           </div>
           <div className="modal-f">
             <button type="button" className="btn glass" disabled={busy} onClick={() => setConfirm(false)}>Cancel</button>
-            <button type="button" className="btn primary" disabled={busy} onClick={async () => { await send(false); setConfirm(false); }}>{busy ? "Sending…" : "Yes, send"}</button>
+            <button type="button" className="btn primary" disabled={busy} onClick={async () => { await (mode === "later" ? schedule() : send(false)); setConfirm(false); }}>{busy ? (mode === "later" ? "Scheduling…" : "Sending…") : (mode === "later" ? "Yes, schedule" : "Yes, send")}</button>
           </div>
         </Modal>)}
       {adjust && photo && <PhotoEditor src={photo.url} onApply={adjusted} onClose={() => setAdjust(false)} />}
@@ -353,7 +376,7 @@ function PickRow({ e, occasion, on, taken, onPick }) {
       <input type="radio" name="cel-who" checked={!!on} disabled={!!taken} onChange={onPick} />
       <PersonAvatar email={e.email} name={e.name} />
       <span className="who"><b>{e.name}</b><span>{e.title || "—"}{note}{e.employmentType && e.employmentType !== "Employee" ? ` · ${e.employmentType}` : ""}</span></span>
-      {taken && <Pill tone="ok">Already announced</Pill>}
+      {taken && (taken === "scheduled" ? <Pill tone="info">Already scheduled</Pill> : <Pill tone="ok">Already announced</Pill>)}
     </label>
   );
 }

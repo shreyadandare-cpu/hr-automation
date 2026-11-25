@@ -768,6 +768,15 @@ ALTER TABLE celebrations ADD CONSTRAINT celebrations_occasion_check CHECK (occas
 ALTER TABLE celebrations ADD COLUMN IF NOT EXISTS poster_token TEXT;
 CREATE UNIQUE INDEX IF NOT EXISTS celebrations_poster_token ON celebrations (poster_token) WHERE poster_token IS NOT NULL;
 
+-- Celebrations: a poster can wait for a date and time ('scheduled', India time chosen by HR) and is then sent by the background check,
+-- on any day (weekends and holidays too). audience_to is the chosen people (NULL means every active employee).
+ALTER TABLE celebrations ADD COLUMN IF NOT EXISTS scheduled_for TIMESTAMPTZ;
+ALTER TABLE celebrations ADD COLUMN IF NOT EXISTS scheduled_by  TEXT;
+ALTER TABLE celebrations ADD COLUMN IF NOT EXISTS audience_to   TEXT[];
+ALTER TABLE celebrations DROP CONSTRAINT IF EXISTS celebrations_status_check;
+ALTER TABLE celebrations ADD CONSTRAINT celebrations_status_check CHECK (status IN ('draft','scheduled','sending','sent','partial','failed'));
+CREATE INDEX IF NOT EXISTS celebrations_due ON celebrations (scheduled_for) WHERE status = 'scheduled';
+
 -- Festival Wishes (everyone): the festivals employees can make greeting images for, and the dates they fall on. The look of each
 -- festival's templates lives in the frontend (src/modules/festivals); this is what changes year to year. Dates of lunar festivals
 -- (Eid, Diwali...) differ each year, so add the new year's dates here (INSERT INTO festival_dates) and nothing else needs a release.

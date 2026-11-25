@@ -11,7 +11,7 @@ import { ACCESS_HELP, ACCESS_LABEL, DEPTS, DOMAIN, DocRows, ON_TOOLS, V, docCoun
 
 const OB_STEPS = ["Details and work email", "Create login", "Tools and review"];
 const OB_DRAFT_KEY = "hr_ob_draft";
-const newDetails = () => ({ first: "", last: "", pemail: "", phone: "", address: "", dept: "Engineering", kind: "Employee", title: "", mgr: "", start: "", empNo: "" });
+const newDetails = () => ({ first: "", last: "", pemail: "", phone: "", address: "", em1n: "", em1r: "", em1p: "", em2n: "", em2r: "", em2p: "", dept: "Engineering", kind: "Employee", title: "", mgr: "", start: "", empNo: "" });
 const newOb = () => ({ step: 1, fromReview: false, email: null, d: newDetails(), work: null, login: null, busy: false, apps: null, reviewed: false, errors: {}, role: null, sendInvite: true });
 
 /* Step 1 asks only for personal and job details. Documents come from the employee, so none are required here. */
@@ -23,6 +23,20 @@ function step1Errors(d) {
   else if (/@wohlig\.com$/i.test(d.pemail.trim())) e.pemail = "Use a personal email, not a @wohlig.com address.";
   if (!V.phone(d.phone)) e.phone = "Enter a 10-digit mobile number.";
   if (!d.address.trim()) e.address = "Enter the address.";
+  const own = String(d.phone || "").replace(/\D/g, "").slice(-10), seen = [];
+  [["1", true], ["2", false]].forEach(([n, need]) => {
+    const [nm, rl, ph] = [d[`em${n}n`], d[`em${n}r`], d[`em${n}p`]].map((x) => String(x || "").trim());
+    if (!need && !nm && !rl && !ph) return;
+    if (!nm) e[`em${n}n`] = "Enter the name of this contact.";
+    if (!rl) e[`em${n}r`] = "Enter how this person is related to the candidate.";
+    if (!V.phone(ph)) e[`em${n}p`] = ph ? "Enter a 10-digit mobile number." : "Enter the number of this contact.";
+    else {
+      const t = ph.replace(/\D/g, "").slice(-10);
+      if (own && t === own) e[`em${n}p`] = "This is the candidate's own number. Enter someone else's.";
+      else if (seen.includes(t)) e[`em${n}p`] = "Both contacts have the same number. Enter a different one.";
+      seen.push(t);
+    }
+  });
   if (!d.title.trim()) e.title = "Enter the job title.";
   if (!d.start) e.start = "Pick the start date.";
   return e;
@@ -295,6 +309,13 @@ export default function Onboarding() {
             <Fld label="Personal email" id="pemail" type="email" value={d.pemail} onChange={(v) => setD("pemail", v)} err={er.pemail} hint="The work email and login details are sent here." />
             <Fld label="Phone" id="phone" type="tel" value={d.phone} onChange={(v) => setD("phone", v)} err={er.phone} ph="10-digit mobile number" />
             <Fld label="Address" id="address" rows={3} full value={d.address} onChange={(v) => setD("address", v)} err={er.address} />
+            <Fld label="Emergency contact 1: name (required)" id="em1n" value={d.em1n} onChange={(v) => setD("em1n", v)} err={er.em1n} />
+            <Fld label="Emergency contact 1: relation to the candidate (required)" id="em1r" value={d.em1r} onChange={(v) => setD("em1r", v)} err={er.em1r} ph="e.g. Mother" />
+            <Fld label="Emergency contact 1: number (required)" id="em1p" type="tel" value={d.em1p} onChange={(v) => setD("em1p", v)} err={er.em1p} ph="10-digit mobile number" hint="Printed on the back of the ID card. It cannot be the candidate's own number." />
+            <span aria-hidden="true" />
+            <Fld label="Emergency contact 2: name (optional)" id="em2n" value={d.em2n} onChange={(v) => setD("em2n", v)} err={er.em2n} />
+            <Fld label="Emergency contact 2: relation to the candidate (optional)" id="em2r" value={d.em2r} onChange={(v) => setD("em2r", v)} err={er.em2r} ph="e.g. Father" />
+            <Fld label="Emergency contact 2: number (optional)" id="em2p" type="tel" value={d.em2p} onChange={(v) => setD("em2p", v)} err={er.em2p} ph="10-digit mobile number" />
           </div></div>
           <div className="card"><div className="card-h"><h3>Job details</h3><span className="muted">Filled in by HR</span></div><div className="card-b form">
             <div className="field"><label htmlFor="ob-dept">Department</label><select className="input" id="ob-dept" value={d.dept} onChange={(e) => setD("dept", e.target.value)}>{DEPTS.map((x) => <option key={x}>{x}</option>)}</select></div>
@@ -328,7 +349,7 @@ export default function Onboarding() {
             </div></div>
         )}
         {ob.step === 3 && w && <>
-          {reviewCard("Personal details", 1, [["Name", d.first + " " + d.last], ["Personal email", d.pemail], ["Phone", d.phone], ["Address", d.address]])}
+          {reviewCard("Personal details", 1, [["Name", d.first + " " + d.last], ["Personal email", d.pemail], ["Phone", d.phone], ["Address", d.address], ["Emergency contact 1", [d.em1n, d.em1r && `(${d.em1r})`, d.em1p].filter(Boolean).join(" ")], ["Emergency contact 2", [d.em2n, d.em2r && `(${d.em2r})`, d.em2p].filter(Boolean).join(" ")]])}
           {reviewCard("Job details", 1, [["Department", d.dept], ["Joining as", d.kind || "Employee"], ["Job title", d.title], ["Reporting manager", d.mgr], ["Start date", fdate(d.start)], ["Employee ID", d.empNo]])}
           <div className="card"><div className="card-h"><h3>Work email and login</h3></div><div className="card-b"><dl className="rv">
             <div><dt>Work email</dt><dd><span className="mono">{w.email}</span></dd></div>

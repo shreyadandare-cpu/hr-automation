@@ -3,7 +3,7 @@ import path from "node:path";
 import crypto from "node:crypto";
 import express from "express";
 import { pool } from "./db.js";
-import { V } from "./validate.js";
+import { V, emergencyCheck } from "./validate.js";
 import { requireAuth } from "./auth.js";
 import { UPLOAD_DIR } from "./documents.js";
 
@@ -35,6 +35,12 @@ function cleanLinkedin(v, errors) {
   return `https://www.linkedin.com/in/${m[1]}`;
 }
 
+/** Emergency contacts on My profile, checked by emergencyCheck (validate.js) and reported under the profile's own field names. */
+export function emergencyErrors(c, errors, needFirst, ownPhone = "") {
+  const out = emergencyCheck([{ name: c.emergencyName, relation: c.emergencyRelation, phone: c.emergencyPhone }, { name: c.emergency2Name, relation: c.emergency2Relation, phone: c.emergency2Phone }], ownPhone || c.phone, needFirst);
+  out.forEach((x, i) => { const k = i ? "emergency2" : "emergency"; for (const [f, F] of [["name", "Name"], ["relation", "Relation"], ["phone", "Phone"]]) if (x[f]) errors[`contact.${k}${F}`] = x[f].replace("the candidate's own", "your own").replace("the candidate", "you"); });
+}
+
 /** Keeps only the known fields, trims and limits them, and returns { data, errors }. */
 export function cleanProfile(input = {}) {
   const errors = {};
@@ -46,7 +52,9 @@ export function cleanProfile(input = {}) {
       gender: str(p.gender, 30), dob: str(p.dob, 10), marital: str(p.marital, 30), blood: str(p.blood, 5),
       handicapped: str(p.handicapped, 5), nationality: str(p.nationality, 60),
     },
-    contact: { personalEmail: str(c.personalEmail, 120), phone: str(c.phone, 20), linkedin: cleanLinkedin(c.linkedin, errors) },
+    contact: { personalEmail: str(c.personalEmail, 120), phone: str(c.phone, 20), linkedin: cleanLinkedin(c.linkedin, errors),
+      emergencyName: str(c.emergencyName, 80), emergencyRelation: str(c.emergencyRelation, 40), emergencyPhone: str(c.emergencyPhone, 20),
+      emergency2Name: str(c.emergency2Name, 80), emergency2Relation: str(c.emergency2Relation, 40), emergency2Phone: str(c.emergency2Phone, 20) },
     addresses: { current: cleanAddress(a.current, "addresses.current", errors), permanent: cleanAddress(a.permanent, "addresses.permanent", errors) },
     education: (Array.isArray(input.education) ? input.education : []).slice(0, 10).map((x = {}, i) => {
       const e = { degree: str(x.degree, 100), branch: str(x.branch, 100), college: str(x.college, 150),
@@ -60,6 +68,7 @@ export function cleanProfile(input = {}) {
   if (data.primary.dob && !V.dob(data.primary.dob)) errors["primary.dob"] = "Enter a valid date of birth (age 16 to 80).";
   if (data.contact.personalEmail && !V.email(data.contact.personalEmail)) errors["contact.personalEmail"] = "Enter a valid email.";
   if (data.contact.phone && !V.phone(data.contact.phone)) errors["contact.phone"] = "Enter a 10-digit mobile number.";
+  emergencyErrors(data.contact, errors, input.requireEmergency === true);
   return { data, errors };
 }
 
@@ -116,6 +125,12 @@ profileRouter.put("/", wrap(async (req, res) => {
     const a = await pool.query("SELECT name FROM employees WHERE lower(personal_email)=$1 AND lower(work_email)<>$2 LIMIT 1", [pe, mine]);
     const b = await pool.query("SELECT email FROM profiles WHERE lower(data->'contact'->>'personalEmail')=$1 AND lower(email)<>$2 LIMIT 1", [pe, mine]);
     if (a.rows[0] || b.rows[0]) errors["contact.personalEmail"] = "That email already belongs to someone else. Use a different one.";
+  }
+  if (data.contact.emergencyPhone || data.contact.emergency2Phone) {
+    const own = (await pool.query("SELECT phone FROM employees WHERE lower(work_email)=$1", [mine])).rows[0]?.phone;
+    const again = {};
+    emergencyErrors(data.contact, again, false, own);
+    for (const [k, v] of Object.entries(again)) if (!errors[k] && /own number/.test(v)) errors[k] = v;
   }
   if (Object.keys(errors).length) return res.status(400).json({ errors });
   await pool.query(

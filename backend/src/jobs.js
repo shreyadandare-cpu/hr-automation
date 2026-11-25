@@ -7,7 +7,7 @@ import { runBudgetReminders } from "./budgets.js";
 import { runPayslips } from "./payslip-auto.js";
 import { runLeaveDigest } from "./leave-digest.js";
 import { runClaudeReminders } from "./claude-requests.js";
-import { runCelebrationAlerts } from "./celebrations.js";
+import { runCelebrationAlerts, runScheduledCelebrations } from "./celebrations.js";
 import { runTaxReminders } from "./tax-reminders.js";
 import { startPortalAttendanceSync } from "./portal-attendance.js";
 import { startGmailIntel } from "./gmail-intel-routes.js";
@@ -45,6 +45,11 @@ export function startBackgroundJobs() {
     .catch((err) => console.error("Celebration check failed:", err));
   checkCelebrations();
   setInterval(checkCelebrations, 60 * 60_000);
+  // Posters HR scheduled are emailed when their time comes, any day of the week, holidays included; checked every 5 minutes.
+  const checkScheduled = () => runScheduledCelebrations().then((r) => { if (r.sent || r.missed) console.log("Scheduled celebrations:", JSON.stringify(r)); })
+    .catch((err) => console.error("Scheduled celebration check failed:", err));
+  checkScheduled();
+  setInterval(checkScheduled, 5 * 60_000);
   // Tax declaration and proof due dates: everyone who has not finished is reminded 7 days and 1 day before (tax-reminders.js); hourly.
   const checkTax = () => runTaxReminders().then((r) => { if (r.sent) console.log("Tax reminders sent:", r.sent); })
     .catch((err) => console.error("Tax reminder check failed:", err));

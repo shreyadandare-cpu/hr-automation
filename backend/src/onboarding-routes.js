@@ -11,7 +11,7 @@ import { checkManager } from "./people.js";
 import { createInvite, INVITE_MINUTES } from "./invites.js";
 import { linkDeviceUserByEmployeeNo } from "./device.js";
 import { ensureKit } from "./digital-kit.js";
-import { onboardingErrors, detailsErrors, maskAadhaar, maskPan, maskAcct } from "./validate.js";
+import { onboardingErrors, detailsErrors, emergencyOfDetails, maskAadhaar, maskPan, maskAcct } from "./validate.js";
 import { createGoogleUser, generatePassword, googleMode, assignLicense } from "./google.js";
 import { mailPlanOf } from "./mail-plan.js";
 import { employeeNoOwner, nextEmployeeNoFrom } from "./employee-no.js";
@@ -42,6 +42,15 @@ async function personalEmailOwner(db, personalEmail, exceptWorkEmail) {
     [String(personalEmail).trim().toLowerCase(), String(exceptWorkEmail || "").toLowerCase()]);
   return rows[0]?.name || null;
 }
+/** Puts the two emergency contacts on the person's profile (My profile > Contact details), where the ID card reads the first one. */
+const saveEmergency = (db, email, d) => {
+  const [a, b] = emergencyOfDetails(d).map((c) => ({ name: String(c.name || "").trim(), relation: String(c.relation || "").trim(), phone: String(c.phone || "").trim() }));
+  const c = { emergencyName: a.name, emergencyRelation: a.relation, emergencyPhone: a.phone, emergency2Name: b.name, emergency2Relation: b.relation, emergency2Phone: b.phone };
+  return db.query(
+    `INSERT INTO profiles (email, data) VALUES ($1, jsonb_build_object('contact', $2::jsonb))
+     ON CONFLICT (email) DO UPDATE SET data=jsonb_set(profiles.data, '{contact}', COALESCE(profiles.data->'contact','{}'::jsonb) || $2::jsonb, true), updated_at=now()`,
+    [email.toLowerCase(), JSON.stringify(c)]);
+};
 const dupEmailError = (email, owner) => ({ pemail: `${email} already belongs to ${owner}. Use a different personal email.` });
 
 const toApi = (r) => ({
@@ -178,6 +187,7 @@ export function onboardingRouter(wrap) {
         await client.query("INSERT INTO audit_log (action, work_email) VALUES ($1,$2)", [typed ? "Work email entered by HR" : "Work email reserved", email]);
       }
       await client.query("UPDATE employees SET employment_type=$1 WHERE lower(work_email)=$2", [kindOf(d), email.toLowerCase()]);
+      await saveEmergency(client, email, d);
       if (typed && !existingEmail) await client.query("UPDATE employees SET work_email_manual=true WHERE lower(work_email)=$1", [email.toLowerCase()]);   // typed by HR: no email about it goes to the personal address
       await client.query("COMMIT");
       invalidateTree();   // a manager or new joiner may have changed the reporting tree
@@ -259,6 +269,7 @@ export function onboardingRouter(wrap) {
          address=$8, dob=COALESCE($9, dob), aadhaar_masked=COALESCE($10, aadhaar_masked), pan_masked=COALESCE($11, pan_masked), acct_masked=COALESCE($12, acct_masked), ifsc=COALESCE($13, ifsc), apps=$14, onboarded_at=now()
          WHERE lower(work_email)=$15`, [full, ...fields, row.work_email.toLowerCase()]);
       await client.query("UPDATE employees SET employment_type=$1 WHERE lower(work_email)=$2", [kindOf(d), row.work_email.toLowerCase()]);
+      await saveEmergency(client, row.work_email, d);
       await client.query("INSERT INTO audit_log (action, work_email) VALUES ($1,$2)", [`Onboarding completed${kindOf(d) === "Intern" ? " (intern)" : ""}`, row.work_email]);
       // Attendance: the person's name is linked to the office device straight away, so their punches count from day one.
       const idNow = (await client.query("SELECT id, name, work_email, emp_no FROM employees WHERE lower(work_email)=$1", [row.work_email.toLowerCase()])).rows[0];

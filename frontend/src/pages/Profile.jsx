@@ -25,7 +25,7 @@ const addr = (w) => [[`addresses.${w}.line`, "Address", "textarea"], [`addresses
 const SECTIONS = {
   about: { title: "About", fields: [["about", "About me", "textarea"], ["loveJob", "What I love about my job?", "textarea"], ["hobbies", "My interests and hobbies", "textarea"]] },
   primary: { title: "Primary details", fields: [["primary.first", "First name"], ["primary.middle", "Middle name"], ["primary.last", "Last name"], ["primary.gender", "Gender", "select", "gender"], ["primary.dob", "Date of birth", "date"], ["primary.marital", "Marital status", "select", "marital"], ["primary.blood", "Blood group", "select", "blood"], ["primary.handicapped", "Physically handicapped", "select", "handicapped"], ["primary.nationality", "Nationality"]] },
-  contact: { title: "Contact details", fields: [["contact.personalEmail", "Personal email", "email"], ["contact.phone", "Phone", "tel"], ["contact.linkedin", "LinkedIn profile", "url"]] },
+  contact: { title: "Contact details", fields: [["contact.personalEmail", "Personal email", "email"], ["contact.phone", "Phone", "tel"], ["contact.linkedin", "LinkedIn profile", "url"], ["contact.emergencyName", "Emergency contact 1: name (required)"], ["contact.emergencyRelation", "Emergency contact 1: relation to you (required)"], ["contact.emergencyPhone", "Emergency contact 1: number (required)", "tel"], ["contact.emergency2Name", "Emergency contact 2: name (optional)"], ["contact.emergency2Relation", "Emergency contact 2: relation to you (optional)"], ["contact.emergency2Phone", "Emergency contact 2: number (optional)", "tel"]] },
   current: { title: "Current address", fields: addr("current") },
   permanent: { title: "Permanent address", fields: addr("permanent") },
   edu: { title: "Add education", fields: [["degree", "Degree"], ["branch", "Branch / specialisation"], ["college", "University / college"], ["cgpa", "CGPA / percentage"], ["joining", "Year of joining", "date"], ["completion", "Year of completion", "date"]] },
@@ -43,7 +43,7 @@ function profileData(me, p, record) {
   return {
     about: p.about || "", loveJob: p.loveJob || "", hobbies: p.hobbies || "", education: (p.education || []).map((x) => ({ ...x })),
     primary: { first, middle: "", last, gender: "", dob: "", marital: "", blood: "", handicapped: "", nationality: "", ...(p.primary || {}), dob: (p.primary && p.primary.dob) || p.employeeDob || (record && record.ids && record.ids.dob) || "" },
-    contact: { personalEmail: (record && record.personalEmail) || "", phone: (record && record.phone) || "", linkedin: "", ...(p.contact || {}) },
+    contact: { personalEmail: (record && record.personalEmail) || "", phone: (record && record.phone) || "", linkedin: "", emergencyName: "", emergencyRelation: "", emergencyPhone: "", emergency2Name: "", emergency2Relation: "", emergency2Phone: "", ...(p.contact || {}) },
     addresses: { current: a(ad.current, record && record.address), permanent: a(ad.permanent, "") },
   };
 }
@@ -112,6 +112,7 @@ export default function Profile() {
     if (sec.startsWith("rm:")) next.education.splice(Number(sec.slice(3)), 1);
     else if (sec === "edu") next.education.push({ ...vals });
     else SECTIONS[sec].fields.forEach(([k]) => setPath(next, k, vals[k] ?? ""));
+    if (sec === "contact") next.requireEmergency = true;   // the first emergency contact is required when the contact details are saved
     const r = await api("PUT", "/api/profile", next);
     if (r.status === 400) { setErrors((r.data && r.data.errors) || {}); toast(Object.values((r.data && r.data.errors) || {})[0] || "Check the highlighted fields."); return; }
     if (!r.ok) { toast(apiMsg(r)); return; }
@@ -184,10 +185,10 @@ export default function Profile() {
             <div><span className={pill(pct === 100 ? "p-ok" : "p-info")} style={{ marginTop: 8 }} title="Parts of your profile that are filled in">Profile {pct}% complete</span></div>
             {photo && <div><button type="button" className="btn glass sm" style={{ marginTop: 12 }} onClick={removePhoto}>Remove photo</button></div>}
             <ul className="pf2-facts">
+              {me.start && <li><Icon name="calendar" />{years >= 1 ? `Joined ${shortDate(me.start)} · ${years} year${years === 1 ? "" : "s"}` : `Joined ${shortDate(me.start)}`}</li>}
               <li><Icon name="mail" />{me.email}</li><li><Icon name="phone" />{phone || "Add a phone number"}</li>
               <li><Icon name="pin" />{city || "Add your city"}</li><li><Icon name="idcard" />{me.no || "No employee number yet"}</li>
             </ul>
-            {me.start && <p className="pf2-since">{years >= 1 ? `${years} year${years === 1 ? "" : "s"} at Wohlig` : `Joined ${shortDate(me.start)}`}</p>}
           </div>
           <nav className="card pf2-nav" aria-label="On this page"><h3>On this page</h3>
             {[["pf-sec-story", "Your story"], ["pf-sec-line", "Reporting line"], ["pf-sec-personal", "Personal details"], ["pf-sec-education", "Education"], ["pf-sec-contact", "Contact and addresses"], ["pf-sec-work", "Work and documents"], ["pf-sec-idcard", "ID card"]]

@@ -176,6 +176,8 @@ function EmployeeView({ p }) {
   const e = { ...p, ...(loc.edits || {}), baseEmail: p.email, status, grants, errors, laptop: loc.laptop, lastDay: rec && rec.lastDay ? String(rec.lastDay).slice(0, 10) : p.lastDay };
   const scheduled = !!(rec && rec.status === "scheduled");
   const isMe = lc(user.email) === lc(p.email);
+  // An ordinary employee looking at a colleague sees only the top card (name, team, contact and joining details). Everything below it is for the person themselves, their managers and the people who run HR, payroll and IT.
+  const plain = !isMe && !edits && !runsOn && !runsOff && !tools && !logins && !setsPay && !can("people.view") && !can("documents.view") && !can("payroll.view") && !can("expenses.approve") && !can("advances.approve") && !canAll("audit.view");
   // Masked PAN and Aadhaar: the person themselves and company-wide HR only (the server decides; people from the old system have no onboarding record, so this is read directly).
   const [idNums, setIdNums] = useState(null);
   const seesIds = isMe || canAll("people.view") || canAll("documents.view") || canAll("onboarding.manage");
@@ -279,6 +281,7 @@ function EmployeeView({ p }) {
           </>}
         </dl>
       </div>
+      {!plain && <>
       <div className="grid g-main">
         <div className="card"><div className="card-h"><h3>Tool access</h3><span className="muted">{toolIds(e).filter((k) => grants[k] === "active").length} of {toolIds(e).length} active</span></div>
           {!toolIds(e).length && <div className="card-b muted">No Claude access yet.</div>}
@@ -317,6 +320,7 @@ function EmployeeView({ p }) {
       {can("expenses.approve") && <ReimbCard e={e} />}
       {can("advances.approve") && !isMe && <AdvancesCard email={p.email} name={e.name} />}
       {canAll("audit.view") && <HistoryCard email={p.email} />}
+      </>}
       {asking && <ConfirmDialog title={byRequest ? `Request Claude access for ${e.name}?` : `Give Claude access to ${e.name}?`} confirmLabel={byRequest ? "Send request" : "Send invite"} onClose={() => setAsking(false)} onConfirm={async () => { await toolDo("grant"); setAsking(false); }}>
         {byRequest
           ? <>The Claude admin is asked to invite <b>{e.email}</b> from your Claude organisation. Nothing reaches {e.name} until they do, and it may use a paid seat.</>

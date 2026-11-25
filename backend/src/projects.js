@@ -21,7 +21,7 @@ const canManageProject = (actor, project) => actor.isHr || (!!actor.name && Stri
 
 export function projectsRouter(wrap) {
   const r = express.Router();
-  // Every project (even ones nobody is on yet) and every allocation, for everyone signed in. `canManage` says whether this person may add people to a project.
+  // Every project and allocation for HR and admins (company-wide "view people" or "edit people"); everyone else sees only the projects they are on (or lead) and the people on them. `canManage` says whether this person may add people to a project.
   r.get("/api/allocations", wrap(async (req, res) => {
     const actor = await projectActor(req);
     // "Left the company" as an end reason tells who left; it is shown only to people who may see that person's details.
@@ -34,12 +34,19 @@ export function projectsRouter(wrap) {
        FROM employee_project_allocations a
        JOIN projects p ON p.id = a.project_id JOIN employees e ON e.id = a.employee_id
        ORDER BY p.name, e.name`);
-    const projects = (await pool.query("SELECT id, name, project_lead, start_date, end_date, status, description, location FROM projects ORDER BY name")).rows;
+    let projects = (await pool.query("SELECT id, name, project_lead, start_date, end_date, status, description, location FROM projects ORDER BY name")).rows;
+    let seen = rows;
+    if (!(canAll(req, "people.view") || canAll(req, "people.edit"))) {
+      const mine = new Set(rows.filter((r) => String(r.email).toLowerCase() === me).map((r) => r.project_id));
+      for (const p of projects) if (actor.name && String(p.project_lead || "").toLowerCase() === actor.name.toLowerCase()) mine.add(p.id);
+      projects = projects.filter((p) => mine.has(p.id));
+      seen = rows.filter((r) => mine.has(r.project_id));
+    }
     res.json({
       canCreate: actor.canCreate,
       projects: projects.map((p) => ({ id: p.id, name: p.name, lead: p.project_lead, start: p.start_date, end: p.end_date, status: p.status,
         description: p.description, location: p.location, closed: isClosed(p), canManage: !isClosed(p) && canManageProject(actor, p), canHandover: !isClosed(p) && canManageProject(actor, p) })),
-      rows: rows.map((r) => ({ id: r.id, projectId: r.project_id, project: r.project, employee: r.employee, email: r.email, no: r.emp_no,
+      rows: seen.map((r) => ({ id: r.id, projectId: r.project_id, project: r.project, employee: r.employee, email: r.email, no: r.emp_no,
         start: r.start_date, end: r.end_date, lead: r.lead, location: r.location, status: r.status, handedOverTo: r.handed_over_to, movedTo: r.moved_to, endReason: r.end_reason === "Left the company" && !leaveSeen(r.email) ? null : r.end_reason })),
     });
   }));

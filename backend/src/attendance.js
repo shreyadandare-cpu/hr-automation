@@ -310,7 +310,7 @@ export function attendanceRouter(wrap) {
       else status = l ? (l.half ? "Half day leave" : "On leave") : off || (offSite(e.work_location) ? "Off-site" : "No punch");
       const firstIn = ins[0] ? ins[0].time : mine.length ? mine[0].time : null, lastOut = outs.length ? outs[outs.length - 1].time : null;
       const marks = status ? dayMarks(shift, { firstIn, lastOut: forgot ? null : lastOut, minutes: forgot ? 0 : w.minutes, workingDay: !off, finished: date < now.day || mins(now.time) >= shiftEnd }) : dayMarks(shift);
-      return { email: e.work_email, name: e.name, title: e.title, status, firstIn, lastOut, shift: { id: shift.id, name: shift.name, start: shift.start, end: shift.end, isDefault: !!shift.isDefault }, ...marks,
+      return { no: e.emp_no || "", email: e.work_email, name: e.name, title: e.title, status, firstIn, lastOut, shift: { id: shift.id, name: shift.name, start: shift.start, end: shift.end, isDefault: !!shift.isDefault }, ...marks,
         lastPunch: mine.length ? mine[mine.length - 1].time : null, punchCount: mine.length,
         minutes: w.minutes, missingOut: w.missingOut && date !== now.day && !forgot, forgotOut: forgot, in: mine.length > 0 && mine[mine.length - 1].direction === "IN" };
     });

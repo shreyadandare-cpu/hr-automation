@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { api, apiMsg } from "../../api.js";
 import { useAuth } from "../../auth.jsx";
+import ConfirmDialog from "../../components/ConfirmDialog.jsx";
 import Modal, { Field } from "../../components/Modal.jsx";
 import PeoplePicker from "../../components/PeoplePicker.jsx";
 import { Callout, PersonCell, Pill, SectionHead, ListSkeleton } from "../../components/ui.jsx";
@@ -18,10 +19,14 @@ export function NoticePeriods() {
   const { can } = useAuth();
   const { data, error, reload } = useList("/api/hr/resignations");
   const person = usePerson(), toast = useToast();
-  const [editing, setEditing] = useState(null);
+  const [editing, setEditing] = useState(null), [revoking, setRevoking] = useState(null);
   if (!can("exit.manage")) return <section className="section"><SectionHead title="Notice periods" /><div className="empty">Only the people who handle notice periods can see them.</div></section>;
   const list = (data && data.resignations) || [];
-  const withdraw = async (x) => { const r = await api("POST", `/api/hr/resignations/${encodeURIComponent(x.person.email)}/withdraw`); if (!r.ok) toast(apiMsg(r)); else { toast(`${x.person.name}'s resignation was marked as withdrawn.`); reload(); } };
+  const revoke = async (x) => {   // the person changed their mind: the notice stops and they stay on
+    const r = await api("POST", `/api/hr/resignations/${encodeURIComponent(x.person.email)}/withdraw`);
+    setRevoking(null); setEditing(null);
+    if (!r.ok) toast(apiMsg(r)); else { toast(`${x.person.name}'s resignation was revoked. They are no longer in their notice period.`); reload(); }
+  };
   return (
     <section className="section">
       <SectionHead title="Notice periods" sub={`Record a resignation to track the notice owed. The usual notice is ${data ? data.noticeDefault : 30} days; you can change it for a person.`}
@@ -34,16 +39,18 @@ export function NoticePeriods() {
             <tr key={x.person.email}><td><PersonCell person={person(x.person)} /></td><td>{longDate(x.resignedOn)}</td><td>{plural(x.noticeDays, "day")}</td><td>{longDate(x.expected)}</td>
               <td>{x.actual ? longDate(x.actual) : "Not set"}{x.agreedLastDay ? <div className="text-[13px] text-ink-faint">agreed by HR</div> : null}</td>
               <td>{x.shortBy ? <Pill tone="bad">{plural(x.shortBy, "day")} short</Pill> : x.over ? <Pill>Notice served</Pill> : <Pill tone="info">{plural(x.left, "day")} left</Pill>}</td>
-              <td className="text-right"><div className="flex flex-wrap justify-end gap-2"><button type="button" className="btn glass sm" onClick={() => setEditing(x)}>Edit</button><button type="button" className="btn glass sm" onClick={() => withdraw(x)}>Withdrawn</button></div></td></tr>))}</tbody>
+              <td className="text-right"><div className="flex flex-wrap justify-end gap-2"><button type="button" className="btn glass sm" onClick={() => setEditing(x)}>Edit</button><button type="button" className="btn glass sm" onClick={() => setRevoking(x)}>Revoke</button></div></td></tr>))}</tbody>
         </table></div>) : <div className="empty">No open resignations.</div>}
       </div>
       <Callout>The notice ends on the resignation date plus the notice days. A last day before that is marked short; agree any notice pay or waiver with the person before their full and final settlement. The last day comes from Offboarding unless you agree one here.</Callout>
-      {editing && <Resign x={editing} noticeDefault={data ? data.noticeDefault : 30} onClose={() => setEditing(null)} onDone={() => { setEditing(null); toast("The resignation was saved."); reload(); }} />}
+      {revoking && <ConfirmDialog title={`Revoke ${revoking.person.name}'s resignation?`} confirmLabel="Revoke resignation" danger onClose={() => setRevoking(null)} onConfirm={() => revoke(revoking)}>
+        Use this when {revoking.person.name} has changed their mind. They will no longer be shown as serving notice, and the record is kept in the history. You can record a new resignation later if needed.</ConfirmDialog>}
+      {editing && <Resign x={editing} onRevoke={() => setRevoking(editing)} noticeDefault={data ? data.noticeDefault : 30} onClose={() => setEditing(null)} onDone={() => { setEditing(null); toast("The resignation was saved."); reload(); }} />}
     </section>
   );
 }
 
-function Resign({ x, noticeDefault, onClose, onDone }) {
+function Resign({ x, noticeDefault, onClose, onDone, onRevoke }) {
   const auth = useAuth(), { people } = useData();
   const scope = scopeSet(auth, "exit.manage", people);   // null = everyone; otherwise only the teams this person looks after
   const staff = useStaff().filter((p) => !scope || scope.has(String(p.email).toLowerCase()));
@@ -67,7 +74,7 @@ function Resign({ x, noticeDefault, onClose, onDone }) {
         <Field id="rs-l" label="Agreed last day (optional)" hint="Leave empty to use the last day set in Offboarding." error={err.agreedLastDay}><input id="rs-l" type="date" className="input" value={f.agreedLastDay} onChange={(e) => setF({ ...f, agreedLastDay: e.target.value })} aria-invalid={!!err.agreedLastDay} /></Field>
         <Field id="rs-t" label="Note (optional)" hint="For example, notice pay agreed or waived."><textarea id="rs-t" className="input" rows={3} maxLength={1000} value={f.note} onChange={(e) => setF({ ...f, note: e.target.value })} /></Field>
       </div>
-      <div className="modal-f"><button type="button" className="btn glass" onClick={onClose} disabled={busy}>Cancel</button><button type="button" className="btn primary" onClick={save} disabled={busy}>{busy ? "Saving…" : "Save"}</button></div>
+      <div className="modal-f">{x.person && onRevoke && <button type="button" className="btn glass mr-auto" onClick={onRevoke} disabled={busy}>Revoke resignation</button>}<button type="button" className="btn glass" onClick={onClose} disabled={busy}>Cancel</button><button type="button" className="btn primary" onClick={save} disabled={busy}>{busy ? "Saving…" : "Save"}</button></div>
     </Modal>
   );
 }

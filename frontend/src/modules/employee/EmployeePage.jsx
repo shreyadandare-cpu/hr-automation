@@ -77,7 +77,9 @@ function EditModal({ e, people, onClose, onPayroll }) {
     if (!v.name) { document.getElementById("e-name").focus(); toast("Add the employee's full name."); return; }
     v.email = (e.baseEmail || e.email || "").toLowerCase();   // the work email is the sign-in and the key of every record, so it is not changed here
     const diff = ["name", "title", "start"].filter((k) => (e[k] || "") !== v[k]);
-    const mgrChanged = edits && manager !== curMgr;
+    // Saving the same name again also re-links a manager whose link is missing, so their leave reaches them.
+    const linked = (people || []).some((m) => m.email.toLowerCase() === (e.managerEmail || "") && m.status !== "offboarded" && m.status !== "offboarding");
+    const mgrChanged = edits && (manager !== curMgr || (!!manager && !linked));
     const noChanged = edits && empNo.trim() !== (e.no && e.no !== "Not assigned" ? e.no : "");
     if (!diff.length && !mgrChanged && !noChanged) { onClose(); toast("No changes to save."); return; }
     if (noChanged) {   // the employee ID is saved on the server first; if it is refused (empty, a duplicate) nothing else is saved
@@ -269,7 +271,10 @@ function EmployeeView({ p }) {
           <div><dt>Employee no.</dt><dd className="mono">{e.no || "Not assigned"}</dd></div>
           <div><dt>Work email</dt><dd className="mono">{e.email}</dd></div>
           <div><dt>Date of joining</dt><dd>{fdate(e.start)}</dd></div>
-          <div><dt>Reporting manager</dt><dd>{mgrOf(e) || "—"}</dd></div>
+          <div><dt>Reporting manager</dt><dd>{mgrOf(e) || "—"}
+            {/* Leave approval follows the manager's linked email; a name with no working link means a super admin decides instead. */}
+            {mgrOf(e) && status !== "offboarded" && !(people || []).some((m) => m.email.toLowerCase() === (e.managerEmail || "") && m.status !== "offboarded" && m.status !== "offboarding")
+              && <span className="mt-1 block text-[13px] text-warn">Not linked, so a super admin approves their leave.{edits ? " Choose the manager again in Edit details." : ""}</span>}</dd></div>
           <div><dt>Works from</dt><dd>{e.location || "—"}</dd></div>
           <div><dt>{status === "offboarded" ? "Left on" : "Last working day"}</dt><dd>{status === "offboarded" ? fdate(e.lastDay) : e.lastDay ? fdate(e.lastDay) : "Not set"}</dd></div>
           <div><dt>Time at Wohlig</dt><dd>{tenureText(e.start, status === "offboarded" ? e.lastDay : null) || "—"}</dd></div>

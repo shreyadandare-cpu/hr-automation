@@ -17,16 +17,17 @@ const byName = (a, b) => a.name.localeCompare(b.name);
 /* Departments in the order people expect to read them; anything else after, by size. */
 const DEPT_ORDER = ["Leadership", "Engineering", "DevOps & Cloud", "Gen AI", "Data", "Sales", "Finance & Admin", "HR"];
 
-/* Who reports to whom, from the reporting manager HR sets for each person. People whose manager is not a current employee
-   start a branch of their own; anyone in a loop (A reports to B, B to A) is cut loose the same way. Those branch tops are
-   then grouped under their department, so everyone sits in the tree even before every manager is set. */
+/* Who reports to whom, by the same link leave approval follows: the reporting manager's email, while that manager is here
+   (not leaving or left). A name with no working link does not count, because that manager could not approve the person's leave.
+   People with no working manager start a branch of their own; anyone in a loop (A reports to B, B to A) is cut loose the same way.
+   Those branch tops are then grouped under their department, so everyone sits in the tree even before every manager is set. */
 export function buildOrg(people) {
   const here = people.filter((p) => p.status !== "offboarded");
-  const named = new Map(here.map((p) => [lc(p.name), p]));
+  const byEmail = new Map(here.filter((p) => p.status !== "offboarding").map((p) => [lc(p.email), p]));
   const kids = new Map(here.map((p) => [p.id, []]));
   const parentOf = new Map();
   for (const p of here) {
-    const boss = named.get(lc(mgrOf(p)));
+    const boss = p.managerEmail ? byEmail.get(lc(p.managerEmail)) : null;
     // Someone at the top (director, VP) hangs under another top person only, such as the CEO.
     if (boss && boss.id !== p.id && (!isTop(p) || isTop(boss))) { parentOf.set(p.id, boss.id); kids.get(boss.id).push(p); }
   }
@@ -228,7 +229,7 @@ export default function OrgChart({ people }) {
       </div>
       {missing.length > 0 && <div className="mx-6 mb-3 flex flex-wrap items-center gap-3 rounded-field bg-tint px-4 py-3 max-sm:mx-4" role="status">
         <p className="m-0 min-w-0 flex-1 basis-[260px] text-[14px] text-ink">
-          <b>{missing.length} {missing.length === 1 ? "person has" : "people have"} no reporting manager.</b>{" "}
+          <b>{missing.length} {missing.length === 1 ? "person has" : "people have"} no reporting manager who can approve their leave.</b>{" "}
           <span className="text-ink-dim">Everyone except directors, the Vice President and the CEO needs one: their manager approves leave and timesheets. Until one is set, a super admin approves their leave.</span></p>
         <button type="button" className="btn primary sm" onClick={() => setBulk(true)}>Assign managers</button>
       </div>}
@@ -303,7 +304,9 @@ function AssignManagers({ list, people, onClose, onDone }) {
   const here = people.filter((p) => p.status !== "offboarded" && p.status !== "offboarding").sort(byName);
   const byEmail = new Map(people.map((p) => [lc(p.email), p])), byNameMap = new Map(people.map((p) => [lc(p.name), p]));
   const formerOf = (p) => (p.managerEmail && byEmail.get(lc(p.managerEmail))) || byNameMap.get(lc(mgrOf(p))) || null;
-  const suggest = (p) => { const old = formerOf(p), up = old && byNameMap.get(lc(mgrOf(old))); return up && up.status !== "offboarded" && up.status !== "offboarding" && up.id !== p.id ? up.email : ""; };
+  const current = (x) => x && x.status !== "offboarded" && x.status !== "offboarding";
+  // A manager who is still here but not linked: suggest them. One who has left: suggest their own manager.
+  const suggest = (p) => { const old = formerOf(p); if (current(old) && old.id !== p.id) return old.email; const up = old && byNameMap.get(lc(mgrOf(old))); return current(up) && up.id !== p.id ? up.email : ""; };
   const [pick, setPick] = useState(() => Object.fromEntries(list.map((p) => [p.email, suggest(p)])));
   const [errs, setErrs] = useState({}), [busy, setBusy] = useState(false), [all, setAll] = useState("");
   const chosen = list.filter((p) => pick[p.email]);
@@ -321,7 +324,7 @@ function AssignManagers({ list, people, onClose, onDone }) {
     <Modal onClose={busy ? () => {} : onClose} wide>
       <div className="card-h"><h3>Assign reporting managers</h3></div>
       <div className="card-b">
-        <p className="m-0 text-ink-dim">Choose a manager for each person. Where their manager has left, their manager's own manager is suggested. Rows you leave empty stay as they are.</p>
+        <p className="m-0 text-ink-dim">Choose a manager for each person. A manager who is named but not linked is suggested as they are; where the manager has left, their own manager is suggested. Rows you leave empty stay as they are.</p>
         <div className="mt-4 flex flex-wrap items-end gap-2">
           <Field id="am-all" label="Same manager for everyone"><select className="input" id="am-all" value={all} onChange={(e) => setAll(e.target.value)}><option value="">Choose…</option>{here.map((m) => <option key={m.id} value={m.email}>{m.name}</option>)}</select></Field>
           <button type="button" className="btn glass sm mb-1" disabled={!all} onClick={() => setPick(Object.fromEntries(list.map((p) => [p.email, p.email === all ? pick[p.email] : all])))}>Apply to all</button>
@@ -331,7 +334,7 @@ function AssignManagers({ list, people, onClose, onDone }) {
           {list.map((p) => { const old = formerOf(p); return (
             <li key={p.id} className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)] items-center gap-3 rounded-field px-3 py-2.5 shadow-[inset_0_0_0_1px_var(--line)] max-sm:grid-cols-1">
               <span className="flex min-w-0 flex-col"><b className="truncate text-[15px] text-ink">{p.name}</b>
-                <span className="text-[13px] text-ink-faint">{p.title}{old ? ` · was ${old.name}${old.status === "offboarded" ? ", who has left" : ""}` : " · never set"}</span></span>
+                <span className="text-[13px] text-ink-faint">{p.title}{old ? (current(old) ? ` · ${old.name} is named but not linked` : ` · was ${old.name}, who has left`) : mgrOf(p) ? ` · ${mgrOf(p)} is not in the staff list` : " · never set"}</span></span>
               <span className="flex min-w-0 flex-col gap-1">
                 <label className="sr-only" htmlFor={`am-${p.id}`}>Reporting manager for {p.name}</label>
                 <select className="input" id={`am-${p.id}`} value={pick[p.email] || ""} aria-invalid={!!errs[p.email]} onChange={(e) => { setPick((x) => ({ ...x, [p.email]: e.target.value })); setErrs((x) => ({ ...x, [p.email]: "", _: "" })); }}>

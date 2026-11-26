@@ -61,7 +61,7 @@ export async function estimateTax({ email, items }) {
   // Someone who joins later this year: their first month is the joining month.
   const joins = emp && mon(emp.start_date), period = joins && joins > now && fyOf(joins) === fy ? joins : now;
   const [paidMap, { rows: past }] = await Promise.all([paidSoFar(payPool, period, email),
-    payPool.query(`SELECT r.period, i.slip, i.base_salary, i.lop_deduction, i.payable FROM payroll_items i JOIN payroll_runs r ON r.id = i.run_id
+    payPool.query(`SELECT r.period, i.slip, i.base_salary, i.lop_deduction, i.payable, i.item_sealed FROM payroll_items i JOIN payroll_runs r ON r.id = i.run_id
       WHERE r.period = ANY($1) AND lower(i.work_email) = $2 AND r.status = ANY($3) ORDER BY r.period LIMIT 12`, [fyMonths(fy).filter((m) => m < period), email, FINAL_STATES])]);
   const paid = paidMap.get(email) || { taxable: 0, tds: 0, pt: 0 };
   const pastMonths = past.map((x) => ({ period: x.period, tds: Number(summaryOfLegacy(x.slip, x).tds) || 0 }));
@@ -124,7 +124,7 @@ export function tdsChanges(months) {
 export async function yearForReturn({ email, fy, own = null, proofsFinal = false }) {
   const label = `${fy}-${String((fy + 1) % 100).padStart(2, "0")}`, periods = fyPeriods(label);
   const [{ rows: items }, { rows: rules }, { rows: [decl] }, { rows: [emp] }, structures] = await Promise.all([
-    payPool.query(`SELECT r.period, r.status, i.slip, i.base_salary, i.lop_deduction, i.payable FROM payroll_items i JOIN payroll_runs r ON r.id = i.run_id
+    payPool.query(`SELECT r.period, r.status, i.slip, i.base_salary, i.lop_deduction, i.payable, i.item_sealed FROM payroll_items i JOIN payroll_runs r ON r.id = i.run_id
       WHERE r.period = ANY($1) AND lower(i.work_email) = $2 AND r.status = ANY($3) ORDER BY r.period LIMIT 24`, [periods, email, FINAL_STATES]),
     payPool.query("SELECT regime, rules FROM tax_rules WHERE fy=$1", [label]),
     payPool.query("SELECT regime, declaration FROM tax_declarations WHERE fy=$1 AND lower(work_email)=$2", [label, email]),

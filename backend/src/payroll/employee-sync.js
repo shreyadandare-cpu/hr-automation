@@ -11,7 +11,7 @@ import { pool, payPool, PAYROLL_SEPARATE } from "../db.js";
  * When it runs: before any Payroll or payslip page is read (at most every few seconds), right after any change made through the app, at start-up, and
  * on demand (`force`). A failure is logged and never stops a page or a save.
  */
-const OWN = new Set(["id", "pf_number", "monthly_gross", "casual_opening", "leave_opening", "work_email_manual"]);   // payroll's own, or not shared
+const OWN = new Set(["id", "pf_number", "monthly_gross", "pay_sealed", "casual_opening", "leave_opening", "work_email_manual"]);   // payroll's own, or not shared
 const FRESH_MS = 5000;
 let columns = null, last = 0, running = null;
 

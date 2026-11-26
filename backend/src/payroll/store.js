@@ -1,4 +1,5 @@
 import L from "../../../frontend/leave-rules.cjs";
+import { sealFields } from "../secret-box.js";
 import { computeLine, summaryOfLegacy, totalsOf, P, R } from "./engine.js";
 import { fyOf, fyMonths } from "./tax.js";
 import { DEFAULT_TAX_RULES } from "./tax-defaults.js";
@@ -66,7 +67,7 @@ export async function paidSoFar(db, period, email = null) {
   const out = new Map();
   if (!months.length) return out;
   const { rows } = await db.query(
-    `SELECT i.work_email, i.slip, i.inputs, i.base_salary, i.lop_deduction, i.payable FROM payroll_items i JOIN payroll_runs r ON r.id=i.run_id
+    `SELECT i.work_email, i.slip, i.inputs, i.base_salary, i.lop_deduction, i.payable, i.item_sealed FROM payroll_items i JOIN payroll_runs r ON r.id=i.run_id
      WHERE r.period = ANY($1) AND r.status IN ('approved','bank_ready','paid','processed') ${email ? "AND lower(i.work_email)=$2" : ""}`, email ? [months, email] : [months]);
   for (const i of rows) {
     if (i.inputs && i.inputs.hold) continue;
@@ -193,7 +194,7 @@ const columnsOf = (l) => {
  * from lines on hold. Returns the lines.
  */
 export async function recalcRun(client, run, actor) {
-  const { rows: existing } = await client.query("SELECT id, work_email, inputs FROM payroll_items WHERE run_id=$1", [run.id]);
+  const { rows: existing } = await client.query("SELECT id, work_email, inputs, item_sealed FROM payroll_items WHERE run_id=$1", [run.id]);
   const lines = await buildLines(client, run.period, run.id, existing);
   const keep = new Set(lines.map((l) => lc(l.email)));
   for (const i of existing) if (!keep.has(lc(i.work_email))) {
@@ -203,13 +204,15 @@ export async function recalcRun(client, run, actor) {
   }
   for (const l of lines) {
     const c = columnsOf(l);
+    // The figures, the payslip and HR's inputs are stored sealed (secret-box.js); the plain columns stay empty.
+    const { sealed, plain: f } = sealFields("item_sealed", { base_salary: c.base, lop_deduction: c.lop, reimbursement_total: c.reimb, payable: c.payable, slip: l.slip, inputs: l.inputs });
     await client.query(
-      `INSERT INTO payroll_items (run_id, work_email, base_salary, lop_days, lop_deduction, reimbursement_total, payable, slip, inputs, structure_id, calculated_at, updated_by)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,now(),$11)
+      `INSERT INTO payroll_items (run_id, work_email, base_salary, lop_days, lop_deduction, reimbursement_total, payable, slip, inputs, structure_id, calculated_at, updated_by, item_sealed)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,now(),$11,$12)
        ON CONFLICT (run_id, lower(work_email)) DO UPDATE SET base_salary=EXCLUDED.base_salary, lop_days=EXCLUDED.lop_days, lop_deduction=EXCLUDED.lop_deduction,
          reimbursement_total=EXCLUDED.reimbursement_total, payable=EXCLUDED.payable, slip=EXCLUDED.slip, inputs=EXCLUDED.inputs, structure_id=EXCLUDED.structure_id,
-         calculated_at=now(), updated_by=EXCLUDED.updated_by`,
-      [run.id, l.email, c.base, c.lopDays, c.lop, c.reimb, c.payable, JSON.stringify(l.slip), JSON.stringify(l.inputs), l.structureId, actor]);
+         calculated_at=now(), updated_by=EXCLUDED.updated_by, item_sealed=EXCLUDED.item_sealed`,
+      [run.id, l.email, f.base_salary, c.lopDays, f.lop_deduction, f.reimbursement_total, f.payable, f.slip, f.inputs, l.structureId, actor, sealed]);
     const attach = l.status === "ready";
     if (attach) {
       for (const cl of l.claims)
@@ -221,8 +224,24 @@ export async function recalcRun(client, run, actor) {
     }
   }
   const totals = totalsOfLines(lines);
-  await client.query("UPDATE payroll_runs SET totals=$2 WHERE id=$1", [run.id, JSON.stringify(totals)]);
+  await setRunTotals(client, run.id, totals);
   return lines;
+}
+
+/** Saves a run's totals, sealed (secret-box.js). */
+export async function setRunTotals(db, runId, totals) {
+  const { sealed, plain } = sealFields("run_sealed", { totals });
+  await db.query("UPDATE payroll_runs SET totals=$2, run_sealed=$3 WHERE id=$1", [runId, plain.totals, sealed]);
+}
+
+/** Saves HR's monthly inputs on one line: the line's sealed figures are opened, the inputs changed, and sealed again. */
+export async function setLineInputs(db, lineId, inputs, actor) {
+  const { rows: [line] } = await db.query("SELECT id, base_salary, lop_deduction, reimbursement_total, payable, slip, inputs, item_sealed FROM payroll_items WHERE id=$1", [lineId]);
+  if (!line) return;
+  const { sealed, plain: f } = sealFields("item_sealed", { base_salary: line.base_salary, lop_deduction: line.lop_deduction, reimbursement_total: line.reimbursement_total,
+    payable: line.payable, slip: line.slip, inputs });
+  await db.query("UPDATE payroll_items SET inputs=$2, base_salary=$3, lop_deduction=$4, reimbursement_total=$5, payable=$6, slip=$7, item_sealed=$8, updated_by=$9 WHERE id=$1",
+    [lineId, f.inputs, f.base_salary, f.lop_deduction, f.reimbursement_total, f.payable, f.slip, sealed, actor]);
 }
 
 /** Run totals: only ready lines are paid; incomplete and on-hold lines are counted separately. */

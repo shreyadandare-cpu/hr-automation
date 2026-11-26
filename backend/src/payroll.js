@@ -1,4 +1,6 @@
 import { payrollChanged } from "./payroll/preview-cache.js";
+import { sealFields } from "./secret-box.js";
+import { setMonthlyGross } from "./payroll/sealing.js";
 import express from "express";
 import { payPool as pool, pool as mainPool, PAYROLL_SEPARATE } from "./db.js";   // payroll may use its own database (PAYROLL_DATABASE_URL)
 import { event } from "./reimbursements.js";
@@ -44,20 +46,24 @@ async function saveStructure(client, emp, email, v, actor) {
       throw e;
     }
   }
+  // The figures are stored sealed (secret-box.js); the plain columns stay empty.
+  const { sealed, plain: f } = sealFields("structure_sealed", { earnings: v.earnings, pf_employee: v.pfEmployee, professional_tax: v.professionalTax,
+    other_deductions: v.otherDeductions, tds_monthly: v.tdsMonthly, annual_ctc: v.annualCtc, employer_pf: v.employerPf, esic_employee: v.esicEmployee, pt_february: v.ptFebruary });
   await client.query(
     `INSERT INTO salary_structures (work_email, effective_from, earnings, pf_employee, professional_tax, other_deductions, tds_monthly, updated_by,
-       annual_ctc, pf_applicable, employer_pf, pt_applicable, pt_february, tds_applicable, tds_mode, reason, esic_employee)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)
+       annual_ctc, pf_applicable, employer_pf, pt_applicable, pt_february, tds_applicable, tds_mode, reason, esic_employee, structure_sealed)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)
      ON CONFLICT (lower(work_email), effective_from) DO UPDATE SET earnings=EXCLUDED.earnings, pf_employee=EXCLUDED.pf_employee,
        professional_tax=EXCLUDED.professional_tax, other_deductions=EXCLUDED.other_deductions, tds_monthly=EXCLUDED.tds_monthly,
        updated_by=EXCLUDED.updated_by, updated_at=now(), annual_ctc=EXCLUDED.annual_ctc, pf_applicable=EXCLUDED.pf_applicable, employer_pf=EXCLUDED.employer_pf,
-       pt_applicable=EXCLUDED.pt_applicable, pt_february=EXCLUDED.pt_february, tds_applicable=EXCLUDED.tds_applicable, tds_mode=EXCLUDED.tds_mode, reason=EXCLUDED.reason, esic_employee=EXCLUDED.esic_employee`,
-    [email, v.effectiveFrom, JSON.stringify(v.earnings), v.pfEmployee, v.professionalTax, JSON.stringify(v.otherDeductions), v.tdsMonthly, actor,
-      v.annualCtc, v.pfApplicable, v.employerPf, v.ptApplicable, v.ptFebruary, v.tdsApplicable, v.tdsMode, v.reason, v.esicEmployee]);
+       pt_applicable=EXCLUDED.pt_applicable, pt_february=EXCLUDED.pt_february, tds_applicable=EXCLUDED.tds_applicable, tds_mode=EXCLUDED.tds_mode, reason=EXCLUDED.reason,
+       esic_employee=EXCLUDED.esic_employee, structure_sealed=EXCLUDED.structure_sealed`,
+    [email, v.effectiveFrom, f.earnings, f.pf_employee, f.professional_tax, f.other_deductions, f.tds_monthly, actor,
+      f.annual_ctc, v.pfApplicable, f.employer_pf, v.ptApplicable, f.pt_february, v.tdsApplicable, v.tdsMode, v.reason, f.esic_employee, sealed]);
   // The monthly gross (used for loss-of-pay cuts and exit settlements) follows the breakdown now in force.
   const [current] = await structuresFor(client, new Date(Date.now() + 5.5 * 3600e3).toISOString().slice(0, 7), email);
-  await client.query("UPDATE employees SET pf_number=CASE WHEN $4 THEN $2 ELSE pf_number END, monthly_gross=coalesce($3, monthly_gross) WHERE id=$1",
-    [emp.id, v.pfNumber ?? null, current ? grossOf(current.earnings) : null, v.pfNumber !== undefined]);
+  await client.query("UPDATE employees SET pf_number=CASE WHEN $2 THEN $3 ELSE pf_number END WHERE id=$1", [emp.id, v.pfNumber !== undefined, v.pfNumber ?? null]);
+  if (current) await setMonthlyGross(client, emp.id, grossOf(current.earnings));
   await client.query("INSERT INTO audit_log (action, work_email) VALUES ($1,$2)", [`Salary breakdown from ${monthName(v.effectiveFrom)} saved by ${actor}`, email]);
   const { rows: [prev] } = old ? { rows: [] } : await client.query(
     "SELECT * FROM salary_structures WHERE lower(work_email)=$1 AND effective_from < $2 ORDER BY effective_from DESC LIMIT 1", [email, v.effectiveFrom]);
@@ -102,7 +108,7 @@ payrollRouter.post("/convert-intern", hrOnly, wrap(async (req, res) => {
 // One person's salary breakdowns, newest first, and their PF number.
 payrollRouter.get("/structures/:email", hrOnly, wrap(async (req, res) => {
   const email = String(req.params.email).toLowerCase();
-  const { rows: [emp] } = await pool.query("SELECT name, pf_number, monthly_gross, start_date, employment_type FROM employees WHERE lower(work_email)=$1", [email]);
+  const { rows: [emp] } = await pool.query("SELECT name, pf_number, monthly_gross, pay_sealed, start_date, employment_type FROM employees WHERE lower(work_email)=$1", [email]);
   if (!emp) return res.status(404).json({ error: "Employee not found." });
   const { rows } = await pool.query("SELECT * FROM salary_structures WHERE lower(work_email)=$1 ORDER BY effective_from DESC", [email]);
   res.json({ name: emp.name, employmentType: emp.employment_type || "Employee", start: emp.start_date, pfNumber: emp.pf_number, monthlyGross: num(emp.monthly_gross), structures: rows.map(toStructure) });

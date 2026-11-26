@@ -43,7 +43,7 @@ async function linesOf(period, finalOnly) {
   const { rows: [run] } = await payPool.query("SELECT id, period, status FROM payroll_runs WHERE period=$1", [period]);
   if (!run || (finalOnly && !isFinal(run.status))) return { run: null, lines: [] };
   const { rows } = await payPool.query(
-    `SELECT lower(i.work_email) AS email, i.slip, i.base_salary, i.lop_deduction, i.payable, e.name, e.emp_no, e.dept, e.pf_number, e.pan_masked
+    `SELECT lower(i.work_email) AS email, i.slip, i.base_salary, i.lop_deduction, i.payable, i.item_sealed, e.name, e.emp_no, e.dept, e.pf_number, e.pan_masked
      FROM payroll_items i LEFT JOIN employees e ON lower(e.work_email) = lower(i.work_email)
      WHERE i.run_id=$1 ORDER BY e.name NULLS LAST, i.work_email LIMIT 2000`, [run.id]);
   const lines = rows.map((x) => {
@@ -167,7 +167,7 @@ export function financeRouter(wrap) {
       "SELECT lower(work_email) AS email, name, emp_no, dept, title, to_char(start_date,'YYYY-MM-DD') AS start FROM employees WHERE status <> 'offboarded' AND start_date IS NOT NULL ORDER BY start_date, name LIMIT 2000");
     // The basic pay of each person's latest salary structure.
     const { rows: latest } = await payPool.query(
-      "SELECT DISTINCT ON (lower(work_email)) lower(work_email) AS email, earnings FROM salary_structures ORDER BY lower(work_email), effective_from DESC");
+      "SELECT DISTINCT ON (lower(work_email)) lower(work_email) AS email, earnings, structure_sealed FROM salary_structures ORDER BY lower(work_email), effective_from DESC");
     const basicOf = Object.fromEntries(latest.map((x) => [x.email, (Array.isArray(x.earnings) ? x.earnings : []).filter((e) => /^\s*basic/i.test(e.name || "")).reduce((n, e) => n + Number(e.amount || 0), 0)]));
     const people = staff.map((p) => {
       const basic = basicOf[p.email];
@@ -183,7 +183,7 @@ export function financeRouter(wrap) {
     if (email) { args.push(email); where.push(`lower(i.work_email) = $${args.length}`); }
     if (finalOnly) { args.push(FINAL_STATES); where.push(`r.status = ANY($${args.length})`); }
     const { rows } = await payPool.query(
-      `SELECT lower(i.work_email) AS email, r.period, r.status, i.slip, i.base_salary, i.lop_deduction, i.payable
+      `SELECT lower(i.work_email) AS email, r.period, r.status, i.slip, i.base_salary, i.lop_deduction, i.payable, i.item_sealed
        FROM payroll_items i JOIN payroll_runs r ON r.id = i.run_id
        WHERE ${where.join(" AND ")} LIMIT 30000`, args);
     const by = {};

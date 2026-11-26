@@ -85,9 +85,14 @@ try {
   r = await call(hr, "GET", `/api/payroll/declarations/${encodeURIComponent(EMP)}?fy=${fy}`);
   ok("payroll's fields use the approved amount", r.data.submitted && r.data.submitted.fields.section80C === 100000, JSON.stringify(r.data.submitted));
 
-  // --- Form 124.
+  // --- Form 124: it opens only with the viewer's document password, and comes locked with it.
+  {
+    const locked = await raw(e, "GET", "/api/tax-declaration/form-124");
+    ok("Form 124 asks for the document password first (423)", locked.status === 423, String(locked.status));
+    for (const t of [e, hr]) await call(t, "PUT", "/api/document-password", { password: "Flow-test-pass-1" });
+  }
   let f = await raw(e, "GET", "/api/tax-declaration/form-124");
-  ok("Form 124 downloads as a PDF", f.status === 200 && f.type.includes("pdf") && f.buf.subarray(0, 5).toString() === "%PDF-", `${f.status} ${f.type}`);
+  ok("Form 124 downloads as a PDF, locked with the password", f.status === 200 && f.type.includes("pdf") && f.buf.subarray(0, 5).toString() === "%PDF-" && f.buf.includes("/Encrypt"), `${f.status} ${f.type}`);
   f = await raw(hr, "GET", `/api/tax-declaration/form-124?email=${encodeURIComponent(EMP)}`);
   ok("payroll can download it too", f.status === 200);
   f = await raw(e, "GET", `/api/tax-declaration/form-124?email=${encodeURIComponent(HR)}`);
@@ -192,6 +197,7 @@ try {
     ok("only the last four years can be asked for", r.status === 400, String(r.status));
   } else console.log("SKIP  year summary with a payslip: the local database already has a run for " + period);
 } finally {
+  await db.query("DELETE FROM document_passwords WHERE email = ANY($1)", [[EMP, HR]]).catch(() => {});
   if (savedPolicy) await db.query("UPDATE tax_regime_policies SET declaration_due=$2, proof_due=$3 WHERE financial_year=$1", [savedPolicy.financial_year, savedPolicy.declaration_due, savedPolicy.proof_due]);
   await clean();
   await db.end();

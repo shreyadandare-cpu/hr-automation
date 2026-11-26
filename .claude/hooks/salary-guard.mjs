@@ -20,12 +20,16 @@ const tool = call.tool_name || "", input = call.tool_input || {};
 const SALARY_NAMES = [
   "payroll_runs", "payroll_items", "salary_structures", "payroll_bank_accounts", "payroll_master", "payroll_adjustments",
   "payroll_files", "payroll_audit", "tax_rules", "tax_declarations", "tax_declaration_requests", "advance_recoveries",
-  "advance_requests", "loans", "loan_events", "monthly_gross", "document_passwords",
+  "advance_requests", "monthly_gross", "document_passwords",
   "PAYROLL_ENCRYPTION_KEY", "DOCUMENTS_ENCRYPTION_KEY", "PAYROLL_DATABASE_URL",
 ];
-const DB_TOOLS = /\b(psql|pg_dump|pg_dumpall|pgcli|createdb|dropdb|sqlite3|mysql)\b|\bpool\.query\b|\bpayPool\b|new\s+(pg\.)?(Pool|Client)\b/;
+// A database client run from the shell, or a one-off script (node -e / --eval / a heredoc) that opens a connection.
+const DB_TOOLS = /\b(psql|pgcli|sqlite3|mysql)\b|\bnode\b[^|;&]*(-e|--eval|-p|<<)[\s\S]*\b(pg|Pool|Client|payPool|pool\.query)\b/;
+// Whole-database copies and the environment, whatever the command names: they hold every salary and every key.
+const ALWAYS = /\b(pg_dump|pg_dumpall|pg_basebackup)\b|(^|[\s;&|(])(printenv|env|export\s+-p|declare\s+-x|set)(\s*$|\s*[|;&>)])|\/proc\/[^\s]*\/environ|docker\s+(compose\s+)?(exec|inspect)\b[\s\S]*\b(env|printenv|psql|pg_dump)\b|docker\s+inspect\b/;
 const ENV_FILE = /(^|[\/\s"'=<])\.env(?!\.example)\b/;   // .env, .env.local, backend/.env; never .env.example
-const UPLOADS = /(^|[\s"'=])(\.\/)?(backend\/)?uploads\/|\/srv\/uploads|hrhub-uploads/;
+// The uploads folder as a path (backend/uploads, /srv/uploads/…, cd uploads), not the word in a code search.
+const UPLOADS = /\/uploads(\/|\b(?![.\w]))|(^|[\s"'=])uploads\/|\bcd\s+uploads\b|hrhub-uploads/;
 const DUMP = /\.(dump|sql\.gz|backup)\b/i;
 const block = (why) => {
   process.stderr.write(`Blocked by the salary guard (.claude/hooks/salary-guard.mjs): ${why} Salaries, payslips, bank details, staff documents and the keys that unlock them are visible only to the salary owner. Work on the code instead, or ask the salary owner.`);
@@ -39,7 +43,8 @@ if (tool === "Bash" || tool === "mcp__terminal__run_in_terminal") {
     // Reading a secret file, the uploads folder or a dump in any way (cat, grep, cp, node -e, …).
     block("this command touches the server's secrets, the uploaded documents or a database dump.");
   }
-  if (/\bprintenv\b|\benv\b\s*($|\|)|process\.env\b/.test(cmd) && namesSalary(cmd)) block("this command reads a salary key from the environment.");
+  if (ALWAYS.test(cmd)) block("this command copies the whole database or prints the server's environment, which hold every salary and key.");
+  if (/process\.env\b/.test(cmd) && namesSalary(cmd)) block("this command reads a salary key from the environment.");
   if (DB_TOOLS.test(cmd) && namesSalary(cmd)) block("this database command names a salary table or column.");
 } else if (["Read", "Edit", "Write", "NotebookEdit", "Grep", "Glob"].includes(tool)) {
   const p = String(input.file_path || input.path || input.notebook_path || "");

@@ -6,6 +6,7 @@ import { useAuth } from "../auth.jsx";
 import { useData } from "../data.jsx";
 import { scopeSet } from "../lib/useLeave.js";
 import { Callout, DownloadIcon, Pill, SectionHead, shortDate } from "../components/ui.jsx";
+import { DocPasswordDialog, UnlockPrompt } from "../components/DocLock.jsx";
 
 const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 const label = (period) => { const [y, m] = period.split("-").map(Number); return `${MONTHS[m - 1]} ${y}`; };
@@ -54,6 +55,8 @@ export default function Payslips() {
   const [pick, setPick] = useState("");
   const [slip, setSlip] = useState(null);
   const [slipErr, setSlipErr] = useState("");
+  const [askFor, setAskFor] = useState(null);   // the month to open once the document password is entered
+  const [opened, setOpened] = useState(0);       // bumped after unlocking, to read the figures again
 
   useEffect(() => {
     setData(null); setSlip(null); setSlipErr(""); setError("");
@@ -63,11 +66,12 @@ export default function Payslips() {
       const first = r.data.payslips.find((x) => x.available) || r.data.payslips[0];
       setPick(first ? first.period : "");
     }).catch(() => { setError("Could not reach the server."); setData({ employee: null, payslips: [] }); });
-  }, [q]);
+  }, [q, opened]);
 
   const view = useCallback(async (period) => {
     setPick(period); setSlipErr(""); setSlip(null);
     const r = await api("GET", `/api/payslips/${period}${q}`);
+    if (r.status === 423) { setAskFor(period); return; }   // figures need the document password (DocLock.jsx)
     if (!r.ok) { setSlipErr(apiMsg(r)); return; }
     setSlip(r.data);
     setTimeout(() => { const el = document.getElementById("ps-view"); if (el) el.scrollIntoView({ block: "start", behavior: "smooth" }); });
@@ -91,6 +95,9 @@ export default function Payslips() {
             {others.filter((p) => p.email.toLowerCase() !== user.email.toLowerCase()).map((p) => <option key={p.email} value={p.email.toLowerCase()}>{p.name}</option>)}
           </select>)} />
       {error && <Callout>{error}</Callout>}
+      {data && data.locked && data.payslips.length > 0 && <UnlockPrompt what="Your pay figures" onUnlocked={() => setOpened((n) => n + 1)} />}
+      {askFor && <DocPasswordDialog saveLabel="Save and show" onClose={() => setAskFor(null)}
+        onUnlocked={() => { const m = askFor; setAskFor(null); setOpened((n) => n + 1); view(m); }} />}
 
       {data === null ? <div className="card"><div className="card-b"><span className="skel" style={{ width: "50%" }} /><span className="skel" style={{ width: "30%" }} /></div></div> : <>
         <div className="card">
@@ -125,7 +132,7 @@ export default function Payslips() {
               <tbody>{list.map((x) => (
                 <tr key={x.period}>
                   <td><b>{label(x.period)}</b></td>
-                  <td className="num">{x.available ? money(x.net) : "—"}</td>
+                  <td className="num">{x.available && x.net !== null ? money(x.net) : x.available && data.locked ? "Locked" : "—"}</td>
                   <td>{x.draft ? <Pill tone="warn">Draft</Pill> : !x.available ? <Pill tone="warn">Incomplete</Pill> : x.status === "paid" ? <Pill tone="ok">Paid{x.paidAt ? ` ${shortDate(String(x.paidAt).slice(0, 10))}` : ""}</Pill> : <Pill tone="info">Processed</Pill>}</td>
                   <td style={{ textAlign: "right" }}>{x.available
                     ? <div className="row" style={{ gap: 8, justifyContent: "flex-end" }}><button type="button" className="btn glass sm" onClick={() => view(x.period)}>View</button><a className="btn primary sm" href={pdf(x.period)} download aria-label="Download PDF" title="Download PDF"><DownloadIcon />PDF</a></div>

@@ -49,3 +49,27 @@ test("the only salary owner may approve a payroll they prepared; otherwise maker
   assert.equal(check(run, "approve", { ...kailash, sole: false }).ok, false);
   assert.equal(check(run, "approve", { ...kailash, sole: true }).ok, true);
 });
+
+test("wrong tries are counted before they are checked, so tries sent together cannot beat the limit", async () => {
+  const { _forTests: T } = await import("../src/doc-password.js");
+  T.clearTries();
+  const results = Array.from({ length: 20 }, () => T.takeTry("someone@wohlig.com"));
+  assert.equal(results.filter(Boolean).length, T.MAX_TRIES);
+  assert.equal(T.takeTry("other@wohlig.com"), true, "each person has their own count");
+  T.clearTries();
+});
+
+test("the Claude Code salary guard blocks secrets, dumps and salary queries, and lets normal work through", async () => {
+  const { spawnSync } = await import("node:child_process");
+  const hook = new URL("../../.claude/hooks/salary-guard.mjs", import.meta.url).pathname;
+  const run = (tool_name, tool_input) => spawnSync(process.execPath, [hook], { input: JSON.stringify({ tool_name, tool_input }) }).status;
+  const bash = (command) => run("Bash", { command });
+  for (const c of ["cat backend/.env", "printenv", "env | grep KEY", "pg_dump hrhub > x.out", "ls backend/uploads", "cat /srv/uploads/a.pdf.enc",
+    "psql hrhub_local -c 'select * from salary_structures'", "node -e \"new (require('pg').Pool)().query('select * from payroll_items')\"",
+    "docker compose exec backend env"]) assert.equal(bash(c), 2, c);
+  for (const c of ["npm test", "git status", "grep -rn uploads src", "grep -n salary_structures src/schema.sql", "cat backend/.env.example",
+    "psql hrhub_local -c 'select count(*) from employees'", "set -e; npm run build:ui"]) assert.equal(bash(c), 0, c);
+  assert.equal(run("Read", { file_path: "/x/backend/.env" }), 2);
+  assert.equal(run("Read", { file_path: "/x/backend/uploads/a.pdf" }), 2);
+  assert.equal(run("Read", { file_path: "/x/backend/src/payroll/schema.sql" }), 0);
+});

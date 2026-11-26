@@ -69,6 +69,10 @@ CREATE TABLE IF NOT EXISTS sessions (
   expires_at TIMESTAMPTZ NOT NULL
 );
 CREATE INDEX IF NOT EXISTS sessions_email_idx ON sessions (email);
+-- When the sign-in happened (2026-11-27): resetting a forgotten document password needs a sign-in from the last 10 minutes.
+-- Sessions from before have none, so they never count as fresh.
+ALTER TABLE sessions ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ;
+ALTER TABLE sessions ALTER COLUMN created_at SET DEFAULT now();
 
 CREATE TABLE IF NOT EXISTS settings (
   key   TEXT PRIMARY KEY,

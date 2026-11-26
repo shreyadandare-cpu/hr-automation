@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { api, apiMsg } from "../api.js";
 import { Callout, Pill, SectionHead, PageSkeleton } from "../components/ui.jsx";
+import { UnlockPrompt } from "../components/DocLock.jsx";
 
 const MON = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 const monthName = (period) => { const [y, m] = String(period).split("-").map(Number); return `${MON[m - 1]} ${y}`; };
@@ -13,7 +14,8 @@ const fyOf = (period) => { const [y, m] = String(period).split("-").map(Number);
 export default function MyFinances() {
   const [d, setD] = useState(null);
   const [error, setError] = useState("");
-  useEffect(() => { api("GET", "/api/payslips").then((r) => { if (r.ok) setD(r.data); else { setError(apiMsg(r)); setD({ payslips: [] }); } }); }, []);
+  const [opened, setOpened] = useState(0);   // bumped after the document password is entered, to read the figures again
+  useEffect(() => { api("GET", "/api/payslips").then((r) => { if (r.ok) setD(r.data); else { setError(apiMsg(r)); setD({ payslips: [] }); } }); }, [opened]);
   const [adv, setAdv] = useState([]);   // advances and loans, with the instalments payroll deducts (read only)
   useEffect(() => { api("GET", "/api/advances/mine").then((r) => { if (r.ok) setAdv(r.data || []); }); }, []);
   if (!d) return <PageSkeleton />;
@@ -29,9 +31,10 @@ export default function MyFinances() {
       <SectionHead title="Pay" sub="Your pay at a glance. Open My pay to view or download a payslip."
         actions={<Link className="btn primary" to="/app/payslips">Open My pay</Link>} />
       {error && <Callout>{error}</Callout>}
+      {d.locked && ready.length > 0 && <UnlockPrompt what="Your pay figures" onUnlocked={() => setOpened((n) => n + 1)} />}
       <div className="rb-stats four db-strip">
-        <div className="rb-stat"><span className="lbl">Latest net pay</span><b>{latest ? inr(latest.net) : "Not ready"}</b><span className="sub">{latest ? monthName(latest.period) : "No payslip has been published yet"}</span></div>
-        <div className="rb-stat"><span className="lbl">Paid this financial year</span><b>{latest ? inr(total) : "₹0"}</b><span className="sub">{fy ? `April ${fy} to March ${fy + 1}` : "Net pay, after deductions"}</span></div>
+        <div className="rb-stat"><span className="lbl">Latest net pay</span><b>{d.locked && latest ? "Locked" : latest ? inr(latest.net) : "Not ready"}</b><span className="sub">{latest ? monthName(latest.period) : "No payslip has been published yet"}</span></div>
+        <div className="rb-stat"><span className="lbl">Paid this financial year</span><b>{d.locked && latest ? "Locked" : latest ? inr(total) : "₹0"}</b><span className="sub">{fy ? `April ${fy} to March ${fy + 1}` : "Net pay, after deductions"}</span></div>
         <div className="rb-stat"><span className="lbl">Payslips this year</span><b>{thisYear.length}</b><span className="sub">published</span></div>
         <div className="rb-stat"><span className="lbl">All payslips</span><b>{ready.length}</b><span className="sub">available to download</span></div>
       </div>

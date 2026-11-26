@@ -161,7 +161,7 @@ export function payslipsRouter(wrap) {
   r.use("/api/payslips", requireAuth);
   r.use("/api/payslips", (_req, res, next) => { res.setHeader("Cache-Control", "private, no-store"); next(); });
 
-  // Months with a payslip, newest first.
+  // Months with a payslip, newest first. Amounts only after the document password (locked: true says they were left out).
   r.get("/api/payslips", wrap(async (req, res) => {
     const email = await targetOf(req, res);
     if (!email) return;
@@ -170,22 +170,27 @@ export function payslipsRouter(wrap) {
     const { rows } = await pool.query(
       `SELECT r.period, r.status, r.paid_at, r.published_at, r.publish_at, i.payable, i.base_salary, i.slip FROM payroll_items i JOIN payroll_runs r ON r.id=i.run_id
        WHERE lower(i.work_email)=$1 AND NOT coalesce((i.inputs->>'hold')::boolean, false) ${seesDrafts(req) ? "" : "AND r.published_at IS NOT NULL"} ORDER BY r.period DESC`, [email]);
+    const open = !!unlockedPassword(req);
+    res.setHeader("Cache-Control", "private, no-store");
     res.json({
+      locked: !open,
       employee: emp ? { name: emp.name, empNo: emp.emp_no, title: emp.title, dept: emp.dept, email } : { name: req.user.email, email },
       payslips: rows.map((x) => {
         const ready = x.slip ? !x.slip.incomplete.length : x.base_salary !== null;
-        return { period: x.period, status: x.status, paidAt: x.paid_at, draft: !x.published_at, publishAt: x.published_at ? null : x.publish_at, available: ready, net: ready ? num(x.payable) : null, message: ready ? null : INCOMPLETE };
+        return { period: x.period, status: x.status, paidAt: x.paid_at, draft: !x.published_at, publishAt: x.published_at ? null : x.publish_at, available: ready, net: ready && open ? num(x.payable) : null, message: ready ? null : INCOMPLETE };
       }),
     });
   }));
 
-  r.get("/api/payslips/:period", wrap(async (req, res) => {
+  // One payslip with every figure: only after the document password.
+  r.get("/api/payslips/:period", needDocUnlock, wrap(async (req, res) => {
     const { period } = req.params;
     if (!PERIOD.test(period)) return res.status(400).json({ error: "Choose a month like 2026-10." });
     const email = await targetOf(req, res);
     if (!email) return;
     const p = await payslipOf(email, period, seesDrafts(req));
     if (!p.slip) return res.status(p.status).json({ error: p.error });
+    res.setHeader("Cache-Control", "private, no-store");
     res.json(p.slip);
   }));
 

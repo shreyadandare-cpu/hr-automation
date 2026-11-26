@@ -5,7 +5,8 @@ import path from "node:path";
 /*
  * Personal documents (Aadhaar, PAN, passport, bank proof, certificates) are stored encrypted on disk, AES-256-GCM, so a copy of
  * the uploads folder or a backup shows nothing. The key is DOCUMENTS_ENCRYPTION_KEY (32 bytes: `openssl rand -hex 32`); without
- * it, PAYROLL_ENCRYPTION_KEY is used. With neither, files are stored as before and the server log says so once.
+ * it, PAYROLL_ENCRYPTION_KEY is used. With neither, uploads are refused on the live server (NODE_ENV=production); in local
+ * development files are stored as before and the server log says so once.
  *
  * An encrypted file's stored name ends in ".enc" and holds: "WOE1" | 12-byte IV | 16-byte tag | the encrypted bytes. Files are at
  * most 5 MB, so they are read whole to decrypt.
@@ -27,6 +28,12 @@ let warned = false;
 export function sealFile(buf) {
   const key = fileKey();
   if (!key) {
+    // On the live server a personal document is never stored unencrypted: the upload is refused until a key is set.
+    if (process.env.NODE_ENV === "production") {
+      const e = new Error("Documents cannot be uploaded right now. Please tell the HR team.");
+      e.status = 503; e.expose = true;
+      throw e;
+    }
     if (!warned) { warned = true; console.warn("[documents] DOCUMENTS_ENCRYPTION_KEY is not set: uploaded documents are stored unencrypted."); }
     return { body: buf, encrypted: false };
   }

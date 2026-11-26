@@ -80,7 +80,9 @@ documentsRouter.put("/:docKey", express.raw({ type: () => true, limit: MAX_BYTES
   if (!type) return res.status(400).json({ error: "Only PDF, JPG or PNG files are allowed." });
 
   const name = safeName(req.query.name);
-  const sealed = sealFile(body);   // encrypted on disk when a key is set (file-crypt.js)
+  let sealed;
+  try { sealed = sealFile(body); }   // encrypted on disk (file-crypt.js); refused on the live server when no key is set
+  catch (e) { if (e.status === 503) { console.error("[documents]", "upload refused: no document encryption key is set"); return res.status(503).json({ error: e.message }); } throw e; }
   const stored = crypto.randomUUID() + "." + type.ext + (sealed.encrypted ? ENC_SUFFIX : "");
   const client = await pool.connect();
   const gone = [];

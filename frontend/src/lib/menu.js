@@ -31,7 +31,7 @@ export function menuFor({ user, isManager, superAdmin, can = () => false, canAll
       !canAll("documents.view") && ["/app/documents", "Documents", "folder"],
     ] },
     { label: "To do", icon: "mail", items: [["/app/inbox", "To do", "inbox"]] },
-    isManager && { label: "My team", icon: "team", items: [["/app/my-team", "Overview", "people"], ["/app/team-leave", "Team leave", "luggage"], ["/app/stand-ins", "Approval cover", "handoff"]] },
+    isManager && { label: "My team", icon: "team", items: [["/app/my-team", "Overview", "people"], ["/app/team-leave", "Team leave", "luggage"], ["/app/team-requests", "Attendance corrections", "send"], ["/app/stand-ins", "Approval cover", "handoff"]] },
     { label: "Pay", icon: "bank", items: [
       ["/app/my-finances", "Overview", "wallet"],
       ["/app/payslips", "My pay", "payslip"],

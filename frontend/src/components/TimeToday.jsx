@@ -43,6 +43,9 @@ export default function TimeToday() {
     if (err) toast(err);
   };
   const where = t.needLocation ? "Uses your location." : "";
+  // A recent day with no punch-out and no correction yet: no hours are counted for it until the person sends one (as in Keka).
+  const missing = (t.missingOut || [])[0];
+  const dayName = (d) => new Date(d + "T00:00:00Z").toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short", timeZone: "UTC" });
   return (
     <div className="card db-time">
       <div className="db-time-t">
@@ -50,6 +53,8 @@ export default function TimeToday() {
         <b>{hm(t.minutes)}</b>
         <span className="sub">{inNow ? `In since ${first ? first.time : t.time}` : t.punches.length ? "You are punched out" : t.canPunch ? "You have not punched in today" : "No punches yet today"}</span>
         {t.canPunch && where && <span className="sub">{where}</span>}
+        {missing && <span className="sub text-warn">Your punch-out on {dayName(missing.date)} is missing, so that day has no hours yet.{" "}
+          <Link className="font-bold text-accent underline" to={`/app/requests?new=missed-punch&date=${missing.date}`}>Request correction</Link></span>}
       </div>
       {t.canPunch
         ? <button type="button" className={`btn ${inNow ? "glass" : "primary"}`} disabled={busy} onClick={punch}>{busy ? (t.needLocation ? "Finding you…" : "Saving…") : inNow ? "Punch out" : "Punch in"}</button>

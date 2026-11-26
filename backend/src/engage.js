@@ -6,12 +6,16 @@ import { UPLOAD_DIR } from "./documents.js";
 import { MAX_BYTES, checkFile } from "./extract.js";
 import { pool } from "./db.js";
 import { requireAuth, unlessHidden } from "./auth.js";
-import { can, canAll, mayDecide, need, scopeOf } from "./access.js";
-import { notify } from "./notify.js";
+import { can, canAll, mayDecide, need, scopeOf, treeOf } from "./access.js";
+import { hrEmails, notify } from "./notify.js";
 import { readProof } from "./finance-rules.js";
-import { reportsOf } from "./teams.js";
+import { managerOf, reportsOf } from "./teams.js";
 import { financialYear, readAdvance, readAppLink, readArticle, readAttendanceRequest, readDecision, readGoal, readPoll, readPraise, readLateDecision, readLateRequest, readTaxDeclaration, readTaxDates, readUnlock, tally, windowOpen, joinerUntil, BOTH_REGIMES } from "./engage-rules.js";
 import { form124Pdf } from "./tax-forms.js";
+import { correctionRoute, policyOf as missingPolicyOf } from "./missing-punch-rules.js";
+import { NOW_SQL, ord } from "./work-day.js";
+import { shiftOn } from "./shift-rules.js";
+import { shiftsFor } from "./shifts.js";
 import { estimateTax, yearForReturn } from "./tax-estimate.js";
 import { postToChat } from "./chat.js";
 
@@ -211,14 +215,21 @@ export function engageRouter(wrap) {
   const REQ = {
     advance: { perm: "advances.approve", table: "advance_requests", cols: "id, email, amount_minor, currency, reason, status, decided_by, decided_at, decision_note, created_at", order: "created_at DESC",
       out: (x) => ({ amount: Number(x.amount_minor) / 100, currency: x.currency, reason: x.reason }), label: "advance request" },
-    attendance: { perm: "attendance.edit", table: "attendance_requests", cols: "id, email, to_char(on_date, 'YYYY-MM-DD') AS on_date, kind, note, status, decided_by, decided_at, decision_note, created_at", order: "created_at DESC",
-      out: (x) => ({ date: x.on_date, kind: x.kind, note: x.note }), label: "attendance request" },
+    // Attendance requests are also decided by anyone above the person in the reporting lines (their manager), as leave is.
+    attendance: { perm: "attendance.edit", table: "attendance_requests", team: true,
+      cols: "id, email, to_char(on_date, 'YYYY-MM-DD') AS on_date, kind, note, to_char(punch_time, 'HH24:MI') AS punch_time, direction, self_fix, status, decided_by, decided_at, decision_note, created_at", order: "created_at DESC",
+      out: (x) => ({ date: x.on_date, kind: x.kind, note: x.note, time: x.punch_time || null, direction: x.direction || null, selfFix: !!x.self_fix }), label: "attendance request" },
   };
   r.get("/api/requests/:type", wrap(async (req, res) => {
     const t = REQ[req.params.type];
     if (!t) return res.status(404).json({ error: "Not found." });
-    // scope=all: everyone the caller may decide for (null = the whole company), otherwise the caller's own.
-    const holds = await can(req, t.perm), scope = holds ? await scopeOf(req, t.perm) : new Set();
+    // scope=all: everyone the caller may decide for (null = the whole company), otherwise the caller's own. For attendance
+    // that includes everyone below the caller in the reporting lines.
+    const below = t.team ? await treeOf(me(req)) : new Set();
+    const granted = await can(req, t.perm);
+    const holds = granted || below.size > 0;
+    let scope = granted ? await scopeOf(req, t.perm) : new Set();
+    if (scope && below.size) scope = new Set([...scope, ...below]);
     const all = holds && req.query.scope === "all";
     const { rows } = await pool.query(`SELECT ${t.cols} FROM ${t.table} WHERE deleted_at IS NULL ${!all ? "AND lower(email) = $2" : scope ? "AND lower(email) = ANY($2)" : ""} ORDER BY ${t.order} LIMIT $1`,
       !all ? [100, me(req)] : scope ? [100, [...scope]] : [100]);
@@ -234,10 +245,54 @@ export function engageRouter(wrap) {
     res.status(201).json({ id: row.id });
   }));
   r.post("/api/requests/attendance", wrap(async (req, res) => {
-    const { date, kind, note, errors } = readAttendanceRequest(req.body);
+    const { rows: [w] } = await pool.query(NOW_SQL);
+    const now = { d: w.day, t: w.time.slice(0, 5) };   // the working day (it starts at 5 am, work-day.js) and the clock time
+    const { date, kind, note, time, direction, errors } = readAttendanceRequest(req.body, now.d, now.t);
     if (Object.keys(errors).length) return res.status(400).json({ errors });
-    const { rows: [row] } = await pool.query("INSERT INTO attendance_requests (email, on_date, kind, note) VALUES ($1,$2,$3,$4) RETURNING id", [me(req), date, kind, note]);
-    res.status(201).json({ id: row.id });
+    if (kind !== "missed-punch") {
+      const { rows: [row] } = await pool.query("INSERT INTO attendance_requests (email, on_date, kind, note) VALUES ($1,$2,$3,$4) RETURNING id", [me(req), date, kind, note]);
+      res.status(201).json({ id: row.id, status: "pending" });
+      const boss = await managerOf(pool, me(req));
+      notify([boss, ...(await hrEmails("attendance.edit"))].filter(Boolean), { title: "Attendance request to review", body: `A request about ${kind.replace(/-/g, " ")} on ${date} is waiting.`, link: boss ? "/app/team-requests" : "/app/hr-requests" }).catch(() => {});
+      return;
+    }
+    // A missed punch, as Keka handles it: within HR's limits (how far back, how many a month), the first few each month are added
+    // straight away with no approval (an adjustment); after that they go to the reporting manager and HR, either of whom approves.
+    const client = await pool.connect();
+    let out;
+    try {
+      await client.query("BEGIN");
+      const emp = (await client.query("SELECT id FROM employees WHERE lower(work_email)=$1 FOR UPDATE", [me(req)])).rows[0];
+      if (!emp) { await client.query("ROLLBACK"); return res.status(404).json({ error: "Your employee record was not found. Please ask the HR team to check your work email." }); }
+      const dup = await client.query("SELECT 1 FROM attendance_requests WHERE lower(email)=$1 AND on_date=$2 AND kind='missed-punch' AND status='pending' AND deleted_at IS NULL", [me(req), date]);
+      if (dup.rowCount) { await client.query("ROLLBACK"); return res.status(409).json({ error: "You already asked for a correction for this day. It is waiting for a decision." }); }
+      const policy = missingPolicyOf((await client.query("SELECT * FROM attendance_policy WHERE id=1")).rows[0]);
+      const { rows: [used] } = await client.query(
+        `SELECT count(*)::int AS requests, count(*) FILTER (WHERE self_fix)::int AS self_fixes FROM attendance_requests
+          WHERE lower(email)=$1 AND kind='missed-punch' AND deleted_at IS NULL AND status <> 'declined' AND date_trunc('month', on_date) = date_trunc('month', $2::date)`, [me(req), date]);
+      let route = correctionRoute({ date, today: now.d, policy, used: { requests: used.requests, selfFixes: used.self_fixes } });
+      if (route.selfFix && direction === "SHIFT") route = { approval: true };   // regularising a whole day always needs the manager or HR
+      if (route.refuse) { await client.query("ROLLBACK"); return res.status(409).json({ error: route.refuse }); }
+      const { rows: [row] } = await client.query(
+        `INSERT INTO attendance_requests (email, on_date, kind, note, punch_time, direction, self_fix, status, decided_by, decided_at)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING id`,
+        [me(req), date, kind, note, time, direction, !!route.selfFix, route.selfFix ? "approved" : "pending", route.selfFix ? "self (no approval needed)" : null, route.selfFix ? new Date() : null]);
+      if (route.selfFix) {
+        const there = await client.query("SELECT 1 FROM attendance_punches WHERE employee_id=$1 AND work_date=$2 AND punch_time=$3::time AND direction=$4", [emp.id, date, time, direction]);
+        if (!there.rowCount) await client.query("INSERT INTO attendance_punches (employee_id, work_date, punch_time, direction, source, note, created_by) VALUES ($1,$2,$3,$4,'request',$5,$6)",
+          [emp.id, date, time, direction, "Added by the employee (no approval needed)", me(req)]);
+        await client.query("INSERT INTO audit_log (action, work_email) VALUES ($1,$2)", [`Attendance: ${direction} at ${time} on ${date} added by the employee (${used.self_fixes + 1} of ${policy.selfFixPerMonth} without approval this month)`, me(req)]);
+      }
+      await client.query("COMMIT");
+      out = { id: row.id, status: route.selfFix ? "approved" : "pending", selfFix: !!route.selfFix, selfFixesLeft: Math.max(0, policy.selfFixPerMonth - used.self_fixes - (route.selfFix ? 1 : 0)) };
+    } catch (err) { await client.query("ROLLBACK"); throw err; } finally { client.release(); }
+    res.status(201).json(out);
+    if (out.selfFix) return;
+    // Waiting for approval: the reporting manager and the HR team are both told, and either decides.
+    const boss = await managerOf(pool, me(req));
+    const what = direction === "SHIFT" ? `regularising ${date} to the shift` : `a missed punch ${direction === "OUT" ? "out" : "in"} at ${time} on ${date}`;
+    if (boss) notify(boss, { title: "Attendance correction to review", body: `A request about ${what} is waiting for you.`, link: "/app/team-requests" }).catch(() => {});
+    notify("perm:attendance.edit", { title: "Attendance correction to review", body: `A request about ${what} is waiting.`, link: "/app/hr-requests" }).catch(() => {});
   }));
   r.post("/api/requests/:type/:id/decide", wrap(async (req, res) => {
     const t = REQ[req.params.type];
@@ -247,9 +302,42 @@ export function engageRouter(wrap) {
     // Whoever holds the permission for this person decides, but never on their own request.
     const { rows: [owner] } = await pool.query(`SELECT email FROM ${t.table} WHERE id=$1 AND deleted_at IS NULL`, [idOf(req.params.id)]);
     if (!owner) return res.status(404).json({ error: "This request is no longer available." });
-    if (!(await mayDecide(req, t.perm, owner.email))) return res.status(403).json(NO_ACCESS);
-    const { rows: [x] } = await pool.query(`UPDATE ${t.table} SET status=$2, decided_by=$3, decided_at=now(), decision_note=$4 WHERE id=$1 AND status='pending' AND deleted_at IS NULL RETURNING email`, [idOf(req.params.id), decision, me(req), note || null]);
-    if (!x) return res.status(409).json({ error: "This request has already been decided." });
+    const own = String(owner.email).toLowerCase() === me(req);
+    const above = t.team && !own && (await treeOf(me(req))).has(String(owner.email).toLowerCase());
+    if (!above && !(await mayDecide(req, t.perm, owner.email))) return res.status(403).json(NO_ACCESS);
+    const client = await pool.connect();
+    let x;
+    try {
+      await client.query("BEGIN");
+      x = (await client.query(`UPDATE ${t.table} SET status=$2, decided_by=$3, decided_at=now(), decision_note=$4 WHERE id=$1 AND status='pending' AND deleted_at IS NULL
+        RETURNING email${t.team ? ", kind, to_char(on_date,'YYYY-MM-DD') AS on_date, to_char(punch_time,'HH24:MI') AS punch_time, direction" : ""}`, [idOf(req.params.id), decision, me(req), note || null])).rows[0];
+      if (!x) { await client.query("ROLLBACK"); return res.status(409).json({ error: "This request has already been decided." }); }
+      // An approved missed punch with a time adds that punch, so the day is counted from the real times (unless it is already there).
+      // A day regularised to the shift (SHIFT) gets the shift's start and end, where the real punches do not already cover them.
+      if (t.team && decision === "approved" && x.kind === "missed-punch" && (x.punch_time || x.direction === "SHIFT")) {
+        const emp = (await client.query("SELECT id, work_email FROM employees WHERE lower(work_email)=lower($1)", [x.email])).rows[0];
+        if (emp) {
+          const have = (await client.query("SELECT to_char(punch_time,'HH24:MI') AS t, direction FROM attendance_punches WHERE employee_id=$1 AND work_date=$2", [emp.id, x.on_date])).rows;
+          const add = async (time, direction, why) => {
+            if (have.some((p) => p.t === time && p.direction === direction)) return;
+            await client.query("INSERT INTO attendance_punches (employee_id, work_date, punch_time, direction, source, note, created_by) VALUES ($1,$2,$3,$4,'request',$5,$6)",
+              [emp.id, x.on_date, time, direction, why, me(req)]);
+          };
+          if (x.direction === "SHIFT") {
+            const sh = await shiftsFor(client, x.on_date, x.on_date, [emp.work_email]);
+            const shift = shiftOn(sh.of(emp.work_email), sh.fallback, x.on_date);
+            const ins = have.filter((p) => p.direction === "IN").map((p) => ord(p.t)), outs = have.filter((p) => p.direction === "OUT").map((p) => ord(p.t));
+            if (!ins.length || Math.min(...ins) > ord(shift.start)) await add(shift.start, "IN", `Regularised to the shift by ${me(req)}`);
+            if (!outs.length || Math.max(...outs) < ord(shift.end)) await add(shift.end, "OUT", `Regularised to the shift by ${me(req)}`);
+            await client.query("INSERT INTO audit_log (action, work_email) VALUES ($1,$2)", [`Attendance: ${x.on_date} regularised to the shift (${shift.start} to ${shift.end}) by ${me(req)}`, x.email]);
+          } else {
+            await add(x.punch_time, x.direction, `Correction approved by ${me(req)}`);
+            await client.query("INSERT INTO audit_log (action, work_email) VALUES ($1,$2)", [`Attendance: ${x.direction} at ${x.punch_time} on ${x.on_date} added from an approved correction by ${me(req)}`, x.email]);
+          }
+        }
+      }
+      await client.query("COMMIT");
+    } catch (err) { await client.query("ROLLBACK"); throw err; } finally { client.release(); }
     res.json({ ok: true });
     notify(x.email, { title: `Your ${t.label} was ${decision}`, body: note || "", link: "/app/requests" }).catch(() => {});
   }));

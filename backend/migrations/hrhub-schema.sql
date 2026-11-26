@@ -922,6 +922,29 @@ CREATE TABLE IF NOT EXISTS attendance_requests (
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(), deleted_at TIMESTAMPTZ);
 CREATE INDEX IF NOT EXISTS attendance_requests_email ON attendance_requests (lower(email), on_date DESC) WHERE deleted_at IS NULL;
 CREATE INDEX IF NOT EXISTS attendance_requests_pending ON attendance_requests (created_at) WHERE deleted_at IS NULL AND status = 'pending';
+-- A missed punch names the punch and the real time (attendance regularisation); approving the request adds that punch.
+ALTER TABLE attendance_requests ADD COLUMN IF NOT EXISTS punch_time TIME;
+ALTER TABLE attendance_requests ADD COLUMN IF NOT EXISTS direction TEXT;
+-- A correction a person added themselves within the month's allowance (no approval needed, as Keka's adjustment).
+ALTER TABLE attendance_requests ADD COLUMN IF NOT EXISTS self_fix BOOLEAN NOT NULL DEFAULT false;
+CREATE INDEX IF NOT EXISTS attendance_requests_month ON attendance_requests (lower(email), on_date) WHERE deleted_at IS NULL AND kind = 'missed-punch';
+-- HR's missing punch-out policy (Shifts > Clock-in), one row: free days a month, the penalty after them (off until HR turns it on),
+-- corrections without approval, corrections a month in all, how far back, and the reminder before the shift ends.
+CREATE TABLE IF NOT EXISTS attendance_policy (
+  id INT PRIMARY KEY CHECK (id = 1), penalty_on BOOLEAN NOT NULL DEFAULT false, free_per_month INT NOT NULL DEFAULT 2,
+  penalty_days NUMERIC NOT NULL DEFAULT 0.5 CHECK (penalty_days IN (0.5, 1)), self_fix_per_month INT NOT NULL DEFAULT 2,
+  requests_per_month INT NOT NULL DEFAULT 5, days_back INT NOT NULL DEFAULT 7, remind_before_min INT NOT NULL DEFAULT 10,
+  updated_by TEXT, updated_at TIMESTAMPTZ NOT NULL DEFAULT now());
+-- The day the penalty was last switched on: only missing punch-outs from that day count, so nobody is penalised for days before it.
+ALTER TABLE attendance_policy ADD COLUMN IF NOT EXISTS penalty_from DATE;
+-- Missing punch-out penalties applied: one per person and day, with the leave entry that holds the deduction.
+CREATE TABLE IF NOT EXISTS attendance_penalties (
+  email TEXT NOT NULL, work_date DATE NOT NULL, leave_request_id INT, days NUMERIC NOT NULL, created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (email, work_date));
+-- Attendance reminders already sent (you are still punched in; your punch-out is missing), so each goes out once.
+CREATE TABLE IF NOT EXISTS attendance_reminders (
+  email TEXT NOT NULL, work_date DATE NOT NULL, kind TEXT NOT NULL, sent_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (email, work_date, kind));
 
 -- Tax declaration requests (2026-11-19): what a person tells payroll for one financial year: the regime they choose and
 -- the investments and expenses they plan to claim. Payroll reads it and then enters what it accepts into its own

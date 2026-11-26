@@ -86,6 +86,26 @@ async function tx(res, fn) {
   if (after) await after();
 }
 
+/**
+ * A missing punch-out penalty (attendance-reminders.js), as Keka deducts it: `days` (half or full) of casual leave on that day,
+ * taken from the balance, and loss of pay for whatever the balance cannot cover. It is an approved leave entry, so the
+ * balance, the leave pages and payroll's loss of pay all count it with no other change. Runs in the caller's transaction.
+ * Returns the leave entry, or null when the person is not found.
+ */
+export async function addPenaltyLeave(client, email, date, days, why) {
+  const emp = await lockEmployee(client, email);
+  if (!emp) return null;
+  const hist = await historyOf(client, emp.work_email);
+  const bal = L.balances(Number(date.slice(0, 4)), toEmp(emp), hist.requests, hist.compOffs);
+  const { paid, lop } = L.allocate("casual", days, bal);
+  const { rows: [out] } = await client.query(
+    `INSERT INTO leave_requests (work_email, type, from_date, to_date, half, days, paid_days, lop_days, reason, status, decided_at, decided_by, created_by, decision_note)
+     VALUES ($1,'casual',$2,$2,$3,$4,$5,$6,$7,'approved',now(),'attendance-penalty','attendance-penalty',$7) RETURNING *`,
+    [emp.work_email, date, days === 0.5 ? "second" : null, days, paid, lop, why]);
+  await audit(client, `Penalty for a missing punch-out on ${date}: ${plural(days)} (${plural(paid)} casual leave${lop ? `, ${plural(lop)} loss of pay` : ""})`, emp.work_email);
+  return toRequest(out);
+}
+
 export function leaveRouter(wrap) {
   const r = express.Router();
   r.use(["/api/leave", "/api/employees"], requireAuth);

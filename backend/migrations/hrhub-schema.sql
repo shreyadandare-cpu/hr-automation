@@ -922,6 +922,13 @@ CREATE TABLE IF NOT EXISTS attendance_requests (
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(), deleted_at TIMESTAMPTZ);
 CREATE INDEX IF NOT EXISTS attendance_requests_email ON attendance_requests (lower(email), on_date DESC) WHERE deleted_at IS NULL;
 CREATE INDEX IF NOT EXISTS attendance_requests_pending ON attendance_requests (created_at) WHERE deleted_at IS NULL AND status = 'pending';
+-- A missed punch names the punch and the real time (attendance regularisation); approving the request adds that punch.
+ALTER TABLE attendance_requests ADD COLUMN IF NOT EXISTS punch_time TIME;
+ALTER TABLE attendance_requests ADD COLUMN IF NOT EXISTS direction TEXT;
+-- Attendance reminders already sent (you are still punched in; your punch-out is missing), so each goes out once.
+CREATE TABLE IF NOT EXISTS attendance_reminders (
+  email TEXT NOT NULL, work_date DATE NOT NULL, kind TEXT NOT NULL, sent_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (email, work_date, kind));
 
 -- Tax declaration requests (2026-11-19): what a person tells payroll for one financial year: the regime they choose and
 -- the investments and expenses they plan to claim. Payroll reads it and then enters what it accepts into its own

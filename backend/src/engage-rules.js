@@ -74,7 +74,7 @@ export function readAdvance(b = {}) {
   return { amountMinor, reason, errors };
 }
 
-export function readAttendanceRequest(b = {}, today = new Date().toISOString().slice(0, 10)) {
+export function readAttendanceRequest(b = {}, today = new Date().toISOString().slice(0, 10), nowTime = null) {
   const errors = {};
   const date = text(b.date), kind = text(b.kind), note = text(b.note);
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || Number.isNaN(Date.parse(date + "T00:00:00Z"))) errors.date = "Please choose the date.";
@@ -84,8 +84,16 @@ export function readAttendanceRequest(b = {}, today = new Date().toISOString().s
     else if (kind === "missed-punch" && days > 0) errors.date = "A missed punch can only be reported for today or an earlier day.";
   }
   if (!ATTENDANCE_KINDS.includes(kind)) errors.kind = "Please choose what the request is about.";
-  if (!note) errors.note = "Please add a short note for HR."; else if (note.length > LIMITS.reason) errors.note = `Please keep the note under ${LIMITS.reason} characters.`;
-  return { date, kind, note, errors };
+  if (!note) errors.note = "Please add a short note."; else if (note.length > LIMITS.reason) errors.note = `Please keep the note under ${LIMITS.reason} characters.`;
+  // A missed punch says which punch and the real time (as Keka's attendance regularisation): approving it adds that punch.
+  let time = null, direction = null;
+  if (kind === "missed-punch") {
+    direction = b.direction === "IN" ? "IN" : "OUT";
+    time = text(b.time).slice(0, 5);
+    if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(time)) errors.time = direction === "OUT" ? "Please enter the time you left, like 18:45." : "Please enter the time you arrived, like 09:40.";
+    else if (!errors.date && date === today && nowTime && time > nowTime) errors.time = "That time has not come yet. Please check it.";
+  }
+  return { date, kind, note, time, direction, errors };
 }
 
 export function readDecision(b = {}) {

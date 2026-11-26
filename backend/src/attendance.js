@@ -17,6 +17,8 @@ const teamEmails = async (email) => Object.entries(await managerMap(pool)).filte
    with Saturday and Sunday off): a day is Present from the shift's full-day minutes (6 hours) and a Half day from its half-day
    minutes (3 hours); until the shift ends, today is "Working". Late arrival, early leaving and overtime are marked on each day. */
 const IST = "Asia/Kolkata";
+/** A finished day whose last punch is an IN (the person forgot to punch out). No hours are made up for it. */
+export const MISSING_OUT = "Punch-out missing";
 /** People who work from a place other than the office (a client site, another city) do not use the office machine, so no punches is not absent for them. */
 const offSite = (loc) => !!loc && !/office/i.test(String(loc));
 const hhmm = (t) => String(t).slice(0, 5);
@@ -51,7 +53,7 @@ function deriveDay(ps) {
 
 /** One person's days for a month. Past days get a status; days before they joined and in the future get none. `shiftFor(date)` is the
     person's shift that day (the roster, or the default). */
-function monthDays(month, punches, leave, holidays, emp, today, nowMin, shiftFor) {
+function monthDays(month, punches, leave, holidays, emp, today, nowMin, shiftFor, corrections = new Map()) {
   const [y, m] = month.split("-").map(Number);
   const last = new Date(Date.UTC(y, m, 0)).getUTCDate();
   const hol = new Map(holidays.map((h) => [h.day, h.name]));
@@ -65,30 +67,31 @@ function monthDays(month, punches, leave, holidays, emp, today, nowMin, shiftFor
     const ins = ps.filter((p) => p.direction === "IN"), outs = ps.filter((p) => p.direction === "OUT");
     const shift = shiftFor(date), shiftEnd = minutesOf(shift.end);
     const w = dd ? { minutes: dd.minutes, missingOut: dd.missingOut } : worked(ps, date === today ? nowMin : null);
-    // Forgot to punch out: once the day is over (midnight has passed), the hours are counted up to the end of the shift instead of being lost.
+    // Forgot to punch out (as in Keka, a missing swipe): once the day is over, no hours are made up. The day shows
+    // "Punch-out missing" and counts only the time between punches that were made, until the person asks for a correction
+    // with the time they left and their manager approves it (the punch is then added; see engage.js).
     const forgot = date < today && ps.length > 0 && w.missingOut;
-    if (forgot) w.minutes = Math.max(0, shiftEnd - mins(ps[0].time));
     const lv = leave.find((r) => r.from <= date && r.to >= date);
     const off = isWeeklyOff(shift, date) ? "Weekend" : hol.has(date) ? "Holiday" : null;
     let status = null;
     if (date > today || (emp.start && date < emp.start) || (emp.lastDay && date > emp.lastDay)) status = null;
-    else if (ps.length) status = date === today && nowMin < shiftEnd ? "Working" : date === today && w.minutes < shift.halfDayMinutes ? "Working" : statusFromMinutes(shift, w.minutes);
+    else if (ps.length) status = forgot ? MISSING_OUT : date === today && nowMin < shiftEnd ? "Working" : date === today && w.minutes < shift.halfDayMinutes ? "Working" : statusFromMinutes(shift, w.minutes);
     else if (lv) status = lv.half ? "Half day leave" : "On leave";
     else status = off || (offSite(emp.location) ? "Off-site" : "No punch");   // only an approved leave is shown as On leave; no punch and no leave is just No punch
-    if (status === "Present" && off) status = "Worked on " + off.toLowerCase();
+    if (/^Present/.test(status || "") && off) status = "Worked on " + off.toLowerCase();
     const firstIn = ins[0] ? ins[0].time : ps.length ? ps[0].time : null, lastOut = outs.length ? outs[outs.length - 1].time : null;
     // Late, early and overtime on a working day; a forgotten punch out says nothing about leaving early or staying late.
     const marks = status ? dayMarks(shift, { firstIn, lastOut: forgot ? null : lastOut, minutes: forgot ? 0 : w.minutes, workingDay: !off, finished: date < today || (date === today && nowMin >= shiftEnd) }) : dayMarks(shift);
     days.push({ date, status, off, holiday: hol.get(date) || null, firstIn: ins[0] ? ins[0].time : null, lastOut,
       shift: { id: shift.id, name: shift.name, start: shift.start, end: shift.end, isDefault: !!shift.isDefault }, ...marks,
-      minutes: w.minutes, missingOut: w.missingOut && date !== today && !forgot, forgotOut: forgot, countedTo: forgot ? shift.end : null, missingSwipe: !!(dd && dd.missingSwipe), site: status === "Off-site" ? emp.location : null, punches: ps });
+      minutes: w.minutes, missingOut: w.missingOut && date !== today && !forgot, forgotOut: forgot, correction: forgot ? corrections.get(date) || null : null, missingSwipe: !!(dd && dd.missingSwipe), site: status === "Off-site" ? emp.location : null, punches: ps });
   }
   return days;
 }
 const summarize = (days) => {
   const c = (f) => days.filter(f).length;
   return { present: c((d) => /^(Present|Worked on)/.test(d.status || "")), half: c((d) => d.status === "Half day"), leave: c((d) => /leave$/i.test(d.status || "")),
-    absent: 0, offsite: c((d) => d.status === "Off-site"), short: c((d) => d.status === "Short hours"), minutes: days.reduce((n, d) => n + d.minutes, 0),
+    absent: 0, missingOut: c((d) => d.forgotOut), offsite: c((d) => d.status === "Off-site"), short: c((d) => d.status === "Short hours"), minutes: days.reduce((n, d) => n + d.minutes, 0),
     late: c((d) => d.late), early: c((d) => d.early), overtimeMinutes: days.reduce((n, d) => n + (d.overtimeMinutes || 0), 0) };
 };
 
@@ -102,7 +105,7 @@ const monthRange = (month) => {
 };
 async function monthOf(emp, month) {
   const [from, to] = monthRange(month);
-  const [p, l, h, now, sh] = await Promise.all([
+  const [p, l, h, now, sh, cr] = await Promise.all([
     pool.query(`SELECT id, to_char(work_date,'YYYY-MM-DD') AS work_date, punch_time, direction, source, note, site_name, distance_m, outside FROM attendance_punches
                 WHERE employee_id=$1 AND work_date BETWEEN $2 AND $3 ORDER BY work_date, punch_time, id`, [emp.id, from, to]),
     pool.query(`SELECT to_char(from_date,'YYYY-MM-DD') AS f, to_char(to_date,'YYYY-MM-DD') AS t, half FROM leave_requests
@@ -110,12 +113,24 @@ async function monthOf(emp, month) {
     pool.query("SELECT to_char(day,'YYYY-MM-DD') AS day, name FROM holidays WHERE day BETWEEN $1 AND $2", [from, to]),
     nowIst(pool),
     shiftsFor(pool, from, to, [emp.work_email]),
+    pool.query(`SELECT DISTINCT ON (on_date) to_char(on_date,'YYYY-MM-DD') AS d, status FROM attendance_requests
+                WHERE lower(email)=$1 AND kind='missed-punch' AND deleted_at IS NULL AND on_date BETWEEN $2 AND $3 ORDER BY on_date, created_at DESC`, [emp.work_email.toLowerCase(), from, to]),
   ]);
+  const corrections = new Map(cr.rows.map((x) => [x.d, x.status]));
   const mine = sh.of(emp.work_email);
   const days = monthDays(month, p.rows.map(toPunch), l.rows.map((r) => ({ from: r.f, to: r.t, half: r.half })), h.rows,
     { start: emp.start_date && String(emp.start_date).slice(0, 10), lastDay: emp.last_day && String(emp.last_day).slice(0, 10), location: emp.work_location }, now.day, mins(now.time),
-    (date) => shiftOn(mine, sh.fallback, date));
+    (date) => shiftOn(mine, sh.fallback, date), corrections);
   return { email: emp.work_email, name: emp.name, month, days, summary: summarize(days), today: now.day };
+}
+
+/** The last 14 days (before today) whose punch-out is missing and has no correction asked for or approved yet, newest first. */
+async function missingOutsOf(emp, today) {
+  const from = new Date(Date.parse(today + "T00:00:00Z") - 14 * 86400000).toISOString().slice(0, 10);
+  const months = [...new Set([from.slice(0, 7), today.slice(0, 7)])];
+  const days = (await Promise.all(months.map((m) => monthOf(emp, m)))).flatMap((x) => x.days);
+  return days.filter((d) => d.forgotOut && d.date >= from && d.date < today && !["pending", "approved"].includes(d.correction))
+    .sort((a, b) => (a.date < b.date ? 1 : -1)).slice(0, 5).map((d) => ({ date: d.date, firstIn: d.firstIn }));
 }
 
 /** Everyone's month at once (or only `emails`): one query per kind of data, then matched in memory. Returns [{ emp, days, summary }]
@@ -171,9 +186,9 @@ export function attendanceRouter(wrap) {
     const ps = (await pool.query(`SELECT id, to_char(work_date,'YYYY-MM-DD') AS work_date, punch_time, direction, source, note, site_name, distance_m, outside FROM attendance_punches
       WHERE employee_id=$1 AND work_date=$2 ORDER BY punch_time, id`, [emp.id, now.day])).rows.map(toPunch);
     const w = worked(ps, mins(now.time));
-    const pol = await clockPolicy();
+    const [pol, missingOut] = await Promise.all([clockPolicy(), missingOutsOf(emp, now.day)]);
     res.json({ date: now.day, time: hhmm(now.time), punches: ps, state: ps.length && ps[ps.length - 1].direction === "IN" ? "in" : "out", minutes: w.minutes,
-      canPunch: pol.enabled, needLocation: pol.enabled && pol.needLocation });
+      canPunch: pol.enabled, needLocation: pol.enabled && pol.needLocation, missingOut });
   }));
 
   // Who is in right now, for the directory and the dashboard (everyone signed in may read it). People who work away from the
@@ -301,12 +316,11 @@ export function attendanceRouter(wrap) {
       const dd = date !== now.day && mine.some((p) => p.source === "device") ? deriveDay(mine) : null;   // same in/out rule as a person's own month
       if (dd) mine = dd.punches;
       const w = dd ? { minutes: dd.minutes, missingOut: dd.missingOut } : worked(mine, date === now.day ? mins(now.time) : null), l = lv.rows.find((x) => x.e === e.work_email.toLowerCase());
-      const forgot = date < now.day && mine.length > 0 && w.missingOut;   // forgot to punch out: counted to the end of the shift once the day is over
-      if (forgot) w.minutes = Math.max(0, shiftEnd - mins(mine[0].time));
+      const forgot = date < now.day && mine.length > 0 && w.missingOut;   // forgot to punch out: no hours are made up (see monthDays)
       const ins = mine.filter((p) => p.direction === "IN"), outs = mine.filter((p) => p.direction === "OUT");
       let status;
       if (date > now.day) status = null;
-      else if (mine.length) status = date === now.day && mins(now.time) < shiftEnd ? "Working" : date === now.day && w.minutes < shift.halfDayMinutes ? "Working" : statusFromMinutes(shift, w.minutes);
+      else if (mine.length) status = forgot ? MISSING_OUT : date === now.day && mins(now.time) < shiftEnd ? "Working" : date === now.day && w.minutes < shift.halfDayMinutes ? "Working" : statusFromMinutes(shift, w.minutes);
       else status = l ? (l.half ? "Half day leave" : "On leave") : off || (offSite(e.work_location) ? "Off-site" : "No punch");
       const firstIn = ins[0] ? ins[0].time : mine.length ? mine[0].time : null, lastOut = outs.length ? outs[outs.length - 1].time : null;
       const marks = status ? dayMarks(shift, { firstIn, lastOut: forgot ? null : lastOut, minutes: forgot ? 0 : w.minutes, workingDay: !off, finished: date < now.day || mins(now.time) >= shiftEnd }) : dayMarks(shift);

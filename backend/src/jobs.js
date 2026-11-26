@@ -9,6 +9,7 @@ import { runLeaveDigest } from "./leave-digest.js";
 import { runClaudeReminders } from "./claude-requests.js";
 import { runCelebrationAlerts, runScheduledCelebrations } from "./celebrations.js";
 import { runTaxReminders } from "./tax-reminders.js";
+import { runAttendanceReminders } from "./attendance-reminders.js";
 import { startPortalAttendanceSync } from "./portal-attendance.js";
 import { startGmailIntel } from "./gmail-intel-routes.js";
 
@@ -17,6 +18,10 @@ export function startBackgroundJobs() {
   const checkDue = () => runDue().catch((err) => console.error("Scheduled offboarding check failed:", err));
   checkDue();
   setInterval(checkDue, 60_000);
+  // Attendance reminders (attendance-reminders.js): still punched in after the shift, and a missing punch-out the next morning; every 10 minutes.
+  const checkAttendance = () => runAttendanceReminders().catch((err) => console.error("Attendance reminder check failed:", err));
+  checkAttendance();
+  setInterval(checkAttendance, 10 * 60_000);
   // Invites nobody accepted within 30 minutes are cancelled.
   const sweepInvites = () => expireInvites().catch((err) => console.error("Invite cleanup failed:", err));
   sweepInvites();

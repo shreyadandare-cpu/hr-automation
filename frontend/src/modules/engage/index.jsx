@@ -17,6 +17,7 @@ export const routes = [
   { path: "/app/apps", element: <Apps /> },
   { path: "/app/requests", element: <Requests /> },
   { path: "/app/hr-requests", element: <Requests all /> },
+  { path: "/app/team-requests", element: <Requests team only="attendance" /> },
   { path: "/app/tax", element: <Tax /> },
   { path: "/app/goals", element: <Goals /> },
 ];

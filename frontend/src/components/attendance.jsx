@@ -169,28 +169,29 @@ export function TimingsCard({ today, punches, minutesToday, now, h24, byMonth = 
   );
 }
 
-/** A message for the person who forgot to punch out: it lists the finished days (from the last week) with a single punch, and says what was counted.
-    Each day is shown once on this browser; "Got it" remembers it. */
-export function ForgotPunchPopup({ byMonth, today, h24 }) {
-  const KEY = "att-forgot-seen";
+/** A message for the person who forgot to punch out (Keka's "missing swipe"): the finished days of the last week with no punch-out and
+    no correction asked for. No hours are made up for them; each day has a button that opens the correction form. "Later" hides it
+    for this browser until a new day is missing. */
+export function ForgotPunchPopup({ byMonth, today, h24, onCorrect }) {
+  const KEY = "att-missing-seen";
   const seen = () => { try { return JSON.parse(localStorage.getItem(KEY) || "[]"); } catch { return []; } };
   const [done, setDone] = useState(false);
   const from = addDays(today, -7);
-  const days = daysIn(byMonth, from, addDays(today, -1)).filter((d) => d.forgotOut && !seen().includes(d.date));
+  const days = daysIn(byMonth, from, addDays(today, -1)).filter((d) => d.forgotOut && !["pending", "approved"].includes(d.correction) && !seen().includes(d.date));
   if (done || !days.length) return null;
   const close = () => { try { localStorage.setItem(KEY, JSON.stringify([...new Set([...seen(), ...days.map((d) => d.date)])].slice(-60))); } catch {} setDone(true); };
   return (
     <Modal onClose={close}>
-      <div className="card-h" style={{ paddingTop: 24 }}><h3>You forgot to punch out</h3></div>
+      <div className="card-h" style={{ paddingTop: 24 }}><h3>Your punch-out is missing</h3></div>
       <div className="card-b">
-        <p style={{ margin: 0 }}>{days.length === 1 ? "There is only one punch for this day, so we counted your hours until the end of your shift." : "There is only one punch on each of these days, so we counted your hours until the end of your shift."}</p>
+        <p style={{ margin: 0 }}>{days.length === 1 ? "This day has no punch-out, so no hours are counted for it yet." : "These days have no punch-out, so no hours are counted for them yet."} Please send a correction with the time you left. Your reporting manager approves it.</p>
         {days.map((d) => (
-          <div key={d.date} className="card" style={{ padding: "12px 16px" }}>
-            <b>{dayText(d.date)}</b><div className="muted">Punched in at {clock(d.firstIn, h24)}, no punch out. Counted until {clock(shiftOf(d).end, h24)}: <b style={{ color: "var(--ink)" }}>{dur(d.minutes)}</b>.</div>
+          <div key={d.date} className="card" style={{ padding: "12px 16px", display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+            <div style={{ flex: 1, minWidth: 180 }}><b>{dayText(d.date)}</b><div className="muted">Punched in at {clock(d.firstIn, h24)}, no punch-out.</div></div>
+            {onCorrect && <button type="button" className="btn primary sm" onClick={() => { setDone(true); onCorrect(d); }}>Request correction</button>}
           </div>))}
-        <p className="muted" style={{ margin: 0 }}>If you left at a different time, ask HR to add your punch out. Please punch out every day.</p>
       </div>
-      <div className="modal-f"><button type="button" className="btn primary" onClick={close}>Got it</button></div>
+      <div className="modal-f"><button type="button" className="btn glass" onClick={close}>Later</button></div>
     </Modal>
   );
 }
@@ -201,7 +202,7 @@ const POLICY = {
     ["No Attendance", "You won't be penalised for any leave if there is no attendance logged by you."],
     ["Late Arrival", "You won't be penalised for any late arrival incidents."],
     ["Work Hours", "There is no penalisation for number of work hours you spend in office."],
-    ["Missing Swipes", "There is no penalisation for Missing Swipes, but it is recommended to regularise your attendance."],
+    ["Missing punch-out", "A day with no punch-out shows Punch-out missing and counts no hours until it is corrected; nothing is filled in for you. Send a correction with the time you left, from the day in your log. Your reporting manager approves it and the punch is added. You are reminded when you are still punched in after your shift, and the next morning if a punch-out is missing."],
   ] },
   track: { label: "Time tracking policy", intro: "Below are the details of time tracking policy assigned to you", items: [
     ["Bio-Metric & Web Clock-In", "Your attendance is automatically tracked using biometric device(s)."],
@@ -251,7 +252,7 @@ export function ActionsCard({ today, state, punches, onPunch, busy, now, h24 }) 
 /* ---- the log, and the calendar ---- */
 const LOG_ICON = { ok: "On track", warn: "Check", live: "Live" };
 function logIcon(d, today) {
-  if (d.forgotOut) return ["warn", `Forgot to punch out: the hours are counted until the end of the shift (${clock(shiftOf(d).end)})`];
+  if (d.forgotOut) return ["warn", d.correction === "pending" ? "Punch-out missing: your correction is waiting for approval" : "Punch-out missing: no hours are counted until it is corrected"];
   if (d.missingOut) return ["warn", "No punch out"];
   if (d.missingSwipe) return ["warn", "A punch in the middle has no matching return: ask HR to check the day"];
   if (d.status === "Working") return ["live", "Still working"];
@@ -259,7 +260,7 @@ function logIcon(d, today) {
   return ["warn", d.status];
 }
 
-function Row({ d, today, nowMin, h24, canEdit, onRemove }) {
+function Row({ d, today, nowMin, h24, canEdit, onRemove, onCorrect }) {
   const [open, setOpen] = useState(false);
   const k = kind(d, today);
   const tag = k === "weekend" ? <span className="att-tag off">W-OFF</span> : k === "holiday" ? <span className="att-tag hol">HLDY</span> : null;
@@ -272,14 +273,15 @@ function Row({ d, today, nowMin, h24, canEdit, onRemove }) {
       <>
         <tr className={`${rowClass} click`} onClick={() => setOpen(!open)} tabIndex={0} onKeyDown={(e) => e.key === "Enter" && setOpen(!open)} aria-expanded={open}>
           {date}
-          <td><DayBar firstIn={d.firstIn} lastOut={d.lastOut || (d.forgotOut ? shiftOf(d).end : null)} open={!d.lastOut && !d.forgotOut} /></td>
+          <td><DayBar firstIn={d.firstIn} lastOut={d.lastOut} open={!d.lastOut && !d.forgotOut} /></td>
           <td className="num-cell">{dur(brk)}</td>
-          <td className="num-cell">{d.forgotOut ? <>{dur(d.minutes)}<div className="muted" style={{ fontSize: 12 }}>counted to {clock(shiftOf(d).end, h24)}</div></> : gross === null ? <span className="muted">No punch out</span> : dur(gross)}</td>
-          <td><span className={`att-chip ${tone}`} title={tip}>{d.forgotOut ? "Forgot punch out" : /^Half day/.test(d.status || "") ? "Half day" : LOG_ICON[tone]}</span></td>
+          <td className="num-cell">{d.forgotOut ? <>{dur(d.minutes)}<div className="muted" style={{ fontSize: 13 }}>{d.correction === "pending" ? "Correction waiting" : "Punch-out missing"}</div>
+            {onCorrect && !["pending", "approved"].includes(d.correction) && <button type="button" className="btn link sm" onClick={(e) => { e.stopPropagation(); onCorrect(d); }}>Request correction</button>}</> : gross === null ? <span className="muted">No punch out</span> : dur(gross)}</td>
+          <td><span className={`att-chip ${tone}`} title={tip}>{d.forgotOut ? (d.correction === "pending" ? "Waiting" : "Missing") : /^Half day/.test(d.status || "") ? "Half day" : LOG_ICON[tone]}</span></td>
         </tr>
         {open && <tr className="att-detail"><td colSpan="5">
           <div className="att-punches">{[d.punches.find((p) => p.direction === "IN"), [...d.punches].reverse().find((p) => p.direction === "OUT")].filter(Boolean).map((p) => (
-            <span key={p.id}><b>{p.direction}</b> {clock(p.time, h24)}{p.source === "hr" ? ` (HR: ${p.note || ""})` : p.source === "device" ? " (office device)" : p.source === "web" ? " (app)" : ""}<PunchPlace p={p} />
+            <span key={p.id}><b>{p.direction}</b> {clock(p.time, h24)}{p.source === "hr" ? ` (HR: ${p.note || ""})` : p.source === "request" ? " (approved correction)" : p.source === "device" ? " (office device)" : p.source === "web" ? " (app)" : ""}<PunchPlace p={p} />
               {canEdit && <> <button type="button" className="btn link sm" aria-label={`Remove ${p.direction} at ${p.time}`} onClick={(e) => { e.stopPropagation(); onRemove(p.id); }}>Remove</button></>}</span>))}
             <span className="muted">{d.status}{d.off ? ` · ${d.off.toLowerCase()}` : ""}{d.shift && !d.shift.isDefault ? ` · ${d.shift.name}` : ""}</span> <DayMarks d={d} /></div>
         </td></tr>}
@@ -317,7 +319,7 @@ function Calendar({ byMonth, ensure, today, h24 }) {
   );
 }
 
-export function AttendanceLog({ months, today, canEdit = false, onRemove = () => {} }) {
+export function AttendanceLog({ months, today, canEdit = false, onRemove = () => {}, onCorrect }) {
   const { byMonth, error, ensure } = months;
   const now = useNow(30000);
   const [h24, setH24] = useH24();
@@ -350,7 +352,7 @@ export function AttendanceLog({ months, today, canEdit = false, onRemove = () =>
               <thead><tr><th>Date</th><th>Time on site</th><th className="num-cell">Break</th><th className="num-cell">Hours</th><th>Log</th></tr></thead>
               <tbody>
                 {loading && <TableSkeletonRow cols={5} />}
-                {days.filter((d) => kind(d, today) !== "none").map((d) => <Row key={d.date} d={d} today={today} nowMin={now.minutes} h24={h24} canEdit={canEdit} onRemove={onRemove} />)}
+                {days.filter((d) => kind(d, today) !== "none").map((d) => <Row key={d.date} d={d} today={today} nowMin={now.minutes} h24={h24} canEdit={canEdit} onRemove={onRemove} onCorrect={onCorrect} />)}
               </tbody>
             </table></div>
           </>)}

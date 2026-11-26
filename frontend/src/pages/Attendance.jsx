@@ -3,14 +3,14 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { api, apiMsg } from "../api.js";
 import { useAuth } from "../auth.jsx";
 import { Callout, DownloadIcon, Person, Pill, SectionHead, Stat, hours, shortDate, ViewTabs, ListSkeleton, TableSkeletonRow } from "../components/ui.jsx";
-import Requests from "../modules/engage/Requests.jsx";
+import Requests, { NewRequest } from "../modules/engage/Requests.jsx";
 import { ActionsCard, AttendanceLog, DayCell, DayMarks, ForgotPunchPopup, StatsCard, TimingsCard, istNow, useH24, useMonths, useNow } from "../components/attendance.jsx";
 import Pager, { usePaged } from "../components/Pager.jsx";
 import { useData } from "../data.jsx";
 import { scopeSet } from "../lib/useLeave.js";
 import Modal, { Field } from "../components/Modal.jsx";
 
-const TONE = { Present: "ok", "Half day": "warn", Working: "info", "Short hours": "warn", "On leave": "info", "No punch": "mute", "Half day leave": "info", Weekend: "mute", Holiday: "mute", "Off-site": "info" };
+const TONE = { "Punch-out missing": "warn", Present: "ok", "Half day": "warn", Working: "info", "Short hours": "warn", "On leave": "info", "No punch": "mute", "Half day leave": "info", Weekend: "mute", Holiday: "mute", "Off-site": "info" };
 const StatusPill = ({ status }) => (status ? <Pill tone={TONE[status] || (/^Worked/.test(status) ? "ok" : "mute")}>{status}</Pill> : <span className="muted">—</span>);
 
 /* Everyone for one day: the people this person may see (everyone with company-wide access), or a reporting manager's team. */
@@ -27,7 +27,7 @@ function DayTable({ day, onOpen, onFix, canFix }) {
       <div className="grid g3">
         <Stat value={people.filter((x) => /^(Present|Working|Half day)$/.test(x.status || "")).length} label="Punched in" />
         <Stat value={people.filter((x) => /leave$/i.test(x.status || "")).length} label="On leave" />
-        <Stat value={people.filter((x) => x.missingOut).length} label="No punch out" />
+        <Stat value={people.filter((x) => x.missingOut || x.forgotOut).length} label="No punch out" />
       </div>
       {day.off && <p className="muted">{day.holiday || day.off}: no attendance is expected on this day.</p>}
       <div className="card">
@@ -40,7 +40,7 @@ function DayTable({ day, onOpen, onFix, canFix }) {
           <tr key={x.email} className="click" tabIndex={0} onClick={() => onOpen(x)} onKeyDown={(e) => e.key === "Enter" && onOpen(x)}>
             <td><Person name={x.name} sub={x.title || x.email} /></td>
             <td><StatusPill status={x.status} />{x.missingOut && <> <Pill tone="warn">No punch out</Pill></>} <DayMarks d={x} />{x.shift && !x.shift.isDefault && <div className="text-[13px] text-ink-faint">{x.shift.name}</div>}</td>
-            <td>{x.firstIn || "—"}</td><td>{x.lastPunch ? <>{x.lastPunch}{x.punchCount > 1 ? "" : <span className="muted"> · only punch</span>}</> : "—"}</td><td className="hide-sm"><DayCell x={x} /></td><td>{x.forgotOut ? <>{hours(x.minutes)}<div className="muted" style={{ fontSize: 12 }}>forgot to punch out</div></> : x.minutes ? hours(x.minutes) : x.punchCount ? <span className="muted">{x.missingOut ? "No punch out" : "Just started"}</span> : "—"}</td>
+            <td>{x.firstIn || "—"}</td><td>{x.lastPunch ? <>{x.lastPunch}{x.punchCount > 1 ? "" : <span className="muted"> · only punch</span>}</> : "—"}</td><td className="hide-sm"><DayCell x={x} /></td><td>{x.forgotOut ? <>{x.minutes ? hours(x.minutes) : "—"}<div className="muted" style={{ fontSize: 13 }}>no punch-out, not counted</div></> : x.minutes ? hours(x.minutes) : x.punchCount ? <span className="muted">{x.missingOut ? "No punch out" : "Just started"}</span> : "—"}</td>
           {onFix && <td>{day.date < day.today && (x.status === "No punch" || x.missingOut || x.forgotOut) && (!canFix || canFix(x))
               ? <button type="button" className="btn glass sm" onClick={(e) => { e.stopPropagation(); onFix(x); }}>Fix</button> : null}</td>}
           </tr>
@@ -320,6 +320,7 @@ export default function Attendance({ onlyMine = false }) {
   const [error, setError] = useState("");
   const [tab, setTab] = useState("day");      // HR: the day view or the monthly report
   const [fixing, setFixing] = useState(null);  // HR: the person whose day is being fixed
+  const [correcting, setCorrecting] = useState(null);   // my own day with no punch-out: the correction form is open for it
   const [toast, setToast] = useState("");
   const now = useNow(1000);
   const [h24] = useH24();
@@ -364,8 +365,10 @@ export default function Attendance({ onlyMine = false }) {
             <div className="att-col"><h3 className="att-h">Today's shift</h3><TimingsCard today={today.date} punches={today.punches} minutesToday={today.minutes} now={now} h24={h24} byMonth={mine.byMonth} /></div>
             <div className="att-col"><h3 className="att-h">Punch clock</h3><ActionsCard today={today.date} state={today.state} punches={today.punches} now={now} h24={h24} onPunch={today.canPunch ? punch : undefined} busy={punching} /></div>
           </div>
-          <ForgotPunchPopup byMonth={mine.byMonth} today={today.date} h24={h24} />
-          <AttendanceLog months={mine} today={today.date} />
+          <ForgotPunchPopup byMonth={mine.byMonth} today={today.date} h24={h24} onCorrect={setCorrecting} />
+          <AttendanceLog months={mine} today={today.date} onCorrect={setCorrecting} />
+          {correcting && <NewRequest type="attendance" initial={{ kind: "missed-punch", date: correcting.date, direction: "OUT" }} onClose={() => setCorrecting(null)}
+            onDone={() => { setCorrecting(null); say("Your correction was sent for approval."); mine.refresh(); loadToday(); }} />}
         </>
       ) : error ? <div className="empty">{error}</div> : <ListSkeleton />}
     </>
@@ -391,7 +394,7 @@ export default function Attendance({ onlyMine = false }) {
   // Everyone else: my own attendance only.
   return (
     <section className="section">
-      <SectionHead eyebrow="Me" title="My attendance" sub={today && today.canPunch ? "Punch in when you start and out when you finish. Your hours and days are counted from those punches. You see only your own attendance here. If a punch is missing, please raise a request or ask HR to add it." : "Your attendance is recorded by the office biometric machine, and your hours and days are counted from those punches. You see only your own attendance here. If a punch is missing, please raise a request or ask HR to add it."} />
+      <SectionHead eyebrow="Me" title="My attendance" sub={today && today.canPunch ? "Punch in when you start and out when you finish. Your hours and days are counted from those punches. You see only your own attendance here. If you forget a punch, send a correction from that day; your reporting manager approves it." : "Your attendance is recorded by the office biometric machine, and your hours and days are counted from those punches. You see only your own attendance here. If you forget a punch, send a correction from that day; your reporting manager approves it."} />
       <ViewTabs label="My attendance" view={myTab} onView={setMyTab} views={[["log", "Attendance log"], ["requests", "Attendance requests"]]} />
       {error && <Callout>{error}</Callout>}
       {myTab === "requests" ? <Requests only="attendance" embedded /> : myView}

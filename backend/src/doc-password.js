@@ -15,7 +15,7 @@ import { notify } from "./notify.js";
  *   POST /api/document-password/lock     closes them again
  *
  * Only a scrypt hash is stored (document_passwords). While unlocked, the password is kept in this server's memory, never on disk,
- * because a payslip PDF is locked with it (pdfkit needs the password itself); it is dropped when the time is up or on lock.
+ * because the files sent out are locked with it (pdf-lock.js needs the password itself); it is dropped when the time is up or on lock.
  * Five wrong tries (unlock or change) lock the person out for 15 minutes; each try is counted before it is checked, so tries sent
  * at the same moment cannot get round the limit. Unlocks and tries live in this server's memory: Wohlig One runs as one server
  * process (docker-compose.yml); a restart locks everything again.
@@ -75,12 +75,6 @@ export function unlockedPassword(req) {
 /** Route guard for personal documents and payslip PDFs: the person must have unlocked with their document password. */
 export const needDocUnlock = (req, res, next) => (unlockedPassword(req) ? next()
   : res.status(423).json({ error: "Please enter your document password to open this file.", locked: true }));
-
-/** pdfkit options that lock a PDF with `password`: it opens only with it, and can be printed but not changed or copied from. */
-export const pdfLock = (password) => !password ? {} : {
-  userPassword: password, ownerPassword: crypto.randomBytes(24).toString("base64"), pdfVersion: "1.7ext3",
-  permissions: { printing: "highResolution", modifying: false, copying: false, annotating: false, fillingForms: false, contentAccessibility: true, documentAssembly: false },
-};
 
 const readPassword = (b) => {
   const p = typeof b?.password === "string" ? b.password : "";

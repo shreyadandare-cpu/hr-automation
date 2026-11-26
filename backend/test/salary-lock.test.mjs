@@ -6,7 +6,6 @@ import os from "node:os";
 import path from "node:path";
 import PDFDocument from "pdfkit";
 import { ENC_SUFFIX, openFile, readStored, sealFile } from "../src/file-crypt.js";
-import { pdfLock } from "../src/doc-password.js";
 import { check } from "../src/payroll/workflow.js";
 
 const withKey = async (fn) => {
@@ -32,15 +31,16 @@ test("documents are encrypted on disk and read back only with the key", () => wi
   assert.throws(() => openFile(body), "another key cannot read it");
 }));
 
-test("a payslip PDF made with the document password is encrypted", async () => {
-  const doc = new PDFDocument({ size: "A4", ...pdfLock("correct horse battery") });
+test("a drawn PDF (payslip, Form 124) is locked with AES-256 and the document password", async () => {
+  const { lockedPdfOf } = await import("../src/pdf-lock.js");
+  const doc = new PDFDocument({ size: "A4" });
   const parts = []; doc.on("data", (c) => parts.push(c));
   const done = new Promise((r) => doc.on("end", r));
   doc.text("Net pay 12,345"); doc.end(); await done;
-  const pdf = Buffer.concat(parts).toString("latin1");
+  const pdf = (await lockedPdfOf(Buffer.concat(parts), "application/pdf", "correct horse battery")).toString("latin1");
   assert.match(pdf, /\/Encrypt/, "the file carries an encryption dictionary");
+  assert.match(pdf, /\/CFM \/AESV3/, "AES-256");
   assert.ok(!pdf.includes("Net pay"), "the text is not readable without the password");
-  assert.deepEqual(pdfLock(null), {}, "no password, no lock");
 });
 
 test("the only salary owner may approve a payroll they prepared; otherwise maker-checker stays", () => {
@@ -72,4 +72,26 @@ test("the Claude Code salary guard blocks secrets, dumps and salary queries, and
   assert.equal(run("Read", { file_path: "/x/backend/.env" }), 2);
   assert.equal(run("Read", { file_path: "/x/backend/uploads/a.pdf" }), 2);
   assert.equal(run("Read", { file_path: "/x/backend/src/payroll/schema.sql" }), 0);
+});
+
+test("uploaded PDFs and photos leave as PDFs locked with the document password", async () => {
+  const zlib = await import("node:zlib");
+  const { PDFDocument, EncryptedPDFError } = await import("@cantoo/pdf-lib");
+  const { lockedPdfOf, pdfName } = await import("../src/pdf-lock.js");
+  // A 1x1 PNG, built by hand.
+  const crc = (b) => { let c = ~0; for (const x of b) { c ^= x; for (let k = 0; k < 8; k++) c = (c >>> 1) ^ (0xedb88320 & -(c & 1)); } return ~c >>> 0; };
+  const chunk = (t, d) => { const len = Buffer.alloc(4); len.writeUInt32BE(d.length); const td = Buffer.concat([Buffer.from(t), d]); const c = Buffer.alloc(4); c.writeUInt32BE(crc(td)); return Buffer.concat([len, td, c]); };
+  const ihdr = Buffer.from([0, 0, 0, 1, 0, 0, 0, 1, 8, 2, 0, 0, 0]);
+  const png = Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), chunk("IHDR", ihdr), chunk("IDAT", zlib.deflateSync(Buffer.from([0, 200, 30, 60]))), chunk("IEND", Buffer.alloc(0))]);
+  const plainDoc = await PDFDocument.create(); plainDoc.addPage().drawText("PAN ABCDE1234F"); const plainPdf = Buffer.from(await plainDoc.save());
+  const isLocked = async (buf) => { try { await PDFDocument.load(buf); return false; } catch (e) { return e instanceof EncryptedPDFError; } };
+
+  const fromPdf = await lockedPdfOf(plainPdf, "application/pdf", "correct horse battery");
+  assert.ok(await isLocked(fromPdf), "an uploaded PDF is locked");
+  const fromPng = await lockedPdfOf(png, "image/png", "correct horse battery", { title: "Passport.png" });
+  assert.equal(fromPng.subarray(0, 4).toString("latin1"), "%PDF");
+  assert.ok(await isLocked(fromPng), "a photo becomes a locked PDF");
+  assert.deepEqual(await lockedPdfOf(fromPdf, "application/pdf", "another one"), fromPdf, "a PDF already locked by its owner is sent as it is");
+  await assert.rejects(lockedPdfOf(plainPdf, "application/pdf", null), "never sent without a password");
+  assert.equal(pdfName("Passport scan.JPG"), "Passport scan.pdf");
 });

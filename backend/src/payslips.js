@@ -1,5 +1,6 @@
 import express from "express";
-import { needDocUnlock, pdfLock, unlockedPassword } from "./doc-password.js";
+import { needDocUnlock, unlockedPassword } from "./doc-password.js";
+import { lockedPdfOf } from "./pdf-lock.js";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import PDFDocument from "pdfkit";
@@ -206,11 +207,14 @@ export function payslipsRouter(wrap) {
     res.setHeader("Content-Type", "application/pdf");
     res.setHeader("Content-Disposition", `${req.query.view === "1" ? "inline" : "attachment"}; filename="Payslip-${period}-${String(s.employee.name).replace(/[^A-Za-z0-9]+/g, "-")}.pdf"`);
     res.setHeader("Cache-Control", "private, no-store");
-    const doc = new PDFDocument({ size: "A4", margin: 45, info: { Title: `Payslip ${monthName(period)}`, Author: "Wohlig Transformations Pvt Ltd" },
-      ...pdfLock(unlockedPassword(req)) });
-    doc.pipe(res);
+    // Drawn in memory (a payslip is a few kilobytes), then locked with AES-256 and the document password (pdf-lock.js).
+    const doc = new PDFDocument({ size: "A4", margin: 45, info: { Title: `Payslip ${monthName(period)}`, Author: "Wohlig Transformations Pvt Ltd" } });
+    const parts = [], drawn = new Promise((ok, fail) => { doc.on("end", ok); doc.on("error", fail); });
+    doc.on("data", (c) => parts.push(c));
     drawPdf(doc, s);
     doc.end();
+    await drawn;
+    res.send(await lockedPdfOf(Buffer.concat(parts), "application/pdf", unlockedPassword(req)));
   }));
   return r;
 }

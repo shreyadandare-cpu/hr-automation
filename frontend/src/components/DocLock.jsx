@@ -3,11 +3,11 @@ import { api, apiMsg } from "../api.js";
 import Modal, { Field } from "./Modal.jsx";
 import { LineSkeleton } from "./ui.jsx";
 
-/* The document password. Personal documents and payslip PDFs open only after the person enters their own document password
-   (backend/src/doc-password.js); a payslip PDF is also locked with it. Mounted once in the shell: any link to such a file is
+/* The document password. Personal documents, tax proofs, Form 124 and payslips open only after the person enters their own
+   document password (backend/src/doc-password.js), and every one of them leaves as a PDF locked with it (pdf-lock.js). Mounted once in the shell: any link to such a file is
    caught here, the dialog asks for the password (or to set one the first time), then the file opens. It stays open for ten
    minutes. Forgotten? The person sets a new one here or on the Account page; files saved earlier keep the old password. */
-const LOCKED = /^\/api\/(documents\/\d+\/file|payslips\/[^/]+\/pdf)(\?|$)/;
+const LOCKED = /^\/api\/(documents\/\d+\/file|payslips\/[^/]+\/pdf|tax-declaration\/form-124|tax-declarations\/[^/]+\/proofs\/\d+\/file)(\?|$)/;
 let until = 0;   // when the unlock ends, as the server said
 
 export const docUnlocked = () => until > Date.now();

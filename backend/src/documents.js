@@ -9,7 +9,8 @@ import { buildDocumentsWorkbook } from "./documents-export.js";
 import { previewOf } from "./excel-preview.js";
 import { fullIdsOf, withFull } from "./id-numbers.js";
 import { ENC_SUFFIX, fileEncryptionReady, readStored, sealFile } from "./file-crypt.js";
-import { needDocUnlock } from "./doc-password.js";
+import { needDocUnlock, unlockedPassword } from "./doc-password.js";
+import { lockedPdfOf, pdfName } from "./pdf-lock.js";
 
 export const UPLOAD_DIR = path.resolve(process.env.UPLOAD_DIR || fileURLToPath(new URL("../uploads", import.meta.url)));
 const MAX_BYTES = 5 * 1024 * 1024;
@@ -118,15 +119,16 @@ documentsRouter.put("/:docKey", express.raw({ type: () => true, limit: MAX_BYTES
   }
 }));
 
-// Opening a file needs the viewer's own document password (doc-password.js), and it is never kept by the browser.
+// Opening a file needs the viewer's own document password (doc-password.js). It always leaves as a PDF locked with that password
+// (pdf-lock.js; a photo is put on a page), and it is never kept by the browser.
 documentsRouter.get("/:id/file", needDocUnlock, wrap(async (req, res) => {
   const { rows } = await pool.query("SELECT * FROM documents WHERE id=$1", [Number(req.params.id) || 0]);
   if (!rows[0] || !(mine(req, rows[0]) || (await can(req, "documents.view", rows[0].work_email)))) return res.status(404).json({ error: "Not found" });
-  const body = await readStored(UPLOAD_DIR, rows[0].stored_name);   // at most 5 MB
+  const body = await lockedPdfOf(await readStored(UPLOAD_DIR, rows[0].stored_name), rows[0].mime, unlockedPassword(req), { title: rows[0].filename });   // at most 5 MB
   if (!mine(req, rows[0])) await pool.query("INSERT INTO audit_log (action, work_email) VALUES ($1,$2)", [`Document opened: ${rows[0].doc_key} (by ${req.user.email})`, rows[0].work_email]);
   res.set({
-    "Content-Type": rows[0].mime,
-    "Content-Disposition": `${req.query.download ? "attachment" : "inline"}; filename="${rows[0].filename.replace(/"/g, "")}"`,
+    "Content-Type": "application/pdf",
+    "Content-Disposition": `${req.query.download ? "attachment" : "inline"}; filename="${pdfName(rows[0].filename).replace(/"/g, "")}"`,
     "X-Content-Type-Options": "nosniff",
     "Cache-Control": "private, no-store",
   });
@@ -147,6 +149,16 @@ export async function encryptStoredDocuments() {
     try { plain = await fs.readFile(from); } catch { continue; }   // a file already missing stays as it is
     await fs.writeFile(path.join(UPLOAD_DIR, to), sealFile(plain).body);
     const u = await pool.query("UPDATE documents SET stored_name=$2 WHERE id=$1 AND stored_name=$3", [r.id, to, r.stored_name]);
+    if (u.rowCount) { await fs.rm(from, { force: true }); done++; } else await fs.rm(path.join(UPLOAD_DIR, to), { force: true });
+  }
+  // Tax proofs (engage.js) are personal documents too.
+  const proofs = await pool.query("SELECT id, stored FROM tax_proof_files WHERE stored NOT LIKE $1 ORDER BY id LIMIT 5000", [`%${ENC_SUFFIX}`]);
+  for (const r of proofs.rows) {
+    const name = path.basename(r.stored), from = path.join(UPLOAD_DIR, name), to = name + ENC_SUFFIX;
+    let plain;
+    try { plain = await fs.readFile(from); } catch { continue; }
+    await fs.writeFile(path.join(UPLOAD_DIR, to), sealFile(plain).body);
+    const u = await pool.query("UPDATE tax_proof_files SET stored=$2 WHERE id=$1 AND stored=$3", [r.id, to, r.stored]);
     if (u.rowCount) { await fs.rm(from, { force: true }); done++; } else await fs.rm(path.join(UPLOAD_DIR, to), { force: true });
   }
   if (done) console.log(`[documents] encrypted ${done} stored document(s)`);

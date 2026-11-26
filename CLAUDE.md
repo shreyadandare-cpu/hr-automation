@@ -104,8 +104,9 @@ kailash@wohlig.com). Decided 2026-11-27.
 - The salary permissions (`SALARY_PERMS` in `access-rules.js`) are held by the owners and nobody else: not super admins, not a
   grant. Never add a way around it (a new role, a new permission that shows salary figures, a report, an export, a notice).
   A new screen or endpoint that shows a salary figure checks one of those permissions.
-- Personal documents are stored encrypted (`file-crypt.js`), and documents and payslip PDFs open only with the person's own
-  document password (`doc-password.js`); payslip PDFs are locked with it. Keep new personal files and salary PDFs behind it.
+- Personal documents and tax proofs are stored encrypted (`file-crypt.js`). Documents, tax proofs, Form 124 and payslips open
+  only with the viewer's own document password (`doc-password.js`), and every one leaves as a PDF locked with it (`pdf-lock.js`,
+  AES-256, for uploads and generated PDFs alike). Any new personal file or salary PDF goes the same way.
 - **Claude never reads salaries, staff documents or the keys**, whoever asks: not from the database, `.env`, the uploads folder,
   a dump or the running app. `.claude/hooks/salary-guard.mjs` blocks it; do not work around it. If a task needs real figures,
   ask the salary owner to do that step.

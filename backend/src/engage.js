@@ -12,6 +12,9 @@ import { readProof } from "./finance-rules.js";
 import { reportsOf } from "./teams.js";
 import { financialYear, readAdvance, readAppLink, readArticle, readAttendanceRequest, readDecision, readGoal, readPoll, readPraise, readLateDecision, readLateRequest, readTaxDeclaration, readTaxDates, readUnlock, tally, windowOpen, joinerUntil, BOTH_REGIMES } from "./engage-rules.js";
 import { form124Pdf } from "./tax-forms.js";
+import { needDocUnlock, unlockedPassword } from "./doc-password.js";
+import { ENC_SUFFIX, readStored, sealFile } from "./file-crypt.js";
+import { lockedPdfOf, pdfName } from "./pdf-lock.js";
 import { estimateTax, yearForReturn } from "./tax-estimate.js";
 import { postToChat } from "./chat.js";
 
@@ -458,7 +461,7 @@ export function engageRouter(wrap) {
 
   /* Form 124 (earlier Form 12BB): the person's statement of claims for the year, as a PDF to sign. The person, or payroll.view
      for the people in scope. */
-  r.get("/api/tax-declaration/form-124", wrap(async (req, res) => {
+  r.get("/api/tax-declaration/form-124", needDocUnlock, wrap(async (req, res) => {   // locked with the viewer's document password
     const asked = req.query.email ? String(req.query.email).toLowerCase() : me(req);
     if (asked !== me(req) && !(await can(req, "payroll.view", asked))) return res.status(404).json({ error: "This declaration was not found." });
     const fy = financialYear(await today());
@@ -467,7 +470,7 @@ export function engageRouter(wrap) {
       pool.query("SELECT name, address, phone, pan_masked FROM employees WHERE lower(work_email)=$1", [asked]),
     ]);
     if (!x) return res.status(404).json({ error: "Please save your declaration first, then download the form." });
-    const pdf = await form124Pdf({ fy, email: asked, person: e || { name: asked.split("@")[0] }, declaration: x });
+    const pdf = await lockedPdfOf(await form124Pdf({ fy, email: asked, person: e || { name: asked.split("@")[0] }, declaration: x }), "application/pdf", unlockedPassword(req));
     res.set({ "Content-Type": "application/pdf", "Content-Disposition": `attachment; filename="Form-${fy >= 2026 ? "124" : "12BB"}-${fy}-${String(fy + 1).slice(2)}.pdf"`,
       "X-Content-Type-Options": "nosniff", "Cache-Control": "private, no-store" });
     res.send(pdf);
@@ -553,10 +556,12 @@ export function engageRouter(wrap) {
     if (index < 0) return res.status(404).json({ error: "Please save your declaration first, then add the proof to its line." });
     const file = await checkFile(req.body);
     if (!file.ok) return res.status(400).json({ error: file.checks.find((c) => !c.ok).label });
-    const stored = crypto.randomUUID() + "." + file.type.ext;
+    let sealed;   // stored encrypted, like personal documents (file-crypt.js)
+    try { sealed = sealFile(req.body); } catch (e) { if (e.status === 503) return res.status(503).json({ error: e.message }); throw e; }
+    const stored = crypto.randomUUID() + "." + file.type.ext + (sealed.encrypted ? ENC_SUFFIX : "");
     const name = String(req.query.name || "proof").replace(/[^\w.\- ()]/g, "_").slice(0, 120);
     await fs.mkdir(UPLOAD_DIR, { recursive: true });
-    await fs.writeFile(path.join(UPLOAD_DIR, stored), req.body);
+    await fs.writeFile(path.join(UPLOAD_DIR, stored), sealed.body);
     await dropFiles(x.id, index);
     await pool.query("INSERT INTO tax_proof_files (request_id, line_index, name, mime, size, stored) VALUES ($1,$2,$3,$4,$5,$6)", [x.id, index, name, file.type.mime, req.body.length, stored]);
     res.json({ file: { name, size: req.body.length } });
@@ -567,7 +572,8 @@ export function engageRouter(wrap) {
     if (index < 0 || !(await dropFiles(x.id, index))) return res.status(404).json({ error: "This document was not found." });
     res.json({ ok: true });
   }));
-  r.get("/api/tax-declarations/:email/proofs/:index/file", requireAuth, wrap(async (req, res) => {
+  // A proof opens only with the viewer's document password, as a PDF locked with it (pdf-lock.js).
+  r.get("/api/tax-declarations/:email/proofs/:index/file", requireAuth, needDocUnlock, wrap(async (req, res) => {
     const target = String(req.params.email || "").toLowerCase();
     // The person, payroll.view for the people in scope, or payroll.prepare (who verifies the proofs).
     if (target !== me(req) && !canAll(req, "payroll.prepare") && !(await can(req, "payroll.view", target))) return res.status(404).json({ error: "This document was not found." });
@@ -575,10 +581,12 @@ export function engageRouter(wrap) {
       `SELECT f.name, f.mime, f.stored FROM tax_proof_files f JOIN tax_declaration_requests d ON d.id = f.request_id
        WHERE lower(d.email)=$1 AND d.financial_year=$2 AND f.line_index=$3`, [target, financialYear(await today()), Number(req.params.index) || 0]);
     if (!f) return res.status(404).json({ error: "This document was not found." });
-    const file = path.join(UPLOAD_DIR, path.basename(f.stored));
-    try { await fs.access(file); } catch { return res.status(410).json({ error: "The document is missing from storage. Please ask the person to upload it again." }); }
-    res.set({ "Content-Type": f.mime, "Content-Disposition": `inline; filename="${f.name.replace(/"/g, "")}"`, "X-Content-Type-Options": "nosniff", "Cache-Control": "private, no-store" });
-    res.sendFile(file);
+    let plain;
+    try { plain = await readStored(UPLOAD_DIR, path.basename(f.stored)); }   // at most 5 MB
+    catch (e) { if (e.code === "ENOENT") return res.status(410).json({ error: "The document is missing from storage. Please ask the person to upload it again." }); throw e; }
+    const pdf = await lockedPdfOf(plain, f.mime, unlockedPassword(req), { title: f.name });
+    res.set({ "Content-Type": "application/pdf", "Content-Disposition": `inline; filename="${pdfName(f.name).replace(/"/g, "")}"`, "X-Content-Type-Options": "nosniff", "Cache-Control": "private, no-store" });
+    res.send(pdf);
   }));
 
   /* ---------- Goals: the person's own. goals.view reads those of the people in scope with ?email=. ---------- */

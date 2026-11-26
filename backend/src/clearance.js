@@ -32,7 +32,7 @@ const AWAITING = { submitted: "Submitted", under_review: "Under review", resubmi
 export async function leaveSettlement(db, email, lastDay) {
   const lc = email.toLowerCase();
   // One after another: this often runs on a single transaction client, which can't take parallel queries.
-  const emp = await db.query("SELECT start_date, casual_opening, leave_opening, monthly_gross FROM employees WHERE lower(work_email)=$1", [lc]);
+  const emp = await db.query("SELECT start_date, casual_opening, leave_opening, monthly_gross, pay_sealed FROM employees WHERE lower(work_email)=$1", [lc]);
   const reqs = await db.query("SELECT * FROM leave_requests WHERE lower(work_email)=$1", [lc]);
   const comps = await db.query("SELECT * FROM comp_off_credits WHERE lower(work_email)=$1", [lc]);
   const hols = await db.query("SELECT day FROM holidays");
@@ -113,7 +113,7 @@ export async function reimbursementsOf(db, email) {
 
 /** Salary for the exit month: the days worked, plus or minus the leave settlement. Null amounts when no salary is set. */
 export async function finalSalaryOf(db, email, lastDay) {
-  const { rows } = await db.query("SELECT start_date, monthly_gross FROM employees WHERE lower(work_email)=$1", [email.toLowerCase()]);
+  const { rows } = await db.query("SELECT start_date, monthly_gross, pay_sealed FROM employees WHERE lower(work_email)=$1", [email.toLowerCase()]);
   const e = rows[0] || {};
   const s = await leaveSettlement(db, email, lastDay);
   const month = lastDay.slice(0, 7), w = payWindow(month, e.start_date, lastDay), gross = n(e.monthly_gross);

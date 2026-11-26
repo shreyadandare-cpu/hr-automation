@@ -1,8 +1,29 @@
 import fs from "node:fs";
 import pg from "pg";
+import { openSealedResult } from "./secret-box.js";
 
 // Keep DATE columns as plain YYYY-MM-DD strings so time zones cannot shift them by a day.
 pg.types.setTypeParser(1082, (v) => v);
+
+// Salary figures are stored sealed (secret-box.js). Every query result of this app's own connections is opened here, on its way
+// out of the database, so a row read anywhere in the app has its salary fields back under their own names. Covers pool.query,
+// client.query and both the promise and the callback forms (pg-pool calls the client with a callback). Only the pools below use
+// it: another connection in the same process (a script, a test) reads the database as it is.
+class SealedClient extends pg.Client {
+  query(...args) {
+    const cb = typeof args[args.length - 1] === "function" ? args.pop() : null;
+    if (cb) {
+      return super.query(...args, (err, res) => {
+        if (err) return cb(err);
+        let opened;
+        try { opened = openSealedResult(res); } catch (e) { return cb(e); }
+        cb(null, opened);
+      });
+    }
+    const out = super.query(...args);
+    return out && typeof out.then === "function" ? out.then(openSealedResult) : out;
+  }
+}
 
 // DB_SCHEMA keeps this app's tables in their own schema when the database is shared with another app (for example the
 // Employee Portal's tables in "public"). Every connection looks only in that schema, so the other app's tables of the same
@@ -13,6 +34,7 @@ if (SCHEMA && !/^[a-z_][a-z0-9_]*$/.test(SCHEMA)) throw new Error("DB_SCHEMA mus
 // that closed them after 10 idle seconds (the default) made the first requests after a pause slow. A bounded pool (DB_POOL_MAX,
 // default 15) with a statement timeout, so one slow query can never hold a connection for long.
 const POOL = () => ({
+  Client: SealedClient,
   max: Number(process.env.DB_POOL_MAX) || 15,
   idleTimeoutMillis: 10 * 60_000,
   connectionTimeoutMillis: 10_000,

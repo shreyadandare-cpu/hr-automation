@@ -1,4 +1,5 @@
 import "dotenv/config";
+import { sealStoredSalaries } from "./payroll/sealing.js";
 import express from "express";
 import { pool, payPool, PAY_SCHEMA, initDb } from "./db.js";
 import { digitalKitRouter, initDigitalKits, removeDuplicateStarters, seedDigitalKit, seedOfficialFiles, repairOfficialFiles, seedDesignationTexts, seedOfficialTexts, updateOfficialLabels } from "./digital-kit.js";
@@ -138,6 +139,7 @@ await initDb();
 if (payPool !== pool) { await initDb(payPool, PAY_SCHEMA); console.log("Payroll and payslips use their own database (PAYROLL_DATABASE_URL)"); }
 await loadLeavePolicy();   // the leave policy numbers HR has saved
 await initPayroll(payPool);   // payroll workflow tables and starting tax rules (payroll/schema.sql)
+for (const db of new Set([pool, payPool])) await sealStoredSalaries(db);   // salary figures saved before encryption are sealed (payroll/sealing.js)
 await syncEmployees({ force: true });   // payroll's copy of the staff list matches the company's from the first request
 warmPayrollPreview();   // the month's payroll preview, worked out in the background so the first visit is quick
 await bootstrapAuth();

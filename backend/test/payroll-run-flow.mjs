@@ -4,7 +4,8 @@
  *
  *   DATABASE_URL=postgresql://postgres:x@localhost:55434/postgres BASE=http://localhost:3190 node test/payroll-run-flow.mjs
  *
- * The server needs PAYROLL_ENCRYPTION_KEY. Not part of `npm test`. It removes its test rows afterwards (approved payroll cannot be deleted normally, so the
+ * The server needs PAYROLL_ENCRYPTION_KEY, and SALARY_OWNERS set to the preparer and the reviewer below (only salary owners see payroll).
+ * Not part of `npm test`. It removes its test rows afterwards (approved payroll cannot be deleted normally, so the
  * cleanup switches the triggers off for its own session: use a throwaway database).
  */
 import crypto from "node:crypto";
@@ -149,7 +150,8 @@ try {
   ok("both a CSV and an Excel sheet are made, with the same version", !!csv && !!xl && csv.version === xl.version, JSON.stringify(d.files.map((f) => [f.kind, f.version])));
   const csvFile = await file(hr, `/api/payroll/runs/${id}/files/${csv.id}`), xlFile = await file(hr, `/api/payroll/runs/${id}/files/${xl.id}`);
   ok("both download for someone with the bank permission", csvFile.s === 200 && xlFile.s === 200 && /spreadsheetml/.test(xlFile.type) && xlFile.buf.subarray(0, 2).toString() === "PK");
-  ok("the reviewer (no bank permission) cannot download either (403 or 404)", [403, 404].includes((await file(rev, `/api/payroll/runs/${id}/files/${xl.id}`)).s) && [403, 404].includes((await file(rev, `/api/payroll/runs/${id}/files/${csv.id}`)).s));
+  const empTry = await file(emp, `/api/payroll/runs/${id}/files/${xl.id}`);
+  ok("an employee cannot download either (403 or 404)", [403, 404].includes(empTry.s), String(empTry.s));
   const bx = new ExcelJS.Workbook(); await bx.xlsx.load(xlFile.buf);
   const brows = rowsOf(bx.getWorksheet("Salary transfer")), bh = brows.find((x) => x[0] === "Payment Reference");
   const amountCol = bh.indexOf("Amount"), acctCol = bh.indexOf("Beneficiary Account Number"), ifscCol = bh.indexOf("IFSC"), pay = brows.filter((x) => ACCT.includes(String(x[acctCol])));
@@ -170,10 +172,13 @@ try {
   ok("the audit log has the hold, the review, the files and the downloads", ["Salary put on hold", "Salary hold released", "Bank transfer file generated", "Bank transfer file downloaded", "Payroll report downloaded"].every((a) => audit.includes(a)), audit.slice(0, 200));
 } catch (e) { fail++; console.log("ERROR  " + e.stack); }
 finally {
-  await wipe().catch((e) => console.log("cleanup:", e.message));
-  await db.query("DELETE FROM sessions WHERE lower(email) IN ($1,$2,$3)", [HR, REV, EMP]);
-  await db.query("DELETE FROM employees WHERE work_email = ANY($1)", [[...E, HR, REV, EMP]]);
-  await db.query("DELETE FROM users WHERE email = ANY($1)", [[HR, REV, EMP]]);
+  // KEEP_DATA=1 leaves the test payroll in place (for example to compare the figures before and after a change); run again without it to clean up.
+  if (process.env.KEEP_DATA !== "1") {
+    await wipe().catch((e) => console.log("cleanup:", e.message));
+    await db.query("DELETE FROM sessions WHERE lower(email) IN ($1,$2,$3)", [HR, REV, EMP]);
+    await db.query("DELETE FROM employees WHERE work_email = ANY($1)", [[...E, HR, REV, EMP]]);
+    await db.query("DELETE FROM users WHERE email = ANY($1)", [[HR, REV, EMP]]);
+  }
   await db.end();
 }
 console.log(`\n${pass} passed, ${fail} failed`);

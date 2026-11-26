@@ -1,4 +1,5 @@
 import express from "express";
+import { setMonthlyGross } from "./payroll/sealing.js";
 import L from "../../frontend/leave-rules.cjs";
 import { pool } from "./db.js";
 import { requireAuth } from "./auth.js";
@@ -115,7 +116,7 @@ export function leaveRouter(wrap) {
       pool.query(`SELECT * FROM leave_requests ${where} ORDER BY from_date DESC, id DESC`, args),
       pool.query(`SELECT * FROM comp_off_credits ${where} ORDER BY worked_on DESC`, args),
       pool.query("SELECT day, name, type, source FROM holidays ORDER BY day"),
-      pool.query(`SELECT work_email, start_date, monthly_gross, casual_opening, leave_opening FROM employees ${where}`, args),
+      pool.query(`SELECT work_email, start_date, monthly_gross, pay_sealed, casual_opening, leave_opening FROM employees ${where}`, args),
     ]);
     res.json({
       policy: L.POLICY,
@@ -396,7 +397,7 @@ export function leaveRouter(wrap) {
   // Monthly gross (for the salary cut) and the casual balance someone had before this system started.
   r.put("/api/employees/:email/pay", needAll("leave.manage"), wrap(async (req, res) => {
     const { monthlyGross, casualOpening } = req.body || {};
-    let gross = monthlyGross === "" || monthlyGross === null || monthlyGross === undefined ? null : Number(monthlyGross);
+    let gross = monthlyGross === "" || monthlyGross === null || monthlyGross === undefined ? null : Math.round(Number(monthlyGross) * 100) / 100;
     const opening = Number(casualOpening ?? 0);
     const errors = {};
     if (gross !== null && canAll(req, "payroll.prepare") && !(gross > 0 && gross < 1e8)) errors.monthlyGross = "Enter the monthly gross salary in rupees.";
@@ -411,7 +412,8 @@ export function leaveRouter(wrap) {
       if (num(emp.monthly_gross) !== gross) changed.push("monthly salary");
       if (num(emp.casual_opening) !== opening) changed.push(`opening casual balance (${num(emp.casual_opening)} → ${opening})`);
       if (!changed.length) return [200, { ok: true, changed: false }];
-      await client.query("UPDATE employees SET monthly_gross=$2, casual_opening=$3 WHERE id=$1", [emp.id, gross, opening]);
+      await client.query("UPDATE employees SET casual_opening=$2 WHERE id=$1", [emp.id, opening]);
+      if (num(emp.monthly_gross) !== gross) await setMonthlyGross(client, emp.id, gross);   // stored sealed (secret-box.js)
       await audit(client, `Updated ${changed.join(" and ")}`, emp.work_email);   // the salary figure itself is not logged
       return [200, { ok: true, changed: true }];
     });
@@ -480,7 +482,7 @@ export function leaveRouter(wrap) {
     if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(month)) return res.status(400).json({ error: "Month must look like 2026-10." });
     const [reqs, emps, holidays] = await Promise.all([
       pool.query("SELECT * FROM leave_requests WHERE status='approved' AND lop_days > 0"),
-      pool.query("SELECT work_email, name, monthly_gross FROM employees"),
+      pool.query("SELECT work_email, name, monthly_gross, pay_sealed FROM employees"),
       holidayDays(pool),
     ]);
     const byEmail = new Map(emps.rows.map((e) => [e.work_email.toLowerCase(), e]));

@@ -169,14 +169,15 @@ export function payslipsRouter(wrap) {
     const { rows: [emp] } = await pool.query("SELECT name, emp_no, title, dept FROM employees WHERE lower(work_email)=$1", [email]);
     if (!emp && email !== req.user.email.toLowerCase()) return res.status(404).json({ error: "Employee not found." });
     const { rows } = await pool.query(
-      `SELECT r.period, r.status, r.paid_at, r.published_at, r.publish_at, i.payable, i.base_salary, i.slip FROM payroll_items i JOIN payroll_runs r ON r.id=i.run_id
-       WHERE lower(i.work_email)=$1 AND NOT coalesce((i.inputs->>'hold')::boolean, false) ${seesDrafts(req) ? "" : "AND r.published_at IS NOT NULL"} ORDER BY r.period DESC`, [email]);
+      `SELECT r.period, r.status, r.paid_at, r.published_at, r.publish_at, i.payable, i.base_salary, i.slip, i.inputs, i.item_sealed FROM payroll_items i JOIN payroll_runs r ON r.id=i.run_id
+       WHERE lower(i.work_email)=$1 ${seesDrafts(req) ? "" : "AND r.published_at IS NOT NULL"} ORDER BY r.period DESC LIMIT 120`, [email]);
     const open = !!unlockedPassword(req);
     res.setHeader("Cache-Control", "private, no-store");
     res.json({
       locked: !open,
       employee: emp ? { name: emp.name, empNo: emp.emp_no, title: emp.title, dept: emp.dept, email } : { name: req.user.email, email },
-      payslips: rows.map((x) => {
+      // A salary on hold is not paid that month, so it has no payslip (checked here: HR's inputs are stored sealed).
+      payslips: rows.filter((x) => !(x.inputs && x.inputs.hold)).map((x) => {
         const ready = x.slip ? !x.slip.incomplete.length : x.base_salary !== null;
         return { period: x.period, status: x.status, paidAt: x.paid_at, draft: !x.published_at, publishAt: x.published_at ? null : x.publish_at, available: ready, net: ready && open ? num(x.payable) : null, message: ready ? null : INCOMPLETE };
       }),

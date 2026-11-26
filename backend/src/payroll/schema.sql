@@ -148,6 +148,8 @@ CREATE INDEX IF NOT EXISTS payroll_audit_email ON payroll_audit (lower(work_emai
 
 CREATE OR REPLACE FUNCTION payroll_audit_append_only() RETURNS trigger AS $$
 BEGIN
+  -- Encrypting stored figures (secret-box.js) is the one change allowed; it sets hrhub.sealing for its own transaction only.
+  IF current_setting('hrhub.sealing', true) = 'on' THEN RETURN NEW; END IF;
   RAISE EXCEPTION 'payroll_audit is append-only';
 END $$ LANGUAGE plpgsql;
 DROP TRIGGER IF EXISTS payroll_audit_append_only ON payroll_audit;
@@ -157,6 +159,8 @@ CREATE TRIGGER payroll_audit_append_only BEFORE UPDATE OR DELETE ON payroll_audi
 CREATE OR REPLACE FUNCTION payroll_items_frozen() RETURNS trigger AS $$
 DECLARE st TEXT; wf BOOLEAN;
 BEGIN
+  -- Encrypting or decrypting stored figures (secret-box.js) changes no amount; it sets hrhub.sealing for its own transaction only.
+  IF TG_OP = 'UPDATE' AND current_setting('hrhub.sealing', true) = 'on' THEN RETURN NEW; END IF;
   SELECT status, workflow INTO st, wf FROM payroll_runs WHERE id = COALESCE(OLD.run_id, NEW.run_id);
   IF wf AND st IN ('approved','bank_ready','paid') THEN
     RAISE EXCEPTION 'payroll for this month is approved and can no longer change';
@@ -166,3 +170,19 @@ BEGIN
 END $$ LANGUAGE plpgsql;
 DROP TRIGGER IF EXISTS payroll_items_frozen ON payroll_items;
 CREATE TRIGGER payroll_items_frozen BEFORE INSERT OR UPDATE OR DELETE ON payroll_items FOR EACH ROW EXECUTE FUNCTION payroll_items_frozen();
+
+-- Salary figures stored encrypted (2026-11-27, secret-box.js): each table keeps its money columns sealed in one column, and the
+-- plain columns are left empty, so they may be NULL now. A start-up step seals rows saved before (payroll/sealing.js).
+ALTER TABLE payroll_items       ADD COLUMN IF NOT EXISTS item_sealed TEXT;
+ALTER TABLE salary_structures   ADD COLUMN IF NOT EXISTS structure_sealed TEXT;
+ALTER TABLE payroll_adjustments ADD COLUMN IF NOT EXISTS adjustment_sealed TEXT;
+ALTER TABLE payroll_runs        ADD COLUMN IF NOT EXISTS run_sealed TEXT;
+ALTER TABLE payroll_files       ADD COLUMN IF NOT EXISTS file_sealed TEXT;
+ALTER TABLE payroll_audit       ADD COLUMN IF NOT EXISTS audit_sealed TEXT;
+ALTER TABLE payroll_items ALTER COLUMN payable DROP NOT NULL, ALTER COLUMN lop_deduction DROP NOT NULL, ALTER COLUMN reimbursement_total DROP NOT NULL;
+ALTER TABLE salary_structures ALTER COLUMN earnings DROP NOT NULL, ALTER COLUMN pf_employee DROP NOT NULL,
+  ALTER COLUMN professional_tax DROP NOT NULL, ALTER COLUMN other_deductions DROP NOT NULL;
+ALTER TABLE payroll_adjustments ALTER COLUMN amount DROP NOT NULL;
+ALTER TABLE payroll_adjustments DROP CONSTRAINT IF EXISTS payroll_adjustments_amount_check;
+ALTER TABLE payroll_adjustments ADD CONSTRAINT payroll_adjustments_amount_check CHECK (amount IS NULL OR amount > 0);
+ALTER TABLE payroll_files ALTER COLUMN totals DROP NOT NULL;

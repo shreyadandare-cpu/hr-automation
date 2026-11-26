@@ -89,6 +89,8 @@ CREATE INDEX IF NOT EXISTS rate_limits_key_idx ON rate_limits (key, hit_at);
 
 -- Leave management. Rules (quotas, carry-over, salary cut) live in frontend/leave-rules.cjs.
 ALTER TABLE employees ADD COLUMN IF NOT EXISTS monthly_gross  NUMERIC(12,2);
+-- The monthly gross stored encrypted (2026-11-27, secret-box.js); monthly_gross is left empty once it is sealed.
+ALTER TABLE employees ADD COLUMN IF NOT EXISTS pay_sealed TEXT;
 ALTER TABLE employees ADD COLUMN IF NOT EXISTS casual_opening NUMERIC(5,1) NOT NULL DEFAULT 0;
 -- Leave balances brought over from a previous leave system: { "asOf": "2026-11-23", "casual": 4, "sick": 1.5, "compoff": 0 }. For that year each balance
 -- starts from the figure on that day and only leave after it counts (leave-rules.cjs). Null = nothing brought over.

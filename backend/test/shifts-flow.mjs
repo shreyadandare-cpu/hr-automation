@@ -34,6 +34,7 @@ const call = async (token, method, path, body) => {
 const clean = async () => {
   await db.query("DELETE FROM attendance_punches WHERE employee_id IN (SELECT id FROM employees WHERE lower(work_email)=$1)", [EMP]);
   await db.query("DELETE FROM shift_assignments WHERE lower(email)=$1", [EMP]);
+  await db.query("DELETE FROM salary_structures WHERE lower(work_email)=$1", [EMP]);   // left by a run that stopped early
   await db.query("DELETE FROM shifts WHERE name=$1", [SHIFT]);
   await db.query("DELETE FROM overtime_approvals WHERE lower(email)=$1", [EMP]);
   await db.query("DELETE FROM overtime_staff WHERE lower(email)=$1", [EMP]);

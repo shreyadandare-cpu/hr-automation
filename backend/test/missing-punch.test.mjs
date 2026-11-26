@@ -101,3 +101,36 @@ test("the saved start day of the penalty is read on its own calendar day", async
   assert.equal(p.penaltyFrom, "2026-11-10");
   assert.equal(p.penaltyDays, 0.5);
 });
+
+import { byOrd, late, ord, workDayOf } from "../src/work-day.js";
+
+test("the attendance day starts at 5 am: the small hours belong to the day before, after the evening", () => {
+  assert.equal(ord("09:30"), 570);
+  assert.equal(ord("01:30"), 1530);
+  assert.equal(ord("04:59"), 1739);
+  assert.equal(ord("05:00"), 300);
+  assert.equal(workDayOf("2026-11-27", "01:30"), "2026-11-26");
+  assert.equal(workDayOf("2026-12-01", "04:59"), "2026-11-30", "across a month");
+  assert.equal(workDayOf("2026-11-27", "05:00"), "2026-11-27");
+  assert.deepEqual([{ time: "01:30" }, { time: "11:00" }, { time: "23:10" }].sort(byOrd).map((p) => p.time), ["11:00", "23:10", "01:30"]);
+  assert.equal(late("01:30"), "25:30");
+  assert.equal(late("18:30"), "18:30");
+});
+
+test("after midnight: still punched in is reminded, and the missing punch-out waits for the new day at 10 am", () => {
+  const people = [{ email: "a@wohlig.com", punches: [P("2026-11-26", "11:00", "IN")] }];
+  const at1am = dueReminders({ ...base, today: "2026-11-26", people, nowTime: "01:00" });
+  assert.deepEqual(at1am.map((r) => r.kind), ["still-in"], "01:00 is still the 26th's working day: no missing punch-out yet");
+  assert.deepEqual(dueReminders({ ...base, today: "2026-11-27", people, nowTime: "09:00" }), [], "a new day from 5 am, reminded from 10");
+  assert.deepEqual(dueReminders({ ...base, today: "2026-11-27", people, nowTime: "10:00" }).map((r) => r.kind), ["missing-out"]);
+});
+
+test("regularising a whole day to the shift needs no time; a time after midnight is checked on the working day", () => {
+  const today = "2026-11-26";
+  const shift = readAttendanceRequest({ date: "2026-11-25", kind: "missed-punch", direction: "SHIFT", note: "Forgot" }, today);
+  assert.deepEqual(shift.errors, {});
+  assert.equal(shift.direction, "SHIFT");
+  assert.equal(shift.time, null);
+  assert.deepEqual(readAttendanceRequest({ date: today, kind: "missed-punch", direction: "OUT", time: "00:30", note: "x" }, today, "01:00").errors, {}, "00:30 is before 01:00 on the same working day");
+  assert.ok(readAttendanceRequest({ date: today, kind: "missed-punch", direction: "OUT", time: "02:00", note: "x" }, today, "23:00").errors.time, "02:00 tonight has not come at 23:00");
+});

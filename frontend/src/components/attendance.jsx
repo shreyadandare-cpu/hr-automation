@@ -37,10 +37,16 @@ export const clock = (t, h24) => {
 const monTitle = (s) => { const m = MON[Number(s.slice(5, 7)) - 1]; return m.charAt(0) + m.slice(1).toLowerCase(); };
 const dayText = (s) => `${DOW[dow(s)]}, ${Number(s.slice(8))} ${monTitle(s)}`;
 
+const DAY_START_MIN = 5 * 60;
+/** Minutes from midnight of the working day: a time before 5 am belongs to the night before, after the evening (01:30 is 1530). */
+const ordMin = (t) => { const m = mins(t); return m < DAY_START_MIN ? m + 1440 : m; };
 /** Now in Indian time, from the browser's clock (punching itself always uses the server's clock). */
 export function istNow(date = new Date()) {
   const p = Object.fromEntries(new Intl.DateTimeFormat("en-GB", { timeZone: "Asia/Kolkata", hourCycle: "h23", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit" }).formatToParts(date).map((x) => [x.type, x.value]));
-  return { date: `${p.year}-${p.month}-${p.day}`, time: `${p.hour}:${p.minute}:${p.second}`, minutes: Number(p.hour) * 60 + Number(p.minute) };
+  const cal = `${p.year}-${p.month}-${p.day}`, minutes = Number(p.hour) * 60 + Number(p.minute);
+  // The attendance day starts at 5 am (server: work-day.js): before then it is still the day before, and the minutes run on past midnight.
+  const early = minutes < DAY_START_MIN;
+  return { date: cal, time: `${p.hour}:${p.minute}:${p.second}`, minutes, day: early ? addDays(cal, -1) : cal, min: early ? minutes + 1440 : minutes };
 }
 export function useNow(everyMs = 1000) {
   const [now, setNow] = useState(() => istNow());
@@ -85,14 +91,14 @@ function kind(d, today) {
 /** Break = time between an OUT and the next IN. Gross hours = first in to last out (to now for today). */
 function grossOf(d, today, nowMin) {
   if (!d.firstIn) return null;
-  if (d.lastOut && mins(d.lastOut) >= mins(d.firstIn)) return mins(d.lastOut) - mins(d.firstIn);
-  return d.date === today ? Math.max(0, nowMin - mins(d.firstIn)) : null;
+  if (d.lastOut && ordMin(d.lastOut) >= ordMin(d.firstIn)) return ordMin(d.lastOut) - ordMin(d.firstIn);
+  return d.date === today ? Math.max(0, nowMin - ordMin(d.firstIn)) : null;
 }
 
 /* ---- the 24 hour bar ---- */
 export function DayBar({ firstIn, lastOut, open }) {
-  const a = (mins(firstIn) / 1440) * 100;
-  const b = lastOut ? Math.max((mins(lastOut) / 1440) * 100, a + 0.8) : a + 0.8;
+  const a = (ordMin(firstIn) / 1440) * 100;
+  const b = lastOut ? Math.min(100, Math.max((ordMin(lastOut) / 1440) * 100, a + 0.8)) : a + 0.8;   // past midnight runs to the end of the bar
   return (
     <div className="att-bar" aria-hidden="true">
       <i className={`att-fill${open ? " open" : ""}`} style={{ left: `${a}%`, width: `${b - a}%` }} />
@@ -141,10 +147,10 @@ export function TimingsCard({ today, punches, minutesToday, now, h24, byMonth = 
   let from = null, to = null, worked = 0, note = "";   // stepping out to eat is not a break, so there is none to show
   if (isToday) {
     const first = punches.find((p) => p.direction === "IN");
-    if (first) { from = mins(first.time); to = now.minutes; }
+    if (first) { from = ordMin(first.time); to = now.min ?? now.minutes; }
     worked = minutesToday || 0;
   } else if (rec && rec.firstIn) {
-    from = mins(rec.firstIn); to = rec.lastOut ? mins(rec.lastOut) : null;
+    from = ordMin(rec.firstIn); to = rec.lastOut ? ordMin(rec.lastOut) : null;
     worked = rec.minutes;
     if (to === null) note = "No punch out";
   } else if (rec) note = rec.holiday || (rec.off === "Weekend" ? "Weekly off" : /leave$/i.test(rec.status || "") ? rec.status : "No time entries");
@@ -354,7 +360,7 @@ export function AttendanceLog({ months, today, canEdit = false, onRemove = () =>
               <thead><tr><th>Date</th><th>Time on site</th><th className="num-cell">Break</th><th className="num-cell">Hours</th><th>Log</th></tr></thead>
               <tbody>
                 {loading && <TableSkeletonRow cols={5} />}
-                {days.filter((d) => kind(d, today) !== "none").map((d) => <Row key={d.date} d={d} today={today} nowMin={now.minutes} h24={h24} canEdit={canEdit} onRemove={onRemove} onCorrect={onCorrect} />)}
+                {days.filter((d) => kind(d, today) !== "none").map((d) => <Row key={d.date} d={d} today={today} nowMin={now.min} h24={h24} canEdit={canEdit} onRemove={onRemove} onCorrect={onCorrect} />)}
               </tbody>
             </table></div>
           </>)}

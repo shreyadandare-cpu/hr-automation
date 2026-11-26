@@ -16,7 +16,7 @@ const clock12 = (t) => { const [h, m] = String(t).split(":").map(Number); return
 /** "Missed punch out at 6:45 pm" for a missed punch with a time, otherwise the kind's name. */
 /** What to tell the person after sending: a missed punch within the month's allowance is added at once, otherwise it waits. */
 export const sentMessage = (d) => (d && d.selfFix ? `Your punch was added to your day.${d.selfFixesLeft ? ` You can add ${d.selfFixesLeft} more this month without approval.` : " Further corrections this month go to your manager and HR for approval."}` : "Your correction was sent to your manager and the HR team for approval.");
-export const aboutOf = (x) => (x.kind === "missed-punch" && x.time ? `Missed punch ${x.direction === "IN" ? "in" : "out"} at ${clock12(x.time)}` : kindName(x.kind));
+export const aboutOf = (x) => (x.kind === "missed-punch" && x.direction === "SHIFT" ? "Regularise the day to the shift" : x.kind === "missed-punch" && x.time ? `Missed punch ${x.direction === "IN" ? "in" : "out"} at ${clock12(x.time)}` : kindName(x.kind));
 const inr = (n) => `₹${Number(n).toLocaleString("en-IN")}`;
 
 /* Requests: attendance requests (a missed punch, working from home, on duty elsewhere) and salary advance requests.
@@ -92,8 +92,11 @@ export function NewRequest({ type, initial = null, onClose, onDone }) {
           <Field id="rq-k" label="What is it about" error={err.kind}><select id="rq-k" className="input" value={f.kind} onChange={set("kind")}>{KINDS.map(([k, n]) => <option key={k} value={k}>{n}</option>)}</select></Field>
           <Field id="rq-d" label="Date" error={err.date}><input id="rq-d" type="date" className="input" value={f.date} onChange={set("date")} aria-invalid={!!err.date} /></Field>
           {f.kind === "missed-punch" && <>
-            <Field id="rq-p" label="Which punch is missing" error={err.direction}><select id="rq-p" className="input" value={f.direction} onChange={set("direction")}><option value="OUT">Punch out (when I left)</option><option value="IN">Punch in (when I arrived)</option></select></Field>
-            <Field id="rq-t" label={f.direction === "IN" ? "The time you arrived" : "The time you left"} hint="The first few each month are added straight away; after that your manager or HR approves it." error={err.time}><input id="rq-t" type="time" className="input" value={f.time} onChange={set("time")} aria-invalid={!!err.time} /></Field>
+            <Field id="rq-p" label="What to fix" error={err.direction}><select id="rq-p" className="input" value={f.direction} onChange={set("direction")}>
+              <option value="OUT">Add my punch out (when I left)</option><option value="IN">Add my punch in (when I arrived)</option><option value="SHIFT">Regularise the whole day to my shift</option></select></Field>
+            {f.direction === "SHIFT"
+              ? <Callout>Your manager or the HR team approves it. The day is then counted from the start of your shift to its end (for example 9:30 am to 6:30 pm).</Callout>
+              : <Field id="rq-t" label={f.direction === "IN" ? "The time you arrived" : "The time you left"} hint="After midnight counts for this day until 5 am. The first few each month are added straight away; after that your manager or HR approves it." error={err.time}><input id="rq-t" type="time" className="input" value={f.time} onChange={set("time")} aria-invalid={!!err.time} /></Field>}
           </>}
           <Field id="rq-n" label="Note for your manager" error={err.note}><textarea id="rq-n" className="input" rows={3} maxLength={500} value={f.note} onChange={set("note")} placeholder={f.kind === "missed-punch" ? "For example: I forgot to punch out before leaving." : "For example: working from home for a delivery."} aria-invalid={!!err.note} /></Field>
         </> : <>
@@ -121,7 +124,7 @@ function Decide({ type, x, name, onClose, onDone }) {
       <div className="card-b">
         {err.form && <Callout>{err.form}</Callout>}
         <p style={{ margin: 0, color: "var(--ink-dim)" }}>{type === "attendance" ? `${aboutOf(x)} on ${shortDate(x.date)}. ${x.note}` : `${inr(x.amount)}. ${x.reason}`}</p>
-        <Callout>{type === "attendance" ? (x.kind === "missed-punch" && x.time ? `Approving adds the punch ${x.direction === "IN" ? "in" : "out"} at ${clock12(x.time)} to ${name}'s day on ${shortDate(x.date)}, and the day is counted from it.` : "Approving records your decision.") : "Approving records your decision. Please record the advance and its recovery on the person's page."}</Callout>
+        <Callout>{type === "attendance" ? (x.kind === "missed-punch" && x.direction === "SHIFT" ? `Approving counts ${name}'s day on ${shortDate(x.date)} from the start of their shift to its end.` : x.kind === "missed-punch" && x.time ? `Approving adds the punch ${x.direction === "IN" ? "in" : "out"} at ${clock12(x.time)} to ${name}'s day on ${shortDate(x.date)}, and the day is counted from it.` : "Approving records your decision.") : "Approving records your decision. Please record the advance and its recovery on the person's page."}</Callout>
         <Field id="dc-n" label="Note to the person" hint="Needed when you decline." error={err.note}><textarea id="dc-n" className="input" rows={3} maxLength={500} value={note} onChange={(e) => setNote(e.target.value)} aria-invalid={!!err.note} /></Field>
       </div>
       <div className="modal-f"><button type="button" className="btn glass" onClick={onClose} disabled={busy}>Cancel</button><button type="button" className="btn danger" onClick={() => go("decline")} disabled={busy}>Decline</button><button type="button" className="btn primary" onClick={() => go("approve")} disabled={busy}>Approve</button></div>

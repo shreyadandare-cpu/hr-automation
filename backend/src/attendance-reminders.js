@@ -11,6 +11,7 @@ import { pool } from "./db.js";
 import { monthsFor } from "./attendance.js";
 import { addPenaltyLeave } from "./leave.js";
 import { penalisedDays, policyOf } from "./missing-punch-rules.js";
+import { NOW_SQL, byOrd, ord } from "./work-day.js";
 import { notify } from "./notify.js";
 import { shiftOn } from "./shift-rules.js";
 import { shiftsFor } from "./shifts.js";
@@ -27,7 +28,7 @@ const addDays = (d, n) => new Date(Date.parse(d + "T00:00:00Z") + n * 86400000).
 export function missingOutOn(punches) {
   if (!punches.length) return false;
   if (punches.some((p) => p.source === "device")) return punches.length < 2;
-  const last = [...punches].sort((a, b) => (a.time < b.time ? -1 : 1)).pop();
+  const last = [...punches].sort(byOrd).pop();
   return last.direction === "IN";
 }
 
@@ -37,17 +38,17 @@ export function missingOutOn(punches) {
  * Returns [{ email, date, kind, shiftEnd }].
  */
 export function dueReminders({ people, today, nowTime, shiftEndOf, sent, corrected, remindBeforeMin = 10 }) {
-  const out = [], now = mins(nowTime);
+  const out = [], now = ord(nowTime);   // the working day runs to 5 am (work-day.js), so 01:00 is after the evening
   for (const p of people) {
     const on = (d) => p.punches.filter((x) => x.date === d);
-    const todays = on(today).sort((a, b) => (a.time < b.time ? -1 : 1));
+    const todays = on(today).sort(byOrd);
     const end = shiftEndOf(p.email, today);
     const stillIn = todays.length && todays[todays.length - 1].direction === "IN";
     if (stillIn && remindBeforeMin > 0 && now >= mins(end) - remindBeforeMin && now < mins(end) && !sent.has(`${p.email}|${today}|before-end`))
       out.push({ email: p.email, date: today, kind: "before-end", shiftEnd: end });
     if (todays.length && todays[todays.length - 1].direction === "IN" && now >= mins(end) + STILL_IN_AFTER_MIN && !sent.has(`${p.email}|${today}|still-in`))
       out.push({ email: p.email, date: today, kind: "still-in", shiftEnd: end });
-    if (nowTime < MISSING_FROM) continue;
+    if (nowTime < MISSING_FROM || ord(nowTime) >= 1440) continue;   // from 10 am on the new working day
     for (let i = 1; i <= LOOK_BACK_DAYS; i++) {
       const d = addDays(today, -i);
       if (missingOutOn(on(d)) && !corrected.has(`${p.email}|${d}`) && !sent.has(`${p.email}|${d}|missing-out`))
@@ -62,7 +63,8 @@ const dayName = (d) => new Date(d + "T00:00:00Z").toLocaleDateString("en-GB", { 
 
 /** Finds the reminders due now and sends each once. Returns how many were sent. */
 export async function runAttendanceReminders(db = pool) {
-  const { rows: [now] } = await db.query("SELECT to_char(now() AT TIME ZONE 'Asia/Kolkata','YYYY-MM-DD') AS d, to_char(now() AT TIME ZONE 'Asia/Kolkata','HH24:MI') AS t");
+  const { rows: [w] } = await db.query(NOW_SQL);
+  const now = { d: w.day, t: w.time.slice(0, 5) };   // the working day (from 5 am) and the clock time
   const from = addDays(now.d, -LOOK_BACK_DAYS);
   const [ps, sentRows, reqRows, sh, pol] = await Promise.all([
     db.query(`SELECT lower(e.work_email) AS email, to_char(p.work_date,'YYYY-MM-DD') AS date, to_char(p.punch_time,'HH24:MI') AS time, p.direction, p.source
@@ -104,7 +106,8 @@ export async function runAttendanceReminders(db = pool) {
 export async function runMissingPunchPenalties(db = pool, { emails = null } = {}) {   // emails: only these people (tests)
   const policy = policyOf((await db.query("SELECT * FROM attendance_policy WHERE id=1")).rows[0]);
   if (!policy.penaltyOn) return 0;
-  const { rows: [now] } = await db.query("SELECT to_char(now() AT TIME ZONE 'Asia/Kolkata','YYYY-MM-DD') AS d");
+  const { rows: [w] } = await db.query(NOW_SQL);
+  const now = { d: w.day };
   const closedBefore = addDays(now.d, -policy.daysBack);   // days before this can no longer be corrected
   const months = [...new Set([addDays(now.d.slice(0, 7) + "-01", -1).slice(0, 7), now.d.slice(0, 7)])];
   const [waiting, done] = await Promise.all([

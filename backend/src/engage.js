@@ -13,6 +13,9 @@ import { managerOf, reportsOf } from "./teams.js";
 import { financialYear, readAdvance, readAppLink, readArticle, readAttendanceRequest, readDecision, readGoal, readPoll, readPraise, readLateDecision, readLateRequest, readTaxDeclaration, readTaxDates, readUnlock, tally, windowOpen, joinerUntil, BOTH_REGIMES } from "./engage-rules.js";
 import { form124Pdf } from "./tax-forms.js";
 import { correctionRoute, policyOf as missingPolicyOf } from "./missing-punch-rules.js";
+import { NOW_SQL, ord } from "./work-day.js";
+import { shiftOn } from "./shift-rules.js";
+import { shiftsFor } from "./shifts.js";
 import { estimateTax, yearForReturn } from "./tax-estimate.js";
 import { postToChat } from "./chat.js";
 
@@ -242,7 +245,8 @@ export function engageRouter(wrap) {
     res.status(201).json({ id: row.id });
   }));
   r.post("/api/requests/attendance", wrap(async (req, res) => {
-    const { rows: [now] } = await pool.query("SELECT to_char(now() AT TIME ZONE 'Asia/Kolkata','YYYY-MM-DD') AS d, to_char(now() AT TIME ZONE 'Asia/Kolkata','HH24:MI') AS t");
+    const { rows: [w] } = await pool.query(NOW_SQL);
+    const now = { d: w.day, t: w.time.slice(0, 5) };   // the working day (it starts at 5 am, work-day.js) and the clock time
     const { date, kind, note, time, direction, errors } = readAttendanceRequest(req.body, now.d, now.t);
     if (Object.keys(errors).length) return res.status(400).json({ errors });
     if (kind !== "missed-punch") {
@@ -266,7 +270,8 @@ export function engageRouter(wrap) {
       const { rows: [used] } = await client.query(
         `SELECT count(*)::int AS requests, count(*) FILTER (WHERE self_fix)::int AS self_fixes FROM attendance_requests
           WHERE lower(email)=$1 AND kind='missed-punch' AND deleted_at IS NULL AND status <> 'declined' AND date_trunc('month', on_date) = date_trunc('month', $2::date)`, [me(req), date]);
-      const route = correctionRoute({ date, today: now.d, policy, used: { requests: used.requests, selfFixes: used.self_fixes } });
+      let route = correctionRoute({ date, today: now.d, policy, used: { requests: used.requests, selfFixes: used.self_fixes } });
+      if (route.selfFix && direction === "SHIFT") route = { approval: true };   // regularising a whole day always needs the manager or HR
       if (route.refuse) { await client.query("ROLLBACK"); return res.status(409).json({ error: route.refuse }); }
       const { rows: [row] } = await client.query(
         `INSERT INTO attendance_requests (email, on_date, kind, note, punch_time, direction, self_fix, status, decided_by, decided_at)
@@ -285,7 +290,7 @@ export function engageRouter(wrap) {
     if (out.selfFix) return;
     // Waiting for approval: the reporting manager and the HR team are both told, and either decides.
     const boss = await managerOf(pool, me(req));
-    const what = `a missed punch ${direction === "OUT" ? "out" : "in"} at ${time} on ${date}`;
+    const what = direction === "SHIFT" ? `regularising ${date} to the shift` : `a missed punch ${direction === "OUT" ? "out" : "in"} at ${time} on ${date}`;
     if (boss) notify(boss, { title: "Attendance correction to review", body: `A request about ${what} is waiting for you.`, link: "/app/team-requests" }).catch(() => {});
     notify("perm:attendance.edit", { title: "Attendance correction to review", body: `A request about ${what} is waiting.`, link: "/app/hr-requests" }).catch(() => {});
   }));
@@ -308,13 +313,27 @@ export function engageRouter(wrap) {
         RETURNING email${t.team ? ", kind, to_char(on_date,'YYYY-MM-DD') AS on_date, to_char(punch_time,'HH24:MI') AS punch_time, direction" : ""}`, [idOf(req.params.id), decision, me(req), note || null])).rows[0];
       if (!x) { await client.query("ROLLBACK"); return res.status(409).json({ error: "This request has already been decided." }); }
       // An approved missed punch with a time adds that punch, so the day is counted from the real times (unless it is already there).
-      if (t.team && decision === "approved" && x.kind === "missed-punch" && x.punch_time) {
-        const emp = (await client.query("SELECT id FROM employees WHERE lower(work_email)=lower($1)", [x.email])).rows[0];
+      // A day regularised to the shift (SHIFT) gets the shift's start and end, where the real punches do not already cover them.
+      if (t.team && decision === "approved" && x.kind === "missed-punch" && (x.punch_time || x.direction === "SHIFT")) {
+        const emp = (await client.query("SELECT id, work_email FROM employees WHERE lower(work_email)=lower($1)", [x.email])).rows[0];
         if (emp) {
-          const there = await client.query("SELECT 1 FROM attendance_punches WHERE employee_id=$1 AND work_date=$2 AND punch_time=$3::time AND direction=$4", [emp.id, x.on_date, x.punch_time, x.direction]);
-          if (!there.rowCount) await client.query("INSERT INTO attendance_punches (employee_id, work_date, punch_time, direction, source, note, created_by) VALUES ($1,$2,$3,$4,'request',$5,$6)",
-            [emp.id, x.on_date, x.punch_time, x.direction, `Correction approved by ${me(req)}`, me(req)]);
-          await client.query("INSERT INTO audit_log (action, work_email) VALUES ($1,$2)", [`Attendance: ${x.direction} at ${x.punch_time} on ${x.on_date} added from an approved correction by ${me(req)}`, x.email]);
+          const have = (await client.query("SELECT to_char(punch_time,'HH24:MI') AS t, direction FROM attendance_punches WHERE employee_id=$1 AND work_date=$2", [emp.id, x.on_date])).rows;
+          const add = async (time, direction, why) => {
+            if (have.some((p) => p.t === time && p.direction === direction)) return;
+            await client.query("INSERT INTO attendance_punches (employee_id, work_date, punch_time, direction, source, note, created_by) VALUES ($1,$2,$3,$4,'request',$5,$6)",
+              [emp.id, x.on_date, time, direction, why, me(req)]);
+          };
+          if (x.direction === "SHIFT") {
+            const sh = await shiftsFor(client, x.on_date, x.on_date, [emp.work_email]);
+            const shift = shiftOn(sh.of(emp.work_email), sh.fallback, x.on_date);
+            const ins = have.filter((p) => p.direction === "IN").map((p) => ord(p.t)), outs = have.filter((p) => p.direction === "OUT").map((p) => ord(p.t));
+            if (!ins.length || Math.min(...ins) > ord(shift.start)) await add(shift.start, "IN", `Regularised to the shift by ${me(req)}`);
+            if (!outs.length || Math.max(...outs) < ord(shift.end)) await add(shift.end, "OUT", `Regularised to the shift by ${me(req)}`);
+            await client.query("INSERT INTO audit_log (action, work_email) VALUES ($1,$2)", [`Attendance: ${x.on_date} regularised to the shift (${shift.start} to ${shift.end}) by ${me(req)}`, x.email]);
+          } else {
+            await add(x.punch_time, x.direction, `Correction approved by ${me(req)}`);
+            await client.query("INSERT INTO audit_log (action, work_email) VALUES ($1,$2)", [`Attendance: ${x.direction} at ${x.punch_time} on ${x.on_date} added from an approved correction by ${me(req)}`, x.email]);
+          }
         }
       }
       await client.query("COMMIT");

@@ -238,11 +238,11 @@ function AddPunch({ today, onAdd }) {
 /* One person's attendance (HR can change punches; a reporting manager can only read). */
 function PersonView({ person, canEdit, onBack, say }) {
   const months = useMonths(person.email);
-  const now = istNow();
+  const now = istNow();   // now.day: the working day, which starts at 5 am
   const clockNow = useNow(1000);
   const [h24] = useH24();
-  useEffect(() => { months.ensure(now.date.slice(0, 7)); }, [months.ensure, now.date]);   // today's month, for the Timings and Today cards
-  const todayDay = months.byMonth[now.date.slice(0, 7)]?.days.find((d) => d.date === now.date);
+  useEffect(() => { months.ensure(now.day.slice(0, 7)); }, [months.ensure, now.day]);   // today's month, for the Timings and Today cards
+  const todayDay = months.byMonth[now.day.slice(0, 7)]?.days.find((d) => d.date === now.day);
   const todayState = todayDay && todayDay.punches.length && todayDay.punches[todayDay.punches.length - 1].direction === "IN" ? "in" : "out";
   const name = Object.values(months.byMonth)[0]?.name || person.name;
   const removePunch = async (id) => {
@@ -259,7 +259,7 @@ function PersonView({ person, canEdit, onBack, say }) {
   const { people, reload } = useData();
   const [siting, setSiting] = useState(null);   // HR: switching this person between On-site and Off-site
   const info = (people || []).find((x) => String(x.email).toLowerCase() === String(person.email).toLowerCase());
-  const sum = months.byMonth[now.date.slice(0, 7)]?.summary;
+  const sum = months.byMonth[now.day.slice(0, 7)]?.summary;
   const details = (
     <div className="card" style={{ padding: "16px 22px", display: "flex", flexDirection: "column", gap: 14 }}>
       {info && <div className="muted" style={{ display: "flex", flexWrap: "wrap", gap: "6px 22px" }}>
@@ -291,14 +291,14 @@ function PersonView({ person, canEdit, onBack, say }) {
       {details}
       {siting && <SiteModal person={{ email: person.email, name }} site={siting} onClose={() => setSiting(null)} onDone={async (m) => { say(m); await reload(); months.refresh(); }} />}
       <div className="att-top">
-        <div className="att-col"><h3 className="att-h">Your numbers</h3><StatsCard byMonth={months.byMonth} today={now.date} name={name.split(" ")[0]} /></div>
+        <div className="att-col"><h3 className="att-h">Your numbers</h3><StatsCard byMonth={months.byMonth} today={now.day} name={name.split(" ")[0]} /></div>
         {todayDay ? <>
-          <div className="att-col"><h3 className="att-h">Today's shift</h3><TimingsCard today={now.date} punches={todayDay.punches} minutesToday={todayDay.minutes} now={clockNow} h24={h24} byMonth={months.byMonth} /></div>
-          <div className="att-col"><h3 className="att-h">Right now</h3><ActionsCard today={now.date} state={todayState} punches={todayDay.punches} now={clockNow} h24={h24} /></div>
+          <div className="att-col"><h3 className="att-h">Today's shift</h3><TimingsCard today={now.day} punches={todayDay.punches} minutesToday={todayDay.minutes} now={clockNow} h24={h24} byMonth={months.byMonth} /></div>
+          <div className="att-col"><h3 className="att-h">Right now</h3><ActionsCard today={now.day} state={todayState} punches={todayDay.punches} now={clockNow} h24={h24} /></div>
         </> : null}
       </div>
-      <AttendanceLog months={months} today={now.date} canEdit={canEdit} onRemove={removePunch} />
-      {canEdit && <AddPunch today={now.date} onAdd={addPunch} />}
+      <AttendanceLog months={months} today={now.day} canEdit={canEdit} onRemove={removePunch} />
+      {canEdit && <AddPunch today={now.day} onAdd={addPunch} />}
     </section>
   );
 }

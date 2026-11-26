@@ -28,7 +28,7 @@ const ok = (cond, name, extra = "") => { if (cond) { pass += 1; console.log(`PAS
 
 const TAG = `test-mp-${Date.now().toString(36)}`;
 const mail = (k) => `${TAG}-${k}@wohlig.com`;
-const made = { sessions: [], emails: ["boss", "emp", "peer", "late"].map(mail), policy: undefined };
+const made = { sessions: [], emails: ["boss", "emp", "peer", "late", "night"].map(mail), policy: undefined };
 const addDays = (d, n) => new Date(Date.parse(d + "T00:00:00Z") + n * 86400000).toISOString().slice(0, 10);
 const weekdayBefore = (d) => { let x = addDays(d, -1); while ([0, 6].includes(new Date(x + "T00:00:00Z").getUTCDay())) x = addDays(x, -1); return x; };
 
@@ -62,7 +62,8 @@ async function cleanup() {
 }
 
 try {
-  const { d: today } = await one("SELECT to_char(now() AT TIME ZONE 'Asia/Kolkata','YYYY-MM-DD') AS d");
+  // The working day, which starts at 5 am (work-day.js): between midnight and 5 am it is still yesterday.
+  const { d: today } = await one("SELECT to_char((now() AT TIME ZONE 'Asia/Kolkata') - interval '5 hours','YYYY-MM-DD') AS d");
   made.policy = (await db.query("SELECT * FROM attendance_policy WHERE id=1")).rows[0] || null;
   await db.query(`INSERT INTO attendance_policy (id, penalty_on, free_per_month, penalty_days, self_fix_per_month, requests_per_month, days_back, remind_before_min, updated_by)
     VALUES (1, true, 1, 0.5, 1, 3, 7, 10, 'test') ON CONFLICT (id) DO UPDATE SET penalty_on=true, free_per_month=1, penalty_days=0.5, self_fix_per_month=1, requests_per_month=3, days_back=7, remind_before_min=10`);
@@ -73,10 +74,12 @@ try {
   const p1 = weekdayBefore(old), p2 = weekdayBefore(p1);   // the penalty person's two closed missing days (p2 earlier, free; p1 penalised)
 
   await db.query("INSERT INTO employees (name, title, work_email, status, start_date) VALUES ($1,'Tech Lead',$2,'active','2024-01-01')", [`Mp ${TAG.slice(-5)} Boss`, mail("boss")]);
-  for (const k of ["emp", "late"]) await db.query("INSERT INTO employees (name, title, work_email, status, start_date, manager_email) VALUES ($1,'Software Development Engineer',$2,'active','2024-01-01',$3)", [`Mp ${TAG.slice(-5)} ${k}`, mail(k), mail("boss")]);
+  for (const k of ["emp", "late", "night"]) await db.query("INSERT INTO employees (name, title, work_email, status, start_date, manager_email) VALUES ($1,'Software Development Engineer',$2,'active','2024-01-01',$3)", [`Mp ${TAG.slice(-5)} ${k}`, mail(k), mail("boss")]);
   await db.query("INSERT INTO employees (name, title, work_email, status, start_date) VALUES ($1,'Software Development Engineer',$2,'active','2024-01-01')", [`Mp ${TAG.slice(-5)} Peer`, mail("peer")]);
   const idOf = async (k) => (await one("SELECT id FROM employees WHERE work_email=$1", [mail(k)])).id;
-  const empId = await idOf("emp"), lateId = await idOf("late");
+  const empId = await idOf("emp"), lateId = await idOf("late"), nightId = await idOf("night");
+  // The night person: d1 worked 11:00 to 1:30 am (after midnight, same working day); d2 punched in at 11:00 only.
+  await db.query("INSERT INTO attendance_punches (employee_id, work_date, punch_time, direction, source, created_by) VALUES ($1,$2,'11:00','IN','web','test'), ($1,$2,'01:30','OUT','web','test'), ($1,$3,'11:00','IN','web','test')", [nightId, d1, d2]);
   for (const d of [d1, d2, d3, d4, old]) await db.query("INSERT INTO attendance_punches (employee_id, work_date, punch_time, direction, source, created_by) VALUES ($1,$2,'11:00','IN','web','test')", [empId, d]);
   for (const d of [p1, p2]) await db.query("INSERT INTO attendance_punches (employee_id, work_date, punch_time, direction, source, created_by) VALUES ($1,$2,'11:00','IN','web','test')", [lateId, d]);
   await new Promise((r) => setTimeout(r, 15500));   // the reporting tree is cached for 15 seconds
@@ -131,6 +134,21 @@ try {
       ok(r.status === 409 && /most allowed/.test(r.data?.error || ""), "the fourth is refused: the month's limit", JSON.stringify(r));
     } else console.log("SKIP  the month's limit (the test days cross a month)");
   } else console.log("SKIP  approval steps (the test days cross a month)");
+
+  // The day starts at 5 am: a punch out at 1:30 am counts for the day before.
+  const night = await signIn(mail("night"));
+  d = await dayOf(d1, night);
+  ok(!d.forgotOut && d.lastOut === "01:30" && d.minutes === 14 * 60 + 30 && d.status !== "Punch-out missing", "a punch out at 1:30 am closes the day before: 11:00 to 1:30 am is 14h 30m", JSON.stringify({ s: d.status, m: d.minutes, out: d.lastOut }));
+  // Regularise a whole day to the shift: always for approval (even with corrections left without approval), then counted 9:30 to 6:30.
+  {
+    r = await api("POST", "/api/requests/attendance", { date: d2, kind: "missed-punch", direction: "SHIFT", note: "Please regularise" }, night);
+    ok(r.status === 201 && r.data.status === "pending" && !r.data.selfFix, "regularising to the shift always waits for approval", JSON.stringify(r.data));
+    const rid = r.data.id;
+    r = await api("POST", `/api/requests/attendance/${rid}/decide`, { decision: "approve" }, boss);
+    ok(r.status === 200, "the manager approves the regularisation", JSON.stringify(r));
+    d = await dayOf(d2, night);
+    ok(!d.forgotOut && d.lastOut === "18:30" && d.minutes === 9 * 60 && d.status === "Present", "the day is counted from the shift's start to its end: 9h, Present", JSON.stringify({ s: d.status, m: d.minutes, out: d.lastOut, in: d.firstIn }));
+  }
 
   // The penalty: run the job for the test person only.
   process.env.DATABASE_URL = DB;

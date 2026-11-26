@@ -3,6 +3,7 @@ import express from "express";
 import { pool } from "./db.js";
 import { needAll } from "./access.js";
 import { tooMany } from "./invites.js";
+import { ordSql, workDayOf } from "./work-day.js";
 
 /* The office biometric device (eSSL / ZKTeco). A small program inside the office network reads the device and posts new
    punches here with a secret key. Each punch is matched to an employee through the device user ID; IDs nobody has linked
@@ -34,11 +35,13 @@ async function istParts(db, text) {
  * Adds one device punch. The device does not always say IN or OUT, so it alternates through the day: first punch IN, next OUT, and so on.
  * A second scan within a minute of another punch is ignored (people tap twice). Returns true when a punch was added.
  */
-async function addPunch(db, employeeId, { date, time }, createdBy) {
+async function addPunch(db, employeeId, { date: calendarDate, time }, createdBy) {
+  // The attendance day starts at 5 am (work-day.js): a scan between midnight and 5 am belongs to the day before.
+  const date = workDayOf(calendarDate, time);
   const r = await db.query(
     `INSERT INTO attendance_punches (employee_id, work_date, punch_time, direction, source, created_by)
      SELECT $1::int, $2::date, $3::time,
-       CASE WHEN (SELECT count(*) FROM attendance_punches WHERE employee_id = $1::int AND work_date = $2::date AND punch_time < $3::time) % 2 = 0 THEN 'IN' ELSE 'OUT' END,
+       CASE WHEN (SELECT count(*) FROM attendance_punches WHERE employee_id = $1::int AND work_date = $2::date AND ${ordSql("punch_time")} < ${ordSql("$3::time")}) % 2 = 0 THEN 'IN' ELSE 'OUT' END,
        'device', $4::text
      WHERE NOT EXISTS (SELECT 1 FROM attendance_punches WHERE employee_id = $1::int AND work_date = $2::date
                          AND abs(extract(epoch FROM (punch_time - $3::time))) < 60)

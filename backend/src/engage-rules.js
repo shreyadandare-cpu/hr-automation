@@ -3,6 +3,7 @@
  * tested without a database. Each `read…` takes what the page sent and returns the cleaned values plus `errors`
  * (field name to a sentence a person can act on).
  */
+import { ord } from "./work-day.js";
 export const LIMITS = { question: 200, option: 80, minOptions: 2, maxOptions: 6, praise: 500, title: 140, article: 20000, appTitle: 60, appText: 200, reason: 500, maxAdvanceMinor: 100000000 };
 export const BADGES = ["thanks", "team-player", "problem-solver", "above-and-beyond", "mentor"];
 export const ATTENDANCE_KINDS = ["missed-punch", "work-from-home", "on-duty"];
@@ -85,13 +86,17 @@ export function readAttendanceRequest(b = {}, today = new Date().toISOString().s
   }
   if (!ATTENDANCE_KINDS.includes(kind)) errors.kind = "Please choose what the request is about.";
   if (!note) errors.note = "Please add a short note."; else if (note.length > LIMITS.reason) errors.note = `Please keep the note under ${LIMITS.reason} characters.`;
-  // A missed punch says which punch and the real time (as Keka's attendance regularisation): approving it adds that punch.
+  // A missed punch says which punch and the real time (Keka's adjustment), or asks to regularise the whole day to the shift
+  // (SHIFT: Keka's regularisation, always approved by the manager or HR). Approving adds the punch(es).
   let time = null, direction = null;
   if (kind === "missed-punch") {
-    direction = b.direction === "IN" ? "IN" : "OUT";
-    time = text(b.time).slice(0, 5);
-    if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(time)) errors.time = direction === "OUT" ? "Please enter the time you left, like 18:45." : "Please enter the time you arrived, like 09:40.";
-    else if (!errors.date && date === today && nowTime && time > nowTime) errors.time = "That time has not come yet. Please check it.";
+    direction = ["IN", "SHIFT"].includes(b.direction) ? b.direction : "OUT";
+    if (direction !== "SHIFT") {
+      time = text(b.time).slice(0, 5);
+      // The working day runs to 5 am (work-day.js), so 01:30 the night after still belongs to it, after the evening.
+      if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(time)) errors.time = direction === "OUT" ? "Please enter the time you left, like 18:45." : "Please enter the time you arrived, like 09:40.";
+      else if (!errors.date && date === today && nowTime && ord(time) > ord(nowTime)) errors.time = "That time has not come yet. Please check it.";
+    }
   }
   return { date, kind, note, time, direction, errors };
 }

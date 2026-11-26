@@ -935,6 +935,8 @@ CREATE TABLE IF NOT EXISTS attendance_policy (
   penalty_days NUMERIC NOT NULL DEFAULT 0.5 CHECK (penalty_days IN (0.5, 1)), self_fix_per_month INT NOT NULL DEFAULT 2,
   requests_per_month INT NOT NULL DEFAULT 5, days_back INT NOT NULL DEFAULT 7, remind_before_min INT NOT NULL DEFAULT 10,
   updated_by TEXT, updated_at TIMESTAMPTZ NOT NULL DEFAULT now());
+-- The day the penalty was last switched on: only missing punch-outs from that day count, so nobody is penalised for days before it.
+ALTER TABLE attendance_policy ADD COLUMN IF NOT EXISTS penalty_from DATE;
 -- Missing punch-out penalties applied: one per person and day, with the leave entry that holds the deduction.
 CREATE TABLE IF NOT EXISTS attendance_penalties (
   email TEXT NOT NULL, work_date DATE NOT NULL, leave_request_id INT, days NUMERIC NOT NULL, created_at TIMESTAMPTZ NOT NULL DEFAULT now(),

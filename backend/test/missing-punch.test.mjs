@@ -89,3 +89,15 @@ test("a correction: refused past the window or the month's limit, added straight
   assert.ok(!correctionRoute({ date: "2026-11-20", today, policy, used: { requests: 0, selfFixes: 0 } }).refuse, "7 days back is allowed");
   assert.ok(correctionRoute({ date: "2026-11-26", today, policy, used: { requests: 5, selfFixes: 2 } }).refuse);
 });
+
+test("the penalty never reaches back before the day HR switched it on", () => {
+  const on = { ...MISSING_POLICY_DEFAULTS, penaltyOn: true, freePerMonth: 1, penaltyFrom: "2026-11-10" };
+  assert.deepEqual(penalisedDays(["2026-11-03", "2026-11-05", "2026-11-12", "2026-11-18"], on), ["2026-11-18"], "the two days before 10 Nov neither count nor are penalised");
+});
+
+test("the saved start day of the penalty is read on its own calendar day", async () => {
+  const { policyOf } = await import("../src/missing-punch-rules.js");
+  const p = policyOf({ penalty_on: true, free_per_month: 2, penalty_days: "0.5", self_fix_per_month: 2, requests_per_month: 5, days_back: 7, remind_before_min: 10, penalty_from: new Date(2026, 10, 10) });
+  assert.equal(p.penaltyFrom, "2026-11-10");
+  assert.equal(p.penaltyDays, 0.5);
+});

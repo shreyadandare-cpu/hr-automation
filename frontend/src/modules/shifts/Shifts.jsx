@@ -329,7 +329,7 @@ function MissingPunchPolicy() {
     if (!r.ok) { setErr((r.data && r.data.errors) || {}); toast(apiMsg(r)); return; }
     setF(null); toast("Missing punch-out policy saved."); reload();
   };
-  const changed = !!f && Object.keys(data).some((k) => String(f[k]) !== String(data[k]));
+  const changed = !!f && Object.keys(data).filter((k) => k !== "penaltyFrom").some((k) => String(f[k]) !== String(data[k]));
   return (
     <div className="card">
       <div className="card-h"><h3>Missing punch-out</h3></div>
@@ -338,7 +338,7 @@ function MissingPunchPolicy() {
         <label className="flex min-h-11 items-start gap-3">
           <input type="checkbox" className="mt-1 size-5 flex-none accent-accent" checked={!!cur.penaltyOn} onChange={(e) => set("penaltyOn", e.target.checked)} />
           <span className="flex flex-col"><b className="font-bold">Penalise missing punch-outs after the free ones</b>
-            <span className="text-[14px] text-ink-dim">Each day still missing once it is closed takes casual leave, and loss of pay when no casual leave is left. This changes salaries.</span></span>
+            <span className="text-[14px] text-ink-dim">Each day still missing once it is closed takes casual leave, and loss of pay when no casual leave is left. This changes salaries. {data.penaltyOn && data.penaltyFrom ? `Counted from ${new Date(data.penaltyFrom + "T00:00:00Z").toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" })}, the day it was switched on.` : "Only days from the day you switch it on are counted."}</span></span>
         </label>
         <div className="grid grid-cols-2 gap-4 max-md:grid-cols-1">
           <div className="field"><label htmlFor="mp-pen">Penalty for each one after the free ones</label>

@@ -103,9 +103,14 @@ try {
     r = await api("POST", "/api/requests/attendance", { date: d2, kind: "missed-punch", direction: "OUT", time: "18:40", note: "Forgot again" }, emp);
     ok(r.status === 201 && r.data.status === "pending" && !r.data.selfFix, "the next correction waits for approval", JSON.stringify(r.data));
     const id = r.data.id;
-    await new Promise((res) => setTimeout(res, 800));   // the notices go out just after the answer
-    const toBoss = await one("SELECT count(*)::int AS n FROM notifications WHERE lower(recipient)=$1 AND title='Attendance correction to review'", [mail("boss")]);
-    const toHr = await one("SELECT count(*)::int AS n FROM notifications WHERE lower(recipient)<>$1 AND title='Attendance correction to review' AND link='/app/hr-requests' AND created_at > now() - interval '2 minutes'", [mail("boss")]);
+    // The notices go out just after the answer: wait for them (up to 3 seconds).
+    let toBoss, toHr;
+    for (let i = 0; i < 15; i++) {
+      toBoss = await one("SELECT count(*)::int AS n FROM notifications WHERE lower(recipient)=$1 AND title='Attendance correction to review'", [mail("boss")]);
+      toHr = await one("SELECT count(*)::int AS n FROM notifications WHERE lower(recipient)<>$1 AND title='Attendance correction to review' AND link='/app/hr-requests' AND created_at > now() - interval '2 minutes'", [mail("boss")]);
+      if (toBoss.n && toHr.n) break;
+      await new Promise((res) => setTimeout(res, 200));
+    }
     ok(toBoss.n === 1 && toHr.n >= 1, "both the manager and the HR team are told", JSON.stringify({ toBoss, toHr }));
     r = await api("POST", `/api/requests/attendance/${id}/decide`, { decision: "approve" }, emp);
     ok(r.status === 403, "nobody approves their own");

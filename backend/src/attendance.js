@@ -287,12 +287,15 @@ export function attendanceRouter(wrap) {
   r.put("/api/attendance/missing-policy", needAll("shifts.manage"), wrap(async (req, res) => {
     const { value: v, errors } = readMissingPolicy(req.body);
     if (Object.keys(errors).length) return res.status(400).json({ errors });
-    await pool.query(`INSERT INTO attendance_policy (id, penalty_on, free_per_month, penalty_days, self_fix_per_month, requests_per_month, days_back, remind_before_min, updated_by, updated_at)
-      VALUES (1,$1,$2,$3,$4,$5,$6,$7,$8,now()) ON CONFLICT (id) DO UPDATE SET penalty_on=$1, free_per_month=$2, penalty_days=$3, self_fix_per_month=$4,
-      requests_per_month=$5, days_back=$6, remind_before_min=$7, updated_by=$8, updated_at=now()`,
+    // Switching the penalty on (from off) sets the day it starts: today, in Indian time. Days before it are never penalised.
+    await pool.query(`INSERT INTO attendance_policy (id, penalty_on, free_per_month, penalty_days, self_fix_per_month, requests_per_month, days_back, remind_before_min, updated_by, updated_at, penalty_from)
+      VALUES (1,$1,$2,$3,$4,$5,$6,$7,$8,now(), CASE WHEN $1 THEN (now() AT TIME ZONE 'Asia/Kolkata')::date END)
+      ON CONFLICT (id) DO UPDATE SET penalty_on=$1, free_per_month=$2, penalty_days=$3, self_fix_per_month=$4,
+      requests_per_month=$5, days_back=$6, remind_before_min=$7, updated_by=$8, updated_at=now(),
+      penalty_from = CASE WHEN $1 AND NOT attendance_policy.penalty_on THEN (now() AT TIME ZONE 'Asia/Kolkata')::date WHEN $1 THEN attendance_policy.penalty_from END`,
       [v.penaltyOn, v.freePerMonth, v.penaltyDays, v.selfFixPerMonth, v.requestsPerMonth, v.daysBack, v.remindBeforeMin, me(req)]);
     await audit(pool, `Missing punch-out policy: penalty ${v.penaltyOn ? `on, ${v.penaltyDays} day after ${v.freePerMonth} free a month` : "off"}; ${v.selfFixPerMonth} self-fixes and ${v.requestsPerMonth} corrections a month, up to ${v.daysBack} days back; reminder ${v.remindBeforeMin} minutes before the shift ends`, me(req));
-    res.json(v);
+    res.json(policyOf((await pool.query("SELECT * FROM attendance_policy WHERE id=1")).rows[0]));
   }));
 
   // A month of days. Everyone reads their own; attendance.view the people in scope, and a manager their team, with ?email=.

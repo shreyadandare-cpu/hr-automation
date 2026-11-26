@@ -14,6 +14,7 @@ export const MISSING_POLICY_DEFAULTS = {
   requestsPerMonth: 5,       // corrections a month in all; after that, HR adds the punch
   daysBack: 7,               // how many days back a correction can be sent; after this the day is closed
   remindBeforeMin: 10,       // minutes before the shift ends: "remember to punch out"
+  penaltyFrom: null,         // the day the penalty was switched on; days before it are never penalised
 };
 const LIMITS = { freePerMonth: [0, 31], selfFixPerMonth: [0, 31], requestsPerMonth: [0, 62], daysBack: [1, 60], remindBeforeMin: [0, 120] };
 
@@ -31,10 +32,13 @@ export function readMissingPolicy(b = {}) {
   return { value, errors };
 }
 
+// A DATE column arrives as midnight on the server's clock; read its calendar day there (toISOString would shift it to UTC).
+const dayOf = (d) => (d instanceof Date ? `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}` : String(d).slice(0, 10));
 /** The saved row (attendance_policy) as settings, with the defaults for anything not set. */
 export const policyOf = (row) => (!row ? { ...MISSING_POLICY_DEFAULTS } : {
   penaltyOn: !!row.penalty_on, freePerMonth: row.free_per_month, penaltyDays: Number(row.penalty_days), selfFixPerMonth: row.self_fix_per_month,
   requestsPerMonth: row.requests_per_month, daysBack: row.days_back, remindBeforeMin: row.remind_before_min,
+  penaltyFrom: row.penalty_from ? dayOf(row.penalty_from) : null,
 });
 
 /**
@@ -43,7 +47,8 @@ export const policyOf = (row) => (!row ? { ...MISSING_POLICY_DEFAULTS } : {
  */
 export function penalisedDays(days, policy) {
   if (!policy.penaltyOn) return [];
-  return [...new Set(days)].sort().slice(policy.freePerMonth);
+  // Only days from the day the penalty was switched on count, towards the free ones too.
+  return [...new Set(days)].filter((d) => !policy.penaltyFrom || d >= policy.penaltyFrom).sort().slice(policy.freePerMonth);
 }
 
 /**

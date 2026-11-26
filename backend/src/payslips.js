@@ -1,4 +1,5 @@
 import express from "express";
+import { needDocUnlock, pdfLock, unlockedPassword } from "./doc-password.js";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import PDFDocument from "pdfkit";
@@ -188,7 +189,8 @@ export function payslipsRouter(wrap) {
     res.json(p.slip);
   }));
 
-  r.get("/api/payslips/:period/pdf", wrap(async (req, res) => {
+  // The PDF opens only with the person's document password: they unlock with it first, and the file is locked with it.
+  r.get("/api/payslips/:period/pdf", needDocUnlock, wrap(async (req, res) => {
     const { period } = req.params;
     if (!PERIOD.test(period)) return res.status(400).json({ error: "Choose a month like 2026-10." });
     const email = await targetOf(req, res);
@@ -198,7 +200,9 @@ export function payslipsRouter(wrap) {
     const s = p.slip;
     res.setHeader("Content-Type", "application/pdf");
     res.setHeader("Content-Disposition", `${req.query.view === "1" ? "inline" : "attachment"}; filename="Payslip-${period}-${String(s.employee.name).replace(/[^A-Za-z0-9]+/g, "-")}.pdf"`);
-    const doc = new PDFDocument({ size: "A4", margin: 45, info: { Title: `Payslip ${monthName(period)}`, Author: "Wohlig Transformations Pvt Ltd" } });
+    res.setHeader("Cache-Control", "private, no-store");
+    const doc = new PDFDocument({ size: "A4", margin: 45, info: { Title: `Payslip ${monthName(period)}`, Author: "Wohlig Transformations Pvt Ltd" },
+      ...pdfLock(unlockedPassword(req)) });
     doc.pipe(res);
     drawPdf(doc, s);
     doc.end();

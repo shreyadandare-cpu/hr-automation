@@ -1,11 +1,12 @@
 import crypto from "node:crypto";
 
-import { LIVE_GRANTS_SQL, canAll, holds, scopeOf } from "../access.js";
+import { canAll, holds, scopeOf } from "../access.js";
+import { salaryOwners } from "../access-rules.js";
 import { pool as mainPool } from "../db.js";
 
 /*
- * Who may see payroll (permissions ticked on the Access page, access-rules.js), and the encryption used for bank account numbers
- * and bank files.
+ * Who may see payroll, and the encryption used for bank account numbers and bank files. The payroll permissions below are held
+ * by the salary owners only (SALARY_OWNERS, kailash@wohlig.com by default; access-rules.js), never by a grant or a super admin.
  *
  *   payroll.prepare  (company)        prepares payroll: salaries, inputs, recalculation, Excel, adjustments, tax rules, declarations, publishing.
  *   payroll.approve  (company)        sees a run once it is sent for review, approves, rejects or asks for changes. Never sees bank
@@ -28,15 +29,15 @@ export async function actorOf(req) {
   const hr = canAll(req, "payroll.prepare"), reviewer = canAll(req, "payroll.approve"), bank = canAll(req, "payroll.bank");
   const viewer = holds(req, "payroll.view");
   const scope = hr || reviewer || bank ? null : viewer ? await scopeOf(req, "payroll.view") : new Set();
-  return { email: req.user.email, hr, reviewer, bank, viewer, scope };
+  // With one salary owner there is nobody else to check their work, so they may review and approve a run they prepared.
+  const sole = salaryOwners().length === 1;
+  return { email: req.user.email, hr, reviewer, bank, viewer, scope, sole };
 }
 
-/** Who is told that a payroll is waiting for review: live company-wide payroll.approve grants, else the super admins. */
+/** Who is told that a payroll is waiting for review: the salary owners (access-rules.js), never anyone else. */
 export async function approvers() {
-  const { rows } = await mainPool.query(
-    `SELECT DISTINCT lower(email) AS email FROM access_grants WHERE permission='payroll.approve' AND scope='company' AND ${LIVE_GRANTS_SQL}`);
-  if (rows.length) return rows.map((r) => r.email);
-  return (await mainPool.query("SELECT lower(email) AS email FROM users WHERE is_super_admin AND NOT login_blocked")).rows.map((r) => r.email);
+  const { rows } = await mainPool.query("SELECT lower(email) AS email FROM users WHERE lower(email) = ANY($1) AND NOT login_blocked", [salaryOwners()]);
+  return rows.map((r) => r.email);
 }
 
 const denied = (res) => res.status(403).json({ error: "You do not have access to this. Please ask a super admin if you need it." });

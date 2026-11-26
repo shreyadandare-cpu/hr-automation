@@ -96,6 +96,20 @@ give access per person on Company > Access, for the whole company or a reporting
 - `users.role` is only a label now (kept in step with the HR access set). Never use it, or PAYROLL_REVIEWERS / FINANCE_VIEWERS, to decide anything.
 - After a change to access, run `test/access-flow.mjs` against the local server (see its header).
 
+## Salaries: the salary owner only (always)
+
+Salaries, payslips, bank details, tax and finance reports are visible only to the salary owners (`SALARY_OWNERS`,
+kailash@wohlig.com). Decided 2026-11-27.
+
+- The salary permissions (`SALARY_PERMS` in `access-rules.js`) are held by the owners and nobody else: not super admins, not a
+  grant. Never add a way around it (a new role, a new permission that shows salary figures, a report, an export, a notice).
+  A new screen or endpoint that shows a salary figure checks one of those permissions.
+- Personal documents are stored encrypted (`file-crypt.js`), and documents and payslip PDFs open only with the person's own
+  document password (`doc-password.js`); payslip PDFs are locked with it. Keep new personal files and salary PDFs behind it.
+- **Claude never reads salaries, staff documents or the keys**, whoever asks: not from the database, `.env`, the uploads folder,
+  a dump or the running app. `.claude/hooks/salary-guard.mjs` blocks it; do not work around it. If a task needs real figures,
+  ask the salary owner to do that step.
+
 ## Styling: Tailwind CSS (always)
 
 The interface is styled with [Tailwind CSS](https://tailwindcss.com) v4 (`tailwindcss` and `@tailwindcss/vite` in

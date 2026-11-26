@@ -13,7 +13,7 @@
  * when a manager changes.
  */
 import { pool } from "./db.js";
-import { FIRST_SUPER_ADMINS, PRESETS, decide, grantsFromRoles, mayDecideOn, scopeFor, subtree } from "./access-rules.js";
+import { FIRST_SUPER_ADMINS, PRESETS, decide, grantsFromRoles, SALARY_PERMS, isSalaryOwner, mayDecideOn, salaryOwners, salaryRule, scopeFor, subtree } from "./access-rules.js";
 import { createGoogleUser } from "./auth.js";
 import { isCompanyEmail } from "./validate.js";
 
@@ -44,7 +44,12 @@ export async function can(req, perm, target) { return decide(req.access, perm, t
 export async function scopeOf(req, perm) { return scopeFor(req.access, perm, await treeFn()); }
 export async function mayDecide(req, perm, owner) { return mayDecideOn(req.access, perm, owner, await treeFn()); }
 /** Holds `perm` for the whole company (a super admin, or a company grant): for company-level actions inside a team-able permission. */
-export const canAll = (req, perm) => !!req.access && (req.access.superAdmin || (req.access.grants || []).some((g) => g.permission === perm && g.scope === "company"));
+export const canAll = (req, perm) => {
+  if (!req.access) return false;
+  const locked = salaryRule(req.access, perm);   // salaries: the salary owners only (access-rules.js)
+  if (locked !== null) return locked;
+  return req.access.superAdmin || (req.access.grants || []).some((g) => g.permission === perm && g.scope === "company");
+};
 /** Route guard: `perm` for the whole company. */
 export const needAll = (perm) => (req, res, next) => (!req.user ? res.status(401).json({ error: "Please sign in." }) : canAll(req, perm) ? next() : denied(res));
 
@@ -89,6 +94,14 @@ export async function bootstrapAccess() {
     }
     await mark("access-grants-from-roles");
   }
+  // Salaries are the salary owners' alone: older salary grants to anyone else are ended on every start (the rows stay as
+  // history, and the audit log says so). They already give nothing (access-rules.js); this keeps the Access page honest.
+  const ended = await pool.query(
+    `UPDATE access_grants SET revoked_at=now(), revoked_by='system' WHERE permission = ANY($1) AND revoked_at IS NULL AND NOT (lower(email) = ANY($2))
+      RETURNING lower(email) AS email, permission`, [[...SALARY_PERMS], salaryOwners()]);
+  for (const g of ended.rows) {
+    await pool.query("INSERT INTO audit_log (action, work_email) VALUES ($1,$2)", [`Access removed: ${g.permission} (salaries are visible only to the salary owner)`, g.email]);
+  }
   const { rowCount } = await pool.query("SELECT 1 FROM users WHERE is_super_admin AND NOT login_blocked LIMIT 1");
   if (!rowCount) {
     for (const a of String(process.env.HR_ADMIN_EMAIL || "").split(",").map((s) => s.trim().toLowerCase()).filter(isCompanyEmail)) {
@@ -124,8 +137,11 @@ export async function syncRoleGrants(email, { hr, itAdmin }, actor) {
  * Stops anyone from taking over a login that has more power than their own.
  */
 export async function mayActOnLogin(req, email) {
-  if (isSuper(req)) return true;
   const e = String(email).toLowerCase();
+  // A salary owner's login is theirs alone: nobody else, super admins included, can send it a sign-in link, reset it or change
+  // its personal email, so salaries can't be reached by taking over that login.
+  if (isSalaryOwner(e)) return e === String(req.user?.email || "").toLowerCase();
+  if (isSuper(req)) return true;
   const u = (await pool.query("SELECT is_super_admin FROM users WHERE lower(email)=$1", [e])).rows[0];
   if (u && u.is_super_admin) return false;
   const { rows } = await pool.query(`SELECT DISTINCT permission FROM access_grants WHERE lower(email)=$1 AND ${LIVE_GRANTS_SQL}`, [e]);

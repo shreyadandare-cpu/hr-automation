@@ -6,6 +6,9 @@
  *   reporting tree: everyone below a person in the manager chain, to any depth (employees.manager_email).
  * - Built in, with no tick: everyone acts on their own records, and a manager keeps what they have today over their direct reports.
  * - Nobody decides their own request, whatever they hold (mayDecide).
+ * - Salaries are locked to the salary owners (SALARY_OWNERS, kailash@wohlig.com by default): the salary permissions below are
+ *   held by them, company-wide, and by nobody else, super admins included. No grant on the Access page changes that; only the
+ *   server's settings do.
  * The decisions against the database are in access.js.
  */
 
@@ -57,15 +60,28 @@ export const PERMISSIONS = [
 ];
 export const PERM = Object.fromEntries(PERMISSIONS.map((p) => [p.key, p]));
 export const GROUPS = [...new Set(PERMISSIONS.map((p) => p.group))];
+/** The permissions that show salaries, payslips, bank details, tax and finance figures: the salary owners only. */
+export const SALARY_PERMS = new Set(["payroll.view", "payroll.prepare", "payroll.approve", "payroll.bank", "finance.view"]);
 
 /** Quick-fill sets on the Access page. They only tick boxes; nothing named is stored. */
 export const PRESETS = {
-  hr: { label: "HR team", scope: "company", perms: PERMISSIONS.map((p) => p.key).filter((k) => k !== "payroll.approve") },
-  payroll: { label: "Payroll", scope: "company", perms: ["payroll.view", "payroll.approve", "finance.view"] },
-  accountant: { label: "Accountant", scope: "company", perms: ["finance.view"] },
+  hr: { label: "HR team", scope: "company", perms: PERMISSIONS.map((p) => p.key).filter((k) => !SALARY_PERMS.has(k)) },
   it: { label: "IT", scope: "company", perms: ["assets.manage", "tools.manage"] },
   teamHead: { label: "Team head (their team)", scope: "tree", perms: ["leave.approve", "attendance.view", "timesheets.approve", "goals.view", "reviews.manage", "overtime.approve"] },
 };
+
+const DEFAULT_SALARY_OWNERS = "kailash@wohlig.com";
+/** The salary owners, from SALARY_OWNERS (comma separated); kailash@wohlig.com when it is not set. Read each time, so tests can set it. */
+export function salaryOwners() {
+  const raw = process.env.SALARY_OWNERS === undefined || process.env.SALARY_OWNERS.trim() === "" ? DEFAULT_SALARY_OWNERS : process.env.SALARY_OWNERS;
+  return [...new Set(raw.split(",").map((s) => s.trim().toLowerCase()).filter((s) => EMAIL.test(s)))];
+}
+export const isSalaryOwner = (email) => salaryOwners().includes(lc(email));
+/** For a salary permission: true or false, decided by the owner list alone. For any other permission: null (the usual rules). */
+export function salaryRule(access, perm) {
+  if (!SALARY_PERMS.has(perm)) return null;
+  return !!access && isSalaryOwner(access.email);
+}
 
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const lc = (s) => String(s || "").trim().toLowerCase();
@@ -121,6 +137,8 @@ export function subtree(people, root) {
  */
 export function decide(access, perm, target, treeOf) {
   if (!access) return false;
+  const locked = salaryRule(access, perm);
+  if (locked !== null) return locked;
   if (access.superAdmin) return true;
   const mine = (access.grants || []).filter((g) => g.permission === perm);
   if (!mine.length) return false;
@@ -133,6 +151,8 @@ export function decide(access, perm, target, treeOf) {
 /** Who `perm` covers: null for everyone, or a Set of emails (empty when none). */
 export function scopeFor(access, perm, treeOf) {
   if (!access) return new Set();
+  const locked = salaryRule(access, perm);
+  if (locked !== null) return locked ? null : new Set();
   if (access.superAdmin) return null;
   const mine = (access.grants || []).filter((g) => g.permission === perm);
   if (mine.some((g) => g.scope === "company")) return null;
@@ -155,17 +175,21 @@ export function grantsFromRoles(user, { reviewers = [], financeViewers = [] } = 
   const email = lc(user.email), set = new Set();
   if (user.role === "hr") PRESETS.hr.perms.forEach((k) => set.add(k));
   if (user.it_admin) PRESETS.it.perms.forEach((k) => set.add(k));
-  if (reviewers.map(lc).includes(email)) PRESETS.payroll.perms.forEach((k) => set.add(k));
-  if (financeViewers.map(lc).includes(email)) set.add("finance.view");
+  // Payroll reviewers and the accountant used to get payroll approval and finance reports here; salaries are now the salary
+  // owners' alone (SALARY_OWNERS), so those lists give nothing. The options are kept so older callers still work.
+  void reviewers; void financeViewers;
   return [...set].map((permission) => ({ email, permission, scope: "company" }));
 }
 
 /** What /api/me sends: each permission held, as "company" or the list of team roots. Super admins hold everything for the company. */
 export function summary(access) {
   if (!access) return {};
-  if (access.superAdmin) return Object.fromEntries(PERMISSIONS.map((p) => [p.key, "company"]));
-  const out = {};
+  const owner = isSalaryOwner(access.email);
+  const salary = owner ? Object.fromEntries([...SALARY_PERMS].map((k) => [k, "company"])) : {};
+  if (access.superAdmin) return { ...Object.fromEntries(PERMISSIONS.filter((p) => !SALARY_PERMS.has(p.key)).map((p) => [p.key, "company"])), ...salary };
+  const out = { ...salary };
   for (const g of access.grants || []) {
+    if (SALARY_PERMS.has(g.permission)) continue;
     if (g.scope === "company") out[g.permission] = "company";
     else if (out[g.permission] !== "company") (out[g.permission] ||= []).push(lc(g.scope_root_email) || lc(access.email));
   }

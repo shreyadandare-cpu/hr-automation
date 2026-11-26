@@ -1,0 +1,52 @@
+#!/usr/bin/env node
+/*
+ * Salary guard: a PreToolUse hook (committed in .claude/settings.json, so it reaches everyone who runs Claude Code in this repo).
+ * Salaries are visible only to the salary owner (SALARY_OWNERS, kailash@wohlig.com; backend/src/access-rules.js). This stops
+ * Claude Code from reading them by another road: the server's secrets (.env files, the encryption keys), the uploaded documents,
+ * database dumps, and any database command that names a salary table or column.
+ *
+ * It is a guard rail for Claude, not a wall: a person with the server and the key can still read the database, which is why
+ * the keys must live only on the server and in the company's secret store, never in the repo or on a laptop.
+ *
+ * Reads the tool call as JSON on stdin; exit code 2 with a reason on stderr blocks it.
+ */
+import { readFileSync } from "node:fs";
+
+let call;
+try { call = JSON.parse(readFileSync(0, "utf8")); } catch { process.exit(0); }
+const tool = call.tool_name || "", input = call.tool_input || {};
+
+// Names that hold salaries, payslips, bank or tax figures, or the keys that unlock them.
+const SALARY_NAMES = [
+  "payroll_runs", "payroll_items", "salary_structures", "payroll_bank_accounts", "payroll_master", "payroll_adjustments",
+  "payroll_files", "payroll_audit", "tax_rules", "tax_declarations", "tax_declaration_requests", "advance_recoveries",
+  "advance_requests", "loans", "loan_events", "monthly_gross", "document_passwords",
+  "PAYROLL_ENCRYPTION_KEY", "DOCUMENTS_ENCRYPTION_KEY", "PAYROLL_DATABASE_URL",
+];
+const DB_TOOLS = /\b(psql|pg_dump|pg_dumpall|pgcli|createdb|dropdb|sqlite3|mysql)\b|\bpool\.query\b|\bpayPool\b|new\s+(pg\.)?(Pool|Client)\b/;
+const ENV_FILE = /(^|[\/\s"'=<])\.env(?!\.example)\b/;   // .env, .env.local, backend/.env; never .env.example
+const UPLOADS = /(^|[\s"'=])(\.\/)?(backend\/)?uploads\/|\/srv\/uploads|hrhub-uploads/;
+const DUMP = /\.(dump|sql\.gz|backup)\b/i;
+const block = (why) => {
+  process.stderr.write(`Blocked by the salary guard (.claude/hooks/salary-guard.mjs): ${why} Salaries, payslips, bank details, staff documents and the keys that unlock them are visible only to the salary owner. Work on the code instead, or ask the salary owner.`);
+  process.exit(2);
+};
+const namesSalary = (s) => SALARY_NAMES.some((n) => new RegExp(`\\b${n}\\b`, "i").test(s));
+
+if (tool === "Bash" || tool === "mcp__terminal__run_in_terminal") {
+  const cmd = String(input.command || "");
+  if (ENV_FILE.test(cmd) || UPLOADS.test(cmd) || DUMP.test(cmd)) {
+    // Reading a secret file, the uploads folder or a dump in any way (cat, grep, cp, node -e, …).
+    block("this command touches the server's secrets, the uploaded documents or a database dump.");
+  }
+  if (/\bprintenv\b|\benv\b\s*($|\|)|process\.env\b/.test(cmd) && namesSalary(cmd)) block("this command reads a salary key from the environment.");
+  if (DB_TOOLS.test(cmd) && namesSalary(cmd)) block("this database command names a salary table or column.");
+} else if (["Read", "Edit", "Write", "NotebookEdit", "Grep", "Glob"].includes(tool)) {
+  const p = String(input.file_path || input.path || input.notebook_path || "");
+  if (/(^|\/)\.env(\.(?!example$)[\w.-]+)?$/.test(p) || /(^|\/)(uploads|srv\/uploads)(\/|$)/.test(p) || /\.(dump|sql\.gz|backup)$/.test(p)) {
+    block("this file holds the server's secrets, uploaded documents or a database dump.");
+  }
+} else if (/^mcp__.*(postgres|sql|query|database|db)/i.test(tool) && namesSalary(JSON.stringify(input))) {
+  block("this database query names a salary table or column.");
+}
+process.exit(0);

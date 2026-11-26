@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { FIRST_SUPER_ADMINS, PERM, PERMISSIONS, PRESETS, decide, grantsFromRoles, liveGrants, mayDecideOn, readGrant, scopeFor, subtree, summary } from "../src/access-rules.js";
+import { FIRST_SUPER_ADMINS, PERM, PERMISSIONS, PRESETS, SALARY_PERMS, decide, salaryOwners, grantsFromRoles, liveGrants, mayDecideOn, readGrant, scopeFor, subtree, summary } from "../src/access-rules.js";
 
 // Chintan > Jagruti > Pratik > Asha ; Jagruti > Osama ; Chirag > Raj
 const people = [
@@ -22,7 +22,7 @@ test("the reporting tree reaches every level below a person, never the person, a
 
 test("super admins can do everything; a company grant covers anyone; a team grant covers only that tree", () => {
   const superA = { email: "chirag@wohlig.com", superAdmin: true, grants: [] };
-  assert.equal(decide(superA, "payroll.bank", "raj@wohlig.com", treeOf), true);
+  assert.equal(decide(superA, "assets.manage", "raj@wohlig.com", treeOf), true);
   const hr = { email: "priyal@wohlig.com", grants: [{ permission: "leave.approve", scope: "company" }] };
   assert.equal(decide(hr, "leave.approve", "raj@wohlig.com", treeOf), true);
   assert.equal(decide(hr, "payroll.view", "raj@wohlig.com", treeOf), false);
@@ -30,9 +30,9 @@ test("super admins can do everything; a company grant covers anyone; a team gran
   assert.equal(decide(head, "leave.approve", "asha@wohlig.com", treeOf), true, "any depth below");
   assert.equal(decide(head, "leave.approve", "raj@wohlig.com", treeOf), false, "another team");
   assert.equal(decide(head, "leave.approve", null, treeOf), true, "holds it for a team, for menus");
-  const other = { email: "priyal@wohlig.com", grants: [{ permission: "payroll.view", scope: "tree", scope_root_email: "chirag@wohlig.com" }] };
-  assert.equal(decide(other, "payroll.view", "raj@wohlig.com", treeOf), true, "a chosen person's team");
-  assert.equal(decide(other, "payroll.view", "asha@wohlig.com", treeOf), false);
+  const other = { email: "priyal@wohlig.com", grants: [{ permission: "attendance.view", scope: "tree", scope_root_email: "chirag@wohlig.com" }] };
+  assert.equal(decide(other, "attendance.view", "raj@wohlig.com", treeOf), true, "a chosen person's team");
+  assert.equal(decide(other, "attendance.view", "asha@wohlig.com", treeOf), false);
   assert.equal(decide(null, "leave.approve", "asha@wohlig.com", treeOf), false);
 });
 
@@ -69,11 +69,11 @@ test("removed and ended grants stop counting", () => {
 
 test("today's roles become grants that give the same access", () => {
   const hr = grantsFromRoles({ email: "priyal@wohlig.com", role: "hr", it_admin: false }).map((g) => g.permission);
-  assert.ok(hr.includes("leave.approve") && hr.includes("payroll.prepare") && hr.includes("users.manage") && hr.includes("assets.manage"));
-  assert.ok(!hr.includes("payroll.approve"), "HR prepares payroll; reviewers approve it");
+  assert.ok(hr.includes("leave.approve") && hr.includes("users.manage") && hr.includes("assets.manage"));
+  assert.ok(hr.every((k) => !SALARY_PERMS.has(k)), "HR gets no salary permission: salaries are the salary owner's");
   assert.deepEqual(grantsFromRoles({ email: "it@wohlig.com", role: "employee", it_admin: true }).map((g) => g.permission), ["assets.manage", "tools.manage"]);
-  assert.deepEqual(grantsFromRoles({ email: "chirag@wohlig.com", role: "employee" }, { reviewers: ["Chirag@wohlig.com"] }).map((g) => g.permission), ["payroll.view", "payroll.approve", "finance.view"]);
-  assert.deepEqual(grantsFromRoles({ email: "acc@wohlig.com", role: "employee" }, { financeViewers: ["acc@wohlig.com"] }).map((g) => g.permission), ["finance.view"]);
+  assert.deepEqual(grantsFromRoles({ email: "chirag@wohlig.com", role: "employee" }, { reviewers: ["Chirag@wohlig.com"] }), [], "payroll reviewers no longer get salaries");
+  assert.deepEqual(grantsFromRoles({ email: "acc@wohlig.com", role: "employee" }, { financeViewers: ["acc@wohlig.com"] }), []);
   assert.deepEqual(grantsFromRoles({ email: "e@wohlig.com", role: "employee" }), []);
   assert.ok(grantsFromRoles({ email: "x@wohlig.com", role: "hr" }).every((g) => g.scope === "company"));
 });
@@ -83,7 +83,34 @@ test("the catalogue is consistent", () => {
   for (const p of Object.values(PRESETS)) for (const k of p.perms) assert.ok(PERM[k], k);
   for (const k of PRESETS.teamHead.perms) assert.ok(PERM[k].team, `${k} must be givable for a team`);
   assert.ok(FIRST_SUPER_ADMINS.includes("pratik.sawant@wohlig.com") && FIRST_SUPER_ADMINS.length === 4);
-  assert.equal(summary({ superAdmin: true })["payroll.bank"], "company");
+  assert.equal(summary({ email: "chirag@wohlig.com", superAdmin: true })["assets.manage"], "company");
+  assert.equal(summary({ email: "chirag@wohlig.com", superAdmin: true })["payroll.bank"], undefined);
   assert.deepEqual(summary({ email: "j@wohlig.com", grants: [{ permission: "leave.approve", scope: "tree" }, { permission: "leave.approve", scope: "tree", scope_root_email: "Raj@wohlig.com" }] }),
     { "leave.approve": ["j@wohlig.com", "raj@wohlig.com"] });
+});
+
+test("salaries are the salary owners' alone: not super admins, not grants", () => {
+  const before = process.env.SALARY_OWNERS;
+  try {
+    delete process.env.SALARY_OWNERS;
+    assert.deepEqual(salaryOwners(), ["kailash@wohlig.com"], "kailash@wohlig.com when nothing is set");
+    const kailash = { email: "Kailash@wohlig.com", grants: [] };
+    const superA = { email: "chirag@wohlig.com", superAdmin: true, grants: [] };
+    const granted = { email: "priyal@wohlig.com", grants: [...SALARY_PERMS].map((permission) => ({ permission, scope: "company" })) };
+    for (const perm of SALARY_PERMS) {
+      assert.equal(decide(kailash, perm, "raj@wohlig.com", treeOf), true, `owner holds ${perm}`);
+      assert.equal(decide(superA, perm, "raj@wohlig.com", treeOf), false, `super admin lacks ${perm}`);
+      assert.equal(decide(granted, perm, "raj@wohlig.com", treeOf), false, `a grant gives no ${perm}`);
+      assert.equal(scopeFor(superA, perm, treeOf).size, 0);
+      assert.equal(scopeFor(kailash, perm, treeOf), null);
+    }
+    assert.equal(summary(kailash)["payroll.prepare"], "company");
+    assert.equal(summary(granted)["payroll.prepare"], undefined);
+    assert.equal(decide(superA, "leave.approve", "raj@wohlig.com", treeOf), true, "everything else is unchanged");
+    process.env.SALARY_OWNERS = "a@wohlig.com, B@wohlig.com, not-an-email";
+    assert.deepEqual(salaryOwners(), ["a@wohlig.com", "b@wohlig.com"]);
+    assert.equal(decide(kailash, "payroll.view", null, treeOf), false, "the list comes from the server's settings");
+  } finally {
+    if (before === undefined) delete process.env.SALARY_OWNERS; else process.env.SALARY_OWNERS = before;
+  }
 });

@@ -39,6 +39,10 @@ CREATE TABLE IF NOT EXISTS audit_log (
   work_email TEXT
 );
 
+-- Each person's document password (doc-password.js): a scrypt hash only. Set and reset by the person while signed in.
+CREATE TABLE IF NOT EXISTS document_passwords (
+  email TEXT PRIMARY KEY, hash TEXT NOT NULL, updated_at TIMESTAMPTZ NOT NULL DEFAULT now());
+
 CREATE TABLE IF NOT EXISTS documents (
   id          SERIAL PRIMARY KEY,
   work_email  TEXT NOT NULL,

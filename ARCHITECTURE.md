@@ -14,7 +14,7 @@ tags:
   - postgres
 repo: hr-automation
 role: Wohlig's internal HR portal — one Express API plus a React interface, on Postgres
-updated: 2026-11-25
+updated: 2026-11-27
 ---
 
 # Wohlig One — Architecture
@@ -91,6 +91,7 @@ Values live in `backend/.env` (never committed). Names from [backend/.env.exampl
   out from the app; off by default, so the office machine stays the record)
 - AI (LinkedIn headline ideas in the Digital Kit): `GEMINI_API_KEY`, `GEMINI_MODEL`
 - Gmail Intelligence Engine (project emails to weekly report facts): `GMAIL_INTEL_ENABLED`, `GMAIL_COMPANY_DOMAIN`, `GMAIL_PUBSUB_TOPIC`, `GMAIL_PUSH_TOKEN`, `GMAIL_SYNC_MINUTES`, `ANTHROPIC_API_KEY` (a normal Claude key, separate from the admin key), `GMAIL_CLASSIFY_MODEL`, `GMAIL_EXTRACT_MODEL`, `GMAIL_PRICE_CLASSIFY`, `GMAIL_PRICE_EXTRACT`. It also reads `GOOGLE_SERVICE_ACCOUNT_FILE` and optional `OFFICE_LOCATION` (the work location saved when HR marks someone On-site, default Office)
+- Salaries and documents: `SALARY_OWNERS` (the only people who see salaries, payslips, bank details, tax and finance reports; kailash@wohlig.com when empty), `DOCUMENTS_ENCRYPTION_KEY` (encrypts uploaded personal documents; `PAYROLL_ENCRYPTION_KEY` when empty).
 - Payroll: `PAYROLL_DATABASE_URL`, `PAYROLL_DB_SCHEMA`, `PAYROLL_REVIEWERS`, `FINANCE_VIEWERS` (the accountant: finance reports only), `NOTICE_PERIOD_DAYS` (default notice, 30), `PAYROLL_ENCRYPTION_KEY`, `PAYROLL_DEBIT_ACCOUNT`, `PAYROLL_DEBIT_BANK_CODE`, `PAYSLIP_AUTO`.
 
 The code also reads these, which the example file does not list: `UPLOAD_DIR`, `MAIL_REPLY_TO`, `EMAIL_LINK_MINUTES`,
@@ -199,7 +200,9 @@ later `/api` route require sign-in. The pages router comes last. The JSON body l
 | [invites.js](backend/src/invites.js) | `/invite` | One-time 30-minute invite links |
 | [email-links.js](backend/src/email-links.js) | `/l` | Short-lived links used in automatic emails |
 | [profile.js](backend/src/profile.js) | `/api/profile` | "My profile" sections and profile photo. Contact details hold two emergency contacts (name, relation, number): the first is required when the contact section is saved, the second is optional, neither may be the person's own number or the same as the other |
-| [documents.js](backend/src/documents.js) | `/api/documents` | Personal document uploads; owns `UPLOAD_DIR` |
+| [documents.js](backend/src/documents.js) | `/api/documents` | Personal document uploads; owns `UPLOAD_DIR`. Files are stored encrypted (names end in `.enc`); opening one needs the viewer's document password and is audited when it is someone else's. `encryptStoredDocuments` encrypts older plain files at start-up |
+| [file-crypt.js](backend/src/file-crypt.js) | none (used by documents.js) | AES-256-GCM for stored documents with `DOCUMENTS_ENCRYPTION_KEY` (or `PAYROLL_ENCRYPTION_KEY`); stores plain files when neither is set |
+| [doc-password.js](backend/src/doc-password.js) | `/api/document-password` | Each person's document password: set or reset it (only while signed in as themselves), unlock for 10 minutes, lock. A scrypt hash in `document_passwords`; five wrong tries lock it for 15 minutes. `needDocUnlock` guards document files and payslip PDFs, and `pdfLock` locks a payslip PDF with the password |
 | [digital-kit.js](backend/src/digital-kit.js) | `/api/digital-kit` | Each person's kit; HR manages shared resources under `/admin` |
 | [gemini.js](backend/src/gemini.js) | none | LinkedIn headline ideas from Gemini for the Digital Kit. Sends only designation, department and an optional note; cleans the replies |
 | [holiday-import.js](backend/src/holiday-import.js) | none (used by leave.js) | Reads an Excel or CSV holiday list (any year) into holidays, compares it with the saved list, builds the template |
@@ -271,6 +274,7 @@ Payroll internals in [backend/src/payroll/](backend/src/payroll/): `access.js` (
 - **Access hierarchy** ([docs/ACCESS_DESIGN.md](docs/ACCESS_DESIGN.md)):
   - Super admins (`users.is_super_admin`) can do everything and are the only people who give access. The first ones are Chintan, Chirag, Jagruti and Pratik (set once at start-up). There is always at least one.
   - Everyone else holds the permissions a super admin ticked for them on Company > Access (`access_grants`). Each is for the whole company or for a reporting tree: everyone below a person, to any depth.
+  - **Salaries are locked to the salary owners** (`SALARY_OWNERS`, kailash@wohlig.com by default): `payroll.view`, `payroll.prepare`, `payroll.approve`, `payroll.bank` and `finance.view` are held by them, company-wide, and by nobody else, super admins included. The Access page does not offer them and refuses them; older grants of them are ended at every start-up. Nobody else can act on a salary owner's login. Salary notices go to the owners only. With one owner, they may approve a payroll they prepared (maker-checker needs a second owner). Leave salary cuts and the monthly gross on the leave page follow the same rule.
   - The catalogue of permissions and the pure rules are in [access-rules.js](backend/src/access-rules.js). The decisions (`can`, `scopeOf`, `mayDecide`, `need`, `needSuper`, with the tree cached for a minute) are in [access.js](backend/src/access.js). The Access page's API is [access-routes.js](backend/src/access-routes.js).
   - `loadSession` loads `req.access` with the session in one query.
   - At the first start, a one-time step turned today's roles into grants (HR → the HR team set, IT admin, payroll reviewers, accountant), so nobody's access changed.
@@ -299,7 +303,7 @@ All paths below were read from the code. Unless noted, a signed-in session is re
 | Teams and projects | `POST /api/team/members`, `GET /api/allocations`, `POST /api/projects`, `PATCH /api/projects/:id`, `POST /api/projects/:id/members`, `POST /api/allocations/:id/end` | Managers, leads, HR |
 | Onboarding | `GET/POST /api/onboarding`, `GET/PUT/DELETE /api/onboarding/draft`, `GET /api/onboarding/next-employee-no`, `POST /api/onboarding/work-email`, `GET /api/work-email` | HR |
 | Offboarding | `GET/POST /api/offboarding`, `POST /api/offboarding/:id/run`, `/cancel`, `/steps/:key`, `/steps/:key/retry`, `/clearance/complete`, `GET /api/offboarding/:id/clearance`, `GET/POST /api/advances` | HR |
-| Profile and documents | `GET/PUT /api/profile`, `PUT/GET/DELETE /api/profile/photo`, `GET /api/documents`, `GET /api/documents/export` (Excel of who uploaded which document, names and dates only; whole-company `documents.view`), `PUT /api/documents/:docKey`, `GET /api/documents/:id/file` | Own data |
+| Profile and documents | `GET/PUT /api/profile`, `PUT/GET/DELETE /api/profile/photo`, `GET /api/documents`, `GET /api/documents/export` (Excel of who uploaded which document, names and dates only; whole-company `documents.view`), `PUT /api/documents/:docKey`, `GET /api/documents/:id/file` (needs the document password), `GET/PUT /api/document-password`, `POST /api/document-password/unlock`, `POST /api/document-password/lock` | Own data |
 | Leave | `GET /api/leave`, `GET /api/leave/export?year=` (whole-company Excel: balances, pending, all requests, comp offs, holidays), `GET /api/leave/today`, `POST /api/leave/requests`, `POST /api/leave/requests/:id/decision` (a decline needs a reason, an approval may carry a comment), `POST /api/leave/requests/:id/cancel`, `PUT /api/leave/balances/:email` (HR corrects casual, sick and comp-off balances, with a reason; audited), `GET/PUT /api/leave/policy` (HR changes the policy numbers), `POST /api/leave/comp-off-requests`, `POST/PUT/DELETE /api/leave/holidays`, `GET /api/leave/salary-cuts` | Everyone; decisions by approver or HR; balance corrections and the policy by `leave.manage` |
 | Holiday list upload | `GET /api/leave/holidays/template?year=`, `POST /api/leave/holidays/import` (preview, saves nothing), `POST /api/leave/holidays/import/apply` | `leave.manage` (company-wide); the sheet is read by `holiday-import.js` and each row is saved like the 2026 holidays, marked `imported` |
 | Employee details sheet | `GET /api/onboarding/import/template[?prefill=1]`, `POST /api/onboarding/import` (preview, saves nothing), `POST /api/onboarding/import/apply` | `onboarding.manage`; the same file is read again to save, so no number is sent back to the page. Date of birth, masked Aadhaar and PAN, masked account number, IFSC, PF/UAN number, phone and address go on the profile (blank cells change nothing); a full bank account number goes to Payroll, encrypted, only for someone who also holds `payroll.bank`. The file is not kept. |
@@ -419,7 +423,7 @@ The "HR only" marks come from the `HR_ONLY` list in `App.jsx`. Every other page 
   `Modal` (the one dialog, on Radix UI Dialog: focus kept inside and returned, Escape, page scroll locked, close button, a bottom sheet on phones; the
   reimbursement `Dlg` is the same component), `ConfirmDialog`, `DatePicker`, `Pager`,
   `PeoplePicker`, `PersonAvatar`, `PhotoEditor`, `OrgChart`, `NotificationBell`, `TodayCards`, `TimeToday` (Home: time worked today, and the punch button when web clock-in is on, with the location when HR asks for it; never a selfie), `InstallApp` (Home: "Get the app", when the browser can install it or on an iPhone), `RemoteToday` (Home: who is working from home today), `RemoteToday` (Home: who has an approved work-from-home request for today, from `/api/remote-today`), `toast.jsx`, `ui.jsx`,
-  `charts.jsx`, `leaveParts.jsx`, `leaveSummary.jsx`, `LeaveBalanceCards` (the four balance cards, shared by My leave and an employee's profile), `attendance.jsx`, `BackButton`, `BirthdayPopup`, `CelebrateCard`, `NextHolidayPopup`, `HolidayImport` (HR's holiday list upload dialog), `ExcelPreview` ("Preview and download" for an Excel export: a window with every sheet of the file, then Download).
+  `charts.jsx`, `leaveParts.jsx`, `leaveSummary.jsx`, `LeaveBalanceCards` (the four balance cards, shared by My leave and an employee's profile), `attendance.jsx`, `BackButton`, `BirthdayPopup`, `CelebrateCard`, `NextHolidayPopup`, `DocLock.jsx` (the document password: `DocLockGate` in the shell catches links to documents and payslip PDFs and asks for it first; `DocPasswordCard` on the Account page sets or resets it), `HolidayImport` (HR's holiday list upload dialog), `ExcelPreview` ("Preview and download" for an Excel export: a window with every sheet of the file, then Download).
   Every page opens with `SectionHead` from `ui.jsx`: the page name, one line, the page's actions on the right and, for a
   page with several views (Employees, Onboarding, Reimbursements), `PageTabs` under it. My leave, Team leave and Leave management are
   separate menu items. Onboarding and Offboarding open on their lists; adding a joiner and offboarding someone are buttons there.
@@ -451,7 +455,8 @@ People are linked mostly by work email (text, compared in lower case), not by fo
 | `users`, `sessions`, `settings`, `invites` | Logins (`role`, `it_admin`), session hashes, default password, invite link hashes | `users.email` = `employees.work_email` |
 | `onboarding_drafts` | One unsaved onboarding form per HR user | keyed by HR email |
 | `audit_log` | Every recorded action (`action`, `work_email`, `ts`) | by email |
-| `documents`, `profiles`, `profile_photos` | Uploaded documents, profile sections, photo | by email |
+| `documents`, `profiles`, `profile_photos` | Uploaded documents (stored encrypted), profile sections, photo | by email |
+| `document_passwords` | Each person's document password, as a scrypt hash | email |
 | `leave_requests`, `comp_off_credits`, `holidays` | Leave, comp-off credit, holiday calendar. A decided request keeps the approver's comment or the reason for a decline (`decision_note`). | by email |
 | `leave_policy` | The policy numbers HR can change (casual and sick days a year, loss-of-pay divisor, days sick leave can be applied late). A missing key uses the default in `leave-rules.cjs`. | `key` |
 | `projects`, `employee_project_allocations` | Projects and who works on them | FK to `employees`, `projects` |
@@ -564,6 +569,8 @@ and a same-origin check on changes; unused packages removed; the SQL copy regene
 duplicate tables removed from `schema.sql`; stale paths and comments corrected; the dev proxy completed.
 
 Still open:
+
+- Salaries (2026-11-27): the server key decrypts bank numbers, PAN, Aadhaar and documents, so anyone with the server and the key can read them; salary amounts themselves are not encrypted in the database. The Claude Code salary guard (`.claude/hooks/salary-guard.mjs`) keeps Claude away from them, but it is not a wall. Exit clearance, loans and offer letters still show salary figures to HR (they need them to do that work).
 
 - **Name-based links.** Managers and project leads are stored as names, not ids, so renaming someone or two people with the
   same name breaks reporting lines. Fixing it needs new id columns, a backfill of live data and changes to every reader;

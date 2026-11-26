@@ -299,9 +299,63 @@ function ClockIn() {
       {site && <SiteForm site={site} onClose={(saved) => { setSite(null); if (saved) reload(); }} />}
       {removing && <ConfirmDialog title={`Remove ${removing.name}?`} confirmLabel="Remove office" onConfirm={() => remove(removing)} onClose={() => setRemoving(null)}>
         Punches already made there keep its name. New punches are no longer matched to it.</ConfirmDialog>}
+      <MissingPunchPolicy />
     </>
   );
 }
+
+/* HR's missing punch-out policy, as Keka's: free missing punch-outs a month and the penalty after them (casual leave first,
+   loss of pay when none is left; off until HR turns it on), corrections people add without approval, the month's limit, how
+   far back, and the reminder before the shift ends. Saved for everyone (attendance_policy). */
+const POLICY_NUMBERS = [
+  ["freePerMonth", "Free missing punch-outs a month", "Days with no punch-out that are not penalised each month."],
+  ["selfFixPerMonth", "Corrections without approval a month", "A person adds their missing punch themselves this many times a month; after that it goes to their manager and HR."],
+  ["requestsPerMonth", "Corrections a month in all", "After this, the HR team adds the punch."],
+  ["daysBack", "How many days back", "A correction can be sent for a day up to this many days ago. After that the day is closed and the penalty is decided."],
+  ["remindBeforeMin", "Reminder before the shift ends (minutes)", "A reminder to punch out this many minutes before the shift ends, then a follow-up 30 minutes after. 0 sends only the follow-up."],
+];
+function MissingPunchPolicy() {
+  const { data, error, reload } = useList("/api/attendance/missing-policy");
+  const toast = useToast();
+  const [f, setF] = useState(null), [err, setErr] = useState({}), [busy, setBusy] = useState(false);
+  if (error) return <Callout>{error}</Callout>;
+  if (!data || data.freePerMonth === undefined) return <div className="card"><ListSkeleton faces={false} rows={3} /></div>;
+  const cur = f || data;
+  const set = (k, v) => { setF({ ...cur, [k]: v }); setErr((x) => ({ ...x, [k]: "" })); };
+  const save = async () => {
+    setBusy(true);
+    const r = await api("PUT", "/api/attendance/missing-policy", { ...cur, ...Object.fromEntries(POLICY_NUMBERS.map(([k]) => [k, cur[k] === "" ? "" : Number(cur[k])])), penaltyDays: Number(cur.penaltyDays) });
+    setBusy(false);
+    if (!r.ok) { setErr((r.data && r.data.errors) || {}); toast(apiMsg(r)); return; }
+    setF(null); toast("Missing punch-out policy saved."); reload();
+  };
+  const changed = !!f && Object.keys(data).filter((k) => k !== "penaltyFrom").some((k) => String(f[k]) !== String(data[k]));
+  return (
+    <div className="card">
+      <div className="card-h"><h3>Missing punch-out</h3></div>
+      <div className="card-b flex flex-col gap-4">
+        <p className="m-0 text-ink-dim">A day with no punch-out counts no hours until it is corrected. People add the time they left; the first few each month go straight in, the rest go to their manager and HR for approval.</p>
+        <label className="flex min-h-11 items-start gap-3">
+          <input type="checkbox" className="mt-1 size-5 flex-none accent-accent" checked={!!cur.penaltyOn} onChange={(e) => set("penaltyOn", e.target.checked)} />
+          <span className="flex flex-col"><b className="font-bold">Penalise missing punch-outs after the free ones</b>
+            <span className="text-[14px] text-ink-dim">Each day still missing once it is closed takes casual leave, and loss of pay when no casual leave is left. This changes salaries. {data.penaltyOn && data.penaltyFrom ? `Counted from ${new Date(data.penaltyFrom + "T00:00:00Z").toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" })}, the day it was switched on.` : "Only days from the day you switch it on are counted."}</span></span>
+        </label>
+        <div className="grid grid-cols-2 gap-4 max-md:grid-cols-1">
+          <div className="field"><label htmlFor="mp-pen">Penalty for each one after the free ones</label>
+            <select id="mp-pen" className="input" value={String(cur.penaltyDays)} disabled={!cur.penaltyOn} onChange={(e) => set("penaltyDays", e.target.value)}>
+              <option value="0.5">Half a day</option><option value="1">A full day</option></select>
+            {err.penaltyDays && <span className="ferr" role="alert">{err.penaltyDays}</span>}</div>
+          {POLICY_NUMBERS.map(([k, label, hint]) => (
+            <div className="field" key={k}><label htmlFor={`mp-${k}`}>{label}</label>
+              <input id={`mp-${k}`} className="input" inputMode="numeric" value={cur[k]} aria-invalid={!!err[k]} onChange={(e) => set(k, e.target.value.replace(/[^0-9]/g, ""))} />
+              {err[k] ? <span className="ferr" role="alert">{err[k]}</span> : <span className="hint">{hint}</span>}</div>))}
+        </div>
+        <div className="flex justify-end"><button type="button" className="btn primary" disabled={busy || !changed} onClick={save}>{busy ? "Saving…" : "Save policy"}</button></div>
+      </div>
+    </div>
+  );
+}
+
 function SiteForm({ site, onClose }) {
   const toast = useToast();
   const [f, setF] = useState({ name: site.name || "", lat: site.lat ?? "", lng: site.lng ?? "", radius: site.radius || 150 }), [err, setErr] = useState({}), [busy, setBusy] = useState(false), [finding, setFinding] = useState(false);

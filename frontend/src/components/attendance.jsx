@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api, apiMsg } from "../api.js";
-import { ListSkeleton, TableSkeletonRow } from "./ui.jsx";
+import { LineSkeleton, ListSkeleton, TableSkeletonRow } from "./ui.jsx";
 import Modal from "./Modal.jsx";
 
 /* The employee's attendance page, laid out like a standard HR attendance screen: stats, today's shift and the punch button on top,
@@ -37,10 +37,16 @@ export const clock = (t, h24) => {
 const monTitle = (s) => { const m = MON[Number(s.slice(5, 7)) - 1]; return m.charAt(0) + m.slice(1).toLowerCase(); };
 const dayText = (s) => `${DOW[dow(s)]}, ${Number(s.slice(8))} ${monTitle(s)}`;
 
+const DAY_START_MIN = 5 * 60;
+/** Minutes from midnight of the working day: a time before 5 am belongs to the night before, after the evening (01:30 is 1530). */
+const ordMin = (t) => { const m = mins(t); return m < DAY_START_MIN ? m + 1440 : m; };
 /** Now in Indian time, from the browser's clock (punching itself always uses the server's clock). */
 export function istNow(date = new Date()) {
   const p = Object.fromEntries(new Intl.DateTimeFormat("en-GB", { timeZone: "Asia/Kolkata", hourCycle: "h23", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit" }).formatToParts(date).map((x) => [x.type, x.value]));
-  return { date: `${p.year}-${p.month}-${p.day}`, time: `${p.hour}:${p.minute}:${p.second}`, minutes: Number(p.hour) * 60 + Number(p.minute) };
+  const cal = `${p.year}-${p.month}-${p.day}`, minutes = Number(p.hour) * 60 + Number(p.minute);
+  // The attendance day starts at 5 am (server: work-day.js): before then it is still the day before, and the minutes run on past midnight.
+  const early = minutes < DAY_START_MIN;
+  return { date: cal, time: `${p.hour}:${p.minute}:${p.second}`, minutes, day: early ? addDays(cal, -1) : cal, min: early ? minutes + 1440 : minutes };
 }
 export function useNow(everyMs = 1000) {
   const [now, setNow] = useState(() => istNow());
@@ -85,14 +91,14 @@ function kind(d, today) {
 /** Break = time between an OUT and the next IN. Gross hours = first in to last out (to now for today). */
 function grossOf(d, today, nowMin) {
   if (!d.firstIn) return null;
-  if (d.lastOut && mins(d.lastOut) >= mins(d.firstIn)) return mins(d.lastOut) - mins(d.firstIn);
-  return d.date === today ? Math.max(0, nowMin - mins(d.firstIn)) : null;
+  if (d.lastOut && ordMin(d.lastOut) >= ordMin(d.firstIn)) return ordMin(d.lastOut) - ordMin(d.firstIn);
+  return d.date === today ? Math.max(0, nowMin - ordMin(d.firstIn)) : null;
 }
 
 /* ---- the 24 hour bar ---- */
 export function DayBar({ firstIn, lastOut, open }) {
-  const a = (mins(firstIn) / 1440) * 100;
-  const b = lastOut ? Math.max((mins(lastOut) / 1440) * 100, a + 0.8) : a + 0.8;
+  const a = (ordMin(firstIn) / 1440) * 100;
+  const b = lastOut ? Math.min(100, Math.max((ordMin(lastOut) / 1440) * 100, a + 0.8)) : a + 0.8;   // past midnight runs to the end of the bar
   return (
     <div className="att-bar" aria-hidden="true">
       <i className={`att-fill${open ? " open" : ""}`} style={{ left: `${a}%`, width: `${b - a}%` }} />
@@ -141,10 +147,10 @@ export function TimingsCard({ today, punches, minutesToday, now, h24, byMonth = 
   let from = null, to = null, worked = 0, note = "";   // stepping out to eat is not a break, so there is none to show
   if (isToday) {
     const first = punches.find((p) => p.direction === "IN");
-    if (first) { from = mins(first.time); to = now.minutes; }
+    if (first) { from = ordMin(first.time); to = now.min ?? now.minutes; }
     worked = minutesToday || 0;
   } else if (rec && rec.firstIn) {
-    from = mins(rec.firstIn); to = rec.lastOut ? mins(rec.lastOut) : null;
+    from = ordMin(rec.firstIn); to = rec.lastOut ? ordMin(rec.lastOut) : null;
     worked = rec.minutes;
     if (to === null) note = "No punch out";
   } else if (rec) note = rec.holiday || (rec.off === "Weekend" ? "Weekly off" : /leave$/i.test(rec.status || "") ? rec.status : "No time entries");
@@ -169,28 +175,29 @@ export function TimingsCard({ today, punches, minutesToday, now, h24, byMonth = 
   );
 }
 
-/** A message for the person who forgot to punch out: it lists the finished days (from the last week) with a single punch, and says what was counted.
-    Each day is shown once on this browser; "Got it" remembers it. */
-export function ForgotPunchPopup({ byMonth, today, h24 }) {
-  const KEY = "att-forgot-seen";
+/** A message for the person who forgot to punch out (Keka's "missing swipe"): the finished days of the last week with no punch-out and
+    no correction asked for. No hours are made up for them; each day has a button that opens the correction form. "Later" hides it
+    for this browser until a new day is missing. */
+export function ForgotPunchPopup({ byMonth, today, h24, onCorrect }) {
+  const KEY = "att-missing-seen";
   const seen = () => { try { return JSON.parse(localStorage.getItem(KEY) || "[]"); } catch { return []; } };
   const [done, setDone] = useState(false);
   const from = addDays(today, -7);
-  const days = daysIn(byMonth, from, addDays(today, -1)).filter((d) => d.forgotOut && !seen().includes(d.date));
+  const days = daysIn(byMonth, from, addDays(today, -1)).filter((d) => d.forgotOut && !["pending", "approved"].includes(d.correction) && !seen().includes(d.date));
   if (done || !days.length) return null;
   const close = () => { try { localStorage.setItem(KEY, JSON.stringify([...new Set([...seen(), ...days.map((d) => d.date)])].slice(-60))); } catch {} setDone(true); };
   return (
     <Modal onClose={close}>
-      <div className="card-h" style={{ paddingTop: 24 }}><h3>You forgot to punch out</h3></div>
+      <div className="card-h" style={{ paddingTop: 24 }}><h3>Your punch-out is missing</h3></div>
       <div className="card-b">
-        <p style={{ margin: 0 }}>{days.length === 1 ? "There is only one punch for this day, so we counted your hours until the end of your shift." : "There is only one punch on each of these days, so we counted your hours until the end of your shift."}</p>
+        <p style={{ margin: 0 }}>{days.length === 1 ? "This day has no punch-out, so no hours are counted for it yet." : "These days have no punch-out, so no hours are counted for them yet."} Please send a correction with the time you left. Your reporting manager approves it.</p>
         {days.map((d) => (
-          <div key={d.date} className="card" style={{ padding: "12px 16px" }}>
-            <b>{dayText(d.date)}</b><div className="muted">Punched in at {clock(d.firstIn, h24)}, no punch out. Counted until {clock(shiftOf(d).end, h24)}: <b style={{ color: "var(--ink)" }}>{dur(d.minutes)}</b>.</div>
+          <div key={d.date} className="card" style={{ padding: "12px 16px", display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+            <div style={{ flex: 1, minWidth: 180 }}><b>{dayText(d.date)}</b><div className="muted">Punched in at {clock(d.firstIn, h24)}, no punch-out.</div></div>
+            {onCorrect && <button type="button" className="btn primary sm" onClick={() => { setDone(true); onCorrect(d); }}>Request correction</button>}
           </div>))}
-        <p className="muted" style={{ margin: 0 }}>If you left at a different time, ask HR to add your punch out. Please punch out every day.</p>
       </div>
-      <div className="modal-f"><button type="button" className="btn primary" onClick={close}>Got it</button></div>
+      <div className="modal-f"><button type="button" className="btn glass" onClick={close}>Later</button></div>
     </Modal>
   );
 }
@@ -201,7 +208,7 @@ const POLICY = {
     ["No Attendance", "You won't be penalised for any leave if there is no attendance logged by you."],
     ["Late Arrival", "You won't be penalised for any late arrival incidents."],
     ["Work Hours", "There is no penalisation for number of work hours you spend in office."],
-    ["Missing Swipes", "There is no penalisation for Missing Swipes, but it is recommended to regularise your attendance."],
+    ["Missing punch-out", (p) => `A day with no punch-out shows Punch-out missing and counts no hours until it is corrected; nothing is filled in for you. Add the time you left from the day in your log, up to ${p.daysBack} days back. The first ${p.selfFixPerMonth} each month are added straight away; after that your reporting manager or the HR team approves them, up to ${p.requestsPerMonth} a month. ${p.penaltyOn ? `${p.freePerMonth} missing punch-outs a month are free; each one after that, still missing once its ${p.daysBack} days have passed, takes ${p.penaltyDays === 1 ? "a full day" : "half a day"} of casual leave, or loss of pay when no casual leave is left.` : "There is no penalty for a missing punch-out."} You are reminded ${p.remindBeforeMin ? `${p.remindBeforeMin} minutes before your shift ends, ` : ""}30 minutes after it ends if you are still punched in, and the next morning if a punch-out is missing.`],
   ] },
   track: { label: "Time tracking policy", intro: "Below are the details of time tracking policy assigned to you", items: [
     ["Bio-Metric & Web Clock-In", "Your attendance is automatically tracked using biometric device(s)."],
@@ -213,6 +220,8 @@ const POLICY = {
 };
 export function PolicyModal({ onClose }) {
   const [tab, setTab] = useState("penal");
+  const [mp, setMp] = useState(null);   // HR's missing punch-out policy, for the numbers in its text
+  useEffect(() => { api("GET", "/api/attendance/missing-policy").then((r) => r.ok && setMp(r.data)); }, []);
   const p = POLICY[tab];
   return (
     <Modal onClose={onClose} wide>
@@ -223,7 +232,7 @@ export function PolicyModal({ onClose }) {
         </div>
         <p style={{ margin: 0 }}>{p.intro}</p>
         {p.note && <p className="muted" style={{ margin: 0 }}>{p.note}</p>}
-        {p.items.map(([h, t]) => <div key={h}><h4 style={{ margin: "0 0 4px", fontSize: 16 }}>{h}</h4><p className="muted" style={{ margin: 0 }}>{t}</p></div>)}
+        {p.items.map(([h, t]) => <div key={h}><h4 style={{ margin: "0 0 4px", fontSize: 16 }}>{h}</h4>{typeof t === "function" && !mp ? <LineSkeleton width="w-full" /> : <p className="muted" style={{ margin: 0 }}>{typeof t === "function" ? t(mp) : t}</p>}</div>)}
       </div>
     </Modal>
   );
@@ -251,7 +260,7 @@ export function ActionsCard({ today, state, punches, onPunch, busy, now, h24 }) 
 /* ---- the log, and the calendar ---- */
 const LOG_ICON = { ok: "On track", warn: "Check", live: "Live" };
 function logIcon(d, today) {
-  if (d.forgotOut) return ["warn", `Forgot to punch out: the hours are counted until the end of the shift (${clock(shiftOf(d).end)})`];
+  if (d.forgotOut) return ["warn", d.correction === "pending" ? "Punch-out missing: your correction is waiting for approval" : "Punch-out missing: no hours are counted until it is corrected"];
   if (d.missingOut) return ["warn", "No punch out"];
   if (d.missingSwipe) return ["warn", "A punch in the middle has no matching return: ask HR to check the day"];
   if (d.status === "Working") return ["live", "Still working"];
@@ -259,7 +268,7 @@ function logIcon(d, today) {
   return ["warn", d.status];
 }
 
-function Row({ d, today, nowMin, h24, canEdit, onRemove }) {
+function Row({ d, today, nowMin, h24, canEdit, onRemove, onCorrect }) {
   const [open, setOpen] = useState(false);
   const k = kind(d, today);
   const tag = k === "weekend" ? <span className="att-tag off">W-OFF</span> : k === "holiday" ? <span className="att-tag hol">HLDY</span> : null;
@@ -272,14 +281,15 @@ function Row({ d, today, nowMin, h24, canEdit, onRemove }) {
       <>
         <tr className={`${rowClass} click`} onClick={() => setOpen(!open)} tabIndex={0} onKeyDown={(e) => e.key === "Enter" && setOpen(!open)} aria-expanded={open}>
           {date}
-          <td><DayBar firstIn={d.firstIn} lastOut={d.lastOut || (d.forgotOut ? shiftOf(d).end : null)} open={!d.lastOut && !d.forgotOut} /></td>
+          <td><DayBar firstIn={d.firstIn} lastOut={d.lastOut} open={!d.lastOut && !d.forgotOut} /></td>
           <td className="num-cell">{dur(brk)}</td>
-          <td className="num-cell">{d.forgotOut ? <>{dur(d.minutes)}<div className="muted" style={{ fontSize: 12 }}>counted to {clock(shiftOf(d).end, h24)}</div></> : gross === null ? <span className="muted">No punch out</span> : dur(gross)}</td>
-          <td><span className={`att-chip ${tone}`} title={tip}>{d.forgotOut ? "Forgot punch out" : /^Half day/.test(d.status || "") ? "Half day" : LOG_ICON[tone]}</span></td>
+          <td className="num-cell">{d.forgotOut ? <>{dur(d.minutes)}<div className="muted" style={{ fontSize: 13 }}>{d.penalty ? `Penalty: ${d.penalty === 1 ? "1 day" : "half a day"} of leave` : d.correction === "pending" ? "Correction waiting" : "Punch-out missing"}</div>
+            {onCorrect && !["pending", "approved"].includes(d.correction) && <button type="button" className="btn link sm" onClick={(e) => { e.stopPropagation(); onCorrect(d); }}>Request correction</button>}</> : gross === null ? <span className="muted">No punch out</span> : dur(gross)}</td>
+          <td><span className={`att-chip ${tone}`} title={tip}>{d.forgotOut ? (d.correction === "pending" ? "Waiting" : "Missing") : /^Half day/.test(d.status || "") ? "Half day" : LOG_ICON[tone]}</span></td>
         </tr>
         {open && <tr className="att-detail"><td colSpan="5">
           <div className="att-punches">{[d.punches.find((p) => p.direction === "IN"), [...d.punches].reverse().find((p) => p.direction === "OUT")].filter(Boolean).map((p) => (
-            <span key={p.id}><b>{p.direction}</b> {clock(p.time, h24)}{p.source === "hr" ? ` (HR: ${p.note || ""})` : p.source === "device" ? " (office device)" : p.source === "web" ? " (app)" : ""}<PunchPlace p={p} />
+            <span key={p.id}><b>{p.direction}</b> {clock(p.time, h24)}{p.source === "hr" ? ` (HR: ${p.note || ""})` : p.source === "request" ? " (approved correction)" : p.source === "device" ? " (office device)" : p.source === "web" ? " (app)" : ""}<PunchPlace p={p} />
               {canEdit && <> <button type="button" className="btn link sm" aria-label={`Remove ${p.direction} at ${p.time}`} onClick={(e) => { e.stopPropagation(); onRemove(p.id); }}>Remove</button></>}</span>))}
             <span className="muted">{d.status}{d.off ? ` · ${d.off.toLowerCase()}` : ""}{d.shift && !d.shift.isDefault ? ` · ${d.shift.name}` : ""}</span> <DayMarks d={d} /></div>
         </td></tr>}
@@ -317,7 +327,7 @@ function Calendar({ byMonth, ensure, today, h24 }) {
   );
 }
 
-export function AttendanceLog({ months, today, canEdit = false, onRemove = () => {} }) {
+export function AttendanceLog({ months, today, canEdit = false, onRemove = () => {}, onCorrect }) {
   const { byMonth, error, ensure } = months;
   const now = useNow(30000);
   const [h24, setH24] = useH24();
@@ -350,7 +360,7 @@ export function AttendanceLog({ months, today, canEdit = false, onRemove = () =>
               <thead><tr><th>Date</th><th>Time on site</th><th className="num-cell">Break</th><th className="num-cell">Hours</th><th>Log</th></tr></thead>
               <tbody>
                 {loading && <TableSkeletonRow cols={5} />}
-                {days.filter((d) => kind(d, today) !== "none").map((d) => <Row key={d.date} d={d} today={today} nowMin={now.minutes} h24={h24} canEdit={canEdit} onRemove={onRemove} />)}
+                {days.filter((d) => kind(d, today) !== "none").map((d) => <Row key={d.date} d={d} today={today} nowMin={now.min} h24={h24} canEdit={canEdit} onRemove={onRemove} onCorrect={onCorrect} />)}
               </tbody>
             </table></div>
           </>)}

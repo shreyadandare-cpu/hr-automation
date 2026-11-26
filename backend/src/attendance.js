@@ -7,6 +7,7 @@ import { managerMap } from "./teams.js";
 import { dayMarks, isWeeklyOff, minutesOf, shiftOn, statusFromMinutes } from "./shift-rules.js";
 import { shiftsFor } from "./shifts.js";
 import { checkPunch, farText, readPoint, readPolicy, readSite } from "./clockin-rules.js";
+import { policyOf, readMissingPolicy } from "./missing-punch-rules.js";
 
 /* A reporting manager sees their own team (the people HR set under them); there is no separate manager login role. */
 const teamEmails = async (email) => Object.entries(await managerMap(pool)).filter(([, rm]) => rm === email).map(([e]) => e);
@@ -53,7 +54,7 @@ function deriveDay(ps) {
 
 /** One person's days for a month. Past days get a status; days before they joined and in the future get none. `shiftFor(date)` is the
     person's shift that day (the roster, or the default). */
-function monthDays(month, punches, leave, holidays, emp, today, nowMin, shiftFor, corrections = new Map()) {
+function monthDays(month, punches, leave, holidays, emp, today, nowMin, shiftFor, corrections = new Map(), penalties = new Map()) {
   const [y, m] = month.split("-").map(Number);
   const last = new Date(Date.UTC(y, m, 0)).getUTCDate();
   const hol = new Map(holidays.map((h) => [h.day, h.name]));
@@ -84,7 +85,7 @@ function monthDays(month, punches, leave, holidays, emp, today, nowMin, shiftFor
     const marks = status ? dayMarks(shift, { firstIn, lastOut: forgot ? null : lastOut, minutes: forgot ? 0 : w.minutes, workingDay: !off, finished: date < today || (date === today && nowMin >= shiftEnd) }) : dayMarks(shift);
     days.push({ date, status, off, holiday: hol.get(date) || null, firstIn: ins[0] ? ins[0].time : null, lastOut,
       shift: { id: shift.id, name: shift.name, start: shift.start, end: shift.end, isDefault: !!shift.isDefault }, ...marks,
-      minutes: w.minutes, missingOut: w.missingOut && date !== today && !forgot, forgotOut: forgot, correction: forgot ? corrections.get(date) || null : null, missingSwipe: !!(dd && dd.missingSwipe), site: status === "Off-site" ? emp.location : null, punches: ps });
+      minutes: w.minutes, missingOut: w.missingOut && date !== today && !forgot, forgotOut: forgot, correction: forgot ? corrections.get(date) || null : null, penalty: penalties.get(date) || null, missingSwipe: !!(dd && dd.missingSwipe), site: status === "Off-site" ? emp.location : null, punches: ps });
   }
   return days;
 }
@@ -105,7 +106,7 @@ const monthRange = (month) => {
 };
 async function monthOf(emp, month) {
   const [from, to] = monthRange(month);
-  const [p, l, h, now, sh, cr] = await Promise.all([
+  const [p, l, h, now, sh, cr, pen] = await Promise.all([
     pool.query(`SELECT id, to_char(work_date,'YYYY-MM-DD') AS work_date, punch_time, direction, source, note, site_name, distance_m, outside FROM attendance_punches
                 WHERE employee_id=$1 AND work_date BETWEEN $2 AND $3 ORDER BY work_date, punch_time, id`, [emp.id, from, to]),
     pool.query(`SELECT to_char(from_date,'YYYY-MM-DD') AS f, to_char(to_date,'YYYY-MM-DD') AS t, half FROM leave_requests
@@ -115,12 +116,14 @@ async function monthOf(emp, month) {
     shiftsFor(pool, from, to, [emp.work_email]),
     pool.query(`SELECT DISTINCT ON (on_date) to_char(on_date,'YYYY-MM-DD') AS d, status FROM attendance_requests
                 WHERE lower(email)=$1 AND kind='missed-punch' AND deleted_at IS NULL AND on_date BETWEEN $2 AND $3 ORDER BY on_date, created_at DESC`, [emp.work_email.toLowerCase(), from, to]),
+    pool.query("SELECT to_char(work_date,'YYYY-MM-DD') AS d, days FROM attendance_penalties WHERE lower(email)=$1 AND work_date BETWEEN $2 AND $3", [emp.work_email.toLowerCase(), from, to]),
   ]);
   const corrections = new Map(cr.rows.map((x) => [x.d, x.status]));
+  const penalties = new Map(pen.rows.map((x) => [x.d, Number(x.days)]));
   const mine = sh.of(emp.work_email);
   const days = monthDays(month, p.rows.map(toPunch), l.rows.map((r) => ({ from: r.f, to: r.t, half: r.half })), h.rows,
     { start: emp.start_date && String(emp.start_date).slice(0, 10), lastDay: emp.last_day && String(emp.last_day).slice(0, 10), location: emp.work_location }, now.day, mins(now.time),
-    (date) => shiftOn(mine, sh.fallback, date), corrections);
+    (date) => shiftOn(mine, sh.fallback, date), corrections, penalties);
   return { email: emp.work_email, name: emp.name, month, days, summary: summarize(days), today: now.day };
 }
 
@@ -277,6 +280,19 @@ export function attendanceRouter(wrap) {
     const { rowCount } = await pool.query("UPDATE clock_in_sites SET deleted_at=now() WHERE id=$1 AND deleted_at IS NULL", [Number(req.params.id) || 0]);
     if (!rowCount) return res.status(404).json({ error: "This office was not found." });
     res.json({ ok: true });
+  }));
+
+  /* ---------- Missing punch-out policy (as Keka's): everyone reads it, HR (shifts.manage, whole company) sets it ---------- */
+  r.get("/api/attendance/missing-policy", wrap(async (_req, res) => res.json(policyOf((await pool.query("SELECT * FROM attendance_policy WHERE id=1")).rows[0]))));
+  r.put("/api/attendance/missing-policy", needAll("shifts.manage"), wrap(async (req, res) => {
+    const { value: v, errors } = readMissingPolicy(req.body);
+    if (Object.keys(errors).length) return res.status(400).json({ errors });
+    await pool.query(`INSERT INTO attendance_policy (id, penalty_on, free_per_month, penalty_days, self_fix_per_month, requests_per_month, days_back, remind_before_min, updated_by, updated_at)
+      VALUES (1,$1,$2,$3,$4,$5,$6,$7,$8,now()) ON CONFLICT (id) DO UPDATE SET penalty_on=$1, free_per_month=$2, penalty_days=$3, self_fix_per_month=$4,
+      requests_per_month=$5, days_back=$6, remind_before_min=$7, updated_by=$8, updated_at=now()`,
+      [v.penaltyOn, v.freePerMonth, v.penaltyDays, v.selfFixPerMonth, v.requestsPerMonth, v.daysBack, v.remindBeforeMin, me(req)]);
+    await audit(pool, `Missing punch-out policy: penalty ${v.penaltyOn ? `on, ${v.penaltyDays} day after ${v.freePerMonth} free a month` : "off"}; ${v.selfFixPerMonth} self-fixes and ${v.requestsPerMonth} corrections a month, up to ${v.daysBack} days back; reminder ${v.remindBeforeMin} minutes before the shift ends`, me(req));
+    res.json(v);
   }));
 
   // A month of days. Everyone reads their own; attendance.view the people in scope, and a manager their team, with ?email=.

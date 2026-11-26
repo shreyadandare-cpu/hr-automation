@@ -3,7 +3,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { api, apiMsg } from "../api.js";
 import { useAuth } from "../auth.jsx";
 import { Callout, DownloadIcon, Person, Pill, SectionHead, Stat, hours, shortDate, ViewTabs, ListSkeleton, TableSkeletonRow } from "../components/ui.jsx";
-import Requests, { NewRequest } from "../modules/engage/Requests.jsx";
+import Requests, { NewRequest, sentMessage } from "../modules/engage/Requests.jsx";
 import { ActionsCard, AttendanceLog, DayCell, DayMarks, ForgotPunchPopup, StatsCard, TimingsCard, istNow, useH24, useMonths, useNow } from "../components/attendance.jsx";
 import Pager, { usePaged } from "../components/Pager.jsx";
 import { useData } from "../data.jsx";
@@ -368,7 +368,7 @@ export default function Attendance({ onlyMine = false }) {
           <ForgotPunchPopup byMonth={mine.byMonth} today={today.date} h24={h24} onCorrect={setCorrecting} />
           <AttendanceLog months={mine} today={today.date} onCorrect={setCorrecting} />
           {correcting && <NewRequest type="attendance" initial={{ kind: "missed-punch", date: correcting.date, direction: "OUT" }} onClose={() => setCorrecting(null)}
-            onDone={() => { setCorrecting(null); say("Your correction was sent for approval."); mine.refresh(); loadToday(); }} />}
+            onDone={(d) => { setCorrecting(null); say(sentMessage(d)); mine.refresh(); loadToday(); }} />}
         </>
       ) : error ? <div className="empty">{error}</div> : <ListSkeleton />}
     </>

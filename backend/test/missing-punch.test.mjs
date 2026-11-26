@@ -51,3 +51,41 @@ test("a missed punch names the punch and the real time; other requests do not ne
   assert.deepEqual(wfh.errors, {});
   assert.equal(wfh.time, null);
 });
+
+import { MISSING_POLICY_DEFAULTS, correctionRoute, penalisedDays, readMissingPolicy } from "../src/missing-punch-rules.js";
+
+test("remember to punch out: HR's minutes before the shift ends, once, only while still in", () => {
+  const people = [{ email: "a@wohlig.com", punches: [P("2026-11-27", "09:30", "IN")] }];
+  assert.deepEqual(dueReminders({ ...base, people, nowTime: "18:19", remindBeforeMin: 10 }), []);
+  assert.deepEqual(dueReminders({ ...base, people, nowTime: "18:20", remindBeforeMin: 10 }).map((r) => r.kind), ["before-end"]);
+  assert.deepEqual(dueReminders({ ...base, people, nowTime: "18:25", remindBeforeMin: 10, sent: new Set(["a@wohlig.com|2026-11-27|before-end"]) }), []);
+  assert.deepEqual(dueReminders({ ...base, people, nowTime: "18:25", remindBeforeMin: 0 }), [], "0 switches it off");
+});
+
+test("HR's missing punch-out settings are checked; the penalty is off unless HR turns it on", () => {
+  assert.equal(MISSING_POLICY_DEFAULTS.penaltyOn, false);
+  const good = readMissingPolicy({ penaltyOn: true, freePerMonth: 2, penaltyDays: 0.5, selfFixPerMonth: 2, requestsPerMonth: 5, daysBack: 7, remindBeforeMin: 10 });
+  assert.deepEqual(good.errors, {});
+  assert.equal(good.value.penaltyOn, true);
+  const bad = readMissingPolicy({ penaltyOn: "yes", freePerMonth: -1, penaltyDays: 2, selfFixPerMonth: 1.5, requestsPerMonth: "", daysBack: 0, remindBeforeMin: 500 });
+  assert.equal(bad.value.penaltyOn, false);
+  assert.deepEqual(Object.keys(bad.errors).sort(), ["daysBack", "freePerMonth", "penaltyDays", "remindBeforeMin", "requestsPerMonth", "selfFixPerMonth"]);
+});
+
+test("the penalty: the first free missing days of the month are free, each one after is penalised", () => {
+  const on = { ...MISSING_POLICY_DEFAULTS, penaltyOn: true, freePerMonth: 2 };
+  assert.deepEqual(penalisedDays(["2026-11-20", "2026-11-03", "2026-11-11", "2026-11-25"], on), ["2026-11-20", "2026-11-25"]);
+  assert.deepEqual(penalisedDays(["2026-11-03", "2026-11-11"], on), []);
+  assert.deepEqual(penalisedDays(["2026-11-03", "2026-11-11", "2026-11-20"], { ...on, penaltyOn: false }), []);
+  assert.deepEqual(penalisedDays(["2026-11-03"], { ...on, freePerMonth: 0 }), ["2026-11-03"]);
+});
+
+test("a correction: refused past the window or the month's limit, added straight away within the allowance, else approval", () => {
+  const policy = { ...MISSING_POLICY_DEFAULTS, selfFixPerMonth: 2, requestsPerMonth: 5, daysBack: 7 };
+  const today = "2026-11-27";
+  assert.deepEqual(correctionRoute({ date: "2026-11-26", today, policy, used: { requests: 0, selfFixes: 0 } }), { selfFix: true });
+  assert.deepEqual(correctionRoute({ date: "2026-11-26", today, policy, used: { requests: 2, selfFixes: 2 } }), { approval: true });
+  assert.ok(correctionRoute({ date: "2026-11-19", today, policy, used: { requests: 0, selfFixes: 0 } }).refuse, "8 days back is past a 7-day window");
+  assert.ok(!correctionRoute({ date: "2026-11-20", today, policy, used: { requests: 0, selfFixes: 0 } }).refuse, "7 days back is allowed");
+  assert.ok(correctionRoute({ date: "2026-11-26", today, policy, used: { requests: 5, selfFixes: 2 } }).refuse);
+});

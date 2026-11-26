@@ -14,6 +14,8 @@ const STATUS = { pending: "Waiting for approval", approved: "Approved", declined
 /** "6:45 pm" from "18:45". */
 const clock12 = (t) => { const [h, m] = String(t).split(":").map(Number); return `${((h + 11) % 12) + 1}:${String(m).padStart(2, "0")} ${h < 12 ? "am" : "pm"}`; };
 /** "Missed punch out at 6:45 pm" for a missed punch with a time, otherwise the kind's name. */
+/** What to tell the person after sending: a missed punch within the month's allowance is added at once, otherwise it waits. */
+export const sentMessage = (d) => (d && d.selfFix ? `Your punch was added to your day.${d.selfFixesLeft ? ` You can add ${d.selfFixesLeft} more this month without approval.` : " Further corrections this month go to your manager and HR for approval."}` : "Your correction was sent to your manager and the HR team for approval.");
 export const aboutOf = (x) => (x.kind === "missed-punch" && x.time ? `Missed punch ${x.direction === "IN" ? "in" : "out"} at ${clock12(x.time)}` : kindName(x.kind));
 const inr = (n) => `₹${Number(n).toLocaleString("en-IN")}`;
 
@@ -57,13 +59,13 @@ export default function Requests({ all = false, only = null, embedded = false, t
                 <td className="num-cell">{type === "attendance" ? shortDate(x.date) : inr(x.amount)}</td>
                 <td>{type === "attendance" ? <><b style={{ fontWeight: 700 }}>{aboutOf(x)}</b><div className="muted">{x.note}</div></> : x.reason}{x.decisionNote && <div className="muted">Note: {x.decisionNote}</div>}</td>
                 <td>{when(x.createdAt)}</td>
-                <td><Pill tone={TONE[x.status] || "mute"}>{STATUS[x.status] || x.status}</Pill></td>
+                <td><Pill tone={TONE[x.status] || "mute"}>{x.selfFix && x.status === "approved" ? "Added, no approval needed" : STATUS[x.status] || x.status}</Pill></td>
                 <td>{x.status === "pending" && (decide && x.canDecide ? <button type="button" className="btn glass sm" onClick={() => setDeciding(x)}>Decide</button> : !scope ? <button type="button" className="btn glass sm" onClick={() => cancel(x)}>Cancel</button> : null)}</td>
               </tr>))}</tbody>
           </table></div>)
           : <div className="empty">{scope ? "No requests yet." : "You have not made any requests yet."}</div>}
       </div>
-      {adding && <NewRequest type={type} initial={typeof adding === "object" ? adding : null} onClose={() => setAdding(false)} onDone={() => { setAdding(false); toast(type === "attendance" ? "Your request was sent for approval." : "Your request was sent to HR."); reload(); }} />}
+      {adding && <NewRequest type={type} initial={typeof adding === "object" ? adding : null} onClose={() => setAdding(false)} onDone={(d) => { setAdding(false); toast(type === "attendance" ? (d && d.kind === "missed-punch" ? sentMessage(d) : "Your request was sent to your manager and the HR team.") : "Your request was sent to HR."); reload(); }} />}
       {deciding && <Decide type={type} x={deciding} name={deciding.person.name} onClose={() => setDeciding(null)} onDone={(d) => { setDeciding(null); toast(`The request was ${d}.`); reload(); }} />}
     </section>
   );
@@ -79,7 +81,7 @@ export function NewRequest({ type, initial = null, onClose, onDone }) {
     const r = await api("POST", `/api/requests/${type}`, f);
     setBusy(false);
     if (!r.ok) { setErr({ ...problems(r), form: r.data && r.data.errors ? "" : apiMsg(r) }); return; }
-    onDone();
+    onDone({ ...(r.data || {}), kind: f.kind });
   };
   return (
     <Modal onClose={busy ? () => {} : onClose}>
@@ -91,7 +93,7 @@ export function NewRequest({ type, initial = null, onClose, onDone }) {
           <Field id="rq-d" label="Date" error={err.date}><input id="rq-d" type="date" className="input" value={f.date} onChange={set("date")} aria-invalid={!!err.date} /></Field>
           {f.kind === "missed-punch" && <>
             <Field id="rq-p" label="Which punch is missing" error={err.direction}><select id="rq-p" className="input" value={f.direction} onChange={set("direction")}><option value="OUT">Punch out (when I left)</option><option value="IN">Punch in (when I arrived)</option></select></Field>
-            <Field id="rq-t" label={f.direction === "IN" ? "The time you arrived" : "The time you left"} hint="Approving adds this punch to your day." error={err.time}><input id="rq-t" type="time" className="input" value={f.time} onChange={set("time")} aria-invalid={!!err.time} /></Field>
+            <Field id="rq-t" label={f.direction === "IN" ? "The time you arrived" : "The time you left"} hint="The first few each month are added straight away; after that your manager or HR approves it." error={err.time}><input id="rq-t" type="time" className="input" value={f.time} onChange={set("time")} aria-invalid={!!err.time} /></Field>
           </>}
           <Field id="rq-n" label="Note for your manager" error={err.note}><textarea id="rq-n" className="input" rows={3} maxLength={500} value={f.note} onChange={set("note")} placeholder={f.kind === "missed-punch" ? "For example: I forgot to punch out before leaving." : "For example: working from home for a delivery."} aria-invalid={!!err.note} /></Field>
         </> : <>

@@ -7,11 +7,12 @@ import { MAX_BYTES, checkFile } from "./extract.js";
 import { pool } from "./db.js";
 import { requireAuth, unlessHidden } from "./auth.js";
 import { can, canAll, mayDecide, need, scopeOf, treeOf } from "./access.js";
-import { notify } from "./notify.js";
+import { hrEmails, notify } from "./notify.js";
 import { readProof } from "./finance-rules.js";
 import { managerOf, reportsOf } from "./teams.js";
 import { financialYear, readAdvance, readAppLink, readArticle, readAttendanceRequest, readDecision, readGoal, readPoll, readPraise, readLateDecision, readLateRequest, readTaxDeclaration, readTaxDates, readUnlock, tally, windowOpen, joinerUntil, BOTH_REGIMES } from "./engage-rules.js";
 import { form124Pdf } from "./tax-forms.js";
+import { correctionRoute, policyOf as missingPolicyOf } from "./missing-punch-rules.js";
 import { estimateTax, yearForReturn } from "./tax-estimate.js";
 import { postToChat } from "./chat.js";
 
@@ -213,8 +214,8 @@ export function engageRouter(wrap) {
       out: (x) => ({ amount: Number(x.amount_minor) / 100, currency: x.currency, reason: x.reason }), label: "advance request" },
     // Attendance requests are also decided by anyone above the person in the reporting lines (their manager), as leave is.
     attendance: { perm: "attendance.edit", table: "attendance_requests", team: true,
-      cols: "id, email, to_char(on_date, 'YYYY-MM-DD') AS on_date, kind, note, to_char(punch_time, 'HH24:MI') AS punch_time, direction, status, decided_by, decided_at, decision_note, created_at", order: "created_at DESC",
-      out: (x) => ({ date: x.on_date, kind: x.kind, note: x.note, time: x.punch_time || null, direction: x.direction || null }), label: "attendance request" },
+      cols: "id, email, to_char(on_date, 'YYYY-MM-DD') AS on_date, kind, note, to_char(punch_time, 'HH24:MI') AS punch_time, direction, self_fix, status, decided_by, decided_at, decision_note, created_at", order: "created_at DESC",
+      out: (x) => ({ date: x.on_date, kind: x.kind, note: x.note, time: x.punch_time || null, direction: x.direction || null, selfFix: !!x.self_fix }), label: "attendance request" },
   };
   r.get("/api/requests/:type", wrap(async (req, res) => {
     const t = REQ[req.params.type];
@@ -244,16 +245,49 @@ export function engageRouter(wrap) {
     const { rows: [now] } = await pool.query("SELECT to_char(now() AT TIME ZONE 'Asia/Kolkata','YYYY-MM-DD') AS d, to_char(now() AT TIME ZONE 'Asia/Kolkata','HH24:MI') AS t");
     const { date, kind, note, time, direction, errors } = readAttendanceRequest(req.body, now.d, now.t);
     if (Object.keys(errors).length) return res.status(400).json({ errors });
-    if (kind === "missed-punch") {
-      const dup = await pool.query("SELECT 1 FROM attendance_requests WHERE lower(email)=$1 AND on_date=$2 AND kind='missed-punch' AND status='pending' AND deleted_at IS NULL", [me(req), date]);
-      if (dup.rowCount) return res.status(409).json({ error: "You already asked for a correction for this day. It is waiting for a decision." });
+    if (kind !== "missed-punch") {
+      const { rows: [row] } = await pool.query("INSERT INTO attendance_requests (email, on_date, kind, note) VALUES ($1,$2,$3,$4) RETURNING id", [me(req), date, kind, note]);
+      res.status(201).json({ id: row.id, status: "pending" });
+      const boss = await managerOf(pool, me(req));
+      notify([boss, ...(await hrEmails("attendance.edit"))].filter(Boolean), { title: "Attendance request to review", body: `A request about ${kind.replace(/-/g, " ")} on ${date} is waiting.`, link: boss ? "/app/team-requests" : "/app/hr-requests" }).catch(() => {});
+      return;
     }
-    const { rows: [row] } = await pool.query("INSERT INTO attendance_requests (email, on_date, kind, note, punch_time, direction) VALUES ($1,$2,$3,$4,$5,$6) RETURNING id", [me(req), date, kind, note, time, direction]);
-    res.status(201).json({ id: row.id });
-    // Their reporting manager decides (HR when there is none), so they are told at once.
+    // A missed punch, as Keka handles it: within HR's limits (how far back, how many a month), the first few each month are added
+    // straight away with no approval (an adjustment); after that they go to the reporting manager and HR, either of whom approves.
+    const client = await pool.connect();
+    let out;
+    try {
+      await client.query("BEGIN");
+      const emp = (await client.query("SELECT id FROM employees WHERE lower(work_email)=$1 FOR UPDATE", [me(req)])).rows[0];
+      if (!emp) { await client.query("ROLLBACK"); return res.status(404).json({ error: "Your employee record was not found. Please ask the HR team to check your work email." }); }
+      const dup = await client.query("SELECT 1 FROM attendance_requests WHERE lower(email)=$1 AND on_date=$2 AND kind='missed-punch' AND status='pending' AND deleted_at IS NULL", [me(req), date]);
+      if (dup.rowCount) { await client.query("ROLLBACK"); return res.status(409).json({ error: "You already asked for a correction for this day. It is waiting for a decision." }); }
+      const policy = missingPolicyOf((await client.query("SELECT * FROM attendance_policy WHERE id=1")).rows[0]);
+      const { rows: [used] } = await client.query(
+        `SELECT count(*)::int AS requests, count(*) FILTER (WHERE self_fix)::int AS self_fixes FROM attendance_requests
+          WHERE lower(email)=$1 AND kind='missed-punch' AND deleted_at IS NULL AND status <> 'declined' AND date_trunc('month', on_date) = date_trunc('month', $2::date)`, [me(req), date]);
+      const route = correctionRoute({ date, today: now.d, policy, used: { requests: used.requests, selfFixes: used.self_fixes } });
+      if (route.refuse) { await client.query("ROLLBACK"); return res.status(409).json({ error: route.refuse }); }
+      const { rows: [row] } = await client.query(
+        `INSERT INTO attendance_requests (email, on_date, kind, note, punch_time, direction, self_fix, status, decided_by, decided_at)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING id`,
+        [me(req), date, kind, note, time, direction, !!route.selfFix, route.selfFix ? "approved" : "pending", route.selfFix ? "self (no approval needed)" : null, route.selfFix ? new Date() : null]);
+      if (route.selfFix) {
+        const there = await client.query("SELECT 1 FROM attendance_punches WHERE employee_id=$1 AND work_date=$2 AND punch_time=$3::time AND direction=$4", [emp.id, date, time, direction]);
+        if (!there.rowCount) await client.query("INSERT INTO attendance_punches (employee_id, work_date, punch_time, direction, source, note, created_by) VALUES ($1,$2,$3,$4,'request',$5,$6)",
+          [emp.id, date, time, direction, "Added by the employee (no approval needed)", me(req)]);
+        await client.query("INSERT INTO audit_log (action, work_email) VALUES ($1,$2)", [`Attendance: ${direction} at ${time} on ${date} added by the employee (${used.self_fixes + 1} of ${policy.selfFixPerMonth} without approval this month)`, me(req)]);
+      }
+      await client.query("COMMIT");
+      out = { id: row.id, status: route.selfFix ? "approved" : "pending", selfFix: !!route.selfFix, selfFixesLeft: Math.max(0, policy.selfFixPerMonth - used.self_fixes - (route.selfFix ? 1 : 0)) };
+    } catch (err) { await client.query("ROLLBACK"); throw err; } finally { client.release(); }
+    res.status(201).json(out);
+    if (out.selfFix) return;
+    // Waiting for approval: the reporting manager and the HR team are both told, and either decides.
     const boss = await managerOf(pool, me(req));
-    const what = kind === "missed-punch" ? `a missed punch ${direction === "OUT" ? "out" : "in"} at ${time} on ${date}` : `${kind.replace(/-/g, " ")} on ${date}`;
-    notify(boss || "perm:attendance.edit", { title: "Attendance correction to review", body: `A request about ${what} is waiting for you.`, link: boss ? "/app/team-requests" : "/app/hr-requests" }).catch(() => {});
+    const what = `a missed punch ${direction === "OUT" ? "out" : "in"} at ${time} on ${date}`;
+    if (boss) notify(boss, { title: "Attendance correction to review", body: `A request about ${what} is waiting for you.`, link: "/app/team-requests" }).catch(() => {});
+    notify("perm:attendance.edit", { title: "Attendance correction to review", body: `A request about ${what} is waiting.`, link: "/app/hr-requests" }).catch(() => {});
   }));
   r.post("/api/requests/:type/:id/decide", wrap(async (req, res) => {
     const t = REQ[req.params.type];

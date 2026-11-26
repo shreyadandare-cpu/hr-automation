@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api, apiMsg } from "../api.js";
-import { ListSkeleton, TableSkeletonRow } from "./ui.jsx";
+import { LineSkeleton, ListSkeleton, TableSkeletonRow } from "./ui.jsx";
 import Modal from "./Modal.jsx";
 
 /* The employee's attendance page, laid out like a standard HR attendance screen: stats, today's shift and the punch button on top,
@@ -202,7 +202,7 @@ const POLICY = {
     ["No Attendance", "You won't be penalised for any leave if there is no attendance logged by you."],
     ["Late Arrival", "You won't be penalised for any late arrival incidents."],
     ["Work Hours", "There is no penalisation for number of work hours you spend in office."],
-    ["Missing punch-out", "A day with no punch-out shows Punch-out missing and counts no hours until it is corrected; nothing is filled in for you. Send a correction with the time you left, from the day in your log. Your reporting manager approves it and the punch is added. You are reminded when you are still punched in after your shift, and the next morning if a punch-out is missing."],
+    ["Missing punch-out", (p) => `A day with no punch-out shows Punch-out missing and counts no hours until it is corrected; nothing is filled in for you. Add the time you left from the day in your log, up to ${p.daysBack} days back. The first ${p.selfFixPerMonth} each month are added straight away; after that your reporting manager or the HR team approves them, up to ${p.requestsPerMonth} a month. ${p.penaltyOn ? `${p.freePerMonth} missing punch-outs a month are free; each one after that, still missing once its ${p.daysBack} days have passed, takes ${p.penaltyDays === 1 ? "a full day" : "half a day"} of casual leave, or loss of pay when no casual leave is left.` : "There is no penalty for a missing punch-out."} You are reminded ${p.remindBeforeMin ? `${p.remindBeforeMin} minutes before your shift ends, ` : ""}30 minutes after it ends if you are still punched in, and the next morning if a punch-out is missing.`],
   ] },
   track: { label: "Time tracking policy", intro: "Below are the details of time tracking policy assigned to you", items: [
     ["Bio-Metric & Web Clock-In", "Your attendance is automatically tracked using biometric device(s)."],
@@ -214,6 +214,8 @@ const POLICY = {
 };
 export function PolicyModal({ onClose }) {
   const [tab, setTab] = useState("penal");
+  const [mp, setMp] = useState(null);   // HR's missing punch-out policy, for the numbers in its text
+  useEffect(() => { api("GET", "/api/attendance/missing-policy").then((r) => r.ok && setMp(r.data)); }, []);
   const p = POLICY[tab];
   return (
     <Modal onClose={onClose} wide>
@@ -224,7 +226,7 @@ export function PolicyModal({ onClose }) {
         </div>
         <p style={{ margin: 0 }}>{p.intro}</p>
         {p.note && <p className="muted" style={{ margin: 0 }}>{p.note}</p>}
-        {p.items.map(([h, t]) => <div key={h}><h4 style={{ margin: "0 0 4px", fontSize: 16 }}>{h}</h4><p className="muted" style={{ margin: 0 }}>{t}</p></div>)}
+        {p.items.map(([h, t]) => <div key={h}><h4 style={{ margin: "0 0 4px", fontSize: 16 }}>{h}</h4>{typeof t === "function" && !mp ? <LineSkeleton width="w-full" /> : <p className="muted" style={{ margin: 0 }}>{typeof t === "function" ? t(mp) : t}</p>}</div>)}
       </div>
     </Modal>
   );
@@ -275,7 +277,7 @@ function Row({ d, today, nowMin, h24, canEdit, onRemove, onCorrect }) {
           {date}
           <td><DayBar firstIn={d.firstIn} lastOut={d.lastOut} open={!d.lastOut && !d.forgotOut} /></td>
           <td className="num-cell">{dur(brk)}</td>
-          <td className="num-cell">{d.forgotOut ? <>{dur(d.minutes)}<div className="muted" style={{ fontSize: 13 }}>{d.correction === "pending" ? "Correction waiting" : "Punch-out missing"}</div>
+          <td className="num-cell">{d.forgotOut ? <>{dur(d.minutes)}<div className="muted" style={{ fontSize: 13 }}>{d.penalty ? `Penalty: ${d.penalty === 1 ? "1 day" : "half a day"} of leave` : d.correction === "pending" ? "Correction waiting" : "Punch-out missing"}</div>
             {onCorrect && !["pending", "approved"].includes(d.correction) && <button type="button" className="btn link sm" onClick={(e) => { e.stopPropagation(); onCorrect(d); }}>Request correction</button>}</> : gross === null ? <span className="muted">No punch out</span> : dur(gross)}</td>
           <td><span className={`att-chip ${tone}`} title={tip}>{d.forgotOut ? (d.correction === "pending" ? "Waiting" : "Missing") : /^Half day/.test(d.status || "") ? "Half day" : LOG_ICON[tone]}</span></td>
         </tr>

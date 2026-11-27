@@ -288,10 +288,10 @@ export function onboardingRouter(wrap) {
       let salary = null;
       const sal = req.body.salary;
       if (sal && String(sal.monthlyGross || "").trim() !== "") {
-        if (!canAll(req, "payroll.prepare")) salary = { saved: false, error: "Only someone who prepares payroll can enter a salary. HR can add it in Payroll." };
+        if (!canAll(req, "payroll.prepare")) salary = { saved: false, error: "Only the salary owner can enter a salary. They can add it in Payroll." };
         else {
           try { salary = await saveOnboardingSalary(row.work_email, { annualCtc: sal.annualCtc, monthlyGross: sal.monthlyGross, startDate: d.start }, req.user.email); }
-          catch (err) { salary = { saved: false, error: "The salary could not be saved. HR can add it in Payroll." }; console.error("Onboarding salary:", err.message); }
+          catch (err) { salary = { saved: false, error: "The salary could not be saved. The salary owner can add it in Payroll." }; console.error("Onboarding salary:", err.message); }
         }
       }
       payrollChanged();   // the new person is on the Payroll list from this moment, with or without a salary

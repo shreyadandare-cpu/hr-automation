@@ -11,6 +11,7 @@ import { findItem, menuFor } from "../lib/menu.js";
 import QuickSearch from "./QuickSearch.jsx";
 import NotificationBell from "./NotificationBell.jsx";
 import NextHolidayPopup from "./NextHolidayPopup.jsx";
+import DocLockGate from "./DocLock.jsx";
 import { BRAND, PRODUCT } from "../brand.js";
 import { FestivalChip, FestiveFrame, useFestivalLook } from "./FestivalLook.jsx";
 
@@ -307,6 +308,7 @@ export default function Shell() {
       </div>
       {searching && <QuickSearch onClose={() => setSearching(false)} />}
       <NextHolidayPopup />
+      <DocLockGate />
     </div>
     </Tooltip.Provider>
   );

@@ -1,4 +1,5 @@
 import express from "express";
+import { SALARY_PERMS, salaryOwners } from "./access-rules.js";
 import { pool } from "./db.js";
 import { mailConfigured, mailSkipped, sendMail } from "./mail.js";
 export { mailSkipped };
@@ -33,6 +34,11 @@ export async function sendEmail(to, subject, body, html = null) {   // html: opt
  * directors are not sent every notice), and still-active logins only. Without a permission, or when nobody holds it, the super admins.
  */
 export async function hrEmails(perm = null) {
+  // Salary notices go to the salary owners only, never to the super admins (access-rules.js).
+  if (perm && SALARY_PERMS.has(perm)) {
+    const { rows } = await pool.query("SELECT lower(email) AS email FROM users WHERE lower(email) = ANY($1) AND NOT login_blocked ORDER BY 1", [salaryOwners()]);
+    return rows.map((r) => r.email);
+  }
   if (perm) {
     const { rows } = await pool.query(
       `SELECT DISTINCT lower(g.email) AS email FROM access_grants g JOIN users u ON lower(u.email)=lower(g.email)

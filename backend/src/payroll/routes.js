@@ -2,13 +2,15 @@ import fs from "node:fs";
 import express from "express";
 import { payPool as pool, pool as mainPool, PAYROLL_SEPARATE } from "../db.js";
 import { notify as notifyAll } from "../notify.js";
-import { event } from "../reimbursements.js";
+import { event, markClaimsPaid } from "../reimbursements.js";
 import { V } from "../validate.js";
 import { cleanInputs, INPUT_FIELDS } from "./engine.js";
 import { fyOf, fyMonths as fyMonthsOf, rulesProblems, annualTax, payrollFieldsFrom } from "./tax.js";
 import { fromEmployee } from "./declared.js";
 import { STATUS, EDITABLE, FINAL, check, nextActions } from "./workflow.js";
 import { actorOf, approvers, bankOnly, hrOnly, seal, open, sha256, encryptionReady } from "./access.js";
+import { setLineInputs } from "./store.js";
+import { sealFields } from "../secret-box.js";
 import { buildLines, recalcRun, loadRun, totalsOfLines, staffFor, joiningLater, payrollProfile, toStructure, structuresFor, seedTaxRules, deptOf, monthName } from "./store.js";
 import { buildWorkbook } from "./excel.js";
 import { buildBankFile, buildBankWorkbook } from "./bank.js";
@@ -52,10 +54,17 @@ const notify = (to, n) => (PAYROLL_SEPARATE ? Promise.resolve(console.log(`Payro
 const fyMonthsStart = (p) => `${fyOf(p).slice(0, 4)}-04`;
 const istMonth = () => new Date(Date.now() + 5.5 * 3600e3).toISOString().slice(0, 7);
 
+/** A file's content as stored: encrypted when the key is set ([encrypted, content]). */
+const storedFile = (buf) => (encryptionReady() ? [true, Buffer.from(seal(buf), "utf8")] : [false, buf]);
+/** A file's totals as stored: [plain totals, sealed totals]. */
+const sealedTotals = (totals) => { const { sealed, plain } = sealFields("file_sealed", { totals }); return [plain.totals, sealed]; };
+
 /** Adds a row to the append-only payroll audit trail. */
-export const audit = (db, actor, action, { run_id = null, period = null, work_email = null, detail = {} } = {}) =>
-  db.query("INSERT INTO payroll_audit (actor, action, run_id, period, work_email, detail) VALUES ($1,$2,$3,$4,$5,$6)",
-    [actor, action, run_id, period, work_email, JSON.stringify(detail)]);
+export const audit = (db, actor, action, { run_id = null, period = null, work_email = null, detail = {} } = {}) => {
+  const { sealed, plain } = sealFields("audit_sealed", { detail });   // the detail can name amounts, so it is stored sealed (secret-box.js)
+  return db.query("INSERT INTO payroll_audit (actor, action, run_id, period, work_email, detail, audit_sealed) VALUES ($1,$2,$3,$4,$5,$6,$7)",
+    [actor, action, run_id, period, work_email, plain.detail, sealed]);
+};
 
 /** Creates the payroll tables (on the payroll database) and the starting tax rules. */
 export async function initPayroll(db) {
@@ -182,10 +191,19 @@ R.get("/runs", wrap(async (req, res) => {
   const actor = await actorOf(req), team = actor.scope ? [...actor.scope] : null;
   // A team viewer's people and net are their team's only (the run's stored totals are the whole company's).
   const { rows } = await pool.query(
-    `SELECT r.*, count(i.id)::int AS people, coalesce(sum(i.payable),0) AS payable FROM payroll_runs r
+    `SELECT r.*, count(i.id)::int AS people FROM payroll_runs r
      LEFT JOIN payroll_items i ON i.run_id=r.id ${team ? "AND lower(i.work_email) = ANY($1)" : ""}
      GROUP BY r.id ORDER BY r.period DESC`, team ? [team] : []);
-  const { rows: files } = await pool.query("SELECT id, run_id, kind, version, filename, size, sha256, totals, generated_by, generated_at, superseded FROM payroll_files ORDER BY version DESC");
+  // The net of runs without stored totals, or of a team's lines only: added up here, since the amounts are stored sealed.
+  const need = rows.filter((r) => team || !r.totals).map((r) => r.id);
+  const payableOf = new Map();
+  if (need.length) {
+    const { rows: items } = await pool.query(
+      `SELECT run_id, payable, item_sealed FROM payroll_items WHERE run_id = ANY($1) ${team ? "AND lower(work_email) = ANY($2)" : ""}`, team ? [need, team] : [need]);
+    for (const i of items) payableOf.set(i.run_id, (payableOf.get(i.run_id) || 0) + Math.round(Number(i.payable || 0) * 100));
+  }
+  for (const r of rows) r.payable = (payableOf.get(r.id) || 0) / 100;
+  const { rows: files } = await pool.query("SELECT id, run_id, kind, version, filename, size, sha256, totals, file_sealed, generated_by, generated_at, superseded FROM payroll_files ORDER BY version DESC");
   res.json(rows.filter((r) => visible(r, actor)).map((r) => ({
     ...(team ? { ...runView(r), totals: null } : runView(r)),
     people: r.totals && !team ? r.totals.people : r.people, netTotal: r.totals && !team ? r.totals.net : Number(r.payable),
@@ -203,8 +221,8 @@ R.get("/runs/:id", wrap(async (req, res) => {
     data.run = { ...data.run, totals: null };
   }
   const [{ rows: files }, { rows: events }] = await Promise.all([
-    pool.query("SELECT id, kind, version, filename, size, sha256, totals, generated_by, generated_at, superseded FROM payroll_files WHERE run_id=$1 ORDER BY generated_at DESC", [data.run.id]),
-    pool.query("SELECT id, ts, actor, action, work_email, detail FROM payroll_audit WHERE run_id=$1 ORDER BY id DESC LIMIT 300", [data.run.id]),
+    pool.query("SELECT id, kind, version, filename, size, sha256, totals, file_sealed, generated_by, generated_at, superseded FROM payroll_files WHERE run_id=$1 ORDER BY generated_at DESC", [data.run.id]),
+    pool.query("SELECT id, ts, actor, action, work_email, detail, audit_sealed FROM payroll_audit WHERE run_id=$1 ORDER BY id DESC LIMIT 300", [data.run.id]),
   ]);
   res.json({
     run: { ...runView(data.run), actions: nextActions(data.run, actor), editable: actor.hr && data.run.workflow && EDITABLE.has(data.run.status) },
@@ -256,10 +274,10 @@ R.put("/runs/:id/lines/:lineId", hrOnly, wrap(async (req, res) => {
       Object.assign(value, { hold: true, holdReason: why });
     }
     const before = line.inputs || {};
-    await client.query("UPDATE payroll_items SET inputs=$2, updated_by=$3 WHERE id=$1", [line.id, JSON.stringify(value), req.user.email]);
+    await setLineInputs(client, line.id, value, req.user.email);
     await backToDraft(client, run, req.user.email, `Inputs changed for ${line.work_email}`);
     await recalcRun(client, { ...run, status: "draft" }, req.user.email);
-    const { rows: [after] } = await client.query("SELECT slip FROM payroll_items WHERE id=$1", [line.id]);
+    const { rows: [after] } = await client.query("SELECT slip, item_sealed FROM payroll_items WHERE id=$1", [line.id]);
     await audit(client, req.user.email, "Payroll inputs changed", { run_id: run.id, period: run.period, work_email: line.work_email,
       detail: { before, after: value, netBefore: line.slip && line.slip.summary ? line.slip.summary.net : null, netAfter: after.slip.summary.net } });
     const was = before.tdsOverride, now = value.tdsOverride;
@@ -283,7 +301,7 @@ R.post("/runs/:id/hold", hrOnly, wrap(async (req, res) => {
     const run = await lockRun(client, req.params.id);
     if (!run) return fail(404, "Payroll run not found.");
     if (!run.workflow || !EDITABLE.has(run.status)) return fail(409, `Payroll for ${monthName(run.period)} is ${STATUS[run.status].toLowerCase()} and can't be edited.`);
-    const { rows: items } = await client.query("SELECT id, work_email, inputs FROM payroll_items WHERE run_id=$1 FOR UPDATE", [run.id]);
+    const { rows: items } = await client.query("SELECT id, work_email, inputs, item_sealed FROM payroll_items WHERE run_id=$1 FOR UPDATE", [run.id]);
     const changes = [];
     for (const it of items) {
       const inputs = { ...(it.inputs || {}) }, isHeld = !!inputs.hold, sel = picked.has(lc(it.work_email));
@@ -292,7 +310,7 @@ R.post("/runs/:id/hold", hrOnly, wrap(async (req, res) => {
       else if (release && isHeld) { delete inputs.hold; delete inputs.holdReason; changes.push([it, inputs, "Salary hold released"]); }
     }
     if (!changes.length) return fail(409, "Nothing to change: those people are already as you asked.");
-    for (const [it, inputs] of changes) await client.query("UPDATE payroll_items SET inputs=$2, updated_by=$3 WHERE id=$1", [it.id, JSON.stringify(inputs), req.user.email]);
+    for (const [it, inputs] of changes) await setLineInputs(client, it.id, inputs, req.user.email);
     await backToDraft(client, run, req.user.email, `Who is processed was changed for ${changes.length} ${changes.length === 1 ? "person" : "people"}`);
     await recalcRun(client, { ...run, status: "draft" }, req.user.email);
     for (const [it, , what] of changes) await audit(client, req.user.email, what, { run_id: run.id, period: run.period, work_email: it.work_email, detail: { reason: what === "Salary put on hold" ? why : null, bulk: true } });
@@ -350,10 +368,11 @@ R.post("/runs/:id/actions/:action", wrap(async (req, res) => {
       const { buffer, totals } = await buildWorkbook({ ...data, run: { ...run, status: c.to } }, { version: v, generatedBy: req.user.email, generatedAt });
       const filename = `Payroll-${run.period}-v${v}.xlsx`;
       await client.query("UPDATE payroll_files SET superseded=true WHERE run_id=$1 AND kind='workbook'", [run.id]);
+      // Stored encrypted like the bank files (it lists everyone's salary), with its totals sealed.
       const { rows: [f] } = await client.query(
-        `INSERT INTO payroll_files (run_id, kind, version, filename, mime, size, sha256, content, totals, generated_by, generated_at)
-         VALUES ($1,'workbook',$2,$3,'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',$4,$5,$6,$7,$8,$9) RETURNING id`,
-        [run.id, v, filename, buffer.length, sha256(buffer), buffer, JSON.stringify(totals), req.user.email, generatedAt]);
+        `INSERT INTO payroll_files (run_id, kind, version, filename, mime, size, sha256, encrypted, content, totals, file_sealed, generated_by, generated_at)
+         VALUES ($1,'workbook',$2,$3,'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',$4,$5,$6,$7,$8,$9,$10,$11) RETURNING id`,
+        [run.id, v, filename, buffer.length, sha256(buffer), ...storedFile(buffer), ...sealedTotals(totals), req.user.email, generatedAt]);
       await moveTo(client, run, c.to, req.user.email, "Payroll report generated", { file: f.id, version: v, sha256: sha256(buffer), totals });
       return { file: f.id };
     }
@@ -362,7 +381,7 @@ R.post("/runs/:id/actions/:action", wrap(async (req, res) => {
       const { rows: [f] } = await client.query("SELECT id, version FROM payroll_files WHERE run_id=$1 AND kind='workbook' AND NOT superseded ORDER BY version DESC LIMIT 1", [run.id]);
       if (!f) return fail(409, "Generate the payroll report first.");
       await moveTo(client, run, c.to, req.user.email, "Payroll sent for review", { file: f.id, version: f.version, note }, { submitted_by: req.user.email, submitted_at: new Date(), review_note: null });
-      after.tell.push([await approvers(), { title: `Payroll for ${month} is waiting for your review.`, body: `${inr(run.totals && run.totals.net)} net for ${run.totals ? run.totals.people : "?"} people. Sent by ${req.user.email}.`, link: "/app/payroll" }]);
+      after.tell.push([await approvers(), { title: `Payroll for ${month} is waiting for your review.`, body: `Sent by ${req.user.email}. Open Payroll to see the figures.`, link: "/app/payroll" }]);
       return {};
     }
 
@@ -374,14 +393,14 @@ R.post("/runs/:id/actions/:action", wrap(async (req, res) => {
         await client.query("UPDATE payroll_runs SET published_at=coalesce(published_at, now()) WHERE id=$1", [run.id]);
         const { rows: claims } = await client.query("SELECT * FROM reimbursements WHERE payroll_run_id=$1 AND status='in_payroll'", [run.id]);
         for (const cl of claims) await event(client, cl, { actor: req.user.email, kind: `Included in ${month} payroll`, status: "in_payroll", note: `payroll run #${run.id}` });
-        const { rows: ready } = await client.query(
-          "SELECT work_email FROM payroll_items WHERE run_id=$1 AND jsonb_array_length(slip->'incomplete') = 0 AND NOT coalesce((inputs->>'hold')::boolean, false)", [run.id]);
-        after.claims = claims; after.period = run.period; after.ready = ready.map((r) => r.work_email);
+        // The lines that are paid: complete and not on hold. Read whole and checked here, since the payslips are stored sealed.
+        const { rows: lines } = await client.query("SELECT work_email, slip, inputs, item_sealed FROM payroll_items WHERE run_id=$1", [run.id]);
+        const paidLines = lines.filter((l) => l.slip && !(l.slip.incomplete || []).length && !(l.inputs && l.inputs.hold));
+        after.claims = claims; after.period = run.period; after.ready = paidLines.map((r) => r.work_email);
         // Advance and loan instalments in the approved lines, recorded as recovered once the month is final (after the commit).
-        const { rows: inst } = await client.query(
-          `SELECT i.work_email, d->>'advanceId' AS advance_id, (d->>'amount')::numeric AS amount FROM payroll_items i, jsonb_array_elements(coalesce(i.slip->'deductions','[]'::jsonb)) d
-            WHERE i.run_id=$1 AND d->>'code' = 'advance' AND jsonb_array_length(coalesce(i.slip->'incomplete','[]'::jsonb)) = 0 AND NOT coalesce((i.inputs->>'hold')::boolean, false)`, [run.id]);
-        after.instalments = inst; after.reviewer = req.user.email;
+        after.instalments = paidLines.flatMap((l) => (l.slip.deductions || []).filter((d) => d.code === "advance")
+          .map((d) => ({ work_email: l.work_email, advance_id: d.advanceId == null ? null : String(d.advanceId), amount: d.amount == null ? null : String(d.amount) })));
+        after.reviewer = req.user.email;
       }
       after.tell.push(["hr", { title: `Payroll for ${month} was ${verb} by ${req.user.email}.`, body: note || "", link: "/app/payroll" }]);
       return {};
@@ -405,15 +424,15 @@ R.post("/runs/:id/actions/:action", wrap(async (req, res) => {
       const totals = { people: bf.count, net: bf.total };
       await client.query("UPDATE payroll_files SET superseded=true WHERE run_id=$1 AND kind IN ('bank','bank_xlsx')", [run.id]);
       const { rows: [f] } = await client.query(
-        `INSERT INTO payroll_files (run_id, kind, version, filename, mime, size, sha256, encrypted, content, totals, generated_by)
-         VALUES ($1,'bank',$2,$3,'text/csv',$4,$5,true,$6,$7,$8) RETURNING id`,
-        [run.id, v, `Salary-transfer-${run.period}-v${v}.csv`, plain.length, sha256(plain), Buffer.from(seal(plain), "utf8"), JSON.stringify(totals), req.user.email]);
+        `INSERT INTO payroll_files (run_id, kind, version, filename, mime, size, sha256, encrypted, content, totals, file_sealed, generated_by)
+         VALUES ($1,'bank',$2,$3,'text/csv',$4,$5,true,$6,$7,$8,$9) RETURNING id`,
+        [run.id, v, `Salary-transfer-${run.period}-v${v}.csv`, plain.length, sha256(plain), Buffer.from(seal(plain), "utf8"), ...sealedTotals(totals), req.user.email]);
       // The same payments as an Excel sheet, stored beside the CSV (encrypted too: it holds full account numbers) with the same version.
       const xlsx = await buildBankWorkbook(run.period, month, bf.payments, bf.total, data.totals.net, { version: v, generatedBy: req.user.email, generatedAt: new Date() });
       await client.query(
-        `INSERT INTO payroll_files (run_id, kind, version, filename, mime, size, sha256, encrypted, content, totals, generated_by)
-         VALUES ($1,'bank_xlsx',$2,$3,'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',$4,$5,true,$6,$7,$8)`,
-        [run.id, v, `Salary-transfer-${run.period}-v${v}.xlsx`, xlsx.length, sha256(xlsx), Buffer.from(seal(xlsx), "utf8"), JSON.stringify(totals), req.user.email]);
+        `INSERT INTO payroll_files (run_id, kind, version, filename, mime, size, sha256, encrypted, content, totals, file_sealed, generated_by)
+         VALUES ($1,'bank_xlsx',$2,$3,'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',$4,$5,true,$6,$7,$8,$9)`,
+        [run.id, v, `Salary-transfer-${run.period}-v${v}.xlsx`, xlsx.length, sha256(xlsx), Buffer.from(seal(xlsx), "utf8"), ...sealedTotals(totals), req.user.email]);
       await moveTo(client, run, c.to, req.user.email, "Bank transfer file generated", { file: f.id, version: v, sha256: sha256(plain), totals, excel: true });
       return { file: f.id };
     }
@@ -422,8 +441,7 @@ R.post("/runs/:id/actions/:action", wrap(async (req, res) => {
       const ref = String((req.body && req.body.bankReference) || "").trim().slice(0, 100);
       if (ref.length < 3) return fail(400, "Enter the bank's batch or transaction reference for this salary transfer.", { errors: { bankReference: "Required." } });
       await moveTo(client, run, c.to, req.user.email, "Payroll processed (bank transfer confirmed)", { bankReference: ref, note }, { paid_at: new Date(), paid_by: req.user.email, bank_reference: ref });
-      const { rows } = await client.query(
-        "UPDATE reimbursements SET status='paid', paid_at=now(), paid_amount=coalesce(approved_amount, amount), updated_at=now() WHERE payroll_run_id=$1 AND status='in_payroll' RETURNING *", [run.id]);
+      const rows = await markClaimsPaid(client, run.id);   // the amounts are sealed: worked out in the app
       for (const cl of rows) await event(client, cl, { actor: req.user.email, kind: "Paid", status: "paid", note: `${inr(cl.paid_amount)} with ${month} payroll (run #${run.id})` });
       after.paid = rows; after.period = run.period;
       return {};
@@ -435,8 +453,9 @@ R.post("/runs/:id/actions/:action", wrap(async (req, res) => {
   if (after.instalments && after.instalments.length) {
     const [y, m] = after.period.split("-").map(Number), lastDay = `${after.period}-${String(new Date(Date.UTC(y, m, 0)).getUTCDate()).padStart(2, "0")}`;
     for (const x of after.instalments) {
-      await mainPool.query(`INSERT INTO advance_recoveries (advance_id, amount, recovered_on, note, recorded_by, payroll_period) VALUES ($1,$2,$3,$4,$5,$6)
-        ON CONFLICT (advance_id, payroll_period) WHERE payroll_period IS NOT NULL DO NOTHING`, [Number(x.advance_id), x.amount, lastDay, `Deducted in payroll for ${monthName(after.period)}`, after.reviewer, after.period])
+      const rv = sealFields("recovery_sealed", { amount: x.amount == null ? null : Number(x.amount) });   // stored sealed (secret-box.js)
+      await mainPool.query(`INSERT INTO advance_recoveries (advance_id, amount, recovered_on, note, recorded_by, payroll_period, recovery_sealed) VALUES ($1,$2,$3,$4,$5,$6,$7)
+        ON CONFLICT (advance_id, payroll_period) WHERE payroll_period IS NOT NULL DO NOTHING`, [Number(x.advance_id), rv.plain.amount, lastDay, `Deducted in payroll for ${monthName(after.period)}`, after.reviewer, after.period, rv.sealed])
         .catch((err) => console.error("Advance instalment not recorded:", err.message));
     }
     await syncLoans().catch((err) => console.error("Loans not updated:", err.message));   // a loan whose last instalment was just recorded is completed
@@ -621,8 +640,8 @@ R.get("/declarations/:email", hrOnly, wrap(async (req, res) => {
   const email = lc(req.params.email), fy = FY.test(String(req.query.fy || "")) ? String(req.query.fy) : fyOf(istMonth());
   // Payroll's own record, and what the employee submitted on Pay > Tax declaration (main database, read only), side by side.
   const [{ rows: [d] }, { rows: [own] }] = await Promise.all([
-    pool.query("SELECT regime, declaration, updated_by, updated_at FROM tax_declarations WHERE fy=$1 AND lower(work_email)=$2", [fy, email]),
-    mainPool.query("SELECT regime, items, proofs, submitted_at FROM tax_declaration_requests WHERE lower(email)=$1 AND financial_year=$2 AND status='submitted'", [email, Number(fy.slice(0, 4))]),
+    pool.query("SELECT regime, declaration, updated_by, updated_at, decl_sealed FROM tax_declarations WHERE fy=$1 AND lower(work_email)=$2", [fy, email]),
+    mainPool.query("SELECT regime, items, proofs, submitted_at, declreq_sealed FROM tax_declaration_requests WHERE lower(email)=$1 AND financial_year=$2 AND status='submitted'", [email, Number(fy.slice(0, 4))]),
   ]);
   // The employee's submission as payroll's fields, with HR's proof decisions and the HRA exemption worked out from the salary.
   let submitted = null;
@@ -653,11 +672,12 @@ R.put("/declarations/:email", hrOnly, wrap(async (req, res) => {
   const out = await tx(async (client) => {
     const { rows: [emp] } = await client.query("SELECT id FROM employees WHERE lower(work_email)=$1", [email]);
     if (!emp) return fail(404, "Employee not found.");
-    const { rows: [old] } = await client.query("SELECT regime, declaration FROM tax_declarations WHERE fy=$1 AND lower(work_email)=$2", [fy, email]);
+    const { rows: [old] } = await client.query("SELECT regime, declaration, decl_sealed FROM tax_declarations WHERE fy=$1 AND lower(work_email)=$2", [fy, email]);
+    const dv = sealFields("decl_sealed", { declaration });   // stored sealed (secret-box.js)
     await client.query(
-      `INSERT INTO tax_declarations (fy, work_email, regime, declaration, updated_by) VALUES ($1,$2,$3,$4,$5)
-       ON CONFLICT (fy, lower(work_email)) DO UPDATE SET regime=EXCLUDED.regime, declaration=EXCLUDED.declaration, updated_by=EXCLUDED.updated_by, updated_at=now()`,
-      [fy, email, body.regime, JSON.stringify(declaration), req.user.email]);
+      `INSERT INTO tax_declarations (fy, work_email, regime, declaration, updated_by, decl_sealed) VALUES ($1,$2,$3,$4,$5,$6)
+       ON CONFLICT (fy, lower(work_email)) DO UPDATE SET regime=EXCLUDED.regime, declaration=EXCLUDED.declaration, updated_by=EXCLUDED.updated_by, updated_at=now(), decl_sealed=EXCLUDED.decl_sealed`,
+      [fy, email, body.regime, dv.plain.declaration, req.user.email, dv.sealed]);
     await audit(client, req.user.email, "Tax declaration saved", { work_email: email, detail: { fy, before: old || null, after: { regime: body.regime, declaration } } });
     return {};
   });
@@ -738,8 +758,9 @@ R.post("/adjustments", hrOnly, wrap(async (req, res) => {
     if (!run || !(FINAL.has(run.status) || run.status === "processed")) return fail(409, `${monthName(sourcePeriod)} isn't finalised. Change its inputs directly instead.`);
     const { rows: [line] } = await client.query("SELECT 1 FROM payroll_items i JOIN payroll_runs r ON r.id=i.run_id WHERE r.period=$1 AND lower(i.work_email)=$2", [sourcePeriod, email]);
     if (!line) return fail(404, `This person wasn't in the ${monthName(sourcePeriod)} payroll.`);
-    const { rows: [a] } = await client.query("INSERT INTO payroll_adjustments (work_email, source_period, kind, amount, reason, created_by) VALUES ($1,$2,$3,$4,$5,$6) RETURNING id",
-      [email, sourcePeriod, b.kind, amount, reason, req.user.email]);
+    const { sealed, plain } = sealFields("adjustment_sealed", { amount });   // stored sealed (secret-box.js)
+    const { rows: [a] } = await client.query("INSERT INTO payroll_adjustments (work_email, source_period, kind, amount, reason, created_by, adjustment_sealed) VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING id",
+      [email, sourcePeriod, b.kind, plain.amount, reason, req.user.email, sealed]);
     await audit(client, req.user.email, "Adjustment added", { work_email: email, period: sourcePeriod, detail: { id: a.id, kind: b.kind, amount, reason } });
     return { id: a.id };
   });

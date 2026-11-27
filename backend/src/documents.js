@@ -8,6 +8,9 @@ import { can, canAll, scopeOf } from "./access.js";
 import { buildDocumentsWorkbook } from "./documents-export.js";
 import { previewOf } from "./excel-preview.js";
 import { fullIdsOf, withFull } from "./id-numbers.js";
+import { ENC_SUFFIX, fileEncryptionReady, readStored, sealFile } from "./file-crypt.js";
+import { needDocUnlock, unlockedPassword } from "./doc-password.js";
+import { lockedPdfOf, pdfName } from "./pdf-lock.js";
 
 export const UPLOAD_DIR = path.resolve(process.env.UPLOAD_DIR || fileURLToPath(new URL("../uploads", import.meta.url)));
 const MAX_BYTES = 5 * 1024 * 1024;
@@ -78,7 +81,10 @@ documentsRouter.put("/:docKey", express.raw({ type: () => true, limit: MAX_BYTES
   if (!type) return res.status(400).json({ error: "Only PDF, JPG or PNG files are allowed." });
 
   const name = safeName(req.query.name);
-  const stored = crypto.randomUUID() + "." + type.ext;
+  let sealed;
+  try { sealed = sealFile(body); }   // encrypted on disk (file-crypt.js); refused on the live server when no key is set
+  catch (e) { if (e.status === 503) { console.error("[documents]", "upload refused: no document encryption key is set"); return res.status(503).json({ error: e.message }); } throw e; }
+  const stored = crypto.randomUUID() + "." + type.ext + (sealed.encrypted ? ENC_SUFFIX : "");
   const client = await pool.connect();
   const gone = [];
   try {
@@ -95,7 +101,7 @@ documentsRouter.put("/:docKey", express.raw({ type: () => true, limit: MAX_BYTES
       return res.status(400).json({ error: `At most ${max} files for this document.` });
     }
     await fs.mkdir(UPLOAD_DIR, { recursive: true });
-    await fs.writeFile(path.join(UPLOAD_DIR, stored), body);
+    await fs.writeFile(path.join(UPLOAD_DIR, stored), sealed.body);
     const ins = await client.query(
       `INSERT INTO documents (work_email, doc_key, filename, mime, size, stored_name)
        VALUES ($1,$2,$3,$4,$5,$6) RETURNING *`,
@@ -113,16 +119,50 @@ documentsRouter.put("/:docKey", express.raw({ type: () => true, limit: MAX_BYTES
   }
 }));
 
-documentsRouter.get("/:id/file", wrap(async (req, res) => {
+// Opening a file needs the viewer's own document password (doc-password.js). It always leaves as a PDF locked with that password
+// (pdf-lock.js; a photo is put on a page), and it is never kept by the browser.
+documentsRouter.get("/:id/file", needDocUnlock, wrap(async (req, res) => {
   const { rows } = await pool.query("SELECT * FROM documents WHERE id=$1", [Number(req.params.id) || 0]);
   if (!rows[0] || !(mine(req, rows[0]) || (await can(req, "documents.view", rows[0].work_email)))) return res.status(404).json({ error: "Not found" });
+  const body = await lockedPdfOf(await readStored(UPLOAD_DIR, rows[0].stored_name), rows[0].mime, unlockedPassword(req), { title: rows[0].filename });   // at most 5 MB
+  if (!mine(req, rows[0])) await pool.query("INSERT INTO audit_log (action, work_email) VALUES ($1,$2)", [`Document opened: ${rows[0].doc_key} (by ${req.user.email})`, rows[0].work_email]);
   res.set({
-    "Content-Type": rows[0].mime,
-    "Content-Disposition": `${req.query.download ? "attachment" : "inline"}; filename="${rows[0].filename.replace(/"/g, "")}"`,
+    "Content-Type": "application/pdf",
+    "Content-Disposition": `${req.query.download ? "attachment" : "inline"}; filename="${pdfName(rows[0].filename).replace(/"/g, "")}"`,
     "X-Content-Type-Options": "nosniff",
+    "Cache-Control": "private, no-store",
   });
-  res.sendFile(path.join(UPLOAD_DIR, rows[0].stored_name));
+  res.send(body);
 }));
+
+/**
+ * Encrypts personal documents stored before encryption existed (start-up, in the background). Each file is written encrypted
+ * under a new name, the row is pointed at it, then the plain file is removed. Safe to run again; does nothing without a key.
+ */
+export async function encryptStoredDocuments() {
+  if (!fileEncryptionReady()) return;
+  const { rows } = await pool.query("SELECT id, stored_name FROM documents WHERE stored_name NOT LIKE $1 ORDER BY id LIMIT 5000", [`%${ENC_SUFFIX}`]);
+  let done = 0;
+  for (const r of rows) {   // a start-up step, so one file at a time is fine
+    const from = path.join(UPLOAD_DIR, r.stored_name), to = r.stored_name + ENC_SUFFIX;
+    let plain;
+    try { plain = await fs.readFile(from); } catch { continue; }   // a file already missing stays as it is
+    await fs.writeFile(path.join(UPLOAD_DIR, to), sealFile(plain).body);
+    const u = await pool.query("UPDATE documents SET stored_name=$2 WHERE id=$1 AND stored_name=$3", [r.id, to, r.stored_name]);
+    if (u.rowCount) { await fs.rm(from, { force: true }); done++; } else await fs.rm(path.join(UPLOAD_DIR, to), { force: true });
+  }
+  // Tax proofs (engage.js) are personal documents too.
+  const proofs = await pool.query("SELECT id, stored FROM tax_proof_files WHERE stored NOT LIKE $1 ORDER BY id LIMIT 5000", [`%${ENC_SUFFIX}`]);
+  for (const r of proofs.rows) {
+    const name = path.basename(r.stored), from = path.join(UPLOAD_DIR, name), to = name + ENC_SUFFIX;
+    let plain;
+    try { plain = await fs.readFile(from); } catch { continue; }
+    await fs.writeFile(path.join(UPLOAD_DIR, to), sealFile(plain).body);
+    const u = await pool.query("UPDATE tax_proof_files SET stored=$2 WHERE id=$1 AND stored=$3", [r.id, to, r.stored]);
+    if (u.rowCount) { await fs.rm(from, { force: true }); done++; } else await fs.rm(path.join(UPLOAD_DIR, to), { force: true });
+  }
+  if (done) console.log(`[documents] encrypted ${done} stored document(s)`);
+}
 
 documentsRouter.delete("/:id", wrap(async (req, res) => {
   const { rows } = await pool.query(

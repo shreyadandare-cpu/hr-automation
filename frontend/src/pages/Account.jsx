@@ -3,6 +3,7 @@ import { api, apiMsg } from "../api.js";
 import { useAuth } from "../auth.jsx";
 import { SectionHead } from "../components/ui.jsx";
 import { useToast } from "../components/toast.jsx";
+import { DocPasswordCard } from "../components/DocLock.jsx";
 
 export default function Account() {
   const { user, isHr, canAll } = useAuth();
@@ -31,6 +32,7 @@ export default function Account() {
           <div className="row" style={{ gridColumn: "1/-1" }}><button type="submit" className="btn primary sm">Change password</button></div>
         </form>
       </div></div>
+      <DocPasswordCard toast={toast} />
       {canAll("users.manage") && (
         <div className="card"><div className="card-h"><h3>Logins and roles</h3></div><div className="card-b">
           <p className="muted" style={{ margin: "0 0 12px" }}>Create accounts, change roles, reset passwords and set the default password.</p>

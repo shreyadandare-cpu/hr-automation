@@ -1,8 +1,10 @@
 import "dotenv/config";
+import { sealStoredSalaries } from "./payroll/sealing.js";
 import express from "express";
 import { pool, payPool, PAY_SCHEMA, initDb } from "./db.js";
 import { digitalKitRouter, initDigitalKits, removeDuplicateStarters, seedDigitalKit, seedOfficialFiles, repairOfficialFiles, seedDesignationTexts, seedOfficialTexts, updateOfficialLabels } from "./digital-kit.js";
-import { documentsRouter } from "./documents.js";
+import { documentsRouter, encryptStoredDocuments } from "./documents.js";
+import { docPasswordRouter } from "./doc-password.js";
 import { bootstrapAuth, loadSession, requireAuth } from "./auth.js";
 import { bootstrapAccess } from "./access.js";
 import { accessRouter } from "./access-routes.js";
@@ -85,6 +87,7 @@ app.use(careersRouter(earlyWrap));
 app.use(offersRouter(earlyWrap));   // offer letters: HR's routes check the sign-in; signing through /sign/<key> is public (offers.js)
 app.use(gmailIntelRouter());   // Gmail Intelligence Engine: each HR route checks for HR itself; Google's Pub/Sub push has no session and proves itself with a token, so this sits before the login-guarded routers (off until GMAIL_INTEL_ENABLED=true)
 app.use("/api", accountRouter);
+app.use("/api/document-password", docPasswordRouter);   // each person's password for opening documents and payslips
 app.use("/api/users", usersRouter);
 app.use("/api/profile", profileRouter);
 app.use(projectReportRouter());   // weekly project reports built from the collected emails: HR sees all projects, others only their own
@@ -136,9 +139,11 @@ await initDb();
 if (payPool !== pool) { await initDb(payPool, PAY_SCHEMA); console.log("Payroll and payslips use their own database (PAYROLL_DATABASE_URL)"); }
 await loadLeavePolicy();   // the leave policy numbers HR has saved
 await initPayroll(payPool);   // payroll workflow tables and starting tax rules (payroll/schema.sql)
+for (const db of new Set([pool, payPool])) await sealStoredSalaries(db);   // salary figures saved before encryption are sealed (payroll/sealing.js)
 await syncEmployees({ force: true });   // payroll's copy of the staff list matches the company's from the first request
 warmPayrollPreview();   // the month's payroll preview, worked out in the background so the first visit is quick
 await bootstrapAuth();
+encryptStoredDocuments().catch((e) => console.error("[documents] encrypting stored documents failed:", e));   // older plain files, in the background
 await bootstrapAccess();   // the first super admins, and grants that match each login's access from before (src/access.js)
 // Digital Kit: starter text once, and a kit for every employee who does not have one yet (safe to repeat; nobody is duplicated or changed).
 try {

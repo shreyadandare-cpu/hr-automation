@@ -136,7 +136,7 @@ export async function loadSession(req, _res, next) {
     const t = tokenOf(req);
     if (t) {
       const { rows } = await pool.query(
-        `SELECT u.email, u.role, u.it_admin, u.is_super_admin, u.hidden_features,
+        `SELECT u.email, u.role, u.it_admin, u.is_super_admin, u.hidden_features, s.created_at AS signed_in_at,
                 COALESCE((SELECT json_agg(json_build_object('permission', g.permission, 'scope', g.scope, 'scope_root_email', g.scope_root_email))
                             FROM access_grants g WHERE lower(g.email)=lower(u.email) AND g.revoked_at IS NULL
                              AND (g.expires_at IS NULL OR g.expires_at >= (now() AT TIME ZONE 'Asia/Kolkata')::date)), '[]') AS grants
@@ -148,6 +148,7 @@ export async function loadSession(req, _res, next) {
       if (u && isCompanyEmail(u.email)) {
         req.user = { email: u.email, role: u.is_super_admin ? "hr" : u.role, it_admin: u.it_admin || u.is_super_admin, stored_role: u.role, hidden: u.hidden_features || [] };
         req.access = { email: u.email.toLowerCase(), superAdmin: !!u.is_super_admin, grants: u.grants || [] };
+        req.session = { key: sha(t), signedInAt: u.signed_in_at ? new Date(u.signed_in_at) : null };   // this sign-in (doc-password.js)
       }
     }
     next();

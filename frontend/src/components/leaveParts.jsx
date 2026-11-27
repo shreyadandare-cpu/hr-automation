@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { api, apiMsg } from "../api.js";
 import { useData } from "../data.jsx";
+import { useAuth } from "../auth.jsx";
 import { useToast } from "./toast.jsx";
 import Modal, { Field } from "./Modal.jsx";
 import { Pill, shortDate } from "./ui.jsx";
@@ -128,6 +129,7 @@ export function PolicyModal({ onClose }) {
 export function PayModal({ email, onClose }) {
   const lv = useLeave(), { reloadLeave } = useData(), toast = useToast();
   const p = lv.payOf(email), e = lv.empBy(email);
+  const seesSalary = useAuth().canAll("payroll.prepare");   // salaries: the salary owner only; for anyone else the server keeps it as it is
   const [f, setF] = useState({ monthlyGross: p.monthlyGross ?? "", casualOpening: p.casualOpening || 0 }), [er, setEr] = useState({});
   if (!e) return null;
   const submit = async (ev) => {
@@ -135,16 +137,16 @@ export function PayModal({ email, onClose }) {
     const r = await api("PUT", `/api/employees/${encodeURIComponent(e.email)}/pay`, { monthlyGross: f.monthlyGross, casualOpening: f.casualOpening || 0 });
     if (!r.ok) { setEr(errorsOf(r)); if (!Object.keys(errorsOf(r)).length) toast(apiMsg(r)); return; }
     const changed = [];
-    if ((p.monthlyGross ?? null) !== (f.monthlyGross === "" ? null : Number(f.monthlyGross))) changed.push("monthly salary");
+    if (seesSalary && (p.monthlyGross ?? null) !== (f.monthlyGross === "" ? null : Number(f.monthlyGross))) changed.push("monthly salary");
     if (Number(p.casualOpening || 0) !== Number(f.casualOpening || 0)) changed.push("opening casual balance");
     toast(changed.length ? `Saved for ${e.name}.` : "No changes to save."); reloadLeave(); onClose();
   };
   return (
     <Modal onClose={onClose}><form onSubmit={submit} noValidate>
-      <div className="card-h" style={{ paddingTop: 24 }}><h3>Pay &amp; balance: {e.name}</h3></div>
+      <div className="card-h" style={{ paddingTop: 24 }}><h3>{seesSalary ? "Pay & balance" : "Leave balance"}: {e.name}</h3></div>
       <div className="card-b">
-        <Field id="lp-gross" label="Monthly gross salary (₹)" hint="The monthly pay on payroll and payslips. A loss-of-pay day cuts this amount ÷ 30." error={er.monthlyGross}>
-          <input className="input" type="number" min="1" step="1" inputMode="numeric" id="lp-gross" value={f.monthlyGross} onChange={(ev) => setF({ ...f, monthlyGross: ev.target.value })} /></Field>
+        {seesSalary && <Field id="lp-gross" label="Monthly gross salary (₹)" hint="The monthly pay on payroll and payslips. A loss-of-pay day cuts this amount ÷ 30." error={er.monthlyGross}>
+          <input className="input" type="number" min="1" step="1" inputMode="numeric" id="lp-gross" value={f.monthlyGross} onChange={(ev) => setF({ ...f, monthlyGross: ev.target.value })} /></Field>}
         <Field id="lp-open" label={`Casual leave carried into ${R.POLICY.startYear}`} hint="Unused casual days from before this system started. They carry over like any other casual days." error={er.casualOpening}>
           <input className="input" type="number" min="0" max="365" step="0.5" id="lp-open" value={f.casualOpening} onChange={(ev) => setF({ ...f, casualOpening: ev.target.value })} /></Field>
       </div>

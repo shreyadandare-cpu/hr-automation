@@ -27,6 +27,7 @@ export default function Access() {
         tabs={<ViewTabs label="Access" view={view} onView={setView} views={[["people", "People"], ["super", "Super admins"], ["who", "Who can do what"]]} />} />
       {error && <Callout>{error}</Callout>}
       <Callout>Access you give here counts from the person&rsquo;s next click: their menu shows the matching pages under Manage, and notices for that work reach them.</Callout>
+      {data && <Callout>Salaries, payslips, bank details, finance reports, expense claims, loans, advances, budgets and contractor payments are decided and seen only by {(data.salaryOwners || []).join(", ") || "the salary owner"} (each person still sees their own). They cannot be given to anyone here, and super admins do not see them.</Callout>}
       {!data ? <CardSkeleton lines={4} />
         : view === "people" ? <PeopleTab data={data} reload={reload} />
         : view === "super" ? <SuperTab data={data} reload={reload} />
@@ -66,7 +67,7 @@ function PeopleTab({ data, reload }) {
                 <span className="text-[14px] text-ink-dim">{p.title || p.email}{p.manager ? ` · reports to ${p.manager}` : ""}</span>
               </div>
               <div className="flex flex-[1_1_240px] flex-wrap gap-1.5">
-                {p.superAdmin ? <Pill tone="info">Super admin: everything</Pill>
+                {p.superAdmin ? <Pill tone="info">Super admin: everything except pay</Pill>
                   : p.grants.length ? <Summary grants={p.grants} names={names} owner={p.email} />
                   : <span className="text-[14px] text-ink-faint">Own records only{p.blocked ? " · login removed" : ""}</span>}
               </div>
@@ -209,7 +210,7 @@ function SuperTab({ data, reload }) {
   return (
     <div className="card overflow-hidden p-0">
       <div className="border-b border-line px-5 py-4 max-sm:px-4">
-        <p className="m-0 text-[15px] text-ink-dim">Super admins can do everything and are the only people who give access. There is always at least one.</p>
+        <p className="m-0 text-[15px] text-ink-dim">Super admins can do everything except see salaries and other payments, and are the only people who give access. There is always at least one.</p>
       </div>
       <ul className="m-0 list-none p-0">
         {supers.map((p) => (

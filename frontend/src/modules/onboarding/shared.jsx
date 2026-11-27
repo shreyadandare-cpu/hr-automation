@@ -55,7 +55,7 @@ export const ACCESS_HELP = {
 export const hrConfirm = (name) => confirm(`Give ${name} full HR rights?\n\nHR can see and change everything in the app: onboarding, offboarding, leave, the audit log and everyone's logins. Only do this for someone who works in HR.`);
 
 export const docLinks = (f) => (f.id
-  ? <><a href={`/api/documents/${f.id}/file`} target="_blank" rel="noopener">{f.name}</a> · <a href={`/api/documents/${f.id}/file?download=1`} download={f.name}>Save</a></>
+  ? <><a href={`/api/documents/${f.id}/file`} target="_blank" rel="noopener">{f.name}</a> · <a href={`/api/documents/${f.id}/file?download=1`} download={asPdf(f.name)}>Save</a></>
   : f.name);
 
 /* docs from the server (flat list) grouped as { email: { key: [file] } } */
@@ -85,3 +85,6 @@ export function ObTabs({ cur }) {
     ["docs", "Documents", "/app/documents"],
   ]} />;
 }
+
+/* Documents leave as a PDF locked with the document password (backend/src/pdf-lock.js), so a saved copy is named .pdf. */
+export const asPdf = (name) => `${String(name || "document").replace(/\.[A-Za-z0-9]{1,5}$/, "") || "document"}.pdf`;

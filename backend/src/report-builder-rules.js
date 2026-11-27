@@ -1,3 +1,4 @@
+import { openJson } from "./secret-box.js";
 /*
  * The custom report builder, as Keka's: the kinds of data a report can be made from, their columns and filters, and how a
  * request is checked. Every column and filter is a fixed piece of SQL listed here; what the person sends only chooses among
@@ -59,7 +60,7 @@ export const DATASETS = {
     from: "reimbursements r LEFT JOIN employees e ON lower(e.work_email) = lower(r.work_email)", order: "r.expense_date DESC, r.id DESC",
     columns: {
       claimNo: { label: "Claim number", sql: "r.claim_no" }, name: { label: "Name", sql: "COALESCE(e.name, r.work_email)" }, email: { label: "Work email", sql: "r.work_email" },
-      category: { label: "Category", sql: "r.category" }, amount: { label: "Amount", sql: "r.amount::float8", type: "number" }, currency: { label: "Currency", sql: "r.currency" },
+      category: { label: "Category", sql: "r.category" }, amount: { label: "Amount", sql: "COALESCE(r.reimb_sealed, r.amount::text)", sealed: "amount", type: "number" }, currency: { label: "Currency", sql: "r.currency" },
       date: { label: "Expense date", sql: day("r.expense_date"), type: "date" }, vendor: { label: "Vendor", sql: "r.vendor" }, invoice: { label: "Invoice number", sql: "r.invoice_no" },
       status: { label: "Status", sql: "r.status", type: "label", labels: CLAIM_STATUS }, description: { label: "Description", sql: "r.description" },
     },
@@ -177,7 +178,11 @@ export function shapeRows(ds, columns, rows, after, deptOf) {
     if (ds.columns.dept && "dept" in row) row.dept = deptOf(row.dept, row._title);
     if (after.some((a) => String(row[a.column]) !== a.value)) continue;
     out.push(columns.map((c) => {
-      const def = ds.columns[c], v = row[c];
+      const def = ds.columns[c];
+      // A figure stored sealed (secret-box.js) is read as its sealed column and opened here.
+      // (Or the plain value, for a row not sealed yet.)
+      const raw = def.sealed && row[c] != null ? (String(row[c]).startsWith("s1:") ? openJson(row[c])[def.sealed] : row[c]) : row[c];
+      const v = def.sealed ? (raw == null ? null : Number(raw)) : raw;
       if (def.type === "label") { const hit = def.labels.find(([k]) => String(k) === String(v)); return hit ? hit[1] : v ?? ""; }
       return v ?? "";
     }));

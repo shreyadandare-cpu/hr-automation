@@ -16,11 +16,12 @@ Onboarding → salary structure + bank account (Payroll › Salary & bank)
 
 | Who | How they get it | Can |
 |---|---|---|
-| HR | `users.role = 'hr'` | Everything except approving. Salaries, bank details, tax rules and declarations, monthly inputs, reports, bank file, marking processed |
-| Payroll reviewer (Chirag Shah) | Email listed in `PAYROLL_REVIEWERS` (default `chirag@wohlig.com`) | See payrolls **once they are sent for review**, every line's calculation, the Excel report and history. Approve, reject or request changes. Never sees bank account numbers or the bank file. |
-| Employee | everyone else | Their own payslip only (`/api/payslips`), once the month is approved |
+| Salary owners (Chintan, Chirag, Kailash) | Emails listed in `SALARY_OWNERS` (default `chintan@wohlig.com,chirag@wohlig.com,kailash@wohlig.com`) | Everything in payroll: salaries, bank details, tax rules and declarations, monthly inputs, reports, review and approval, bank file, marking processed, finance reports |
+| Everyone else, super admins and HR included | | Nothing in payroll. The salary permissions can't be given on the Access page |
+| Employee | everyone | Their own payslip only (`/api/payslips`), once the month is approved. The figures and the PDF need their document password first, and the PDF is locked with it |
 
-The person who sent a payroll for review can't approve it (maker-checker), even if they are also listed as a reviewer.
+Since 2026-11-27, `PAYROLL_REVIEWERS` and `FINANCE_VIEWERS` give nothing. With two or more salary owners (the default three), the
+person who sent a payroll for review can't approve it: another owner does (maker-checker). Only a single owner may approve their own.
 
 ## Workflow statuses
 
@@ -97,6 +98,7 @@ Only after approval, and only HR. A CSV with Payment reference (`SAL202611<EmpID
 ## Security
 
 - `/api/payroll/*` needs HR or a reviewer (`requirePayrollAccess`). Changes are HR only (`hrOnly`), and review decisions are reviewer only (`workflow.js`). Responses are `Cache-Control: private, no-store`.
+- Every salary figure is stored encrypted (AES-256-GCM with `PAYROLL_ENCRYPTION_KEY`, `src/secret-box.js`): salary structures, payroll lines and payslips, HR's monthly inputs, adjustments, run and file totals, the payroll history's details, the monthly gross, exit settlement figures, offer letters (CTC), and the Excel reports. Expense claims, advances, loans, budgets, contractor payments and tax declarations are encrypted the same way. Audit lines, notices and emails name no amount. The plain columns are empty, so the database, a backup or a dump shows no salary. Figures saved before are encrypted at start-up; `node scripts/salary-encryption.mjs --down` puts them back in plain columns before running an older release.
 - Full bank account numbers are written once (HR enters them twice) and stored AES-256-GCM encrypted with `PAYROLL_ENCRYPTION_KEY`. APIs only ever return the last four digits. Bank files are stored encrypted, with a SHA-256 integrity check on every download.
 - `payroll_audit` is append-only (a trigger refuses UPDATE/DELETE). It records salary and bank changes (before/after), tax rules and declarations, run start, input edits, TDS overrides, recalculations, status changes with reasons, generated files with hashes, and every report and bank-file download.
 - Payroll can live on its own database (`PAYROLL_DATABASE_URL`). In that case notifications and emails about payroll are skipped.

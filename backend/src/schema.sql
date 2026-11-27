@@ -39,6 +39,10 @@ CREATE TABLE IF NOT EXISTS audit_log (
   work_email TEXT
 );
 
+-- Each person's document password (doc-password.js): a scrypt hash only. Set and reset by the person while signed in.
+CREATE TABLE IF NOT EXISTS document_passwords (
+  email TEXT PRIMARY KEY, hash TEXT NOT NULL, updated_at TIMESTAMPTZ NOT NULL DEFAULT now());
+
 CREATE TABLE IF NOT EXISTS documents (
   id          SERIAL PRIMARY KEY,
   work_email  TEXT NOT NULL,
@@ -65,6 +69,10 @@ CREATE TABLE IF NOT EXISTS sessions (
   expires_at TIMESTAMPTZ NOT NULL
 );
 CREATE INDEX IF NOT EXISTS sessions_email_idx ON sessions (email);
+-- When the sign-in happened (2026-11-27): resetting a forgotten document password needs a sign-in from the last 10 minutes.
+-- Sessions from before have none, so they never count as fresh.
+ALTER TABLE sessions ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ;
+ALTER TABLE sessions ALTER COLUMN created_at SET DEFAULT now();
 
 CREATE TABLE IF NOT EXISTS settings (
   key   TEXT PRIMARY KEY,
@@ -81,6 +89,8 @@ CREATE INDEX IF NOT EXISTS rate_limits_key_idx ON rate_limits (key, hit_at);
 
 -- Leave management. Rules (quotas, carry-over, salary cut) live in frontend/leave-rules.cjs.
 ALTER TABLE employees ADD COLUMN IF NOT EXISTS monthly_gross  NUMERIC(12,2);
+-- The monthly gross stored encrypted (2026-11-27, secret-box.js); monthly_gross is left empty once it is sealed.
+ALTER TABLE employees ADD COLUMN IF NOT EXISTS pay_sealed TEXT;
 ALTER TABLE employees ADD COLUMN IF NOT EXISTS casual_opening NUMERIC(5,1) NOT NULL DEFAULT 0;
 -- Leave balances brought over from a previous leave system: { "asOf": "2026-11-23", "casual": 4, "sick": 1.5, "compoff": 0 }. For that year each balance
 -- starts from the figure on that day and only leave after it counts (leave-rules.cjs). Null = nothing brought over.
@@ -413,9 +423,18 @@ CREATE TABLE IF NOT EXISTS reimbursement_documents (
 );
 CREATE INDEX IF NOT EXISTS reimbursement_documents_claim ON reimbursement_documents (reimbursement_id);
 -- Claims filed before expenses existed become one expense with their one receipt (runs once per claim).
-INSERT INTO reimbursement_items (reimbursement_id, position, category, expense_date, amount, description, payment_method)
-  SELECT r.id, 1, r.category, r.expense_date, r.amount, r.description, r.payment_method FROM reimbursements r
-  WHERE NOT EXISTS (SELECT 1 FROM reimbursement_items i WHERE i.reimbursement_id = r.id);
+-- (Claims stored encrypted are from after expenses existed, so they are skipped.)
+DO $$ BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema=current_schema() AND table_name='reimbursements' AND column_name='reimb_sealed') THEN
+    INSERT INTO reimbursement_items (reimbursement_id, position, category, expense_date, amount, description, payment_method)
+      SELECT r.id, 1, r.category, r.expense_date, r.amount, r.description, r.payment_method FROM reimbursements r
+      WHERE r.reimb_sealed IS NULL AND NOT EXISTS (SELECT 1 FROM reimbursement_items i WHERE i.reimbursement_id = r.id);
+  ELSE
+    INSERT INTO reimbursement_items (reimbursement_id, position, category, expense_date, amount, description, payment_method)
+      SELECT r.id, 1, r.category, r.expense_date, r.amount, r.description, r.payment_method FROM reimbursements r
+      WHERE NOT EXISTS (SELECT 1 FROM reimbursement_items i WHERE i.reimbursement_id = r.id);
+  END IF;
+END $$;
 INSERT INTO reimbursement_documents (reimbursement_id, item_id, name, mime, size, stored, uploaded_at, validation)
   SELECT r.id, (SELECT min(i.id) FROM reimbursement_items i WHERE i.reimbursement_id = r.id), r.doc_name, r.doc_mime,
          coalesce(r.doc_size, 0), r.doc_stored, coalesce(r.doc_uploaded_at, r.created_at),
@@ -519,10 +538,20 @@ EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 CREATE UNIQUE INDEX IF NOT EXISTS reimbursements_one_claim_per_budget ON reimbursements (budget_request_id)
   WHERE budget_request_id IS NOT NULL AND status <> 'rejected';
 -- Claims approved before partial approval existed were approved in full.
-UPDATE reimbursements SET requested_amount = amount, approved_amount = amount, unapproved_amount = 0
-  WHERE status IN ('payroll_pending','in_payroll','paid') AND approved_amount IS NULL;
-UPDATE reimbursements SET requested_amount = amount
-  WHERE requested_amount IS NULL AND status NOT IN ('draft','changes_requested');
+-- (Claims whose figures are stored encrypted are skipped: they were saved with these amounts.)
+DO $$ BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema=current_schema() AND table_name='reimbursements' AND column_name='reimb_sealed') THEN
+    UPDATE reimbursements SET requested_amount = amount, approved_amount = amount, unapproved_amount = 0
+      WHERE status IN ('payroll_pending','in_payroll','paid') AND approved_amount IS NULL AND reimb_sealed IS NULL AND amount IS NOT NULL;
+    UPDATE reimbursements SET requested_amount = amount
+      WHERE requested_amount IS NULL AND status NOT IN ('draft','changes_requested') AND reimb_sealed IS NULL AND amount IS NOT NULL;
+  ELSE
+    UPDATE reimbursements SET requested_amount = amount, approved_amount = amount, unapproved_amount = 0
+      WHERE status IN ('payroll_pending','in_payroll','paid') AND approved_amount IS NULL;
+    UPDATE reimbursements SET requested_amount = amount
+      WHERE requested_amount IS NULL AND status NOT IN ('draft','changes_requested');
+  END IF;
+END $$;
 
 -- An expense line can start from an uploaded invoice and be completed by the employee, so its fields can be empty
 -- while it is a draft (submitting checks they are filled in). What was read from the invoice is kept in `extracted`.
@@ -1509,3 +1538,36 @@ CREATE TABLE IF NOT EXISTS loan_events (
 CREATE INDEX IF NOT EXISTS loan_events_loan ON loan_events (loan_id, id);
 ALTER TABLE employee_advances ADD COLUMN IF NOT EXISTS loan_id INTEGER;
 CREATE UNIQUE INDEX IF NOT EXISTS employee_advances_loan ON employee_advances (loan_id) WHERE loan_id IS NOT NULL;
+
+-- Exit settlements and offer letters hold salaries too: stored encrypted like payroll (2026-11-27, secret-box.js). The plain
+-- columns are left empty, so they may be NULL now; a start-up step seals rows saved before (payroll/sealing.js).
+ALTER TABLE offboarding_clearances ADD COLUMN IF NOT EXISTS clearance_sealed TEXT;
+ALTER TABLE offboarding_clearances ALTER COLUMN reimbursements_payable DROP NOT NULL, ALTER COLUMN advance_outstanding DROP NOT NULL,
+  ALTER COLUMN total_recovery DROP NOT NULL;
+ALTER TABLE offer_letters ADD COLUMN IF NOT EXISTS offer_sealed TEXT;
+ALTER TABLE offer_letters ALTER COLUMN ctc_annual DROP NOT NULL;
+ALTER TABLE offer_letters DROP CONSTRAINT IF EXISTS offer_letters_ctc_annual_check;
+ALTER TABLE offer_letters ADD CONSTRAINT offer_letters_ctc_annual_check CHECK (ctc_annual IS NULL OR ctc_annual > 0);
+
+-- Every other payment stored encrypted (2026-11-27, secret-box.js): expense claims and their lines, advances, their recoveries
+-- and requests, loans and their history, contractor payments, budgets and tax declarations. The plain columns are left empty
+-- (so they may be NULL now; a CHECK on an amount lets an empty value through); a start-up step seals rows saved before.
+ALTER TABLE reimbursements      ADD COLUMN IF NOT EXISTS reimb_sealed TEXT;
+ALTER TABLE reimbursement_items ADD COLUMN IF NOT EXISTS reimb_item_sealed TEXT;
+ALTER TABLE employee_advances   ADD COLUMN IF NOT EXISTS advance_sealed TEXT;
+ALTER TABLE advance_recoveries  ADD COLUMN IF NOT EXISTS recovery_sealed TEXT;
+ALTER TABLE advance_requests    ADD COLUMN IF NOT EXISTS advreq_sealed TEXT;
+ALTER TABLE loans               ADD COLUMN IF NOT EXISTS loan_sealed TEXT;
+ALTER TABLE loan_events         ADD COLUMN IF NOT EXISTS loan_event_sealed TEXT;
+ALTER TABLE contractor_payments ADD COLUMN IF NOT EXISTS contractor_sealed TEXT;
+ALTER TABLE budget_requests     ADD COLUMN IF NOT EXISTS budget_sealed TEXT;
+ALTER TABLE tax_declaration_requests ADD COLUMN IF NOT EXISTS declreq_sealed TEXT;
+ALTER TABLE employee_advances   ALTER COLUMN amount DROP NOT NULL;
+ALTER TABLE advance_recoveries  ALTER COLUMN amount DROP NOT NULL;
+ALTER TABLE advance_requests    ALTER COLUMN amount_minor DROP NOT NULL;
+ALTER TABLE loans               ALTER COLUMN requested_amount DROP NOT NULL;
+ALTER TABLE contractor_payments ALTER COLUMN amount_minor DROP NOT NULL, ALTER COLUMN tds_minor DROP NOT NULL;
+ALTER TABLE budget_requests     ALTER COLUMN requested_budget DROP NOT NULL;
+ALTER TABLE reimbursement_events  ADD COLUMN IF NOT EXISTS reimb_event_sealed TEXT;
+ALTER TABLE budget_request_events ADD COLUMN IF NOT EXISTS budget_event_sealed TEXT;
+ALTER TABLE reimbursement_documents ADD COLUMN IF NOT EXISTS reimb_doc_sealed TEXT;

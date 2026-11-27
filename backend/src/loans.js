@@ -1,10 +1,12 @@
 import express from "express";
 import { pool, payPool } from "./db.js";
-import { canAll } from "./access.js";
+import { canAll, mayDecideOwn } from "./access.js";
 import { notify } from "./notify.js";
 import { money, plan, addMonths, progress, MAX_AMOUNT, MAX_MONTHS } from "./loans-rules.js";
 import { structuresFor } from "./payroll/store.js";
 import { payrollChanged } from "./payroll/preview-cache.js";
+import { sealFields } from "./secret-box.js";
+import { recoveriesByAdvance, updateSealed } from "./sealed-rows.js";
 
 /*
  * Company loans, inside Expenses. An employee asks (amount, months, reason); HR opens the request and approves the amount asked, approves a different amount, or
@@ -31,11 +33,20 @@ const amountOk = (v) => { const n = Number(v); return n > 0 && n <= MAX_AMOUNT &
 const monthsOk = (v) => Number.isInteger(Number(v)) && Number(v) >= 1 && Number(v) <= MAX_MONTHS;
 const monthName = (p) => new Date(`${p}-01T00:00:00Z`).toLocaleString("en-IN", { month: "long", year: "numeric", timeZone: "UTC" });
 
-const SELECT = `SELECT l.*, e.name, e.emp_no, e.dept, e.title, COALESCE(r.repaid, 0) AS repaid
-  FROM loans l LEFT JOIN employees e ON lower(e.work_email) = lower(l.work_email)
-  LEFT JOIN (SELECT advance_id, sum(amount) AS repaid FROM advance_recoveries GROUP BY advance_id) r ON r.advance_id = l.advance_id`;
+// The amounts are stored sealed (secret-box.js), so what has been repaid is added up in the app (withRepaid), never in SQL.
+const SELECT = `SELECT l.*, e.name, e.emp_no, e.dept, e.title
+  FROM loans l LEFT JOIN employees e ON lower(e.work_email) = lower(l.work_email)`;
+/** Loans with `repaid` filled in from their advance's recoveries. */
+async function withRepaid(db, loans) {
+  const rec = await recoveriesByAdvance(db, loans.map((l) => l.advance_id).filter(Boolean));
+  for (const l of loans) { const r = l.advance_id && rec.get(l.advance_id); l.repaid = r ? r.repaid : 0; l.last_recovered_on = r ? r.lastOn : null; }
+  return loans;
+}
 
-const log = (db, id, actor, action, detail = {}) => db.query("INSERT INTO loan_events (loan_id, actor, action, detail) VALUES ($1,$2,$3,$4)", [id, actor, action, JSON.stringify(detail)]);
+const log = (db, id, actor, action, detail = {}) => {
+  const { sealed, plain } = sealFields("loan_event_sealed", { detail });   // the detail names amounts, so it is stored sealed
+  return db.query("INSERT INTO loan_events (loan_id, actor, action, detail, loan_event_sealed) VALUES ($1,$2,$3,$4,$5)", [id, actor, action, plain.detail, sealed]);
+};
 
 async function tx(fn) {
   const c = await pool.connect();
@@ -45,10 +56,12 @@ async function tx(fn) {
 
 /** An active loan whose advance has been fully recovered is completed, with the date of the last recovery. Safe to run any time, any number of times. */
 export async function syncLoans() {
-  const { rows } = await pool.query(
-    `UPDATE loans l SET status = 'completed', completed_on = r.last_on
-       FROM (SELECT advance_id, sum(amount) AS repaid, max(recovered_on) AS last_on FROM advance_recoveries GROUP BY advance_id) r
-      WHERE l.status = 'active' AND r.advance_id = l.advance_id AND r.repaid >= l.approved_amount RETURNING l.id, l.work_email, l.loan_no, l.approved_amount`);
+  const active = await withRepaid(pool, (await pool.query("SELECT id, work_email, loan_no, advance_id, approved_amount, loan_sealed FROM loans WHERE status = 'active' AND advance_id IS NOT NULL")).rows);
+  const rows = [];
+  for (const l of active.filter((x) => x.approved_amount != null && Math.round(x.repaid * 100) >= Math.round(Number(x.approved_amount) * 100))) {
+    const { rowCount } = await pool.query("UPDATE loans SET status = 'completed', completed_on = $2 WHERE id = $1 AND status = 'active'", [l.id, l.last_recovered_on]);
+    if (rowCount) rows.push(l);
+  }
   for (const l of rows) {
     await log(pool, l.id, "system", "Loan completed", { repaid: money(l.approved_amount) });
     await notify(l.work_email, { title: `Your loan ${l.loan_no} is fully repaid.`, body: "No more installments will be deducted.", link: `/app/loans?open=${l.id}` }).catch(() => {});
@@ -73,8 +86,8 @@ async function review(email, amount, months, firstMonth) {
   out.schedule = (validMonth(firstMonth) ? Array.from({ length: p.count }, (_, i) => ({ n: i + 1, month: addMonths(firstMonth, i), amount: i === p.count - 1 ? p.last : p.monthly })) : []);
   const [st, adv, fin] = await Promise.all([
     validMonth(firstMonth) ? structuresFor(payPool, firstMonth, email) : [],
-    pool.query(`SELECT a.id, a.reason, a.amount, a.monthly_recovery, a.loan_id, COALESCE((SELECT sum(r.amount) FROM advance_recoveries r WHERE r.advance_id = a.id), 0) AS recovered
-                  FROM employee_advances a WHERE lower(a.work_email) = $1`, [email]),
+    pool.query("SELECT a.id, a.reason, a.amount, a.monthly_recovery, a.loan_id, a.advance_sealed FROM employee_advances a WHERE lower(a.work_email) = $1", [email])
+      .then(async (r) => { const rec = await recoveriesByAdvance(pool, r.rows.map((a) => a.id)); for (const a of r.rows) a.recovered = (rec.get(a.id) || { repaid: 0 }).repaid; return r; }),
     payPool.query("SELECT max(period) AS p FROM payroll_runs WHERE workflow AND status IN ('approved','bank_ready','paid')").catch(() => ({ rows: [{}] })),
   ]);
   const gross = st[0] ? money((st[0].earnings || []).reduce((n, x) => n + Number(x.amount || 0), 0)) : null;
@@ -102,7 +115,7 @@ loansRouter.get("/mine", wrap(async (req, res) => {
   await syncLoans();
   const [{ rows: [e] }, { rows }] = await Promise.all([
     pool.query("SELECT name, emp_no, dept, title FROM employees WHERE lower(work_email) = $1", [me(req)]),
-    pool.query(`${SELECT} WHERE lower(l.work_email) = $1 ORDER BY l.id DESC`, [me(req)])]);
+    pool.query(`${SELECT} WHERE lower(l.work_email) = $1 ORDER BY l.id DESC`, [me(req)]).then(async (r) => ({ rows: await withRepaid(pool, r.rows) }))]);
   res.json({ profile: { name: e ? e.name : req.user.email, empNo: e ? e.emp_no || "" : "", dept: e ? e.dept || "" : "", title: e ? e.title || "" : "" }, loans: rows.map(shape) });
 }));
 
@@ -120,14 +133,13 @@ loansRouter.get("/", wrap(async (req, res) => {
   if (year) { args.push(year); where.push(`extract(year FROM l.created_at AT TIME ZONE 'Asia/Kolkata') = $${args.length}`); }
   const W = where.length ? `WHERE ${where.join(" AND ")}` : "";
   const [{ rows }, { rows: [s] }, { rows: depts }] = await Promise.all([
-    pool.query(`${SELECT} ${W} ORDER BY (l.status = 'pending') DESC, l.id DESC LIMIT 300`, args),
+    pool.query(`${SELECT} ${W} ORDER BY (l.status = 'pending') DESC, l.id DESC LIMIT 300`, args).then(async (r) => ({ rows: await withRepaid(pool, r.rows) })),
+    // Counts in SQL; money added up here, since it is stored sealed.
     pool.query(`SELECT count(*)::int AS total, count(*) FILTER (WHERE l.status='pending')::int AS pending, count(*) FILTER (WHERE l.status='active')::int AS active,
-                       count(*) FILTER (WHERE l.status='completed')::int AS completed, count(*) FILTER (WHERE l.status='rejected')::int AS rejected,
-                       COALESCE(sum(l.approved_amount) FILTER (WHERE l.status IN ('active','completed')), 0) AS disbursed,
-                       COALESCE(sum(r.repaid) FILTER (WHERE l.status IN ('active','completed')), 0) AS repaid
-                  FROM loans l LEFT JOIN (SELECT advance_id, sum(amount) AS repaid FROM advance_recoveries GROUP BY advance_id) r ON r.advance_id = l.advance_id`),
+                       count(*) FILTER (WHERE l.status='completed')::int AS completed, count(*) FILTER (WHERE l.status='rejected')::int AS rejected FROM loans l`),
     pool.query("SELECT DISTINCT dept FROM employees WHERE dept IS NOT NULL AND dept <> '' ORDER BY dept")]);
-  const disbursed = money(s.disbursed), repaid = money(s.repaid);
+  const live = await withRepaid(pool, (await pool.query("SELECT id, advance_id, approved_amount, loan_sealed FROM loans WHERE status IN ('active','completed')")).rows);
+  const disbursed = money(live.reduce((n, l) => n + Number(l.approved_amount || 0), 0)), repaid = money(live.reduce((n, l) => n + l.repaid, 0));
   res.json({ loans: rows.map(shape), departments: depts.map((d) => d.dept),
     stats: { total: s.total, pending: s.pending, active: s.active, completed: s.completed, rejected: s.rejected, disbursed, repaid, outstanding: Math.max(0, money(disbursed - repaid)) } });
 }));
@@ -144,20 +156,22 @@ loansRouter.post("/", wrap(async (req, res) => {
   const out = await tx(async (c) => {
     const { rows: [open] } = await c.query("SELECT loan_no FROM loans WHERE lower(work_email) = $1 AND status = 'pending'", [me(req)]);
     if (open) return { rollback: true, status: 409, error: `You already have a request (${open.loan_no}) waiting for HR. Please wait for the decision, or cancel it first.` };
-    const { rows: [l] } = await c.query("INSERT INTO loans (work_email, requested_amount, reason, requested_months) VALUES ($1,$2,$3,$4) RETURNING *", [me(req), money(b.amount), reason, Number(b.months)]);
+    const lv = sealFields("loan_sealed", { requested_amount: money(b.amount) });   // stored sealed (secret-box.js)
+    const { rows: [l] } = await c.query("INSERT INTO loans (work_email, requested_amount, reason, requested_months, loan_sealed) VALUES ($1,$2,$3,$4,$5) RETURNING *", [me(req), lv.plain.requested_amount, reason, Number(b.months), lv.sealed]);
     l.loan_no = `LN-${l.created_at.getFullYear()}-${String(l.id).padStart(4, "0")}`;
     await c.query("UPDATE loans SET loan_no = $2 WHERE id = $1", [l.id, l.loan_no]);
     await log(c, l.id, me(req), "Loan requested", { amount: money(b.amount), months: Number(b.months), monthly: plan(b.amount, b.months).monthly, reason });
     return { l };
   });
   if (out.error) return res.status(out.status).json({ error: out.error });
-  await notify("perm:advances.approve", { title: `${emp.name} requested a loan of ${inr(money(b.amount))} over ${Number(b.months)} months.`, body: out.l.loan_no, link: `/app/loans?open=${out.l.id}` }).catch(() => {});
+  await notify("perm:advances.approve", { title: `${emp.name} requested a loan.`, body: `${out.l.loan_no}. Open Loans to see the amount.`, link: `/app/loans?open=${out.l.id}` }).catch(() => {});
   res.status(201).json({ id: out.l.id, loanNo: out.l.loan_no });
 }));
 
 /** The loan if the caller may see it (their own, or any for HR); otherwise null. */
 async function visible(req, id) {
-  const { rows: [l] } = await pool.query(`${SELECT} WHERE l.id = $1`, [Number(id) || 0]);
+  const { rows: [l0] } = await pool.query(`${SELECT} WHERE l.id = $1`, [Number(id) || 0]);
+  const l = l0 && (await withRepaid(pool, [l0]))[0];
   return l && (l.work_email.toLowerCase() === me(req) || isHr(req)) ? l : null;
 }
 
@@ -168,16 +182,16 @@ loansRouter.get("/:id", wrap(async (req, res) => {
   if (!l) return res.status(404).json({ error: "Loan not found." });
   const out = { loan: shape(l), schedule: [], events: [] };
   if (l.advance_id) {
-    const { rows } = await pool.query("SELECT payroll_period, amount FROM advance_recoveries WHERE advance_id = $1 AND payroll_period IS NOT NULL", [l.advance_id]);
+    const { rows } = await pool.query("SELECT payroll_period, amount, recovery_sealed FROM advance_recoveries WHERE advance_id = $1 AND payroll_period IS NOT NULL", [l.advance_id]);
     const prog = progress({ amount: l.approved_amount, months: l.months, firstMonth: l.first_month, recovered: new Map(rows.map((r) => [r.payroll_period, Number(r.amount)])), total: Number(l.repaid), thisMonth: istMonth() });
     out.schedule = prog.rows; out.paidCount = prog.paidCount; out.remainingCount = prog.rows.length - prog.paidCount;
     out.expectedCompletion = prog.rows.length ? prog.rows[prog.rows.length - 1].month : null;
   }
-  const { rows: ev } = await pool.query("SELECT ts, actor, action, detail FROM loan_events WHERE loan_id = $1 ORDER BY id", [l.id]);
+  const { rows: ev } = await pool.query("SELECT ts, actor, action, detail, loan_event_sealed FROM loan_events WHERE loan_id = $1 ORDER BY id", [l.id]);
   out.events = ev;
   if (isHr(req)) {
     const [{ rows: others }, rv] = await Promise.all([
-      pool.query(`${SELECT} WHERE lower(l.work_email) = $1 AND l.id <> $2 ORDER BY l.id DESC`, [l.work_email.toLowerCase(), l.id]),
+      pool.query(`${SELECT} WHERE lower(l.work_email) = $1 AND l.id <> $2 ORDER BY l.id DESC`, [l.work_email.toLowerCase(), l.id]).then(async (r) => ({ rows: await withRepaid(pool, r.rows) })),
       l.status === "pending" ? review(l.work_email.toLowerCase(), l.requested_amount, l.requested_months, istMonth()) : null]);
     out.others = others.map(shape); out.existing = rv ? rv.existing : [];
   }
@@ -207,25 +221,25 @@ loansRouter.post("/:id/activate", wrap(async (req, res) => {
   const out = await tx(async (c) => {
     const { rows: [l] } = await c.query("SELECT * FROM loans WHERE id = $1 FOR UPDATE", [Number(req.params.id) || 0]);
     if (!l) return { rollback: true, status: 404, error: "Loan not found." };
-    if (l.work_email.toLowerCase() === me(req)) return { rollback: true, status: 403, error: "You cannot decide your own loan request. Another HR user needs to do it." };
+    if (l.work_email.toLowerCase() === me(req) && !mayDecideOwn(req, "advances.approve")) return { rollback: true, status: 403, error: "You cannot decide your own loan request. Another salary owner needs to do it." };
     if (l.status !== "pending") return { rollback: true, status: 409, error: "This request has already been decided." };
     const email = l.work_email.toLowerCase(), amount = money(b.amount), months = Number(b.months), rv = await review(email, amount, months, b.firstMonth);
     if (rv.blocked) return { rollback: true, status: 400, error: rv.blocked, errors: { months: "Choose a longer period or a smaller amount." } };
     if (rv.firstMonthError) return { rollback: true, status: 400, error: rv.firstMonthError, errors: { firstMonth: rv.firstMonthError } };
     if (rv.existing.length && b.ack !== true) return { rollback: true, status: 409, needsAck: true, error: "This person has a loan or advance that is not repaid yet. Please confirm that you have seen it." };
+    const av = sealFields("advance_sealed", { amount, monthly_recovery: rv.plan.monthly });   // stored sealed (secret-box.js)
     const { rows: [adv] } = await c.query(
-      `INSERT INTO employee_advances (work_email, advance_date, reason, amount, created_by, monthly_recovery, recover_from, loan_id) VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id`,
-      [email, b.disbursedOn, `Company loan ${l.loan_no}`, amount, me(req), rv.plan.monthly, b.firstMonth, l.id]);
-    await c.query(
-      `UPDATE loans SET status = 'active', approved_amount = $2, months = $3, monthly_amount = $4, first_month = $5, disbursed_on = $6, hr_remarks = $7, decided_by = $8, decided_at = now(), advance_id = $9 WHERE id = $1`,
-      [l.id, amount, months, rv.plan.monthly, b.firstMonth, b.disbursedOn, remarks || null, me(req), adv.id]);
+      `INSERT INTO employee_advances (work_email, advance_date, reason, amount, created_by, monthly_recovery, recover_from, loan_id, advance_sealed) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING id`,
+      [email, b.disbursedOn, `Company loan ${l.loan_no}`, av.plain.amount, me(req), av.plain.monthly_recovery, b.firstMonth, l.id, av.sealed]);
+    await updateSealed(c, "loan_sealed", l.id, { approved_amount: amount, monthly_amount: rv.plan.monthly },
+      { status: "active", months, first_month: b.firstMonth, disbursed_on: b.disbursedOn, hr_remarks: remarks || null, decided_by: me(req), decided_at: { sql: "now()" }, advance_id: adv.id });
     await log(c, l.id, me(req), money(l.requested_amount) === amount ? "Approved as requested and activated" : "Approved with a changed amount and activated",
       { requestedAmount: money(l.requested_amount), approvedAmount: amount, requestedMonths: l.requested_months, months, monthly: rv.plan.monthly, last: rv.plan.last, firstMonth: b.firstMonth, disbursedOn: b.disbursedOn, remarks });
     return { l, amount, months, monthly: rv.plan.monthly };
   });
   if (out.error) return res.status(out.status).json({ error: out.error, ...(out.errors ? { errors: out.errors } : {}), ...(out.needsAck ? { needsAck: true } : {}) });
   payrollChanged();
-  await notify(out.l.work_email, { title: `Your loan of ${inr(out.amount)} is approved.`, body: `${inr(out.monthly)} a month for ${out.months} month${out.months === 1 ? "" : "s"}, from ${monthName(b.firstMonth)}.`, link: `/app/loans?open=${out.l.id}` }).catch(() => {});
+  await notify(out.l.work_email, { title: `Your loan ${out.l.loan_no} is approved.`, body: `Deductions start from ${monthName(b.firstMonth)}. Open Loans to see the amount and installments.`, link: `/app/loans?open=${out.l.id}` }).catch(() => {});   // no amounts in notices or emails
   res.json({ ok: true });
 }));
 
@@ -237,7 +251,7 @@ loansRouter.post("/:id/reject", wrap(async (req, res) => {
   const out = await tx(async (c) => {
     const { rows: [l] } = await c.query("SELECT * FROM loans WHERE id = $1 FOR UPDATE", [Number(req.params.id) || 0]);
     if (!l) return { rollback: true, status: 404, error: "Loan not found." };
-    if (l.work_email.toLowerCase() === me(req)) return { rollback: true, status: 403, error: "You cannot decide your own loan request. Another HR user needs to do it." };
+    if (l.work_email.toLowerCase() === me(req) && !mayDecideOwn(req, "advances.approve")) return { rollback: true, status: 403, error: "You cannot decide your own loan request. Another salary owner needs to do it." };
     if (l.status !== "pending") return { rollback: true, status: 409, error: "This request has already been decided." };
     await c.query("UPDATE loans SET status = 'rejected', rejection_reason = $2, decided_by = $3, decided_at = now() WHERE id = $1", [l.id, reason, me(req)]);
     await log(c, l.id, me(req), "Loan rejected", { reason });

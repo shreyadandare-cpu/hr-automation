@@ -1,4 +1,5 @@
 import express from "express";
+import { sealFields } from "./secret-box.js";
 import { pool, payPool } from "./db.js";
 import { requireAuth } from "./auth.js";
 import { canAll } from "./access.js";
@@ -43,7 +44,7 @@ async function linesOf(period, finalOnly) {
   const { rows: [run] } = await payPool.query("SELECT id, period, status FROM payroll_runs WHERE period=$1", [period]);
   if (!run || (finalOnly && !isFinal(run.status))) return { run: null, lines: [] };
   const { rows } = await payPool.query(
-    `SELECT lower(i.work_email) AS email, i.slip, i.base_salary, i.lop_deduction, i.payable, e.name, e.emp_no, e.dept, e.pf_number, e.pan_masked
+    `SELECT lower(i.work_email) AS email, i.slip, i.base_salary, i.lop_deduction, i.payable, i.item_sealed, e.name, e.emp_no, e.dept, e.pf_number, e.pan_masked
      FROM payroll_items i LEFT JOIN employees e ON lower(e.work_email) = lower(i.work_email)
      WHERE i.run_id=$1 ORDER BY e.name NULLS LAST, i.work_email LIMIT 2000`, [run.id]);
   const lines = rows.map((x) => {
@@ -138,7 +139,7 @@ export function financeRouter(wrap) {
   r.get("/api/finance/contractors", wrap(async (req, res) => {
     const fy = String(req.query.fy || ""); if (!isFy(fy)) return bad(res, "Please choose a financial year.");
     const { rows } = await pool.query(
-      `SELECT id, name, pan_masked, has_pan, section, to_char(paid_on,'YYYY-MM-DD') AS paid_on, amount_minor, tds_rate, tds_minor, note FROM contractor_payments
+      `SELECT id, name, pan_masked, has_pan, section, to_char(paid_on,'YYYY-MM-DD') AS paid_on, amount_minor, tds_rate, tds_minor, note, contractor_sealed FROM contractor_payments
        WHERE deleted_at IS NULL AND paid_on BETWEEN $1::date AND $2::date ORDER BY paid_on DESC, id DESC LIMIT 2000`, fyDates(fy));
     res.json({ fy, canEdit: canAll(req, "finance.contractors"), quarters: contractorQuarters(rows.map((x) => ({ paidOn: x.paid_on, section: x.section, amountMinor: x.amount_minor, tdsMinor: x.tds_minor }))),
       payments: rows.map((x) => ({ id: x.id, name: x.name, pan: x.pan_masked, hasPan: x.has_pan, section: x.section, paidOn: x.paid_on, amount: Number(x.amount_minor) / 100, rate: Number(x.tds_rate), tds: Number(x.tds_minor) / 100, net: (Number(x.amount_minor) - Number(x.tds_minor)) / 100, note: x.note })) });
@@ -147,9 +148,10 @@ export function financeRouter(wrap) {
     if (!canAll(req, "finance.contractors")) return denied(res);
     const p = readContractorPayment(req.body);
     if (Object.keys(p.errors).length) return res.status(400).json({ errors: p.errors });
+    const cv = sealFields("contractor_sealed", { amount_minor: p.amountMinor, tds_minor: p.tdsMinor });   // stored sealed (secret-box.js)
     const { rows: [row] } = await pool.query(
-      `INSERT INTO contractor_payments (name, pan_masked, has_pan, section, paid_on, amount_minor, tds_rate, tds_minor, note, created_by) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING id`,
-      [p.name, p.panMasked, p.hasPan, p.section, p.paidOn, p.amountMinor, p.rate, p.tdsMinor, p.note, req.user.email.toLowerCase()]);
+      `INSERT INTO contractor_payments (name, pan_masked, has_pan, section, paid_on, amount_minor, tds_rate, tds_minor, note, created_by, contractor_sealed) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING id`,
+      [p.name, p.panMasked, p.hasPan, p.section, p.paidOn, cv.plain.amount_minor, p.rate, cv.plain.tds_minor, p.note, req.user.email.toLowerCase(), cv.sealed]);
     await pool.query("INSERT INTO audit_log (action, work_email) VALUES ($1,$2)", [`Contractor payment recorded for ${p.name}`, req.user.email]);
     res.status(201).json({ id: row.id });
   }));
@@ -167,7 +169,7 @@ export function financeRouter(wrap) {
       "SELECT lower(work_email) AS email, name, emp_no, dept, title, to_char(start_date,'YYYY-MM-DD') AS start FROM employees WHERE status <> 'offboarded' AND start_date IS NOT NULL ORDER BY start_date, name LIMIT 2000");
     // The basic pay of each person's latest salary structure.
     const { rows: latest } = await payPool.query(
-      "SELECT DISTINCT ON (lower(work_email)) lower(work_email) AS email, earnings FROM salary_structures ORDER BY lower(work_email), effective_from DESC");
+      "SELECT DISTINCT ON (lower(work_email)) lower(work_email) AS email, earnings, structure_sealed FROM salary_structures ORDER BY lower(work_email), effective_from DESC");
     const basicOf = Object.fromEntries(latest.map((x) => [x.email, (Array.isArray(x.earnings) ? x.earnings : []).filter((e) => /^\s*basic/i.test(e.name || "")).reduce((n, e) => n + Number(e.amount || 0), 0)]));
     const people = staff.map((p) => {
       const basic = basicOf[p.email];
@@ -183,7 +185,7 @@ export function financeRouter(wrap) {
     if (email) { args.push(email); where.push(`lower(i.work_email) = $${args.length}`); }
     if (finalOnly) { args.push(FINAL_STATES); where.push(`r.status = ANY($${args.length})`); }
     const { rows } = await payPool.query(
-      `SELECT lower(i.work_email) AS email, r.period, r.status, i.slip, i.base_salary, i.lop_deduction, i.payable
+      `SELECT lower(i.work_email) AS email, r.period, r.status, i.slip, i.base_salary, i.lop_deduction, i.payable, i.item_sealed
        FROM payroll_items i JOIN payroll_runs r ON r.id = i.run_id
        WHERE ${where.join(" AND ")} LIMIT 30000`, args);
     const by = {};

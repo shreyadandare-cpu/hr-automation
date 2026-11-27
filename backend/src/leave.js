@@ -1,10 +1,12 @@
 import express from "express";
+import { setMonthlyGross } from "./payroll/sealing.js";
 import L from "../../frontend/leave-rules.cjs";
 import { pool } from "./db.js";
 import { requireAuth } from "./auth.js";
 import { can, canAll, isSuper, mayDecide, need, needAll, scopeOf, treeOf } from "./access.js";
 import { approverOf, approverMap, coveredBy, hrLeaveApprovers, reportsOf } from "./teams.js";
 import { tellLeave } from "./leave-mail.js";
+import { missingOutOn } from "./missing-punch-rules.js";
 import { buildLeaveWorkbook } from "./leave-export.js";
 import { previewOf } from "./excel-preview.js";
 import { compare, parseHolidays, readTable, templateXlsx } from "./holiday-import.js";
@@ -106,6 +108,27 @@ export async function addPenaltyLeave(client, email, date, days, why) {
   return toRequest(out);
 }
 
+/**
+ * Undoes a missing punch-out penalty once the day has its punch-out after all (HR added it, or a correction was approved): the
+ * penalty's leave entry is cancelled, so the casual leave or loss of pay comes back, and the penalty row goes. Runs inside the
+ * caller's transaction (`client`). Returns the removed penalty ({ days, leaveId }) or null when there was none or the day is
+ * still missing its punch-out. A payroll already finalised for that month is not changed; HR settles it with an adjustment.
+ */
+export async function removePenaltyIfFixed(client, email, date, by) {
+  const { rows: [pen] } = await client.query("SELECT leave_request_id, days FROM attendance_penalties WHERE email=lower($1) AND work_date=$2 FOR UPDATE", [email, date]);
+  if (!pen) return null;
+  const { rows: day } = await client.query(
+    `SELECT to_char(p.punch_time,'HH24:MI') AS time, p.direction, p.source FROM attendance_punches p JOIN employees e ON e.id = p.employee_id
+      WHERE lower(e.work_email)=lower($1) AND p.work_date=$2`, [email, date]);
+  if (!day.length || missingOutOn(day)) return null;
+  if (pen.leave_request_id) await client.query(
+    "UPDATE leave_requests SET status='cancelled', decided_at=now(), decided_by=$2, decision_note='Penalty removed: the punch-out was added' WHERE id=$1 AND status='approved'",
+    [pen.leave_request_id, by]);
+  await client.query("DELETE FROM attendance_penalties WHERE email=lower($1) AND work_date=$2", [email, date]);
+  await audit(client, `Penalty for a missing punch-out on ${date} removed by ${by}: the punch-out was added (${plural(Number(pen.days))} given back)`, email);
+  return { days: Number(pen.days), leaveId: pen.leave_request_id };
+}
+
 export function leaveRouter(wrap) {
   const r = express.Router();
   r.use(["/api/leave", "/api/employees"], requireAuth);
@@ -135,7 +158,7 @@ export function leaveRouter(wrap) {
       pool.query(`SELECT * FROM leave_requests ${where} ORDER BY from_date DESC, id DESC`, args),
       pool.query(`SELECT * FROM comp_off_credits ${where} ORDER BY worked_on DESC`, args),
       pool.query("SELECT day, name, type, source FROM holidays ORDER BY day"),
-      pool.query(`SELECT work_email, start_date, monthly_gross, casual_opening, leave_opening FROM employees ${where}`, args),
+      pool.query(`SELECT work_email, start_date, monthly_gross, pay_sealed, casual_opening, leave_opening FROM employees ${where}`, args),
     ]);
     res.json({
       policy: L.POLICY,
@@ -416,20 +439,23 @@ export function leaveRouter(wrap) {
   // Monthly gross (for the salary cut) and the casual balance someone had before this system started.
   r.put("/api/employees/:email/pay", needAll("leave.manage"), wrap(async (req, res) => {
     const { monthlyGross, casualOpening } = req.body || {};
-    const gross = monthlyGross === "" || monthlyGross === null || monthlyGross === undefined ? null : Number(monthlyGross);
+    let gross = monthlyGross === "" || monthlyGross === null || monthlyGross === undefined ? null : Math.round(Number(monthlyGross) * 100) / 100;
     const opening = Number(casualOpening ?? 0);
     const errors = {};
-    if (gross !== null && !(gross > 0 && gross < 1e8)) errors.monthlyGross = "Enter the monthly gross salary in rupees.";
+    if (gross !== null && canAll(req, "payroll.prepare") && !(gross > 0 && gross < 1e8)) errors.monthlyGross = "Enter the monthly gross salary in rupees.";
     if (!(opening >= 0 && opening <= 365 && Number.isInteger(opening * 2))) errors.casualOpening = "Enter whole or half days, 0 to 365.";
     if (Object.keys(errors).length) return res.status(400).json({ errors });
     await tx(res, async (client) => {
       const emp = await lockEmployee(client, req.params.email);
       if (!emp) return [404, { error: "Employee not found." }];
+      // Only the salary owner sets the salary (access-rules.js); for anyone else it stays as it is, since they never see it.
+      if (!canAll(req, "payroll.prepare")) gross = num(emp.monthly_gross);
       const changed = [];
       if (num(emp.monthly_gross) !== gross) changed.push("monthly salary");
       if (num(emp.casual_opening) !== opening) changed.push(`opening casual balance (${num(emp.casual_opening)} → ${opening})`);
       if (!changed.length) return [200, { ok: true, changed: false }];
-      await client.query("UPDATE employees SET monthly_gross=$2, casual_opening=$3 WHERE id=$1", [emp.id, gross, opening]);
+      await client.query("UPDATE employees SET casual_opening=$2 WHERE id=$1", [emp.id, opening]);
+      if (num(emp.monthly_gross) !== gross) await setMonthlyGross(client, emp.id, gross);   // stored sealed (secret-box.js)
       await audit(client, `Updated ${changed.join(" and ")}`, emp.work_email);   // the salary figure itself is not logged
       return [200, { ok: true, changed: true }];
     });
@@ -493,12 +519,12 @@ export function leaveRouter(wrap) {
   }));
 
   // Salary cuts for one month: loss-of-pay days that fall in that month × monthly gross / 30.
-  r.get("/api/leave/salary-cuts", needAll("leave.manage"), wrap(async (req, res) => {
+  r.get("/api/leave/salary-cuts", needAll("payroll.view"), wrap(async (req, res) => {
     const month = String(req.query.month || "");
     if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(month)) return res.status(400).json({ error: "Month must look like 2026-10." });
     const [reqs, emps, holidays] = await Promise.all([
       pool.query("SELECT * FROM leave_requests WHERE status='approved' AND lop_days > 0"),
-      pool.query("SELECT work_email, name, monthly_gross FROM employees"),
+      pool.query("SELECT work_email, name, monthly_gross, pay_sealed FROM employees"),
       holidayDays(pool),
     ]);
     const byEmail = new Map(emps.rows.map((e) => [e.work_email.toLowerCase(), e]));

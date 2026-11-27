@@ -150,11 +150,11 @@ export function LeaveCard({ e, maySetPay }) {
   const year = Number(lv.today.slice(0, 4)), p = lv.payOf(e.baseEmail);
   const mine = [...lv.reqsOf(e.baseEmail)].sort((a, c) => (a.from < c.from ? 1 : -1)).slice(0, 5);
   return (
-    <div className="card"><div className="card-h"><h3>Leave {year}</h3>{maySetPay && <button className="btn glass sm" onClick={() => setPay(true)}>Pay &amp; balance</button>}</div>
+    <div className="card"><div className="card-h"><h3>Leave {year}</h3>{maySetPay && <button className="btn glass sm" onClick={() => setPay(true)}>{canAll("payroll.prepare") ? "Pay & balance" : "Leave balance"}</button>}</div>
       <div className="card-b" style={{ paddingTop: 0 }}><LeaveBalanceCards email={e.baseEmail} year={year} /></div>
-      <dl className="facts" style={{ borderTop: 0, paddingTop: 0 }}>
+      {canAll("payroll.prepare") && <dl className="facts" style={{ borderTop: 0, paddingTop: 0 }}>
         <div><dt>Monthly gross</dt><dd>{p.monthlyGross ? inr(p.monthlyGross) : "Not set"}</dd></div>
-      </dl>
+      </dl>}
       {mine.map((r) => (
         <div className="li" key={r.id}><div className="grow"><b style={{ fontWeight: 600 }}>{LTYPE[r.type]}</b> · {rangeText(r, fdate)}
           <div className="meta">{r.status === "approved" ? <>{dd(r.paidDays)} paid{r.lopDays ? `, ${dd(r.lopDays)} loss of pay` : ""}</> : dd(r.days)}</div></div>
@@ -167,6 +167,7 @@ export function LeaveCard({ e, maySetPay }) {
 
 /* ---------- offboarding status ---------- */
 function SettlementBlock({ e, s, onPay, maySetPay }) {
+  const { canAll } = useAuth();   // only the salary owner sets a salary
   if (!s) return null;
   const mon = fdate(s.month + "-01").replace(/^1 /, "");
   const amt = (v) => (s.monthlyGross ? inr(v) : "—");
@@ -174,7 +175,7 @@ function SettlementBlock({ e, s, onPay, maySetPay }) {
     <div className="field"><span className="lab">Final settlement: leave</span><div className="settle">
       <div><span>Unused casual leave paid out<small>{s.carried} carried + {s.quota} for months worked − {s.used} used</small></span><b>{dd(s.casualLeft)} · {amt(s.encashment)}</b></div>
       <div><span>Loss of pay in {mon}</span><b className="neg">{dd(s.lopDays)} · {s.monthlyGross ? "−" + inr(s.deduction) : "—"}</b></div>
-      <div className="tot"><span>Leave adjustment</span><b>{s.monthlyGross ? inr(s.net) : maySetPay ? <button type="button" className="btn link" onClick={onPay}>Add monthly salary to see amounts</button> : "—"}</b></div>
+      <div className="tot"><span>Leave adjustment</span><b>{s.monthlyGross ? inr(s.net) : maySetPay && canAll("payroll.prepare") ? <button type="button" className="btn link" onClick={onPay}>Add monthly salary to see amounts</button> : "—"}</b></div>
     </div></div>
   );
 }

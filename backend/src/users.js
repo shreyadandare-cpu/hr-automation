@@ -126,12 +126,12 @@ usersRouter.post("/", wrap(async (req, res) => {
   if (role === "hr" && !isSuper(req)) return res.status(403).json({ error: "Only a super admin can give the HR role." });
   if (!(await createUser(pool, email, role))) {
     // A login that was removed is blocked, not deleted: adding it again lets the person back in.
-    const back = await pool.query("UPDATE users SET login_blocked=false, role=$2 WHERE lower(email)=$1 AND login_blocked RETURNING email", [email, role]);
-    if (!back.rowCount) return res.status(409).json({ error: `${email} already has an account.` });
+    // Checked before anything changes, so a refused caller never unblocks the login or changes its role, even for a moment.
     if (!(await mayActOnLogin(req, email))) {
-      await pool.query("UPDATE users SET login_blocked=true WHERE lower(email)=$1", [email]);
       return res.status(403).json({ error: "This login has more access than yours, so a super admin must give it back." });
     }
+    const back = await pool.query("UPDATE users SET login_blocked=false, role=$2 WHERE lower(email)=$1 AND login_blocked RETURNING email", [email, role]);
+    if (!back.rowCount) return res.status(409).json({ error: `${email} already has an account.` });
     await syncRoleGrants(email, { hr: role === "hr" }, req.user.email);
     await pool.query("INSERT INTO audit_log (action, work_email) VALUES ($1,$2)", [`Login given back with the ${role === "hr" ? "HR (full rights)" : role} role by ${req.user.email}`, email]);
     return res.status(201).json({ ok: true, defaultPassword: showDefault(req) ? await getDefaultPassword() : "", invite: null });

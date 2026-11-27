@@ -5,7 +5,7 @@ import ExcelPreview from "../../components/ExcelPreview.jsx";
 import { useData } from "../../data.jsx";
 import { SectionHead, ViewTabs, pill, PageSkeleton } from "../../components/ui.jsx";
 import { useToast } from "../../components/toast.jsx";
-import { DOCS, MAX_MB, ObTabs, DocRows, docCount, fileProblem, fmtSize, groupDocs } from "./shared.jsx";
+import { DOCS, MAX_MB, ObTabs, DocRows, asPdf, docCount, fileProblem, fmtSize, groupDocs } from "./shared.jsx";
 
 /* HR reads what employees uploaded. */
 function DocsHr() {
@@ -77,7 +77,7 @@ function MyDocs() {
             <div className="doc-row" key={def.k}><div className="grow"><b>{def.name} <span className={pill(fl.length ? "p-ok" : "p-mute")}>{fl.length ? "Uploaded" : "Optional"}</span></b>
               <span className="sub">PDF, JPG or PNG, up to {MAX_MB} MB{def.multi ? `, up to ${def.max} files` : ""}</span>
               <div>{fl.map((f) => (
-                <span className="fchip" key={f.id}><a href={`/api/documents/${f.id}/file`} target="_blank" rel="noopener">{f.name}</a> · {fmtSize(f.size)} · <a href={`/api/documents/${f.id}/file?download=1`} download={f.name}>Save</a>
+                <span className="fchip" key={f.id}><a href={`/api/documents/${f.id}/file`} target="_blank" rel="noopener">{f.name}</a> · {fmtSize(f.size)} · <a href={`/api/documents/${f.id}/file?download=1`} download={asPdf(f.name)}>Save</a>
                   <button type="button" aria-label={`Remove ${f.name}`} onClick={() => remove(def, f)}>×</button></span>
               ))}</div>
               {er && <div className="derr" role="alert">{er}</div>}</div>

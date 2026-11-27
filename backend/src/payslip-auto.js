@@ -76,7 +76,8 @@ payslipAutoRouter.post("/runs/:id/publish", hrOnly, wrap(async (req, res) => {
   if (run.workflow) return res.status(409).json({ error: "Payslips for this month are published when the payroll is approved." });
   const { rowCount } = await pool.query("UPDATE payroll_runs SET published_at=now() WHERE id=$1 AND published_at IS NULL", [run.id]);
   if (!rowCount) return res.status(409).json({ error: "These payslips are already published." });
-  const { rows } = await pool.query("SELECT work_email FROM payroll_items WHERE run_id=$1 AND slip IS NOT NULL AND jsonb_array_length(slip->'incomplete') = 0", [run.id]);
+  // Complete payslips only; checked here, since the payslips are stored sealed (secret-box.js).
+  const rows = (await pool.query("SELECT work_email, slip, item_sealed FROM payroll_items WHERE run_id=$1", [run.id])).rows.filter((r) => r.slip && !(r.slip.incomplete || []).length);
   await audit(pool, req.user.email, "Payslips published", { run_id: run.id, period: run.period, detail: { people: rows.length } });
   await tellReady(rows.map((r) => r.work_email), run.period);
   res.json({ ok: true, published: rows.length });

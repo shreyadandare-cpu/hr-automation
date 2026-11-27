@@ -54,9 +54,10 @@ export function check(run, action, actor, note) {
   if (t.who === "reviewer" && !actor.reviewer) return { ok: false, error: "Only a payroll approver can do this." };
   if (t.who === "bank" && !actor.bank) return { ok: false, error: "Only someone with access to the bank file can do this." };
   if (!t.from.includes(run.status)) return { ok: false, error: `Not possible while the payroll is ${STATUS[run.status] ? STATUS[run.status].toLowerCase() : run.status}.` };
-  if (t.who === "reviewer" && run.submitted_by && run.submitted_by.toLowerCase() === String(actor.email).toLowerCase())
+  // actor.sole: the only salary owner, with nobody else to check their work (payroll/access.js actorOf).
+  if (!actor.sole && t.who === "reviewer" && run.submitted_by && run.submitted_by.toLowerCase() === String(actor.email).toLowerCase())
     return { ok: false, error: "You sent this payroll for review, so someone else has to review it." };
-  if (action === "approve" && actor.maker) return { ok: false, error: "You prepared part of this payroll, so someone else has to approve it." };
+  if (!actor.sole && action === "approve" && actor.maker) return { ok: false, error: "You prepared part of this payroll, so someone else has to approve it." };
   if (t.note && String(note || "").trim().length < 5) return { ok: false, error: "Give a reason (at least 5 characters)." };
   return { ok: true, to: t.to };
 }

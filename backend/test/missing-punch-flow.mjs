@@ -6,7 +6,9 @@
  *   - the first correction of the month is added straight away (no approval); the next goes to the manager AND HR;
  *   - nobody approves their own, a colleague outside the team cannot; the manager can; approving adds the punch;
  *   - a correction past the window or past the month's limit is refused;
- *   - once a day is closed and still missing, after the free one, half a day of casual leave is taken (once only).
+ *   - once a day is closed and still missing, after the free one, half a day of casual leave is taken (once only);
+ *   - when HR adds the punch-out to that day later, the penalty is undone and the leave given back;
+ *   - an office-machine day with three punches is flagged as a missing swipe, never as a missing punch-out.
  * It makes its own test people (test-mp-*@wohlig.com) and removes everything it made.
  *
  *   DATABASE_URL=postgresql://localhost:5432/hrhub_local DB_SCHEMA= BASE=http://localhost:3100 node test/missing-punch-flow.mjs
@@ -28,7 +30,7 @@ const ok = (cond, name, extra = "") => { if (cond) { pass += 1; console.log(`PAS
 
 const TAG = `test-mp-${Date.now().toString(36)}`;
 const mail = (k) => `${TAG}-${k}@wohlig.com`;
-const made = { sessions: [], emails: ["boss", "emp", "peer", "late", "night"].map(mail), policy: undefined };
+const made = { sessions: [], emails: ["boss", "emp", "peer", "late", "night", "hr"].map(mail), policy: undefined };
 const addDays = (d, n) => new Date(Date.parse(d + "T00:00:00Z") + n * 86400000).toISOString().slice(0, 10);
 const weekdayBefore = (d) => { let x = addDays(d, -1); while ([0, 6].includes(new Date(x + "T00:00:00Z").getUTCDay())) x = addDays(x, -1); return x; };
 
@@ -45,6 +47,7 @@ async function api(method, path, body, token) {
   return { status: r.status, data };
 }
 async function cleanup() {
+  await db.query("DELETE FROM access_grants WHERE lower(email) = ANY($1) AND granted_by='missing-punch test'", [made.emails]);
   await db.query("DELETE FROM attendance_penalties WHERE lower(email) = ANY($1)", [made.emails]);
   await db.query("DELETE FROM leave_requests WHERE lower(work_email) = ANY($1)", [made.emails]);
   await db.query("DELETE FROM attendance_requests WHERE lower(email) = ANY($1)", [made.emails]);
@@ -170,6 +173,28 @@ try {
   }
   n = await runMissingPunchPenalties(appPool, { emails: [mail("late")] });
   ok(n === 0, "running again penalises nothing twice", String(n));
+
+  // HR adds the punch-out to the penalised day later: the penalty is undone and the leave comes back.
+  if (sameMonth && pens[0]) {
+    await db.query("INSERT INTO employees (name, title, work_email, status, start_date) VALUES ($1,'HR Executive',$2,'active','2024-01-01')", [`Mp ${TAG.slice(-5)} Hr`, mail("hr")]);
+    await db.query("INSERT INTO access_grants (email, permission, scope, granted_by, note) VALUES ($1,'attendance.edit','company','missing-punch test','test'), ($1,'attendance.view','company','missing-punch test','test')", [mail("hr")]);
+    const hr = await signIn(mail("hr"));
+    r = await api("POST", "/api/attendance/punches", { email: mail("late"), date: p1, time: "19:00", direction: "OUT", note: "Left at 7 pm, confirmed by the manager" }, hr);
+    ok(r.status === 201, "HR adds the missing punch-out to the closed day", JSON.stringify(r));
+    const gone = await one("SELECT count(*)::int AS n FROM attendance_penalties WHERE email=$1 AND work_date=$2", [mail("late"), p1]);
+    const lr = await one("SELECT status, decided_by FROM leave_requests WHERE id=$1", [pens[0].leave_request_id]);
+    ok(gone.n === 0 && lr.status === "cancelled", "the penalty is undone and its leave cancelled, so the half day comes back", JSON.stringify({ gone, lr }));
+    const told = await one("SELECT count(*)::int AS n FROM notifications WHERE lower(recipient)=$1 AND title='Penalty removed'", [mail("late")]);
+    ok(told.n === 1, "the person is told the penalty was removed");
+    n = await runMissingPunchPenalties(appPool, { emails: [mail("late")] });
+    ok(n === 0, "the job does not penalise the corrected day again", String(n));
+  }
+
+  // The office machine: three punches on a finished day is a missing swipe (flagged), counted first to last, not a missing punch-out.
+  await db.query("INSERT INTO attendance_punches (employee_id, work_date, punch_time, direction, source, created_by) VALUES ($1,$2,'09:30','IN','device','test'), ($1,$2,'13:00','OUT','device','test'), ($1,$2,'14:00','IN','device','test')", [nightId, d3]);
+  const night2 = await signIn(mail("night"));
+  d = await dayOf(d3, night2);
+  ok(d.missingSwipe === true && !d.forgotOut && d.minutes === 270, "three machine punches: flagged as a missing swipe, 9:30 to 2 pm counted, no penalty", JSON.stringify({ sw: d.missingSwipe, f: d.forgotOut, m: d.minutes, s: d.status }));
   await appPool.end();
 } catch (err) {
   fail += 1;

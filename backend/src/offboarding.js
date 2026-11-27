@@ -3,7 +3,7 @@ import L from "../../frontend/leave-rules.cjs";
 import { pool } from "./db.js";
 import { needAll, invalidateTree } from "./access.js";
 import { TOOL_NAMES, removeAccess } from "./connectors.js";
-import { computeClearance, inMonthEndWindow, inr, latestClearance, leaveSettlement, money, saveClearance } from "./clearance.js";
+import { computeClearance, inMonthEndWindow, latestClearance, leaveSettlement, money, saveClearance } from "./clearance.js";
 import { PRODUCT } from "./brand.js";
 import { moveTeam } from "./people.js";
 
@@ -117,9 +117,8 @@ function clearanceProblem(c, body) {
     return [409, `${c.reimbursements.awaiting.length} reimbursement claim${c.reimbursements.awaiting.length === 1 ? " is" : "s are"} still waiting for a decision. Decide ${c.reimbursements.awaiting.length === 1 ? "it" : "them"} first, or confirm clearing without ${c.reimbursements.awaiting.length === 1 ? "it" : "them"}.`];
   return null;
 }
-const clearanceDetail = (rec) => rec.status === "cleared"
-  ? `Financial clearance: nothing to recover${rec.netSalary !== null ? `, net salary ${inr(rec.netSalary)}` : ""}`
-  : `Financial clearance: ${inr(rec.totalRecovery)} recovered, net salary ${inr(rec.netSalary)}`;
+// Shown on the checklist and written to the audit log, so it names no amount: the figures are in the sealed clearance record.
+const clearanceDetail = (rec) => rec.status === "cleared" ? "Financial clearance: nothing to recover" : "Financial clearance: recovery confirmed";
 
 /**
  * Removes access tool by tool, Google Workspace first (that also blocks sign-in to every tool using Google login).

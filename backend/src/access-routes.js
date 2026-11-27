@@ -8,7 +8,8 @@ import express from "express";
 import { pool } from "./db.js";
 import { createGoogleUser } from "./auth.js";
 import { needSuper } from "./access.js";
-import { GROUPS, PERM, PERMISSIONS, PRESETS, readGrant } from "./access-rules.js";
+import { GROUPS, PERM, PERMISSIONS, PRESETS, SALARY_PERMS, readGrant, salaryOwners } from "./access-rules.js";
+const GIVABLE = PERMISSIONS.filter((p) => !SALARY_PERMS.has(p.key));
 import { isCompanyEmail } from "./validate.js";
 
 const istToday = () => new Date(Date.now() + 330 * 60000).toISOString().slice(0, 10);
@@ -41,7 +42,8 @@ export function accessRouter(wrap) {
     for (const g of grants) (byEmail[g.email.toLowerCase()] ||= []).push(grantOut(g));
     res.json({
       today: istToday(), me: _req.user.email.toLowerCase(),
-      groups: GROUPS, permissions: PERMISSIONS, presets: PRESETS,
+      // Salary permissions are not offered: only the salary owners hold them (access-rules.js).
+      groups: GROUPS.filter((g) => GIVABLE.some((p) => p.group === g)), permissions: GIVABLE, presets: PRESETS, salaryOwners: salaryOwners(),
       people: people.map((p) => ({ email: p.email, name: p.name, title: p.title || "", status: p.status, managerEmail: p.manager_email, manager: p.manager || "",
         hasLogin: p.has_login, superAdmin: p.super_admin, blocked: p.blocked, grants: byEmail[p.email] || [] })),
     });
@@ -63,6 +65,7 @@ export function accessRouter(wrap) {
     if (person && person.status === "offboarded") return res.status(400).json({ error: `${person.name} has left, so cannot be given access.` });
     const today = istToday(), clean = [];
     for (const g of list) {
+      if (SALARY_PERMS.has(g?.permission)) return res.status(400).json({ error: "Salary access cannot be given here. Only the salary owner can see salaries." });
       const { value, errors } = readGrant({ ...g, email }, today);
       if (errors) return res.status(400).json({ error: Object.values(errors)[0], errors });
       if (value.scopeRootEmail) {

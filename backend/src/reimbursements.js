@@ -3,10 +3,12 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import express from "express";
 import { pool } from "./db.js";
-import { can, canAll, mayDecide, need, needAll, scopeOf } from "./access.js";
+import { can, canAll, mayDecide, need, needAll, scopeOf, mayDecideOwn } from "./access.js";
 import { UPLOAD_DIR } from "./documents.js";
 import { MAX_BYTES, checkFile, readInvoice } from "./extract.js";
 import { notify } from "./notify.js";
+import { openJson, sealFields } from "./secret-box.js";
+import { updateSealed } from "./sealed-rows.js";
 import { readSheet, buildXlsx } from "./sheet.js";
 
 /*
@@ -85,10 +87,26 @@ const send = (res, out) => res.status(out.status || 200).json(out.body);
 
 /** One step in a claim's history: the timeline/stepper event plus a copy in the audit log. */
 export async function event(db, claim, { actor, kind, status = null, note = null }) {
-  await db.query("INSERT INTO reimbursement_events (reimbursement_id, actor, kind, status, note) VALUES ($1,$2,$3,$4,$5)",
-    [claim.id, actor, kind, status, note]);
+  // The note can name amounts, so it is stored sealed (secret-box.js) and kept out of the audit log, which is not encrypted.
+  const { sealed, plain } = sealFields("reimb_event_sealed", { note });
+  await db.query("INSERT INTO reimbursement_events (reimbursement_id, actor, kind, status, note, reimb_event_sealed) VALUES ($1,$2,$3,$4,$5,$6)",
+    [claim.id, actor, kind, status, plain.note, sealed]);
   await db.query("INSERT INTO audit_log (action, work_email) VALUES ($1,$2)",
-    [`${claim.claim_no}: ${kind}${note ? ` (${note})` : ""}${actor && actor !== claim.work_email ? ` by ${actor}` : ""}`, claim.work_email]);
+    [`${claim.claim_no}: ${kind}${actor && actor !== claim.work_email ? ` by ${actor}` : ""}`, claim.work_email]);
+}
+
+/** A receipt's reading (amounts read off the invoice) as stored: [plain, sealed] (secret-box.js). */
+const docValidation = (validation) => { const { sealed, plain } = sealFields("reimb_doc_sealed", { validation }); return [plain.validation, sealed]; };
+
+/** Marks a payroll run's claims paid, each with what was approved (or claimed): worked out here, since the amounts are sealed. */
+export async function markClaimsPaid(db, runId) {
+  const { rows: ids } = await db.query("SELECT id FROM reimbursements WHERE payroll_run_id=$1 AND status='in_payroll' ORDER BY id FOR UPDATE", [runId]);
+  const out = [];
+  for (const { id } of ids) {   // one payroll run, a handful of claims
+    out.push(await updateSealed(db, "reimb_sealed", id, { paid_amount: (r) => (r.approved_amount ?? r.amount) },
+      { status: "paid", paid_at: { sql: "now()" }, updated_at: { sql: "now()" } }));
+  }
+  return out;
 }
 
 /* ---------- checks that run on every change: amount vs invoice, policy limit, duplicates ---------- */
@@ -136,12 +154,16 @@ async function evaluate(db, c) {
   const invNos = new Set(docs.map((d) => d.validation.read && d.validation.read.fields && d.validation.read.fields.invoiceNo)
     .filter(Boolean).map((x) => String(x).trim().toLowerCase()));
   const { rows: others } = await db.query(
-    `SELECT r.id, r.claim_no, r.work_email, r.amount AS claim_amount, r.status, e.name,
-       i.category, i.amount, i.expense_date, d.validation AS doc_validation
+    `SELECT r.id, r.claim_no, r.work_email, r.amount AS claim_amount, r.reimb_sealed AS claim_sealed, r.status, e.name,
+       i.category, i.amount, i.expense_date, i.reimb_item_sealed, d.validation AS doc_validation, d.reimb_doc_sealed AS doc_sealed
      FROM reimbursements r JOIN reimbursement_items i ON i.reimbursement_id=r.id
      LEFT JOIN reimbursement_documents d ON d.item_id=i.id
      LEFT JOIN employees e ON lower(e.work_email)=lower(r.work_email)
      WHERE r.id <> $1 AND r.status NOT IN ('draft','rejected')`, [c.id]);
+  for (const o of others) {   // figures sealed under other names here: the claim's amount, the receipt's reading
+    if (o.claim_sealed) o.claim_amount = openJson(o.claim_sealed).amount;
+    if (o.doc_sealed) o.doc_validation = openJson(o.doc_sealed).validation;
+  }   // the claim's own amount, sealed under another name here
   const dups = new Map();
   for (const o of others) {
     const of = o.doc_validation && o.doc_validation.read && o.doc_validation.read.fields;
@@ -155,8 +177,8 @@ async function evaluate(db, c) {
   }
   const duplicates = [...dups.values()];
   const eligibility = await eligibilityOf(db, c, items, cat);
-  await db.query("UPDATE reimbursements SET validation=$2, duplicates=$3, eligibility=$4, eligible_amount=$5, non_eligible_amount=$6, updated_at=now() WHERE id=$1",
-    [c.id, JSON.stringify(v), JSON.stringify(duplicates), JSON.stringify(eligibility), eligibility.eligible, eligibility.nonEligible]);
+  await updateSealed(db, "reimb_sealed", c.id, { validation: v, eligibility, eligible_amount: eligibility.eligible, non_eligible_amount: eligibility.nonEligible, duplicates },
+    { updated_at: { sql: "now()" } });
   return { validation: v, duplicates, eligibility };
 }
 
@@ -190,7 +212,7 @@ async function eligibilityOf(db, c, items, cat) {
   }
   requested = round2(requested); eligible = round2(eligible);
   if (c.budget_request_id) {
-    const { rows: [b] } = await db.query("SELECT request_no, approved_budget, status FROM budget_requests WHERE id=$1", [c.budget_request_id]);
+    const { rows: [b] } = await db.query("SELECT request_no, approved_budget, status, budget_sealed FROM budget_requests WHERE id=$1", [c.budget_request_id]);
     if (b && b.approved_budget != null) {
       const approved = Number(b.approved_budget), covered = Math.min(eligible, approved);
       out.budget = { requestNo: b.request_no, approvedBudget: approved, actual: requested, covered: round2(covered), excess: round2(Math.max(0, requested - approved)) };
@@ -205,15 +227,24 @@ async function eligibilityOf(db, c, items, cat) {
 /* ---------- reading claims ---------- */
 
 const SELECT = `SELECT r.*, e.name AS emp_name, e.emp_no, e.dept, e.title, p.period AS run_period, p.status AS run_status,
-    (SELECT json_agg(json_build_object('category', i.category, 'amount', i.amount, 'noReceipt', i.no_receipt) ORDER BY i.position, i.id)
+    (SELECT json_agg(json_build_object('category', i.category, 'amount', i.amount, 'noReceipt', i.no_receipt, 'sealed', i.reimb_item_sealed) ORDER BY i.position, i.id)
        FROM reimbursement_items i WHERE i.reimbursement_id=r.id) AS items_brief,
     (SELECT count(*) FROM reimbursement_documents d WHERE d.reimbursement_id=r.id)::int AS doc_count,
-    b.request_no AS budget_no, b.purpose AS budget_purpose, b.approved_budget AS budget_approved, b.requested_budget AS budget_requested
+    b.request_no AS budget_no, b.purpose AS budget_purpose, b.approved_budget AS budget_approved, b.requested_budget AS budget_requested,
+    b.budget_sealed AS budget_sealed_join
   FROM reimbursements r LEFT JOIN employees e ON lower(e.work_email)=lower(r.work_email)
   LEFT JOIN payroll_runs p ON p.id = r.payroll_run_id
   LEFT JOIN budget_requests b ON b.id = r.budget_request_id`;
 
-const toApi = (r) => ({
+/** The figures that came through SQL joins under other names (expense lines, the budget), opened here (secret-box.js). */
+function openJoined(r) {
+  if (Array.isArray(r.items_brief)) for (const i of r.items_brief) if (i.sealed) { i.amount = openJson(i.sealed).amount; delete i.sealed; }
+  if (r.budget_sealed_join) { const f = openJson(r.budget_sealed_join); r.budget_approved = f.approved_budget; r.budget_requested = f.requested_budget; }
+  delete r.budget_sealed_join;
+  return r;
+}
+
+const toApi = (row) => { const r = openJoined(row); return ({
   id: r.id, claimNo: r.claim_no, email: r.work_email, createdBy: r.created_by ? String(r.created_by).toLowerCase() : null, employee: { name: r.emp_name || r.work_email, empNo: r.emp_no, dept: r.dept, title: r.title },
   category: r.category, amount: num(r.amount), currency: r.currency, expenseDate: r.expense_date, description: r.description,
   paymentMethod: r.payment_method,
@@ -230,7 +261,7 @@ const toApi = (r) => ({
   eligibility: r.eligibility,
   budget: r.budget_request_id ? { id: r.budget_request_id, requestNo: r.budget_no, purpose: r.budget_purpose,
     approvedBudget: num(r.budget_approved), requestedBudget: num(r.budget_requested) } : null,
-});
+}); };
 
 async function loadClaim(db, id, lock = false) {
   const { rows } = await db.query(`SELECT * FROM reimbursements WHERE id=$1${lock ? " FOR UPDATE" : ""}`, [Number(id) || 0]);
@@ -249,8 +280,9 @@ const canSee = async (req, c) => !!c && (c.work_email.toLowerCase() === me(req) 
   || (c.status !== "draft" && await can(req, "expenses.approve", c.work_email)));
 /** Why the caller may not decide this claim, or null when they may: never your own claim, nor one you filed for someone. */
 async function cannotDecide(req, c) {
-  if (c.work_email.toLowerCase() === me(req)) return "Someone else has to decide your own claim.";
-  if (c.created_by === me(req)) return "You filed this claim, so someone else has to decide it.";
+  const own = mayDecideOwn(req, "expenses.approve");   // the sole salary owner decides their own (access-rules.js)
+  if (c.work_email.toLowerCase() === me(req) && !own) return "Someone else has to decide your own claim.";
+  if (c.created_by === me(req) && !own) return "You filed this claim, so someone else has to decide it.";
   return (await mayDecide(req, "expenses.approve", c.work_email)) ? null : "You do not have access to this.";
 }
 
@@ -304,11 +336,11 @@ async function saveItems(db, claimId, items) {
     const old = it.id && existing.find((x) => x.id === it.id);
     const hasDoc = old && docs.some((d) => d.item_id === old.id);
     const fare = it.policyFare == null ? null : Number(it.policyFare);
-    const args = [it.category, it.expenseDate, Number(it.amount), String(it.description).trim().slice(0, 500), it.paymentMethod, it.noReceipt && !hasDoc, i + 1,
-      it.vendor, it.invoiceNo, it.travelClass, fare];
+    // The amounts and what was read off the invoice are stored sealed (secret-box.js).
+    const other = { category: it.category, expense_date: it.expenseDate, description: String(it.description).trim().slice(0, 500), payment_method: it.paymentMethod,
+      no_receipt: it.noReceipt && !hasDoc, position: i + 1, vendor: it.vendor, invoice_no: it.invoiceNo, travel_class: it.travelClass };
     if (old) {
-      await db.query(`UPDATE reimbursement_items SET category=$1, expense_date=$2, amount=$3, description=$4, payment_method=$5, no_receipt=$6, position=$7,
-        vendor=$8, invoice_no=$9, travel_class=$10, policy_fare=$11 WHERE id=$12`, [...args, old.id]);
+      await updateSealed(db, "reimb_item_sealed", old.id, { amount: Number(it.amount), policy_fare: fare }, other);
       keep.add(old.id);
       // Which values the employee changed from what was read off the invoice (for the audit timeline).
       const x = old.extracted || {};
@@ -318,12 +350,15 @@ async function saveItems(db, claimId, items) {
       const prevDiff = old.extracted ? JSON.stringify(old.extracted._edited || []) : "[]";
       if (diff.length && JSON.stringify(diff) !== prevDiff) {
         edited.push(`expense ${i + 1}: ${diff.join(", ")}`);
-        await db.query("UPDATE reimbursement_items SET extracted = extracted || jsonb_build_object('_edited', $2::jsonb) WHERE id=$1", [old.id, JSON.stringify(diff)]);
+        await updateSealed(db, "reimb_item_sealed", old.id, { extracted: (r) => ({ ...(r.extracted || {}), _edited: diff }) });
       }
     } else {
+      const iv = sealFields("reimb_item_sealed", { amount: Number(it.amount), policy_fare: fare, extracted: null });
       await db.query(`INSERT INTO reimbursement_items (category, expense_date, amount, description, payment_method, no_receipt, position,
-        vendor, invoice_no, travel_class, policy_fare, reimbursement_id, source)
-        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`, [...args, claimId, it.source]);
+        vendor, invoice_no, travel_class, policy_fare, reimbursement_id, source, extracted, reimb_item_sealed)
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)`,
+        [other.category, other.expense_date, iv.plain.amount, other.description, other.payment_method, other.no_receipt, other.position,
+          other.vendor, other.invoice_no, other.travel_class, iv.plain.policy_fare, claimId, it.source, iv.plain.extracted, iv.sealed]);
     }
   }
   for (const old of existing.filter((x) => !keep.has(x.id))) {
@@ -344,10 +379,9 @@ async function syncHeader(db, claimId) {
   const descs = items.map((it) => it.description || it.vendor).filter(Boolean);
   const desc = items.length === 1 ? descs[0] || null : `${items.length} expenses${descs.length ? ": " + descs.join("; ") : ""}`;
   const methods = [...new Set(items.map((it) => it.payment_method).filter(Boolean))];
-  const { rows } = await db.query(
-    `UPDATE reimbursements SET amount=$2, category=$3, expense_date=$4, description=$5, payment_method=$6, updated_at=now() WHERE id=$1 RETURNING *`,
-    [claimId, total > 0 ? total : null, main.category, first, desc ? desc.slice(0, 500) : null, methods.length === 1 ? methods[0] : methods.length ? "Multiple" : null]);
-  return rows[0];
+  return updateSealed(db, "reimb_sealed", claimId, { amount: total > 0 ? total : null },
+    { category: main.category, expense_date: first, description: desc ? desc.slice(0, 500) : null,
+      payment_method: methods.length === 1 ? methods[0] : methods.length ? "Multiple" : null, updated_at: { sql: "now()" } });
 }
 
 /** What still stops a claim from going to HR: an expense with neither a receipt nor the no-receipt mark. */
@@ -396,7 +430,7 @@ export async function runReimbursementReminders() {
     await event(pool, c, { actor: "system", kind: "Review reminder sent to HR", note: `waiting ${days} days` });
     await notify("perm:expenses.approve", {
       title: `Reimbursement ${c.claim_no} has been awaiting review for ${days} days.`,
-      body: `${await employeeName(pool, c.work_email)} · ${inr(c.amount)}`, link: `claim:${c.id}`,
+      body: await employeeName(pool, c.work_email), link: `claim:${c.id}`,
       email: { subject: `Reminder: ${c.claim_no} awaiting review`, body: `Reimbursement ${c.claim_no} has been awaiting review for ${days} days.` },
     });
   }
@@ -445,29 +479,27 @@ reimbursementsRouter.get("/", wrap(async (req, res) => {
   if (q.category) add("EXISTS (SELECT 1 FROM reimbursement_items i WHERE i.reimbursement_id=r.id AND i.category=?)", String(q.category));
   if (q.from && /^\d{4}-\d{2}-\d{2}$/.test(q.from)) add("r.expense_date >= ?", q.from);
   if (q.to && /^\d{4}-\d{2}-\d{2}$/.test(q.to)) add("r.expense_date <= ?", q.to);
-  if (q.min && Number(q.min) > 0) add("r.amount >= ?", Number(q.min));
-  if (q.max && Number(q.max) > 0) add("r.amount <= ?", Number(q.max));
+  // The amount filters run after the read (below): the amounts are stored sealed.
+  const min = q.min && Number(q.min) > 0 ? Number(q.min) : null, max = q.max && Number(q.max) > 0 ? Number(q.max) : null;
   if (q.q) { args.push(`%${String(q.q).slice(0, 60)}%`); const i = args.length;
     where.push(`(e.name ILIKE $${i} OR r.claim_no ILIKE $${i} OR r.description ILIKE $${i})`); }
-  const { rows } = await pool.query(`${SELECT} ${where.length ? "WHERE " + where.map((w) => `(${w})`).join(" AND ") : ""}
-    ORDER BY coalesce(r.submitted_at, r.created_at) DESC, r.id DESC LIMIT 500`, args);
+  const { rows: read } = await pool.query(`${SELECT} ${where.length ? "WHERE " + where.map((w) => `(${w})`).join(" AND ") : ""}
+    ORDER BY coalesce(r.submitted_at, r.created_at) DESC, r.id DESC LIMIT ${min || max ? 100000 : 500}`, args);   // with an amount filter: every match, then filtered here
+  const rows = (min || max ? read.filter((r) => r.amount != null && (!min || Number(r.amount) >= min) && (!max || Number(r.amount) <= max)) : read).slice(0, 500);
   let summary = null;
   if (reviews) {
+    // Counts and totals added up here: the amounts are stored sealed.
     const month = istMonth();
     const { rows: s } = await pool.query(
-      `SELECT
-         count(*) FILTER (WHERE status IN ('submitted','under_review','resubmitted'))::int AS pending_review,
-         count(*) FILTER (WHERE status='changes_requested')::int AS needs_changes,
-         count(*) FILTER (WHERE status IN ('approved','payroll_pending','in_payroll','paid'))::int AS approved,
-         coalesce(sum(coalesce(approved_amount, amount)) FILTER (WHERE status IN ('approved','payroll_pending','in_payroll')),0) AS pending_payroll_amount,
-         count(*) FILTER (WHERE status IN ('approved','payroll_pending','in_payroll'))::int AS pending_payroll,
-         coalesce(sum(paid_amount) FILTER (WHERE status='paid' AND to_char(paid_at + interval '330 minutes','YYYY-MM')=$1),0) AS paid_this_month,
-         coalesce(sum(paid_amount) FILTER (WHERE status='paid'),0) AS total_reimbursed
-       FROM reimbursements WHERE status <> 'draft' ${team ? "AND lower(work_email) = ANY($2)" : ""}`, team ? [month, team] : [month]);
-    const x = s[0];
-    summary = { pendingReview: x.pending_review, needsChanges: x.needs_changes, approved: x.approved,
-      pendingPayroll: x.pending_payroll, pendingPayrollAmount: num(x.pending_payroll_amount),
-      paidThisMonth: num(x.paid_this_month), totalReimbursed: num(x.total_reimbursed) };
+      `SELECT status, amount, approved_amount, paid_amount, to_char(paid_at + interval '330 minutes','YYYY-MM') AS paid_month, reimb_sealed
+       FROM reimbursements WHERE status <> 'draft' ${team ? "AND lower(work_email) = ANY($1)" : ""} LIMIT 50000`, team ? [team] : []);
+    const isIn = (r, list) => list.includes(r.status), paise = (v) => Math.round(Number(v || 0) * 100);
+    const sum = (list, f) => list.reduce((n, r) => n + paise(f(r)), 0) / 100;
+    const toPay = s.filter((r) => isIn(r, ["approved", "payroll_pending", "in_payroll"])), paid = s.filter((r) => r.status === "paid");
+    summary = { pendingReview: s.filter((r) => isIn(r, ["submitted", "under_review", "resubmitted"])).length, needsChanges: s.filter((r) => r.status === "changes_requested").length,
+      approved: s.filter((r) => isIn(r, ["approved", "payroll_pending", "in_payroll", "paid"])).length,
+      pendingPayroll: toPay.length, pendingPayrollAmount: sum(toPay, (r) => r.approved_amount ?? r.amount),
+      paidThisMonth: sum(paid.filter((r) => r.paid_month === month), (r) => r.paid_amount), totalReimbursed: sum(paid, (r) => r.paid_amount) };
   }
   res.json({ claims: rows.map(toApi), summary });
 }));
@@ -480,20 +512,26 @@ reimbursementsRouter.get("/monthly", needAll("expenses.approve"), wrap(async (re
   const args = [period];
   let only = "";
   if (req.query.email) { args.push(String(req.query.email).toLowerCase()); only = `AND lower(r.work_email)=$${args.length}`; }
-  const { rows } = await pool.query(
-    `SELECT r.work_email, e.name, e.emp_no,
-       count(*) FILTER (WHERE r.status IN ('payroll_pending','in_payroll','paid') AND r.payroll_period=$1)::int AS approved_n,
-       coalesce(sum(coalesce(r.approved_amount, r.amount)) FILTER (WHERE r.status IN ('payroll_pending','in_payroll','paid') AND r.payroll_period=$1),0) AS approved_total,
-       coalesce(sum(coalesce(r.paid_amount, r.approved_amount, r.amount)) FILTER (WHERE r.status='paid' AND r.payroll_period=$1),0) AS paid_total,
-       count(*) FILTER (WHERE r.status='in_payroll' AND r.payroll_period=$1)::int AS in_payroll_n,
-       count(*) FILTER (WHERE r.status IN ('submitted','under_review','resubmitted','changes_requested') AND to_char(r.expense_date,'YYYY-MM')=$1)::int AS waiting_n,
-       coalesce(sum(r.amount) FILTER (WHERE r.status IN ('submitted','under_review','resubmitted','changes_requested') AND to_char(r.expense_date,'YYYY-MM')=$1),0) AS waiting_total
+  // Each person's month, added up here: the amounts are stored sealed.
+  const { rows: claims } = await pool.query(
+    `SELECT r.work_email, e.name, e.emp_no, r.status, r.payroll_period, to_char(r.expense_date,'YYYY-MM') AS expense_month,
+            r.amount, r.approved_amount, r.paid_amount, r.reimb_sealed
      FROM reimbursements r LEFT JOIN employees e ON lower(e.work_email)=lower(r.work_email)
-     WHERE r.status <> 'draft' AND (r.payroll_period=$1 OR to_char(r.expense_date,'YYYY-MM')=$1) ${only}
-     GROUP BY r.work_email, e.name, e.emp_no ORDER BY approved_total DESC, e.name`, args);
-  const people = rows.map((r) => ({ email: r.work_email, name: r.name || r.work_email, empNo: r.emp_no,
-    approvedCount: r.approved_n, approvedTotal: num(r.approved_total), paidTotal: num(r.paid_total), inPayrollCount: r.in_payroll_n,
-    waitingCount: r.waiting_n, waitingTotal: num(r.waiting_total) })).filter((p) => p.approvedCount || p.waitingCount);
+     WHERE r.status <> 'draft' AND (r.payroll_period=$1 OR to_char(r.expense_date,'YYYY-MM')=$1) ${only} LIMIT 20000`, args);
+  const by = new Map(), paise = (v) => Math.round(Number(v || 0) * 100);
+  for (const r of claims) {
+    const k = r.work_email.toLowerCase();
+    const p = by.get(k) || { email: r.work_email, name: r.name || r.work_email, empNo: r.emp_no, approvedCount: 0, approvedTotal: 0, paidTotal: 0, inPayrollCount: 0, waitingCount: 0, waitingTotal: 0 };
+    const inMonth = r.payroll_period === period;
+    if (inMonth && ["payroll_pending", "in_payroll", "paid"].includes(r.status)) { p.approvedCount++; p.approvedTotal += paise(r.approved_amount ?? r.amount); }
+    if (inMonth && r.status === "paid") p.paidTotal += paise(r.paid_amount ?? r.approved_amount ?? r.amount);
+    if (inMonth && r.status === "in_payroll") p.inPayrollCount++;
+    if (r.expense_month === period && ["submitted", "under_review", "resubmitted", "changes_requested"].includes(r.status)) { p.waitingCount++; p.waitingTotal += paise(r.amount); }
+    by.set(k, p);
+  }
+  const people = [...by.values()].map((p) => ({ ...p, approvedTotal: p.approvedTotal / 100, paidTotal: p.paidTotal / 100, waitingTotal: p.waitingTotal / 100 }))
+    .filter((p) => p.approvedCount || p.waitingCount)
+    .sort((a, b) => b.approvedTotal - a.approvedTotal || String(a.name).localeCompare(String(b.name)));
   const { rows: run } = await pool.query("SELECT status FROM payroll_runs WHERE period=$1", [period]);
   res.json({ period, payrollStatus: run[0] ? run[0].status : null, people,
     totals: { approved: people.reduce((n, p) => n + p.approvedTotal, 0), waiting: people.reduce((n, p) => n + p.waitingTotal, 0) } });
@@ -574,7 +612,8 @@ reimbursementsRouter.post("/import", express.raw({ type: () => true, limit: 2 * 
 /** Automation 3: a final bill above its approved budget is announced to the employee and HR. */
 async function notifyBudgetExcess(c, el) {
   if (!el || !el.budget || !(el.budget.excess > 0)) return;
-  const msg = `Approved budget ${inr(el.budget.approvedBudget)}, actual bill ${inr(el.budget.actual)}. The company covers ${inr(el.budget.covered)}; ${inr(el.budget.excess)} is not reimbursed.`;
+  // No amounts in notices or emails (they are not encrypted): the figures are on the claim in the app.
+  const msg = "The bill is above the approved budget, so the company covers only up to the approved budget. Open the claim in the app to see the amounts.";
   await notify(c.work_email, { title: `Your bill for ${el.budget.requestNo} is above the approved budget.`, body: msg, link: `claim:${c.id}`,
     email: { subject: `Bill above approved budget: ${el.budget.requestNo}`, body: msg } });
   await notify("perm:expenses.approve", { title: `${c.claim_no}: bill above the approved budget (${el.budget.requestNo}).`, body: msg, link: `claim:${c.id}`,
@@ -639,15 +678,17 @@ reimbursementsRouter.post("/from-document", express.raw({ type: () => true, limi
       const extracted = read.readable ? { vendor: f.vendor || null, invoiceNo: f.invoiceNo || null, expenseDate: day, amount: f.total ?? null,
         subtotal: f.subtotal ?? null, tax: f.tax ?? null, currency: guessCurrency(read.text), category, travelClass: category === "travel" ? guessClass(read.text) : null } : null;
       const { rows: [{ n }] } = await db.query("SELECT coalesce(max(position),0)+1 AS n FROM reimbursement_items WHERE reimbursement_id=$1", [c.id]);
+      // The amount and what was read off the invoice are stored sealed (secret-box.js).
+      const iv = sealFields("reimb_item_sealed", { amount: f.total > 0 ? f.total : null, policy_fare: null, extracted: extracted || null });
       const { rows: [item] } = await db.query(
-        `INSERT INTO reimbursement_items (reimbursement_id, position, category, expense_date, amount, description, vendor, invoice_no, currency, extracted, travel_class, source)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,'document') RETURNING *`,
-        [c.id, n, category, day, f.total > 0 ? f.total : null, f.vendor ? `${f.vendor}` : null, f.vendor || null, f.invoiceNo || null,
-         (extracted && extracted.currency) || "INR", extracted ? JSON.stringify(extracted) : null, extracted ? extracted.travelClass : null]);
+        `INSERT INTO reimbursement_items (reimbursement_id, position, category, expense_date, amount, description, vendor, invoice_no, currency, extracted, travel_class, source, policy_fare, reimb_item_sealed)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,'document',$12,$13) RETURNING *`,
+        [c.id, n, category, day, iv.plain.amount, f.vendor ? `${f.vendor}` : null, f.vendor || null, f.invoiceNo || null,
+         (extracted && extracted.currency) || "INR", iv.plain.extracted, extracted ? extracted.travelClass : null, iv.plain.policy_fare, iv.sealed]);
       const validation = { file: { ok: true, checks: file.checks }, read: { ...read, text: undefined } };
       const { rows: [doc] } = await db.query(
-        `INSERT INTO reimbursement_documents (reimbursement_id, item_id, name, mime, size, stored, validation) VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *`,
-        [c.id, item.id, name, file.type.mime, req.body.length, stored, JSON.stringify(validation)]);
+        `INSERT INTO reimbursement_documents (reimbursement_id, item_id, name, mime, size, stored, validation, reimb_doc_sealed) VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *`,
+        [c.id, item.id, name, file.type.mime, req.body.length, stored, ...docValidation(validation)]);   // what was read off the receipt is stored sealed
       await event(db, c, { actor: me(req), kind: "Invoice uploaded", note: `${name} (expense ${n})` });
       const found = extracted ? Object.entries({ vendor: "vendor", invoiceNo: "invoice number", expenseDate: "date", amount: "total", tax: "tax", category: "category", travelClass: "travel class" })
         .filter(([k]) => extracted[k] != null && extracted[k] !== 0).map(([, l]) => l) : [];
@@ -775,8 +816,8 @@ reimbursementsRouter.put("/:id/items/:itemId/document", express.raw({ type: () =
       for (const d of prev) await db.query("DELETE FROM reimbursement_documents WHERE id=$1", [d.id]);
       const validation = { file: { ok: true, checks: file.checks }, read };
       const { rows: [doc] } = await db.query(
-        `INSERT INTO reimbursement_documents (reimbursement_id, item_id, name, mime, size, stored, validation) VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *`,
-        [c.id, item.id, name, file.type.mime, req.body.length, stored, JSON.stringify(validation)]);
+        `INSERT INTO reimbursement_documents (reimbursement_id, item_id, name, mime, size, stored, validation, reimb_doc_sealed) VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *`,
+        [c.id, item.id, name, file.type.mime, req.body.length, stored, ...docValidation(validation)]);   // what was read off the receipt is stored sealed
       await db.query("UPDATE reimbursement_items SET no_receipt=false WHERE id=$1", [item.id]);
       const label = `expense ${item.position} (${inr(item.amount)})`;
       await event(db, c, { actor: me(req), kind: prev.length ? "Receipt replaced" : "Receipt uploaded", note: `${name} for ${label}` });
@@ -878,14 +919,15 @@ reimbursementsRouter.post("/:id/submit", wrap(async (req, res) => {
     if (!TRANSITIONS.submit.includes(c.status)) return { status: 409, body: { error: "This claim was already submitted." } };
     const bad = await readyToSend(db, c, req.body, me(req));
     if (bad) return bad;
-    const { rows: [fresh] } = await db.query("UPDATE reimbursements SET status='submitted', submitted_at=now(), requested_amount=amount, updated_at=now() WHERE id=$1 RETURNING *", [c.id]);
+    const fresh = await updateSealed(db, "reimb_sealed", c.id, { requested_amount: (r) => r.amount },
+      { status: "submitted", submitted_at: { sql: "now()" }, updated_at: { sql: "now()" } });
     const r = await onSubmitted(db, fresh, me(req), false);
     return { status: 200, body: { ok: true, ...r }, claim: fresh, eligibility: r.eligibility };
   });
   if (out.status === 200) {
     const c = out.claim, name = await employeeName(pool, c.work_email);
-    await notify("perm:expenses.approve", { title: `New reimbursement claim from ${name} for ${inr(c.amount)} requires review.`, body: c.claim_no, link: `claim:${c.id}`,
-      email: { subject: `New reimbursement claim: ${c.claim_no}`, body: `New reimbursement claim from ${name} for ${inr(c.amount)} requires review (${c.claim_no}).` } });
+    await notify("perm:expenses.approve", { title: `New reimbursement claim from ${name} requires review.`, body: `${c.claim_no}. Open the claim to see the amount.`, link: `claim:${c.id}`,   // no amounts in notices or emails
+      email: { subject: `New reimbursement claim: ${c.claim_no}`, body: `New reimbursement claim from ${name} requires review (${c.claim_no}). Open the claim in the app to see the amount.` } });
     await notifyBudgetExcess(c, out.eligibility);
   }
   send(res, { status: out.status, body: out.body });
@@ -931,10 +973,9 @@ reimbursementsRouter.post("/:id/approve", need("expenses.approve"), wrap(async (
     if (partial && !reason && approved !== ev.eligibility.eligible) return { status: 400, body: { errors: { reason: "Give a reason for approving less than requested." } } };
     let period = istMonth();
     for (;;) { const { rowCount } = await db.query("SELECT 1 FROM payroll_runs WHERE period=$1", [period]); if (!rowCount) break; period = nextMonth(period); }
-    await db.query(
-      `UPDATE reimbursements SET status='payroll_pending', approved_by=$2, approved_at=now(), payroll_period=$3, requested_amount=$4,
-         approved_amount=$5, unapproved_amount=$6, approval_reason=$7, updated_at=now() WHERE id=$1`,
-      [c.id, me(req), period, requested, approved, unapproved, reason || (partial && ev.eligibility.reasons.length ? ev.eligibility.reasons.join(" ") : null)]);
+    await updateSealed(db, "reimb_sealed", c.id, { requested_amount: requested, approved_amount: approved, unapproved_amount: unapproved,
+        approval_reason: reason || (partial && ev.eligibility.reasons.length ? ev.eligibility.reasons.join(" ") : null) },   // the reasons can name amounts
+      { status: "payroll_pending", approved_by: me(req), approved_at: { sql: "now()" }, payroll_period: period, updated_at: { sql: "now()" } });
     await event(db, c, { actor: me(req), kind: "HR reviewed the amounts", note: `requested ${inr(requested)}, eligible ${inr(ev.eligibility.eligible)}` });
     await event(db, c, { actor: me(req), kind: partial ? "Partially approved by HR" : "Approved by HR", status: "approved",
       note: partial ? `approved ${inr(approved)} of ${inr(requested)}; ${inr(unapproved)} not approved` : `approved ${inr(approved)}` });
@@ -946,10 +987,10 @@ reimbursementsRouter.post("/:id/approve", need("expenses.approve"), wrap(async (
   });
   if (out.status === 200) {
     const c = out.claim, f = out.facts;
-    if (f.partial) await notify(c.work_email, { title: `Your reimbursement of ${inr(f.requested)} was partly approved: ${inr(f.approved)}.`, body: `${c.claim_no} · ${inr(f.unapproved)} not approved`, link: `claim:${c.id}`,
-      email: { subject: `Reimbursement partly approved: ${c.claim_no}`, body: `Your reimbursement request of ${inr(f.requested)} has been reviewed.\n\nApproved amount: ${inr(f.approved)}\nUnapproved amount: ${inr(f.unapproved)}${f.reason ? `\n\nReason:\n${f.reason}` : ""}\n\nThe approved amount will be paid with the ${out.body.payrollPeriod} payroll.` } });
-    else await notify(c.work_email, { title: `Your reimbursement claim of ${inr(f.approved)} has been approved.`, body: `${c.claim_no} · paid with the ${out.body.payrollPeriod} payroll`, link: `claim:${c.id}`,
-      email: { subject: `Reimbursement approved: ${c.claim_no}`, body: `Your reimbursement claim of ${inr(f.approved)} has been approved. It will be paid with the ${out.body.payrollPeriod} payroll.` } });
+    if (f.partial) await notify(c.work_email, { title: "Your reimbursement claim was partly approved.", body: `${c.claim_no}. Open the claim to see the approved amount.`, link: `claim:${c.id}`,
+      email: { subject: `Reimbursement partly approved: ${c.claim_no}`, body: `Your reimbursement claim ${c.claim_no} has been reviewed and partly approved.${f.reason ? `\n\nReason:\n${f.reason}` : ""}\n\nOpen the claim in the app to see the approved amount. It will be paid with the ${out.body.payrollPeriod} payroll.` } });
+    else await notify(c.work_email, { title: "Your reimbursement claim has been approved.", body: `${c.claim_no} · paid with the ${out.body.payrollPeriod} payroll`, link: `claim:${c.id}`,
+      email: { subject: `Reimbursement approved: ${c.claim_no}`, body: `Your reimbursement claim ${c.claim_no} has been approved. It will be paid with the ${out.body.payrollPeriod} payroll.` } });
   }
   send(res, { status: out.status, body: out.body });
 }));
@@ -971,7 +1012,7 @@ reimbursementsRouter.post("/:id/reject", need("expenses.approve"), wrap(async (r
   if (out.status === 200) {
     const c = out.claim;
     await notify(c.work_email, { title: "Your reimbursement claim has been rejected.", body: `${c.claim_no} · ${reason}${note ? `: ${note}` : ""}`, link: `claim:${c.id}`,
-      email: { subject: `Reimbursement rejected: ${c.claim_no}`, body: `Your reimbursement claim ${c.claim_no} of ${inr(c.amount)} has been rejected.\nReason: ${reason}${note ? `\n${note}` : ""}` } });
+      email: { subject: `Reimbursement rejected: ${c.claim_no}`, body: `Your reimbursement claim ${c.claim_no} has been rejected.\nReason: ${reason}${note ? `\n${note}` : ""}` } });
   }
   send(res, { status: out.status, body: out.body });
 }));
@@ -1005,14 +1046,15 @@ reimbursementsRouter.post("/:id/resubmit", wrap(async (req, res) => {
     if (!TRANSITIONS.resubmit.includes(c.status)) return { status: 409, body: { error: "Only a claim with changes requested can be resubmitted." } };
     const bad = await readyToSend(db, c, req.body, me(req));
     if (bad) return bad;
-    const { rows: [fresh] } = await db.query("UPDATE reimbursements SET status='resubmitted', submitted_at=now(), requested_amount=amount, last_reminded_at=NULL, updated_at=now() WHERE id=$1 RETURNING *", [c.id]);
+    const fresh = await updateSealed(db, "reimb_sealed", c.id, { requested_amount: (r) => r.amount },
+      { status: "resubmitted", submitted_at: { sql: "now()" }, last_reminded_at: null, updated_at: { sql: "now()" } });
     const r = await onSubmitted(db, fresh, me(req), true);
     return { status: 200, body: { ok: true, ...r }, claim: fresh, eligibility: r.eligibility };
   });
   if (out.status === 200) {
     const c = out.claim, name = await employeeName(pool, c.work_email);
-    await notify("perm:expenses.approve", { title: `${name} resubmitted reimbursement ${c.claim_no} (${inr(c.amount)}) for review.`, link: `claim:${c.id}`,
-      email: { subject: `Reimbursement resubmitted: ${c.claim_no}`, body: `${name} resubmitted reimbursement ${c.claim_no} (${inr(c.amount)}) after the requested changes.` } });
+    await notify("perm:expenses.approve", { title: `${name} resubmitted reimbursement ${c.claim_no} for review.`, link: `claim:${c.id}`,
+      email: { subject: `Reimbursement resubmitted: ${c.claim_no}`, body: `${name} resubmitted reimbursement ${c.claim_no} after the requested changes. Open the claim in the app to see the amount.` } });
     await notifyBudgetExcess(c, out.eligibility);
   }
   send(res, { status: out.status, body: out.body });

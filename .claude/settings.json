@@ -1,5 +1,18 @@
 {
   "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash|Read|Edit|Write|NotebookEdit|Grep|Glob|mcp__.*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/salary-guard.mjs\"",
+            "timeout": 10,
+            "statusMessage": "Checking that salaries stay private"
+          }
+        ]
+      }
+    ],
     "Stop": [
       {
         "hooks": [

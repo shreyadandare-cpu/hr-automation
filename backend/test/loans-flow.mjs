@@ -9,6 +9,7 @@
  */
 import crypto from "node:crypto";
 import pg from "pg";
+import { openSealedRow } from "../src/secret-box.js";   // the test needs PAYROLL_ENCRYPTION_KEY, as the server
 
 const DB = process.env.DATABASE_URL || "", BASE = process.env.BASE || "http://localhost:3190";
 if (!/@?(localhost|127\.0\.0\.1)[:/]/.test(DB) || !/^http:\/\/(localhost|127\.0\.0\.1)/.test(BASE)) { console.error("Refusing: a local database and a local server only."); process.exit(2); }
@@ -151,7 +152,9 @@ try {
   r = await call(rev, "POST", `/api/payroll/runs/${run}/actions/approve`, { note: "ok" });
   ok("payroll for the month is generated and approved", r.s === 200, JSON.stringify(r.d));
   await new Promise((ok2) => setTimeout(ok2, 800));
-  const rec = await db.query("SELECT r.amount, r.payroll_period FROM advance_recoveries r JOIN employee_advances a ON a.id = r.advance_id WHERE a.loan_id = $1", [loanA]);
+  // The amount is stored encrypted (src/secret-box.js): opened here as the app opens it.
+  const rec = await db.query("SELECT r.amount, r.payroll_period, r.recovery_sealed FROM advance_recoveries r JOIN employee_advances a ON a.id = r.advance_id WHERE a.loan_id = $1", [loanA]);
+  rec.rows.forEach(openSealedRow);
   ok("Test 8: the first installment is recorded once for that month and reduces the balance", rec.rowCount === 1 && Number(rec.rows[0].amount) === 10000 && rec.rows[0].payroll_period === PERIOD, JSON.stringify(rec.rows));
   r = await call(a, "GET", `/api/loans/${loanA}`);
   ok("outstanding ₹10,000, repaid ₹10,000 (50%), installment 1 paid, 1 remaining, still active", r.d.loan.repaid === 10000 && r.d.loan.outstanding === 10000 && r.d.loan.percent === 50 && r.d.paidCount === 1 && r.d.remainingCount === 1 && r.d.loan.status === "active" && r.d.schedule[0].status === "paid", JSON.stringify([r.d.loan, r.d.schedule]));

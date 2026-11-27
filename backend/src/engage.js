@@ -16,6 +16,7 @@ import { correctionFits, correctionRoute, policyOf as missingPolicyOf } from "./
 import { NOW_SQL, ord } from "./work-day.js";
 import { shiftOn } from "./shift-rules.js";
 import { shiftsFor } from "./shifts.js";
+import { removePenaltyIfFixed } from "./leave.js";
 import { estimateTax, yearForReturn } from "./tax-estimate.js";
 import { postToChat } from "./chat.js";
 
@@ -286,6 +287,7 @@ export function engageRouter(wrap) {
         const there = await client.query("SELECT 1 FROM attendance_punches WHERE employee_id=$1 AND work_date=$2 AND punch_time=$3::time AND direction=$4", [emp.id, date, time, direction]);
         if (!there.rowCount) await client.query("INSERT INTO attendance_punches (employee_id, work_date, punch_time, direction, source, note, created_by) VALUES ($1,$2,$3,$4,'request',$5,$6)",
           [emp.id, date, time, direction, "Added by the employee (no approval needed)", me(req)]);
+        await removePenaltyIfFixed(client, me(req), date, me(req));
         await client.query("INSERT INTO audit_log (action, work_email) VALUES ($1,$2)", [`Attendance: ${direction} at ${time} on ${date} added by the employee (${used.self_fixes + 1} of ${policy.selfFixPerMonth} without approval this month)`, me(req)]);
       }
       await client.query("COMMIT");
@@ -339,6 +341,7 @@ export function engageRouter(wrap) {
             await add(x.punch_time, x.direction, `Correction approved by ${me(req)}`);
             await client.query("INSERT INTO audit_log (action, work_email) VALUES ($1,$2)", [`Attendance: ${x.direction} at ${x.punch_time} on ${x.on_date} added from an approved correction by ${me(req)}`, x.email]);
           }
+          await removePenaltyIfFixed(client, emp.work_email, x.on_date, me(req));
         }
       }
       await client.query("COMMIT");

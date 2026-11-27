@@ -5,6 +5,7 @@ import { requireAuth } from "./auth.js";
 import { can, canAll, isSuper, mayDecide, need, needAll, scopeOf, treeOf } from "./access.js";
 import { approverOf, approverMap, coveredBy, hrLeaveApprovers, reportsOf } from "./teams.js";
 import { tellLeave } from "./leave-mail.js";
+import { missingOutOn } from "./missing-punch-rules.js";
 import { buildLeaveWorkbook } from "./leave-export.js";
 import { previewOf } from "./excel-preview.js";
 import { compare, parseHolidays, readTable, templateXlsx } from "./holiday-import.js";
@@ -104,6 +105,27 @@ export async function addPenaltyLeave(client, email, date, days, why) {
     [emp.work_email, date, days === 0.5 ? "second" : null, days, paid, lop, why]);
   await audit(client, `Penalty for a missing punch-out on ${date}: ${plural(days)} (${plural(paid)} casual leave${lop ? `, ${plural(lop)} loss of pay` : ""})`, emp.work_email);
   return toRequest(out);
+}
+
+/**
+ * Undoes a missing punch-out penalty once the day has its punch-out after all (HR added it, or a correction was approved): the
+ * penalty's leave entry is cancelled, so the casual leave or loss of pay comes back, and the penalty row goes. Runs inside the
+ * caller's transaction (`client`). Returns the removed penalty ({ days, leaveId }) or null when there was none or the day is
+ * still missing its punch-out. A payroll already finalised for that month is not changed; HR settles it with an adjustment.
+ */
+export async function removePenaltyIfFixed(client, email, date, by) {
+  const { rows: [pen] } = await client.query("SELECT leave_request_id, days FROM attendance_penalties WHERE email=lower($1) AND work_date=$2 FOR UPDATE", [email, date]);
+  if (!pen) return null;
+  const { rows: day } = await client.query(
+    `SELECT to_char(p.punch_time,'HH24:MI') AS time, p.direction, p.source FROM attendance_punches p JOIN employees e ON e.id = p.employee_id
+      WHERE lower(e.work_email)=lower($1) AND p.work_date=$2`, [email, date]);
+  if (!day.length || missingOutOn(day)) return null;
+  if (pen.leave_request_id) await client.query(
+    "UPDATE leave_requests SET status='cancelled', decided_at=now(), decided_by=$2, decision_note='Penalty removed: the punch-out was added' WHERE id=$1 AND status='approved'",
+    [pen.leave_request_id, by]);
+  await client.query("DELETE FROM attendance_penalties WHERE email=lower($1) AND work_date=$2", [email, date]);
+  await audit(client, `Penalty for a missing punch-out on ${date} removed by ${by}: the punch-out was added (${plural(Number(pen.days))} given back)`, email);
+  return { days: Number(pen.days), leaveId: pen.leave_request_id };
 }
 
 export function leaveRouter(wrap) {

@@ -8,6 +8,7 @@ import { seal, open as unseal } from "./payroll/access.js";
 import { buildEmployeeWorkbook } from "./employee-export.js";
 import { previewOf } from "./excel-preview.js";
 import { fullIdsOf, withFull } from "./id-numbers.js";
+import { updateSealed } from "./sealed-rows.js";
 import { cleanAadhaar, cleanPan, formatAadhaar, maskAadhaar, maskPan, validAadhaar, validPan } from "./validate.js";
 
 /**
@@ -115,7 +116,7 @@ export function peopleRouter(wrap) {
     const scope = (await scopeOf(req, "people.view")), offs = canAll(req, "offboarding.manage"), me = req.user.email.toLowerCase();
     const sees = (email) => offs || !scope || scope.has(String(email).toLowerCase()) || String(email).toLowerCase() === me;
     const { rows } = await pool.query(
-      `SELECT e.id, e.emp_no, e.name, e.work_email, e.phone, e.title, e.sub_title, e.work_location, e.manager, e.manager_email, e.start_date, e.last_day, e.status, e.onboarding_closed_at, e.employment_type,
+      `SELECT e.id, e.emp_no, e.name, e.work_email, e.phone, e.person_sealed, e.title, e.sub_title, e.work_location, e.manager, e.manager_email, e.start_date, e.last_day, e.status, e.onboarding_closed_at, e.employment_type,
          (SELECT COALESCE(json_agg(json_build_object('project', p.name, 'lead', a.project_lead, 'location', a.location,
                                                      'status', a.status, 'start', a.start_date, 'end', a.end_date)
                                    ORDER BY (a.status = 'Active') DESC, p.name), '[]'::json)
@@ -176,7 +177,7 @@ export function peopleRouter(wrap) {
   r.get("/api/employees/export", requireAuth, wrap(async (req, res) => {
     if (!(canAll(req, "people.view") || canAll(req, "documents.view") || canAll(req, "onboarding.manage"))) return res.status(403).json({ error: "You are not allowed to download everyone's details." });
     const { rows } = await pool.query(
-      `SELECT emp_no, name, work_email, title, dept, employment_type, status, start_date, last_day, manager, work_location, phone, pan_masked, aadhaar_masked
+      `SELECT emp_no, name, work_email, title, dept, employment_type, status, start_date, last_day, manager, work_location, phone, pan_masked, aadhaar_masked, person_sealed
          FROM employees ORDER BY name LIMIT 5000`);
     const today = new Date(Date.now() + 330 * 60000).toISOString().slice(0, 10);
     const full = await fullIdsOf(pool);
@@ -195,7 +196,7 @@ export function peopleRouter(wrap) {
     if (!email) return res.status(400).json({ error: "Choose a person." });
     const mine = email === req.user.email.toLowerCase();
     if (!mine && !(canAll(req, "people.view") || canAll(req, "documents.view") || canAll(req, "onboarding.manage"))) return res.status(403).json({ error: "You are not allowed to see this." });
-    const { rows } = await pool.query("SELECT pan_masked, aadhaar_masked FROM employees WHERE lower(work_email)=$1", [email]);
+    const { rows } = await pool.query("SELECT pan_masked, aadhaar_masked, person_sealed FROM employees WHERE lower(work_email)=$1", [email]);
     if (!rows[0]) return res.status(404).json({ error: "Employee not found." });
     res.json({ pan: rows[0].pan_masked || "", aadhaar: rows[0].aadhaar_masked || "" });
   }));
@@ -234,7 +235,7 @@ export function peopleRouter(wrap) {
          ON CONFLICT (lower(work_email)) DO UPDATE SET pan_enc=COALESCE($2, employee_ids.pan_enc), aadhaar_enc=COALESCE($3, employee_ids.aadhaar_enc), updated_by=$4, updated_at=now()`,
         [email, pan ? seal(pan) : null, aad ? seal(aad) : null, req.user.email]);
     } catch (err) { if (err.status === 503) return res.status(503).json({ error: "Numbers cannot be stored until the server's encryption key is set." }); throw err; }
-    await pool.query("UPDATE employees SET pan_masked=COALESCE($2, pan_masked), aadhaar_masked=COALESCE($3, aadhaar_masked) WHERE id=$1", [emp.id, pan ? maskPan(pan) : null, aad ? maskAadhaar(aad) : null]);
+    await updateSealed(pool, "person_sealed", emp.id, { ...(pan ? { pan_masked: maskPan(pan) } : {}), ...(aad ? { aadhaar_masked: maskAadhaar(aad) } : {}) });   // stored encrypted
     await pool.query("INSERT INTO audit_log (action, work_email) VALUES ($1,$2)", [`${[pan && "PAN", aad && "Aadhaar"].filter(Boolean).join(" and ")} saved by ${req.user.email}`, email]);
     res.json({ email, pan: pan ? maskPan(pan) : undefined, aadhaar: aad ? maskAadhaar(aad) : undefined });
   }));

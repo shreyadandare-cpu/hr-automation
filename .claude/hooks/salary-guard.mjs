@@ -21,6 +21,8 @@ const SALARY_NAMES = [
   "payroll_runs", "payroll_items", "salary_structures", "payroll_bank_accounts", "payroll_master", "payroll_adjustments",
   "payroll_files", "payroll_audit", "tax_rules", "tax_declarations", "tax_declaration_requests", "advance_recoveries",
   "advance_requests", "monthly_gross", "document_passwords",
+  // Personal details (stored encrypted since 2026-11-27): the sealed columns, the masked numbers and the profile record.
+  "person_sealed", "profile_sealed", "personal_email", "pan_masked", "aadhaar_masked", "acct_masked", "employee_ids", "profiles",
   "PAYROLL_ENCRYPTION_KEY", "DOCUMENTS_ENCRYPTION_KEY", "PAYROLL_DATABASE_URL",
 ];
 // A database client run from the shell, or a one-off script (node -e / --eval / a heredoc) that opens a connection.
@@ -32,7 +34,7 @@ const ENV_FILE = /(^|[\/\s"'=<])\.env(?!\.example)\b/;   // .env, .env.local, ba
 const UPLOADS = /\/uploads(\/|\b(?![.\w]))|(^|[\s"'=])uploads\/|\bcd\s+uploads\b|hrhub-uploads/;
 const DUMP = /\.(dump|sql\.gz|backup)\b/i;
 const block = (why) => {
-  process.stderr.write(`Blocked by the salary guard (.claude/hooks/salary-guard.mjs): ${why} Salaries, payslips, bank details, staff documents and the keys that unlock them are visible only to the salary owner. Work on the code instead, or ask the salary owner.`);
+  process.stderr.write(`Blocked by the salary guard (.claude/hooks/salary-guard.mjs): ${why} Salaries, payslips, bank details, staff documents, personal details and the keys that unlock them are not for Claude to read. Work on the code instead, or ask the salary owner.`);
   process.exit(2);
 };
 const namesSalary = (s) => SALARY_NAMES.some((n) => new RegExp(`\\b${n}\\b`, "i").test(s));

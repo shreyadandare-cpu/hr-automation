@@ -305,6 +305,19 @@ CREATE TABLE IF NOT EXISTS salary_structures (
 );
 CREATE UNIQUE INDEX IF NOT EXISTS salary_structures_once ON salary_structures (lower(work_email), effective_from);
 ALTER TABLE employees ADD COLUMN IF NOT EXISTS pf_number TEXT;
+-- Personal details stored encrypted (2026-11-27, secret-box.js): person_sealed holds the personal email, phone, address, date of
+-- birth, masked Aadhaar, PAN and bank account and IFSC; profile_sealed holds the whole "My profile" record. The plain columns are
+-- left empty once sealed. The PF number is sealed with the monthly gross (pay_sealed). personal_email_hash is a keyed hash of the
+-- personal email, so it can still be unique and looked up without being readable.
+ALTER TABLE employees ADD COLUMN IF NOT EXISTS person_sealed TEXT;
+ALTER TABLE employees ADD COLUMN IF NOT EXISTS personal_email_hash TEXT;
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS profile_sealed TEXT;
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS personal_email_hash TEXT;
+DO $$ BEGIN
+  CREATE UNIQUE INDEX IF NOT EXISTS employees_personal_email_hash_key ON employees (personal_email_hash) WHERE personal_email_hash IS NOT NULL;
+EXCEPTION WHEN unique_violation THEN RAISE NOTICE 'Duplicate personal emails exist, so the unique index on their hash was not created.';
+END $$;
+CREATE INDEX IF NOT EXISTS profiles_personal_email_hash_idx ON profiles (personal_email_hash) WHERE personal_email_hash IS NOT NULL;
 ALTER TABLE payroll_items ADD COLUMN IF NOT EXISTS slip JSONB;
 -- Payslips made automatically start as a draft HR can check; employees see them from published_at (set at publish_at, or by HR).
 -- Runs HR processes by hand, and every run from before this, are published.

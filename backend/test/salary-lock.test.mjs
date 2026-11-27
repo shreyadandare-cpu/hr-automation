@@ -66,7 +66,7 @@ test("the Claude Code salary guard blocks secrets, dumps and salary queries, and
   const bash = (command) => run("Bash", { command });
   for (const c of ["cat backend/.env", "printenv", "env | grep KEY", "pg_dump hrhub > x.out", "ls backend/uploads", "cat /srv/uploads/a.pdf.enc",
     "psql hrhub_local -c 'select * from salary_structures'", "node -e \"new (require('pg').Pool)().query('select * from payroll_items')\"",
-    "docker compose exec backend env"]) assert.equal(bash(c), 2, c);
+    "docker compose exec backend env", "psql hrhub_local -c 'select phone, person_sealed from employees'", "psql hrhub_local -c 'select data from profiles'"]) assert.equal(bash(c), 2, c);
   for (const c of ["npm test", "git status", "grep -rn uploads src", "grep -n salary_structures src/schema.sql", "cat backend/.env.example",
     "psql hrhub_local -c 'select count(*) from employees'", "set -e; npm run build:ui"]) assert.equal(bash(c), 0, c);
   assert.equal(run("Read", { file_path: "/x/backend/.env" }), 2);

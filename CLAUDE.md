@@ -110,6 +110,12 @@ person still sees and files their own. Decided 2026-11-27.
   encrypted in the database (`secret-box.js`): a new salary column goes into its table's sealed column
   (`SEALED`), is written with `sealFields`, and is added up or filtered in the app, never in SQL (the plain columns are empty).
   Never put a salary figure in the audit log, a notification, an email or a server log: those are not encrypted.
+- Personal details are stored encrypted too (2026-11-27): the personal email, phone, address, date of birth, masked Aadhaar,
+  PAN and bank account and IFSC (`employees.person_sealed`), the PF number (`employees.pay_sealed`) and the whole My profile
+  record with family and emergency contacts (`profiles.profile_sealed`). Names, work emails, job titles, teams, managers and
+  joining dates stay plain (sign-in, search and reporting lines). A query that reads one of these fields also selects its sealed
+  column; a change goes through `updatePerson`, `updateProfile` or `updateSealed` (`sealed-rows.js`); filters, sorting and
+  birthdays on them are worked out in the app. A personal email is looked up by its keyed hash (`personalEmailTaken`).
 - Personal documents and tax proofs are stored encrypted (`file-crypt.js`). Documents, tax proofs, Form 124 and payslips open
   only with the viewer's own document password (`doc-password.js`), and every one leaves as a PDF locked with it (`pdf-lock.js`,
   AES-256, for uploads and generated PDFs alike). Any new personal file or salary PDF goes the same way.

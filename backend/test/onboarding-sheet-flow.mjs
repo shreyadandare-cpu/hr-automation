@@ -10,9 +10,11 @@ import crypto from "node:crypto";
 import ExcelJS from "exceljs";
 import pg from "pg";
 
+import { openSealedResult } from "../src/secret-box.js";   // personal details are stored encrypted: the test opens them with PAYROLL_ENCRYPTION_KEY, as the server
 const DB = process.env.DATABASE_URL || "", BASE = process.env.BASE || "http://localhost:3190";
 if (!/@?(localhost|127\.0\.0\.1)[:/]/.test(DB) || !/^http:\/\/(localhost|127\.0\.0\.1)/.test(BASE)) { console.error("Refusing: a local database and a local server only."); process.exit(2); }
 const db = new pg.Pool({ connectionString: DB }), sha = (s) => crypto.createHash("sha256").update(s).digest("hex");
+{ const q0 = db.query.bind(db); db.query = async (...a) => openSealedResult(await q0(...a)); }   // rows come back opened, as in the app
 // Every joiner needs a reporting manager: any current employee whose name is unique (the top of the company has no manager).
 const MGR = (await db.query(`SELECT name FROM employees WHERE status='active' GROUP BY name HAVING count(*)=1 ORDER BY name LIMIT 1`)).rows[0]?.name || "";
 const HR = "os.hr@wohlig.com", NOBANK = "os.nobank@wohlig.com", EMP = "os.emp@wohlig.com";
@@ -83,19 +85,19 @@ try {
   ok("a row found by Employee ID alone with nothing to add says so", by[9].status === "nothing" && by[9].name === "Esha Five" && by[9].adds.length === 0);
   ok("no full Aadhaar, PAN or account number is in the preview answer", ![...FULL, "FGHIJ5678K"].some((n) => JSON.stringify(r.d).includes(n)), [...FULL, "FGHIJ5678K"].filter((n) => JSON.stringify(r.d).includes(n)).join() + " " + JSON.stringify(r.d.rows.map((x) => x.problems)));
   ok("an employee cannot preview (403)", (await call(emp, "POST", "/api/onboarding/import", null, body)).s === 403);
-  ok("the preview saved nothing", (await db.query("SELECT pan_masked, dob FROM employees WHERE work_email=$1", [P[0]])).rows[0].pan_masked === null);
+  ok("the preview saved nothing", (await db.query("SELECT pan_masked, dob, person_sealed, pay_sealed FROM employees WHERE work_email=$1", [P[0]])).rows[0].pan_masked === null);
 
   // ---- save ----
   r = await call(hr, "POST", "/api/onboarding/import/apply", null, body);
   ok("the details are saved for the ready rows, the others skipped with their problems", r.s === 200 && r.d.saved === 3 && r.d.skipped.length === 4 && r.d.bankAdded === 1, JSON.stringify(r.d));
-  let e1 = (await db.query("SELECT dob::text, aadhaar_masked, pan_masked, acct_masked, ifsc, pf_number, phone, address FROM employees WHERE work_email=$1", [P[0]])).rows[0];
+  let e1 = (await db.query("SELECT dob::text, aadhaar_masked, pan_masked, acct_masked, ifsc, pf_number, phone, address, person_sealed, pay_sealed FROM employees WHERE work_email=$1", [P[0]])).rows[0];
   ok("the profile has the date of birth, masked Aadhaar, PAN and account, IFSC, PF number, phone and address", e1.dob === "1998-03-14" && e1.aadhaar_masked === "•••• •••• 0123" && e1.pan_masked === "BC••••••5G" && e1.acct_masked === "•••• 9012" && e1.ifsc === "HDFC0001234" && e1.pf_number === "MH/BAN/1/1" && e1.phone === "9876543210" && /Test Road/.test(e1.address), JSON.stringify(e1));
   ok("no full number is stored on the profile", !FULL.some((n) => JSON.stringify(e1).includes(n)));
-  const e2 = (await db.query("SELECT pan_masked, ifsc, dob, aadhaar_masked FROM employees WHERE work_email=$1", [P[1]])).rows[0];
+  const e2 = (await db.query("SELECT pan_masked, ifsc, dob, aadhaar_masked, person_sealed, pay_sealed FROM employees WHERE work_email=$1", [P[1]])).rows[0];
   ok("a partial row saves only what it had (PAN and IFSC), the rest stays empty", e2.pan_masked === "FG••••••8K" && e2.ifsc === "ICIC0004321" && e2.dob === null && e2.aadhaar_masked === null, JSON.stringify(e2));
-  const e4 = (await db.query("SELECT pan_masked, dob::text FROM employees WHERE work_email=$1", [P[3]])).rows[0];
+  const e4 = (await db.query("SELECT pan_masked, dob::text, person_sealed, pay_sealed FROM employees WHERE work_email=$1", [P[3]])).rows[0];
   ok("a blank cell never wipes what was saved (the PAN stays, the date of birth is added)", e4.pan_masked === "AB••••••4F" && e4.dob === "1990-11-02", JSON.stringify(e4));
-  ok("the rows with problems saved nothing", (await db.query("SELECT pan_masked FROM employees WHERE work_email IN ($1,$2)", [P[2], P[4]])).rows.every((x) => x.pan_masked === null));
+  ok("the rows with problems saved nothing", (await db.query("SELECT pan_masked, person_sealed, pay_sealed FROM employees WHERE work_email IN ($1,$2)", [P[2], P[4]])).rows.every((x) => x.pan_masked === null));
   const bank = (await db.query("SELECT holder_name, bank_name, ifsc, acct_last4, acct_enc FROM payroll_bank_accounts WHERE lower(work_email)=$1", [P[0]])).rows[0];
   ok("the bank account went to payroll, encrypted, with the last four digits", !!bank && bank.acct_last4 === "9012" && bank.holder_name === "Asha One" && bank.bank_name === "HDFC Bank" && !String(bank.acct_enc).includes(FULL[2]), JSON.stringify(bank && [bank.acct_last4, bank.holder_name]));
   const log = (await db.query("SELECT action FROM audit_log WHERE work_email = ANY($1) ORDER BY id", [P])).rows.map((x) => x.action).join("\n");
@@ -111,7 +113,7 @@ try {
   ok("without the bank permission the preview says only the profile gets the bank account", r.s === 200 && r.d.rows[0].bank === "profile" && r.d.bankPayroll === false, JSON.stringify(r.d));
   r = await call(nobank, "POST", "/api/onboarding/import/apply", null, nb);
   ok("the profile details are saved and payroll gets no bank account, with a note saying why", r.s === 200 && r.d.saved === 1 && r.d.bankAdded === 0 && r.d.notes.length === 1, JSON.stringify(r.d));
-  ok("the profile has the masked account; payroll has none", (await db.query("SELECT acct_masked FROM employees WHERE work_email=$1", [P[4]])).rows[0].acct_masked === "•••• 1098" && (await db.query("SELECT 1 FROM payroll_bank_accounts WHERE lower(work_email)=$1", [P[4]])).rowCount === 0);
+  ok("the profile has the masked account; payroll has none", (await db.query("SELECT acct_masked, person_sealed, pay_sealed FROM employees WHERE work_email=$1", [P[4]])).rows[0].acct_masked === "•••• 1098" && (await db.query("SELECT 1 FROM payroll_bank_accounts WHERE lower(work_email)=$1", [P[4]])).rowCount === 0);
 
   // ---- an account whose bank details are incomplete, and the last onboarding step ----
   const inc = await sheet([[P[1], "", "", "", "", "", "", "", "555566667777", "", "", "", ""]]);
@@ -121,7 +123,7 @@ try {
   await db.query("INSERT INTO users (email, password_hash, role) VALUES ($1,'x','employee') ON CONFLICT DO NOTHING", [MANUAL]);
   await call(hr, "POST", "/api/onboarding/import/apply", null, await sheet([[MANUAL, "", "", "05-May-1996", "", "PQRST1234U", "", "", "", "", "", "", ""]]));
   w = await call(hr, "POST", "/api/onboarding", { existingEmail: MANUAL, ids: {}, apps: [], d: { first: "Manny", last: "Manual", pemail: "manny.p@example.com", phone: "9876543210", address: "12 Test Road, Mumbai", dept: "Engineering", title: "Developer", mgr: MGR, em1n: "Test Contact", em1r: "Parent", em1p: "9123456780", start: "2026-12-07", kind: "Employee" } });
-  const fin = (await db.query("SELECT dob::text, pan_masked FROM employees WHERE work_email=$1", [MANUAL])).rows[0];
+  const fin = (await db.query("SELECT dob::text, pan_masked, person_sealed, pay_sealed FROM employees WHERE work_email=$1", [MANUAL])).rows[0];
   ok("finishing onboarding with the ID boxes empty does not wipe what the sheet filled in", w.s === 201 && fin.dob === "1996-05-05" && fin.pan_masked === "PQ••••••4U", JSON.stringify([w.s, fin]));
 } catch (e) { fail++; console.log("ERROR  " + e.stack); }
 finally {

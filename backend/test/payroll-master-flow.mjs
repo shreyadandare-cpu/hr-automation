@@ -10,9 +10,11 @@ import crypto from "node:crypto";
 import ExcelJS from "exceljs";
 import pg from "pg";
 
+import { openSealedResult } from "../src/secret-box.js";   // personal details are stored encrypted: the test opens them with PAYROLL_ENCRYPTION_KEY, as the server
 const DB = process.env.DATABASE_URL || "", BASE = process.env.BASE || "http://localhost:3190";
 if (!/@?(localhost|127\.0\.0\.1)[:/]/.test(DB) || !/^http:\/\/(localhost|127\.0\.0\.1)/.test(BASE)) { console.error("Refusing: a local database and a local server only."); process.exit(2); }
 const db = new pg.Pool({ connectionString: DB }), sha = (s) => crypto.createHash("sha256").update(s).digest("hex");
+{ const q0 = db.query.bind(db); db.query = async (...a) => openSealedResult(await q0(...a)); }   // rows come back opened, as in the app
 const HR = "pm.hr@wohlig.com", EMP = "pm.emp@wohlig.com", NEW = "pm.new@wohlig.com";
 const mail = (i) => `pm.p${i}@wohlig.com`, no = (i) => `PM/${String(i).padStart(3, "0")}`;
 const letters = (i) => String.fromCharCode(65 + (i % 26)) + String.fromCharCode(97 + ((i * 7) % 26)) + "ana " + String.fromCharCode(65 + ((i * 3) % 26)) + "umar";
@@ -72,7 +74,7 @@ try {
   r = await call(hr, "GET", `/api/payroll/master/${mail(7)}`);
   const p7 = r.d && r.d.person;
   ok("Test 2: the form for one person has bank, branch, Aadhaar and PAN filled in (masked)", r.s === 200 && p7.bankName === "HDFC Bank" && p7.holder === letters(7) && p7.branch === "Andheri" && p7.account === `•••• ${acct(7).slice(-4)}` && p7.aadhaar.endsWith(aad(7).slice(-4)) && p7.pan.startsWith("AB") && !JSON.stringify(r.d).includes(aad(7)), JSON.stringify(p7));
-  const prof = (await db.query("SELECT acct_masked, ifsc, pan_masked, aadhaar_masked FROM employees WHERE work_email=$1", [mail(7)])).rows[0];
+  const prof = (await db.query("SELECT acct_masked, ifsc, pan_masked, aadhaar_masked, person_sealed, pay_sealed FROM employees WHERE work_email=$1", [mail(7)])).rows[0];
   ok("and the employee profile has the masked numbers too", prof.acct_masked.endsWith(acct(7).slice(-4)) && prof.ifsc === "HDFC0001234" && prof.pan_masked && prof.aadhaar_masked, JSON.stringify(prof));
 
   // Test 3: change IFSC in the form → the table shows it

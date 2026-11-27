@@ -1,4 +1,5 @@
-import { SEALED, EMPTY, sealFields, sealingReady } from "../secret-box.js";
+import { SEALED, EMPTY, MERGED, sealFields, sealingReady, openJson, indexesOf } from "../secret-box.js";
+import { updateSealed } from "../sealed-rows.js";
 import { seal } from "./access.js";
 
 /*
@@ -23,22 +24,40 @@ const plainWhere = (fields) => fields.map((f) => `"${f}" IS NOT NULL${EMPTY[f] ?
 export async function sealStoredSalaries(db) {
   if (!sealingReady()) return {};
   const done = {};
-  for (const [col, { table, fields }] of Object.entries(SEALED)) {
+  for (const [col, { table, fields, key = "id" }] of Object.entries(SEALED)) {
     const exists = (await db.query("SELECT 1 FROM information_schema.columns WHERE table_schema=current_schema() AND table_name=$1 AND column_name=$2", [table, col])).rowCount;
     if (!exists) continue;   // a table this database does not hold
+    const merged = MERGED.has(col);
     let n = 0;
     for (;;) {
       const client = await db.connect();
       try {
         await client.query("BEGIN");
         await client.query("SET LOCAL hrhub.sealing = 'on'");
+        // A column written a few fields at a time keeps the sealed fields an older release did not write: the sealed copy is read
+        // under another name (so it is not opened on the way out) and opened here, where a failure stops the step instead of losing them.
         const { rows } = await client.query(
-          `SELECT id, ${cols(fields)} FROM ${table} WHERE ${plainWhere(fields)} ORDER BY id LIMIT ${BATCH} FOR UPDATE SKIP LOCKED`);
+          `SELECT "${key}" AS row_key, ${merged ? `${col} AS sealed_now, ` : ""}${cols(fields)} FROM ${table} WHERE ${plainWhere(fields)} ORDER BY "${key}" LIMIT ${BATCH} FOR UPDATE SKIP LOCKED`);
         for (const r of rows) {
-          const values = Object.fromEntries(fields.map((f) => [f, r[f]]));
+          const before = merged && r.sealed_now ? openJson(r.sealed_now) : {};
+          const isSet = (f) => r[f] !== null && r[f] !== undefined && !(f in EMPTY && (r[f] === EMPTY[f] || (typeof r[f] === "object" && !Object.keys(r[f]).length)));
+          const values = Object.fromEntries(fields.map((f) => [f, isSet(f) ? r[f] : f in before ? before[f] : r[f]]));
           const { sealed, plain } = sealFields(col, values);
-          const sets = fields.map((f, i) => `"${f}"=$${i + 2}`).join(", ");
-          await client.query(`UPDATE ${table} SET ${col}=$1, ${sets} WHERE id=$${fields.length + 2}`, [sealed, ...fields.map((f) => plain[f]), r.id]);
+          const index = indexesOf(col, values);
+          const write = (idx) => client.query(
+            `UPDATE ${table} SET ${[`${col}=$1`, ...fields.map((f, i) => `"${f}"=$${i + 2}`), ...Object.keys(idx).map((c, i) => `"${c}"=$${fields.length + 2 + i}`)].join(", ")} WHERE "${key}"=$${fields.length + Object.keys(idx).length + 2}`,
+            [sealed, ...fields.map((f) => plain[f]), ...Object.values(idx), r.row_key]);
+          if (!Object.keys(index).length) { await write(index); continue; }
+          // A personal email someone else already has (two rows that differ only by a space, from before) must not stop the server
+          // starting: the row is sealed without its look-up hash, and the server log names it so HR can correct one of them.
+          await client.query("SAVEPOINT seal_row");
+          try { await write(index); await client.query("RELEASE SAVEPOINT seal_row"); }
+          catch (e) {
+            if (e.code !== "23505") throw e;
+            await client.query("ROLLBACK TO SAVEPOINT seal_row");
+            console.error(`[salaries] ${table} ${r.row_key}: the personal email is the same as another person's, so it was sealed without its look-up hash. Please correct one of them.`);
+            await write(Object.fromEntries(Object.keys(index).map((c) => [c, null])));
+          }
         }
         await client.query("COMMIT");
         n += rows.length;
@@ -50,7 +69,7 @@ export async function sealStoredSalaries(db) {
         client.release();
       }
     }
-    if (n) done[table] = n;
+    if (n) done[table] = (done[table] || 0) + n;
   }
   // Payroll Excel reports saved before (bank files always were): encrypted in place, as the bank files are. Their checksum is of the
   // plain file, so it stays as it is; every release reads both forms (payroll/routes.js).
@@ -64,22 +83,29 @@ export async function sealStoredSalaries(db) {
 /** The way back: every sealed row gets its plain figures again and its sealed column is emptied. */
 export async function unsealStoredSalaries(db) {
   const done = {};
-  for (const [col, { table, fields }] of Object.entries(SEALED)) {
+  for (const [col, { table, fields, key = "id" }] of Object.entries(SEALED)) {
     const exists = (await db.query("SELECT 1 FROM information_schema.columns WHERE table_schema=current_schema() AND table_name=$1 AND column_name=$2", [table, col])).rowCount;
     if (!exists) continue;
+    // Lookup hashes are of no use to an older release, and would go stale as it changes the plain columns: cleared too.
+    const clear = Object.keys(indexesOf(col, Object.fromEntries(fields.map((f) => [f, null])))).map((c) => `, "${c}"=NULL`).join("");
     const client = await db.connect();
     try {
       await client.query("BEGIN");
       await client.query("SET LOCAL hrhub.sealing = 'on'");
-      // The read opens the sealed column (db.js), so each row comes back with its figures under their own names.
-      const { rows } = await client.query(`SELECT id, ${col}, ${cols(fields)} FROM ${table} WHERE ${col} IS NOT NULL FOR UPDATE`);
+      // The sealed copy is read under another name and opened here, where a failure stops the step: emptying the sealed column of a
+      // row that could not be opened would lose it. A plain value an older release wrote after sealing wins, as on a read.
+      const { rows } = await client.query(`SELECT "${key}" AS row_key, ${col} AS sealed_now, ${cols(fields)} FROM ${table} WHERE ${col} IS NOT NULL FOR UPDATE`);
       const asParam = (v) => (v !== null && typeof v === "object" ? JSON.stringify(v) : v ?? null);
+      const isSet = (r, f) => r[f] !== null && r[f] !== undefined && !(f in EMPTY && (r[f] === EMPTY[f] || (typeof r[f] === "object" && !Object.keys(r[f]).length)));
       for (const r of rows) {
+        const opened = openJson(r.sealed_now);
+        const merged = MERGED.has(col), anyPlain = fields.some((f) => isSet(r, f));
+        for (const f of fields) if (merged ? !isSet(r, f) && f in opened : !anyPlain) r[f] = opened[f];
         const sets = fields.map((f, i) => `"${f}"=$${i + 1}`).join(", ");
-        await client.query(`UPDATE ${table} SET ${sets}, ${col}=NULL WHERE id=$${fields.length + 1}`, [...fields.map((f) => (r[f] === undefined ? EMPTY[f] ?? null : asParam(r[f]))), r.id]);
+        await client.query(`UPDATE ${table} SET ${sets}, ${col}=NULL${clear} WHERE "${key}"=$${fields.length + 1}`, [...fields.map((f) => (r[f] === undefined ? EMPTY[f] ?? null : asParam(r[f]))), r.row_key]);
       }
       await client.query("COMMIT");
-      if (rows.length) done[table] = rows.length;
+      if (rows.length) done[table] = (done[table] || 0) + rows.length;
     } catch (e) {
       await client.query("ROLLBACK").catch(() => {});
       throw e;
@@ -97,15 +123,18 @@ export async function sealingStatus(db) {
     const exists = (await db.query("SELECT 1 FROM information_schema.columns WHERE table_schema=current_schema() AND table_name=$1 AND column_name=$2", [table, col])).rowCount;
     if (!exists) continue;
     const { rows: [r] } = await db.query(`SELECT count(*) FILTER (WHERE ${col} IS NOT NULL)::int AS sealed, count(*) FILTER (WHERE ${plainWhere(fields)})::int AS plain FROM ${table}`);
-    out[table] = r;
+    out[Object.values(SEALED).filter((x) => x.table === table).length > 1 ? `${table} (${col})` : table] = r;
   }
   return out;
 }
 
-/** Saves someone's monthly gross, sealed (employees.pay_sealed); null clears it. */
+/** Saves someone's monthly gross, sealed (employees.pay_sealed, beside the PF number, which is kept); null clears it. */
 export async function setMonthlyGross(db, employeeId, gross) {
-  const { sealed, plain } = sealFields("pay_sealed", { monthly_gross: gross === undefined ? null : gross });
-  await db.query("UPDATE employees SET monthly_gross=$2, pay_sealed=$3 WHERE id=$1", [employeeId, plain.monthly_gross, gross == null ? null : sealed]);
+  await updateSealed(db, "pay_sealed", employeeId, { monthly_gross: gross === undefined ? null : gross });
+}
+/** Saves someone's PF number, sealed beside the monthly gross (employees.pay_sealed). */
+export async function setPfNumber(db, employeeId, pfNumber) {
+  await updateSealed(db, "pay_sealed", employeeId, { pf_number: pfNumber || null });
 }
 
 /*

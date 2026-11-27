@@ -44,7 +44,7 @@ async function linesOf(period, finalOnly) {
   const { rows: [run] } = await payPool.query("SELECT id, period, status FROM payroll_runs WHERE period=$1", [period]);
   if (!run || (finalOnly && !isFinal(run.status))) return { run: null, lines: [] };
   const { rows } = await payPool.query(
-    `SELECT lower(i.work_email) AS email, i.slip, i.base_salary, i.lop_deduction, i.payable, i.item_sealed, e.name, e.emp_no, e.dept, e.pf_number, e.pan_masked
+    `SELECT lower(i.work_email) AS email, i.slip, i.base_salary, i.lop_deduction, i.payable, i.item_sealed, e.name, e.emp_no, e.dept, e.pf_number, e.pan_masked, e.pay_sealed, e.person_sealed
      FROM payroll_items i LEFT JOIN employees e ON lower(e.work_email) = lower(i.work_email)
      WHERE i.run_id=$1 ORDER BY e.name NULLS LAST, i.work_email LIMIT 2000`, [run.id]);
   const lines = rows.map((x) => {
@@ -198,7 +198,7 @@ export function financeRouter(wrap) {
     const fy = fyFrom(req, res); if (!fy) return;
     const by = await yearOf(fy, null, !seesDrafts(req));
     const emails = Object.keys(by);
-    const { rows: staff } = emails.length ? await payPool.query("SELECT lower(work_email) AS email, name, emp_no, pan_masked FROM employees WHERE lower(work_email) = ANY($1)", [emails]) : { rows: [] };
+    const { rows: staff } = emails.length ? await payPool.query("SELECT lower(work_email) AS email, name, emp_no, pan_masked, person_sealed FROM employees WHERE lower(work_email) = ANY($1)", [emails]) : { rows: [] };
     const who = Object.fromEntries(staff.map((p) => [p.email, p]));
     const people = emails.map((e) => { const y = annualStatement(by[e]); const p = who[e] || {}; return { email: e, name: p.name || e.split("@")[0], empNo: p.emp_no || "", pan: p.pan_masked || "", ...y.totals, quarters: y.quarters }; })
       .sort((a, b) => a.name.localeCompare(b.name));
@@ -214,7 +214,7 @@ export function financeRouter(wrap) {
     if (q < 0) return bad(res, "Please choose a quarter.");
     const months = fyPeriods(fy).slice(q * 3, q * 3 + 3), by = await yearOf(fy, null, !seesDrafts(req));
     const emails = Object.keys(by);
-    const { rows: staff } = emails.length ? await payPool.query("SELECT lower(work_email) AS email, name, emp_no, pan_masked FROM employees WHERE lower(work_email) = ANY($1)", [emails]) : { rows: [] };
+    const { rows: staff } = emails.length ? await payPool.query("SELECT lower(work_email) AS email, name, emp_no, pan_masked, person_sealed FROM employees WHERE lower(work_email) = ANY($1)", [emails]) : { rows: [] };
     const who = Object.fromEntries(staff.map((p) => [p.email, p]));
     const rows = [];
     for (const e of emails.sort((a, b) => ((who[a] || {}).name || a).localeCompare((who[b] || {}).name || b))) for (const m of by[e].filter((x) => months.includes(x.period) && (Number(x.s.taxable) > 0 || Number(x.s.tds) > 0)).sort((a, b) => (a.period < b.period ? -1 : 1)))
@@ -226,7 +226,7 @@ export function financeRouter(wrap) {
     const fy = fyFrom(req, res); if (!fy) return;
     const email = String(req.params.email || "").toLowerCase();
     const by = await yearOf(fy, email, !seesDrafts(req));
-    const { rows: [p] } = await payPool.query("SELECT name, emp_no, title, dept, pan_masked, to_char(start_date,'YYYY-MM-DD') AS start FROM employees WHERE lower(work_email)=$1", [email]);
+    const { rows: [p] } = await payPool.query("SELECT name, emp_no, title, dept, pan_masked, person_sealed, to_char(start_date,'YYYY-MM-DD') AS start FROM employees WHERE lower(work_email)=$1", [email]);
     if (!p && !by[email]) return res.status(404).json({ error: "This person has no payslips in that financial year." });
     // The regime payroll used for the year (payroll's own record, read only).
     const { rows: [d] } = await payPool.query("SELECT regime FROM tax_declarations WHERE fy=$1 AND lower(work_email)=$2", [fy, email]);

@@ -97,7 +97,8 @@ async function submittedDeclarations(fyStart) {
 /** People on the payroll for a month: joined by its last day, and not gone before its first day. */
 export async function staffFor(db, period) {
   const { rows } = await db.query(
-    `SELECT id, work_email, name, emp_no, title, dept, start_date, last_day, dob, status, pan_masked, acct_masked, ifsc, pf_number, employment_type, onboarded_at FROM employees
+    `SELECT id, work_email, name, emp_no, title, dept, start_date, last_day, dob, status, pan_masked, acct_masked, ifsc, pf_number, employment_type, onboarded_at,
+            person_sealed, pay_sealed FROM employees
      WHERE start_date IS NOT NULL AND start_date <= $2::date
        AND ((last_day IS NULL AND status <> 'offboarded') OR last_day >= $1::date)
      ORDER BY name`, [period + "-01", monthEnd(period)]);
@@ -107,7 +108,8 @@ export async function staffFor(db, period) {
 /** People who are onboarded but join after this month: not on its payroll run, but HR can set their salary, bank and tax details ahead of time. */
 export async function joiningLater(db, period) {
   const { rows } = await db.query(
-    `SELECT id, work_email, name, emp_no, title, dept, start_date, last_day, dob, status, pan_masked, acct_masked, ifsc, pf_number, employment_type, onboarded_at FROM employees
+    `SELECT id, work_email, name, emp_no, title, dept, start_date, last_day, dob, status, pan_masked, acct_masked, ifsc, pf_number, employment_type, onboarded_at,
+            person_sealed, pay_sealed FROM employees
      WHERE start_date > $1::date AND last_day IS NULL AND status <> 'offboarded'
      ORDER BY start_date, name`, [monthEnd(period)]);
   return rows;

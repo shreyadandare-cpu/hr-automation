@@ -381,7 +381,7 @@ R.post("/runs/:id/actions/:action", wrap(async (req, res) => {
       const { rows: [f] } = await client.query("SELECT id, version FROM payroll_files WHERE run_id=$1 AND kind='workbook' AND NOT superseded ORDER BY version DESC LIMIT 1", [run.id]);
       if (!f) return fail(409, "Generate the payroll report first.");
       await moveTo(client, run, c.to, req.user.email, "Payroll sent for review", { file: f.id, version: f.version, note }, { submitted_by: req.user.email, submitted_at: new Date(), review_note: null });
-      after.tell.push([await approvers(), { title: `Payroll for ${month} is waiting for your review.`, body: `${inr(run.totals && run.totals.net)} net for ${run.totals ? run.totals.people : "?"} people. Sent by ${req.user.email}.`, link: "/app/payroll" }]);
+      after.tell.push([await approvers(), { title: `Payroll for ${month} is waiting for your review.`, body: `Sent by ${req.user.email}. Open Payroll to see the figures.`, link: "/app/payroll" }]);
       return {};
     }
 

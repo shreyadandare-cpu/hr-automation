@@ -1,4 +1,5 @@
 import express from "express";
+import { sealFields } from "./secret-box.js";
 import L from "../../frontend/leave-rules.cjs";
 import { pool } from "./db.js";
 import { can, mayDecide, need, needAll } from "./access.js";
@@ -179,17 +180,18 @@ export async function saveClearance(db, o, hrEmail, c) {
     reimbursementsPayable: c.reimbursements.payable, reimbursementsAwaiting: c.reimbursements.awaiting, reimbursementsLeftOut: c.reimbursements.leftOut,
     advancesOutstanding: c.advances.outstanding, recovered, shortfall: t.shortfall,
   };
+  // The figures are stored sealed (secret-box.js); the plain columns stay empty.
+  const { sealed, plain: f } = sealFields("clearance_sealed", { final_salary: t.finalSalary, reimbursements_payable: t.reimbursementsPayable,
+    advance_outstanding: t.advanceOutstanding, total_recovery: t.totalRecovery, net_salary: t.netSalary, final_payout: t.finalPayout, details });
   const { rows } = await db.query(
     `INSERT INTO offboarding_clearances (offboarding_id, work_email, exit_date, final_salary, reimbursements_payable, advance_outstanding,
-       total_recovery, net_salary, final_payout, month_end_window, status, details, completed_by)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING *`,
-    [o.id, o.work_email, c.exitDate, t.finalSalary, t.reimbursementsPayable, t.advanceOutstanding, t.totalRecovery, t.netSalary, t.finalPayout,
-      c.monthEndWindow, status, details, hrEmail]);
-  const fmt = (v) => (v === null ? "not set" : inr(v));
+       total_recovery, net_salary, final_payout, month_end_window, status, details, completed_by, clearance_sealed)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14) RETURNING *`,
+    [o.id, o.work_email, c.exitDate, f.final_salary, f.reimbursements_payable, f.advance_outstanding, f.total_recovery, f.net_salary, f.final_payout,
+      c.monthEndWindow, status, f.details, hrEmail, sealed]);
+  // The audit log names what happened, never the amounts: they are kept only in the sealed clearance record.
   await db.query("INSERT INTO audit_log (action, work_email) VALUES ($1,$2)", [
-    `Financial clearance confirmed by ${hrEmail}: exit ${c.exitDate}, final salary ${fmt(t.finalSalary)}, advance recovery ${inr(t.totalRecovery)}, ` +
-    `reimbursements payable ${inr(t.reimbursementsPayable)}, net salary ${fmt(t.netSalary)}, final payout ${fmt(t.finalPayout)}` +
-    `${t.shortfall ? `, ${inr(t.shortfall)} still to collect` : ""} (${status === "cleared" ? "nothing to recover" : "recovery confirmed"})`, o.work_email]);
+    `Financial clearance confirmed by ${hrEmail}: exit ${c.exitDate}${t.shortfall ? ", an amount is still to collect" : ""} (${status === "cleared" ? "nothing to recover" : "recovery confirmed"})`, o.work_email]);
   return toRecord(rows[0]);
 }
 

@@ -15,12 +15,15 @@ export const SEALED = {
   file_sealed: { table: "payroll_files", fields: ["totals"] },
   audit_sealed: { table: "payroll_audit", fields: ["detail"] },
   pay_sealed: { table: "employees", fields: ["monthly_gross"] },
+  clearance_sealed: { table: "offboarding_clearances", fields: ["final_salary", "reimbursements_payable", "advance_outstanding", "total_recovery", "net_salary", "final_payout", "details"] },
+  offer_sealed: { table: "offer_letters", fields: ["ctc_annual", "letter_text"] },
 };
 /** What a plain column is left holding once its figures are sealed (NOT NULL columns get their empty value). */
-export const EMPTY = { inputs: "{}", detail: "{}" };
+export const EMPTY = { inputs: "{}", detail: "{}", details: "{}" };
 /** Money columns that were NUMERIC(12,2): rounded to paise before sealing, as the database used to round them. */
 const MONEY = new Set(["base_salary", "lop_deduction", "reimbursement_total", "payable", "pf_employee", "professional_tax", "tds_monthly", "annual_ctc",
-  "employer_pf", "esic_employee", "pt_february", "amount", "monthly_gross"]);
+  "employer_pf", "esic_employee", "pt_february", "amount", "monthly_gross", "final_salary", "reimbursements_payable", "advance_outstanding",
+  "total_recovery", "net_salary", "final_payout", "ctc_annual"]);
 const paise = (f, v) => (MONEY.has(f) && typeof v === "number" && Number.isFinite(v) ? Math.round(v * 100) / 100 : v);
 
 /*

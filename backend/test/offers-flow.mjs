@@ -9,6 +9,7 @@
  */
 import crypto from "node:crypto";
 import pg from "pg";
+import { openSealedRow } from "../src/secret-box.js";   // the test needs PAYROLL_ENCRYPTION_KEY, as the server
 
 const DB = process.env.DATABASE_URL || "", BASE = process.env.BASE || "http://localhost:3100";
 if (!/(localhost|127\.0\.0\.1)[:/]/.test(DB)) { console.error("Refusing: DATABASE_URL must be a local database."); process.exit(2); }
@@ -76,7 +77,10 @@ try {
   ok("the candidate signs by typing their name", r.status === 200);
   r = await call(null, "POST", `/api/sign/${key}`, { name: "Test Offer Candidate", accept: true });
   ok("it cannot be signed twice", r.status === 409);
-  const { rows: [signed] } = await db.query("SELECT status, signed_name, signed_ip, signed_at, letter_sha256, letter_text FROM offer_letters WHERE id=$1", [id]);
+  const { rows: [kept] } = await db.query("SELECT status, signed_name, signed_ip, signed_at, letter_sha256, letter_text, ctc_annual, offer_sealed FROM offer_letters WHERE id=$1", [id]);
+  // The CTC and the letter are stored encrypted (src/secret-box.js): nothing readable in the plain columns. Opened here as the app opens it.
+  ok("the CTC and the letter are stored encrypted", kept.letter_text === null && kept.ctc_annual === null && /^s1:/.test(kept.offer_sealed || ""), JSON.stringify({ letter: kept.letter_text, ctc: kept.ctc_annual }));
+  const signed = openSealedRow({ ...kept });
   ok("the signature keeps the name, time, address and the letter's fingerprint", signed.status === "signed" && signed.signed_name === "test offer candidate" && signed.signed_ip && signed.signed_at && signed.letter_sha256 === sha(signed.letter_text));
   r = await call(maker, "GET", `/api/hr/offers/${id}/pdf`);
   ok("HR downloads the signed letter as a PDF", r.status === 200 && r.type.includes("pdf") && r.data.subarray(0, 5).toString() === "%PDF-");

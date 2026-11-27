@@ -48,7 +48,9 @@ try {
   for (const [what, p, m, b] of [["reset Kailash's login", `/api/users/${K}/reset`, "POST"], ["disable Kailash's login", `/api/users/${K}/disabled`, "PUT", { value: true }], ["send Kailash a sign-in link", `/api/users/${K}/invite`, "POST"], ["remove Kailash's login", `/api/users/${K}`, "DELETE"]]) {
     const s = await call(tSA, p, m, b); console.log(s === 403 ? "ok  " : "FAIL", ` super admin tries to ${what} ->`, s); if (s !== 403) bad++; }
   const kOk = []; for (const p of P.slice(0, 7)) kOk.push(await call(tK, p));
-  console.log(kOk.every((s) => s === 200) ? "ok  " : "FAIL", " Kailash, plain employee role, no grants ->", kOk.join(",")); if (!kOk.every((s) => s === 200)) bad++;
+  // Kailash is never refused: 200, or 404 where that person simply has no salary or bank details saved yet.
+  const kIn = kOk.every((s) => s === 200 || s === 404) && kOk.filter((s) => s === 200).length >= 5;
+  console.log(kIn ? "ok  " : "FAIL", " Kailash, plain employee role, no grants ->", kOk.join(",")); if (!kIn) bad++;
   await db.query("UPDATE users SET role='employee' WHERE email=$1", [K]); finished = true;
 } finally {
   await db.query("DELETE FROM access_grants WHERE id = ANY($1)", [made.grants]);

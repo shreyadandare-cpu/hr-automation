@@ -25,8 +25,8 @@ const SALARY_NAMES = [
 ];
 // A database client run from the shell, or a one-off script (node -e / --eval / a heredoc) that opens a connection.
 const DB_TOOLS = /\b(psql|pgcli|sqlite3|mysql)\b|\bnode\b[^|;&]*(-e|--eval|-p|<<)[\s\S]*\b(pg|Pool|Client|payPool|pool\.query)\b/;
-// Whole-database copies and the environment, whatever the command names: they hold every salary and every key.
-const ALWAYS = /\b(pg_dump|pg_dumpall|pg_basebackup)\b|(^|[\s;&|(])(printenv|env|export\s+-p|declare\s+-x|set)(\s*$|\s*[|;&>)])|\/proc\/[^\s]*\/environ|docker\s+(compose\s+)?(exec|inspect)\b[\s\S]*\b(env|printenv|psql|pg_dump)\b|docker\s+inspect\b/;
+// Whole-database copies, the environment and the cloud secret stores, whatever the command names: they hold every salary and every key.
+const ALWAYS = /\b(pg_dump|pg_dumpall|pg_basebackup)\b|(^|[\s;&|(])(printenv|env|export\s+-p|declare\s+-x|set)(\s*$|\s*[|;&>)])|\/proc\/[^\s]*\/environ|docker\s+(compose\s+)?(exec|inspect)\b[\s\S]*\b(env|printenv|psql|pg_dump)\b|docker\s+inspect\b|\bgcloud\b[\s\S]*\bsecrets\b[\s\S]*\b(access|versions)\b|\bgcloud\s+run\s+(services|revisions)\s+describe\b|\bkubectl\b[\s\S]*\b(get|describe)\s+secrets?\b|\baws\s+secretsmanager\b|\b(heroku|fly|railway|render)\b[\s\S]*\b(config|secrets|env)\b|\bvault\s+(kv\s+)?(read|get)\b/;
 const ENV_FILE = /(^|[\/\s"'=<])\.env(?!\.example)\b/;   // .env, .env.local, backend/.env; never .env.example
 // The uploads folder as a path (backend/uploads, /srv/uploads/…, cd uploads), not the word in a code search.
 const UPLOADS = /\/uploads(\/|\b(?![.\w]))|(^|[\s"'=])uploads\/|\bcd\s+uploads\b|hrhub-uploads/;

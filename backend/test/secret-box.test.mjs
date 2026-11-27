@@ -47,7 +47,8 @@ test("without the key: refused on the live server, plain only in local developme
 
 test("every salary table and figure is covered", () => {
   assert.deepEqual(Object.values(SEALED).map((x) => x.table).sort(),
-    ["employees", "payroll_adjustments", "payroll_audit", "payroll_files", "payroll_items", "payroll_runs", "salary_structures"]);
+    ["employees", "offboarding_clearances", "offer_letters", "payroll_adjustments", "payroll_audit", "payroll_files", "payroll_items", "payroll_runs", "salary_structures"]);
+  assert.ok(SEALED.clearance_sealed.fields.includes("net_salary") && SEALED.offer_sealed.fields.includes("ctc_annual") && SEALED.offer_sealed.fields.includes("letter_text"));
   assert.ok(SEALED.item_sealed.fields.includes("payable") && SEALED.item_sealed.fields.includes("slip") && SEALED.item_sealed.fields.includes("inputs"));
   assert.ok(SEALED.structure_sealed.fields.includes("earnings") && SEALED.structure_sealed.fields.includes("annual_ctc"));
 });

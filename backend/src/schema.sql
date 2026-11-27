@@ -1496,3 +1496,13 @@ CREATE TABLE IF NOT EXISTS loan_events (
 CREATE INDEX IF NOT EXISTS loan_events_loan ON loan_events (loan_id, id);
 ALTER TABLE employee_advances ADD COLUMN IF NOT EXISTS loan_id INTEGER;
 CREATE UNIQUE INDEX IF NOT EXISTS employee_advances_loan ON employee_advances (loan_id) WHERE loan_id IS NOT NULL;
+
+-- Exit settlements and offer letters hold salaries too: stored encrypted like payroll (2026-11-27, secret-box.js). The plain
+-- columns are left empty, so they may be NULL now; a start-up step seals rows saved before (payroll/sealing.js).
+ALTER TABLE offboarding_clearances ADD COLUMN IF NOT EXISTS clearance_sealed TEXT;
+ALTER TABLE offboarding_clearances ALTER COLUMN reimbursements_payable DROP NOT NULL, ALTER COLUMN advance_outstanding DROP NOT NULL,
+  ALTER COLUMN total_recovery DROP NOT NULL;
+ALTER TABLE offer_letters ADD COLUMN IF NOT EXISTS offer_sealed TEXT;
+ALTER TABLE offer_letters ALTER COLUMN ctc_annual DROP NOT NULL;
+ALTER TABLE offer_letters DROP CONSTRAINT IF EXISTS offer_letters_ctc_annual_check;
+ALTER TABLE offer_letters ADD CONSTRAINT offer_letters_ctc_annual_check CHECK (ctc_annual IS NULL OR ctc_annual > 0);

@@ -106,6 +106,7 @@ kailash@wohlig.com). Decided 2026-11-27.
   A new screen or endpoint that shows a salary figure checks one of those permissions.
 - Salary figures are stored encrypted in the database (`secret-box.js`): a new salary column goes into its table's sealed column
   (`SEALED`), is written with `sealFields`, and is added up or filtered in the app, never in SQL (the plain columns are empty).
+  Never put a salary figure in the audit log, a notification, an email or a server log: those are not encrypted.
 - Personal documents and tax proofs are stored encrypted (`file-crypt.js`). Documents, tax proofs, Form 124 and payslips open
   only with the viewer's own document password (`doc-password.js`), and every one leaves as a PDF locked with it (`pdf-lock.js`,
   AES-256, for uploads and generated PDFs alike). Any new personal file or salary PDF goes the same way.

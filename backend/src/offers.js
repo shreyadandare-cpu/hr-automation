@@ -13,6 +13,7 @@
  *   GET  /api/sign/:key/pdf   the letter as a PDF
  * The key is never stored, only its fingerprint; a signature keeps the typed name, the time, the address and the letter's fingerprint.
  */
+import { sealFields } from "./secret-box.js";
 import express from "express";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -129,10 +130,11 @@ export function offersRouter(wrap) {
     if (Object.keys(errors).length) return res.status(400).json({ errors });
     const { rowCount } = await pool.query("SELECT 1 FROM offer_letters WHERE candidate_id=$1 AND status IN ('pending_approval','approved','sent')", [c.id]);
     if (rowCount) return res.status(409).json({ error: "This candidate already has an offer in progress. Withdraw it first to make a new one." });
-    const { rows: [o] } = await pool.query("INSERT INTO offer_letters (candidate_id, title, ctc_annual, joining_date, location, terms, created_by) VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING id",
-      [c.id, v.title, v.ctc, v.joiningDate, v.location, v.terms, me(req)]);
+    const { sealed, plain: f } = sealFields("offer_sealed", { ctc_annual: v.ctc, letter_text: null });   // the CTC is stored sealed (secret-box.js)
+    const { rows: [o] } = await pool.query("INSERT INTO offer_letters (candidate_id, title, ctc_annual, joining_date, location, terms, created_by, offer_sealed) VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id",
+      [c.id, v.title, f.ctc_annual, v.joiningDate, v.location, v.terms, me(req), sealed]);
     if (["applied", "screening", "interview"].includes(c.stage)) await pool.query("UPDATE candidates SET stage='offer', updated_at=now() WHERE id=$1", [c.id]);
-    await audit(req, `Offer prepared for ${c.name}: ${v.title}, CTC ${v.ctc}, joining ${v.joiningDate}`);
+    await audit(req, `Offer prepared for ${c.name}: ${v.title}, joining ${v.joiningDate}`);   // the CTC is never written to the audit log
     notify("perm:offers.approve", { title: `An offer for ${c.name} is waiting for approval`, body: `${v.title}, prepared by ${me(req)}.`, link: "/app/hiring" }).catch(() => {});
     res.status(201).json({ id: o.id });
   }));
@@ -159,8 +161,10 @@ export function offersRouter(wrap) {
     const { key, hash } = newSignKey();
     const until = new Date(Date.now() + SIGN_DAYS * 86400000), expires = until.toISOString().slice(0, 10);
     const words = o.letter_text && o.status === "sent" ? o.letter_text : offerText({ company: BRAND.company.name, candidate: o.candidate, title: o.title, ctc: o.ctc_annual, joiningDate: o.joining, location: o.location, terms: o.terms, expires });
-    await pool.query("UPDATE offer_letters SET status='sent', letter_text=$2, letter_sha256=$3, sign_key_hash=$4, sent_by=$5, sent_at=now(), sign_until=$6, updated_at=now() WHERE id=$1",
-      [o.id, words, fingerprint(words), hash, me(req), until]);
+    // The letter names the CTC, so it is stored sealed with it (secret-box.js).
+    const { sealed, plain: f } = sealFields("offer_sealed", { ctc_annual: o.ctc_annual, letter_text: words });
+    await pool.query("UPDATE offer_letters SET status='sent', letter_text=$2, letter_sha256=$3, sign_key_hash=$4, sent_by=$5, sent_at=now(), sign_until=$6, updated_at=now(), ctc_annual=$7, offer_sealed=$8 WHERE id=$1",
+      [o.id, f.letter_text, fingerprint(words), hash, me(req), until, f.ctc_annual, sealed]);
     const link = `${frontendUrl()}/sign/${key}`;
     await audit(req, `Offer for ${o.candidate} sent for signature (until ${expires})`);
     let emailed = false;

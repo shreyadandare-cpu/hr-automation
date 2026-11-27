@@ -49,7 +49,7 @@ function legacySlip(x) {
 /** The stored payslip for one person and month: { slip } or { status, error }. */
 async function payslipOf(email, period, drafts) {
   const { rows } = await pool.query(
-    `SELECT i.*, r.period, r.status, r.paid_at, r.published_at, r.publish_at, e.name, e.emp_no, e.title, e.dept, e.start_date, e.pan_masked, e.pf_number
+    `SELECT i.*, r.period, r.status, r.paid_at, r.published_at, r.publish_at, e.name, e.emp_no, e.title, e.dept, e.start_date, e.pan_masked, e.pf_number, e.person_sealed, e.pay_sealed
      FROM payroll_items i JOIN payroll_runs r ON r.id=i.run_id LEFT JOIN employees e ON lower(e.work_email)=lower(i.work_email)
      WHERE lower(i.work_email)=$1 AND r.period=$2 ${drafts ? "" : "AND r.published_at IS NOT NULL"}`, [email, period]);
   const x = rows[0];

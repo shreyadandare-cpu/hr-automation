@@ -9,6 +9,7 @@ import { mailSkipped, notify } from "./notify.js";
 import { COMPANY_LEGAL } from "./brand.js";
 import { needAll } from "./access.js";
 import { postToChat } from "./chat.js";
+import { dobOf } from "./sealed-rows.js";
 
 /*
  * Celebrations: birthday and welcome posters. HR picks the person (birthdays come from the date of birth on file, new joiners
@@ -54,12 +55,12 @@ function nextBirthday(dob, from) {
 async function activeEmployees(db = pool) {
   const { rows } = await db.query(
     `SELECT e.work_email AS email, e.name, e.title, e.dept, e.employment_type, e.start_date,
-            COALESCE(NULLIF(p.data->'primary'->>'dob', ''), e.dob::text) AS dob,
+            e.dob, e.person_sealed, p.data, p.profile_sealed,
             (SELECT extract(epoch FROM ph.updated_at)::bigint FROM profile_photos ph WHERE lower(ph.email) = lower(e.work_email)) AS photo_v
      FROM employees e LEFT JOIN profiles p ON lower(p.email) = lower(e.work_email)
      WHERE e.status <> 'offboarded' AND e.last_day IS NULL
        AND NOT EXISTS (SELECT 1 FROM users u WHERE lower(u.email) = lower(e.work_email) AND u.login_blocked) ORDER BY e.name`);
-  return rows;
+  return rows.map(dobOf);   // the profile's date of birth wins over HR's; both are stored encrypted, so it is chosen here
 }
 const person = (e, extra = {}) => ({ email: e.email, name: e.name, title: e.title || "", dept: e.dept || "", employmentType: e.employment_type || "Employee",
   start: e.start_date || "", photoV: e.photo_v || null, ...extra });

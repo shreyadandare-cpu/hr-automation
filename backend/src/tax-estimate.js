@@ -55,7 +55,7 @@ export async function estimateTax({ email, items }) {
     structuresFor(payPool, now, email),
     payPool.query("SELECT regime, rules FROM tax_rules WHERE fy=$1", [fy]),
     payPool.query("SELECT regime, declaration, decl_sealed FROM tax_declarations WHERE fy=$1 AND lower(work_email)=$2", [fy, email]),
-    payPool.query("SELECT start_date, last_day, dob FROM employees WHERE lower(work_email)=$1", [email]),
+    payPool.query("SELECT start_date, last_day, dob, person_sealed FROM employees WHERE lower(work_email)=$1", [email]),
   ]);
   if (!structures.length) return { available: false, message: "Your salary is not set up in payroll yet, so your tax cannot be worked out. Please ask the payroll team." };
   // Someone who joins later this year: their first month is the joining month.
@@ -128,7 +128,7 @@ export async function yearForReturn({ email, fy, own = null, proofsFinal = false
       WHERE r.period = ANY($1) AND lower(i.work_email) = $2 AND r.status = ANY($3) ORDER BY r.period LIMIT 24`, [periods, email, FINAL_STATES]),
     payPool.query("SELECT regime, rules FROM tax_rules WHERE fy=$1", [label]),
     payPool.query("SELECT regime, declaration, decl_sealed FROM tax_declarations WHERE fy=$1 AND lower(work_email)=$2", [label, email]),
-    payPool.query("SELECT name, emp_no, pan_masked, start_date, last_day, dob FROM employees WHERE lower(work_email)=$1", [email]),
+    payPool.query("SELECT name, emp_no, pan_masked, start_date, last_day, dob, person_sealed FROM employees WHERE lower(work_email)=$1", [email]),
     structuresFor(payPool, periods.at(-1), email),
   ]);
   const statement = annualStatement(items.map((x) => ({ period: x.period, status: x.status, s: summaryOfLegacy(x.slip, x) })));

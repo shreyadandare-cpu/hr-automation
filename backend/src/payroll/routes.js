@@ -528,7 +528,7 @@ R.get("/joiners", hrOnly, wrap(async (req, res) => {
   const period = PERIOD.test(String(req.query.period || "")) ? String(req.query.period) : istMonth();
   const [y, m] = period.split("-").map(Number), monthEnd = `${period}-${String(new Date(Date.UTC(y, m, 0)).getUTCDate()).padStart(2, "0")}`;
   const { rows } = await pool.query(
-    `SELECT work_email, name, emp_no, title, dept, start_date, status, onboarded_at, pan_masked, employment_type FROM employees
+    `SELECT work_email, name, emp_no, title, dept, start_date, status, onboarded_at, pan_masked, person_sealed, employment_type FROM employees
       WHERE status <> 'offboarded' AND last_day IS NULL AND ((status='onboarding' AND onboarded_at IS NULL) OR start_date >= $1::date)
       ORDER BY start_date NULLS LAST, name LIMIT 200`, [`${period}-01`]);
   const emails = rows.map((e) => lc(e.work_email));
@@ -552,7 +552,7 @@ R.get("/joiners", hrOnly, wrap(async (req, res) => {
 R.get("/profile/:email", hrOnly, wrap(async (req, res) => {
   const email = lc(req.params.email), month = istMonth();
   const { rows: [e] } = await pool.query(
-    "SELECT name, emp_no, title, dept, start_date, last_day, status, pan_masked, employment_type, onboarded_at, to_char(converted_on, 'YYYY-MM-DD') AS converted_on FROM employees WHERE lower(work_email)=$1", [email]);
+    "SELECT name, emp_no, title, dept, start_date, last_day, status, pan_masked, person_sealed, employment_type, onboarded_at, to_char(converted_on, 'YYYY-MM-DD') AS converted_on FROM employees WHERE lower(work_email)=$1", [email]);
   if (!e) return res.status(404).json({ error: "Employee not found." });
   const [{ rows: all }, { rows: [b] }] = await Promise.all([
     pool.query("SELECT * FROM salary_structures WHERE lower(work_email)=$1 ORDER BY effective_from", [email]),
@@ -582,7 +582,7 @@ R.get("/bank-people", bankOnly, wrap(async (_req, res) => {
 
 R.get("/bank/:email", bankOnly, wrap(async (req, res) => {
   const email = lc(req.params.email);
-  const { rows: [emp] } = await pool.query("SELECT name, ifsc, acct_masked FROM employees WHERE lower(work_email)=$1", [email]);
+  const { rows: [emp] } = await pool.query("SELECT name, ifsc, acct_masked, person_sealed FROM employees WHERE lower(work_email)=$1", [email]);
   if (!emp) return res.status(404).json({ error: "Employee not found." });
   const { rows: [b] } = await pool.query("SELECT holder_name, bank_name, ifsc, acct_last4, updated_by, updated_at FROM payroll_bank_accounts WHERE lower(work_email)=$1", [email]);
   res.json({ name: emp.name, onboarding: { ifsc: emp.ifsc, acctMasked: emp.acct_masked }, encryptionReady: encryptionReady(),

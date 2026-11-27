@@ -342,7 +342,7 @@ async function personOf(email, role = "employee") {
   if (!e) return null;
   await ensureKit(pool, e.id, "first-visit");
   const kit = (await pool.query("SELECT * FROM digital_kits WHERE employee_id=$1", [e.id])).rows[0];
-  const profile = (await pool.query("SELECT data FROM profiles WHERE lower(email)=$1", [key])).rows[0]?.data || {};
+  const profile = (await pool.query("SELECT data, profile_sealed FROM profiles WHERE lower(email)=$1", [key])).rows[0]?.data || {};
   const ov = kit.overrides || {};
   const person = {
     id: e.id, empNo: e.emp_no || "", name: e.name, email: e.work_email.toLowerCase(), dept: e.dept || "", role,
@@ -545,10 +545,11 @@ admin.delete("/resources/:id", wrap(async (req, res) => {
 // Each employee's kit, with what is missing for personalising it, and HR's overrides.
 admin.get("/employees", wrap(async (_req, res) => {
   const { rows } = await pool.query(
-    `SELECT e.id, e.emp_no, e.name, e.work_email, e.title, e.phone, e.work_location, e.status, k.overrides, k.created_at AS kit_at, k.source,
-            p.data->'contact'->>'phone' AS profile_phone
+    `SELECT e.id, e.emp_no, e.name, e.work_email, e.title, e.phone, e.person_sealed, e.work_location, e.status, k.overrides, k.created_at AS kit_at, k.source,
+            p.data, p.profile_sealed
      FROM employees e LEFT JOIN digital_kits k ON k.employee_id = e.id LEFT JOIN profiles p ON lower(p.email) = lower(e.work_email)
      WHERE e.status <> 'offboarded' ORDER BY e.name`);
+  for (const r of rows) { r.profile_phone = (r.data && r.data.contact && r.data.contact.phone) || null; delete r.data; }   // stored encrypted: read here
   res.json(rows.map((r) => {
     const ov = r.overrides || {};
     const title = placeholderTitle(ov.title) || placeholderTitle(r.title), phone = line(ov.phone, 20) || line(r.profile_phone, 20) || line(r.phone, 20);

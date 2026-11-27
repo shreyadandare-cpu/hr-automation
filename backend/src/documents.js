@@ -51,7 +51,7 @@ documentsRouter.get("/", wrap(async (req, res) => {
 documentsRouter.get("/export", wrap(async (req, res) => {
   if (!canAll(req, "documents.view")) return res.status(403).json({ error: "You are not authorised to download everyone's documents." });
   const [emps, docs] = await Promise.all([
-    pool.query("SELECT work_email, name, emp_no, dept, title, status, start_date, pan_masked, aadhaar_masked FROM employees ORDER BY name LIMIT 5000"),
+    pool.query("SELECT work_email, name, emp_no, dept, title, status, start_date, pan_masked, aadhaar_masked, person_sealed FROM employees ORDER BY name LIMIT 5000"),
     pool.query("SELECT work_email, doc_key, filename, size, uploaded_at FROM documents ORDER BY id LIMIT 50000"),
   ]);
   const today = new Date(Date.now() + 330 * 60000).toISOString().slice(0, 10);

@@ -1,5 +1,5 @@
 import express from "express";
-import { sealFields } from "./secret-box.js";
+import { sealFields, openJson } from "./secret-box.js";
 import { recoveriesByAdvance, updateSealed } from "./sealed-rows.js";
 import L from "../../frontend/leave-rules.cjs";
 import { pool } from "./db.js";
@@ -34,11 +34,12 @@ const AWAITING = { submitted: "Submitted", under_review: "Under review", resubmi
 export async function leaveSettlement(db, email, lastDay) {
   const lc = email.toLowerCase();
   // One after another: this often runs on a single transaction client, which can't take parallel queries.
-  const emp = await db.query("SELECT start_date, casual_opening, leave_opening, monthly_gross, pay_sealed FROM employees WHERE lower(work_email)=$1", [lc]);
+  const emp = await db.query("SELECT start_date, casual_opening, leave_opening, monthly_gross, pay_sealed, pay_sealed AS pay_check FROM employees WHERE lower(work_email)=$1", [lc]);
   const reqs = await db.query("SELECT * FROM leave_requests WHERE lower(work_email)=$1", [lc]);
   const comps = await db.query("SELECT * FROM comp_off_credits WHERE lower(work_email)=$1", [lc]);
   const hols = await db.query("SELECT day FROM holidays");
   const e = emp.rows[0] || {};
+  if (e.pay_check) openJson(e.pay_check);   // never settle on a salary that could not be read
   return L.exitSettlement({
     emp: { start: e.start_date, casualOpening: n(e.casual_opening) || 0, openings: e.leave_opening || null },
     lastDay,
@@ -118,8 +119,9 @@ export async function reimbursementsOf(db, email) {
 
 /** Salary for the exit month: the days worked, plus or minus the leave settlement. Null amounts when no salary is set. */
 export async function finalSalaryOf(db, email, lastDay) {
-  const { rows } = await db.query("SELECT start_date, monthly_gross, pay_sealed FROM employees WHERE lower(work_email)=$1", [email.toLowerCase()]);
+  const { rows } = await db.query("SELECT start_date, monthly_gross, pay_sealed, pay_sealed AS pay_check FROM employees WHERE lower(work_email)=$1", [email.toLowerCase()]);
   const e = rows[0] || {};
+  if (e.pay_check) openJson(e.pay_check);   // a settlement is never worked out on a salary that could not be read (it would be 0)
   const s = await leaveSettlement(db, email, lastDay);
   const month = lastDay.slice(0, 7), w = payWindow(month, e.start_date, lastDay), gross = n(e.monthly_gross);
   if (!gross) return { month, daysWorked: w.days, daysInMonth: w.total, monthlyGross: null, finalSalary: null, casualLeft: s ? s.casualLeft : 0, lopDays: s ? s.lopDays : 0 };

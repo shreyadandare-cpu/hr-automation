@@ -2,8 +2,7 @@ import express from "express";
 import { pool } from "./db.js";
 import {
   verifyPassword, hashPassword, startSession, endSession, endOtherSessions, requireAuth,
-  getDefaultPassword, setDefaultPassword, createUser, lockedFor, noteFailure, clearFailures,
-} from "./auth.js";
+  getDefaultPassword, setDefaultPassword, createUser, lockedFor, noteFailure, clearFailures, revokeKeysOf } from "./auth.js";
 import { V, isCompanyEmail, COMPANY_EMAIL_MESSAGE } from "./validate.js";
 import { sendInvite, acceptInvitation, tooMany } from "./invites.js";
 import { mailConfigured, sendTestEmail } from "./mail.js";
@@ -16,7 +15,7 @@ const wrap = (fn) => (req, res, next) => fn(req, res, next).catch(next);
 const passwordLoginOn = () => String(process.env.ALLOW_PASSWORD_LOGIN || "").toLowerCase() === "true";
 const ROLES = ["hr", "employee"];
 /** The shared starting password matters only when password sign-in is on, and only super admins see it. */
-const showDefault = (req) => passwordLoginOn() && isSuper(req);
+const showDefault = (req) => passwordLoginOn() && isSuper(req) && !req.access.viaKey;   // never through an access key (access-keys.js)
 
 /* Public: sign in and out. */
 export const sessionRouter = express.Router();
@@ -234,6 +233,7 @@ usersRouter.post("/:email/reset", wrap(async (req, res) => {
   const r = await pool.query("UPDATE users SET password_hash=$1 WHERE lower(email)=$2", [hash, email]);
   if (!r.rowCount) return res.status(404).json({ error: "No such account." });
   await pool.query("DELETE FROM sessions WHERE lower(email)=$1", [email]); // signs them out
+  await revokeKeysOf(email);   // and ends their access keys (access-keys.js)
   res.json({ ok: true });
 }));
 

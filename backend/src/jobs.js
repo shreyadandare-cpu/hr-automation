@@ -12,8 +12,11 @@ import { runTaxReminders } from "./tax-reminders.js";
 import { runAttendanceReminders, runMissingPunchPenalties } from "./attendance-reminders.js";
 import { startPortalAttendanceSync } from "./portal-attendance.js";
 import { startGmailIntel } from "./gmail-intel-routes.js";
+import { sweepConnector } from "./oauth.js";
 
 export function startBackgroundJobs() {
+  // The Claude connector (oauth.js): spent tokens, old sign-ins, ended connections and unused app registrations; hourly.
+  setInterval(() => sweepConnector().catch((e) => console.error("[connector] sweep failed:", e.message)), 60 * 60_000);
   // Scheduled offboardings run at 6 pm India time on the last working day; check every minute.
   const checkDue = () => runDue().catch((err) => console.error("Scheduled offboarding check failed:", err));
   checkDue();

@@ -7,6 +7,9 @@ import { documentsRouter, encryptStoredDocuments } from "./documents.js";
 import { docPasswordRouter } from "./doc-password.js";
 import { bootstrapAuth, loadSession, requireAuth } from "./auth.js";
 import { bootstrapAccess } from "./access.js";
+import { accessKeysRouter, keyGuard } from "./access-keys.js";
+import { oauthAccountRouter, oauthCors, oauthPublicRouter } from "./oauth.js";
+import { mcpRoute } from "./mcp-server.js";
 import { accessRouter } from "./access-routes.js";
 import { timing } from "./timing.js";
 import { toolsRouter } from "./tools.js";
@@ -65,8 +68,10 @@ app.set("trust proxy", Number(process.env.TRUST_PROXY ?? 1));
 app.disable("x-powered-by");
 app.use(timing);   // Server-Timing on every response, and a log line for slow /api requests (timing.js)
 app.use(securityHeaders);
+app.use(oauthCors);   // the connector's token paths answer MCP clients on any origin (oauth.js); they use no cookies
 app.use(sameOriginWrites);   // a form on another website cannot change anything here
 app.use(loadSession);
+app.use(keyGuard);   // a personal access key (the Wohlig One MCP) reaches /api only, never salaries, payments, documents or access (access-keys.js)
 // Payroll keeps its own copy of the staff list when it runs on its own database: bring it up to date in the background when Payroll and payslip pages are read, and right after
 // any change made through the app (an employee ID, a name, a joiner), so what was just edited shows on every page (payroll/employee-sync.js).
 app.use("/api", (req, res, next) => {
@@ -79,6 +84,8 @@ app.use("/api/documents", requireAuth, documentsRouter); // raw file bodies, so 
 app.use("/api/digital-kit", requireAuth, digitalKitRouter); // employees: only their own kit; HR: the /admin part (it reads raw uploads itself, so it also goes before the JSON parser)
 app.use(express.json({ limit: "100kb" }));
 app.use("/api", sessionRouter); // login and logout are public
+app.use(oauthPublicRouter);   // the connector's sign-in for Claude: discovery, register, authorize, token, revoke (public; oauth.js)
+app.all("/mcp", mcpRoute);    // the connector itself: Claude, signed in as a person, does the HR dashboard's work (mcp-server.js)
 app.use("/api", festivalLookRouter);   // public: which festival is near, for the sign-in page's festival look
 app.use(deviceRouter()); // the office device posts punches with its own key (no session); the linking screens check for HR themselves
 // The careers page, applications and signing an offer are public, so they sit before the login-guarded routers; the staff and HR
@@ -88,6 +95,8 @@ app.use(careersRouter(earlyWrap));
 app.use(offersRouter(earlyWrap));   // offer letters: HR's routes check the sign-in; signing through /sign/<key> is public (offers.js)
 app.use(gmailIntelRouter());   // Gmail Intelligence Engine: each HR route checks for HR itself; Google's Pub/Sub push has no session and proves itself with a token, so this sits before the login-guarded routers (off until GMAIL_INTEL_ENABLED=true)
 app.use("/api", accountRouter);
+app.use("/api/oauth", oauthAccountRouter);   // the Allow page for the connector and Account > Connected apps (browser sign-in only)
+app.use("/api/access-keys", accessKeysRouter);   // each person's own access keys for the Wohlig One MCP; a key cannot manage keys (keyGuard)
 app.use("/api/document-password", docPasswordRouter);   // each person's password for opening documents and payslips
 app.use("/api/users", usersRouter);
 app.use("/api/profile", profileRouter);

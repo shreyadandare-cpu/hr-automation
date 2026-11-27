@@ -4,6 +4,7 @@ import { useAuth } from "../auth.jsx";
 import { SectionHead } from "../components/ui.jsx";
 import { useToast } from "../components/toast.jsx";
 import { DocPasswordCard } from "../components/DocLock.jsx";
+import { AccessKeysCard } from "../components/AccessKeys.jsx";
 
 export default function Account() {
   const { user, isHr, canAll } = useAuth();
@@ -33,6 +34,7 @@ export default function Account() {
         </form>
       </div></div>
       <DocPasswordCard toast={toast} />
+      <AccessKeysCard toast={toast} />
       {canAll("users.manage") && (
         <div className="card"><div className="card-h"><h3>Logins and roles</h3></div><div className="card-b">
           <p className="muted" style={{ margin: "0 0 12px" }}>Create accounts, change roles, reset passwords and set the default password.</p>

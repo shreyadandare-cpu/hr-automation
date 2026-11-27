@@ -245,6 +245,12 @@ const SWITCHES = [
   ["needLocation", "Ask for the person's location", "The punch is checked against the offices below. With no office listed, the location is only recorded."],
   ["allowOutside", "Keep punches made outside every office, and flag them", "When this is off, a punch outside every office is refused and the person asks HR to add it."],
 ];
+/* Fingerprint or face unlock before a punch (a passkey on the person's phone). Off by default; nothing changes until HR picks another. */
+const CONFIRM = [
+  ["off", "Off", "Nobody is asked. Punching works as before."],
+  ["optional", "Optional", "People may set it up on their phone from Home. Those who do are asked each time they punch."],
+  ["required", "Required for everyone", "Each person sets it up once, on their first punch, then confirms every punch. It stops one person punching for another."],
+];
 function ClockIn() {
   const { data, error, reload } = useList("/api/attendance/clock-in");
   const toast = useToast();
@@ -254,7 +260,7 @@ function ClockIn() {
   if (!data || !data.sites) return <div className="card"><ListSkeleton faces={false} rows={4} /></div>;
   const save = async () => {
     setBusy(true);
-    const r = await api("PUT", "/api/attendance/clock-in", { enabled: !!cur.enabled, needLocation: !!cur.needLocation, allowOutside: !!cur.allowOutside });
+    const r = await api("PUT", "/api/attendance/clock-in", { enabled: !!cur.enabled, needLocation: !!cur.needLocation, allowOutside: !!cur.allowOutside, confirm: cur.confirm || "off" });
     setBusy(false);
     if (!r.ok) { toast(apiMsg(r)); return; }
     setF(null); toast("Clock-in settings saved."); reload();
@@ -264,7 +270,7 @@ function ClockIn() {
     setRemoving(null);
     if (!r.ok) toast(apiMsg(r)); else { toast(`${x.name} was removed.`); reload(); }
   };
-  const changed = !!f && SWITCHES.some(([k]) => !!f[k] !== !!data[k]);
+  const changed = !!f && (SWITCHES.some(([k]) => !!f[k] !== !!data[k]) || (f.confirm || "off") !== (data.confirm || "off"));
   return (
     <>
       <div className="card">
@@ -280,6 +286,16 @@ function ClockIn() {
                 <span className="flex flex-col"><b className="font-bold">{label}</b><span className="text-[14px] text-ink-dim">{hint}</span></span>
               </label>);
           })}
+          <fieldset className={`m-0 flex flex-col gap-2 border-0 p-0 ${cur.enabled ? "" : "opacity-60"}`} disabled={!cur.enabled}>
+            <legend className="mb-1 p-0 font-bold">Confirm each punch with the phone's fingerprint or face</legend>
+            <span className="text-[14px] text-ink-dim">Uses the phone's own fingerprint, face or screen lock. The fingerprint never leaves the phone, and no photo is taken.</span>
+            {CONFIRM.map(([v, label, hint]) => (
+              <label key={v} className="flex min-h-11 items-start gap-3">
+                <input type="radio" name="ci-confirm" className="mt-1 size-5 flex-none accent-accent" value={v} checked={(cur.confirm || "off") === v}
+                  onChange={() => setF({ ...cur, confirm: v })} />
+                <span className="flex flex-col"><b className="font-bold">{label}</b><span className="text-[14px] text-ink-dim">{hint}</span></span>
+              </label>))}
+          </fieldset>
           <div className="flex justify-end"><button type="button" className="btn primary" disabled={busy || !changed} onClick={save}>{busy ? "Saving…" : "Save settings"}</button></div>
         </div>
       </div>
@@ -287,11 +303,12 @@ function ClockIn() {
         <div className="card-h"><h3>Offices</h3><button type="button" className="btn glass sm" onClick={() => setSite({})}>Add an office</button></div>
         {data.sites.length ? (
           <div className="tbl-wrap"><table>
-            <thead><tr><th>Office</th><th>Position</th><th className="text-right">Radius</th><th><span className="sr-only">Actions</span></th></tr></thead>
+            <thead><tr><th>Office</th><th>Position</th><th className="text-right">Radius</th><th>Office internet</th><th><span className="sr-only">Actions</span></th></tr></thead>
             <tbody>{data.sites.map((x) => (
               <tr key={x.id}><td><b className="font-bold">{x.name}</b></td>
                 <td><a className="text-accent" href={`https://www.google.com/maps?q=${x.lat},${x.lng}`} target="_blank" rel="noopener noreferrer">{x.lat.toFixed(5)}, {x.lng.toFixed(5)}</a></td>
                 <td className="num-cell text-right">{x.radius} m</td>
+                <td>{x.networks && x.networks.length ? `${x.networks.length} ${x.networks.length === 1 ? "address" : "addresses"}` : <span className="text-ink-dim">Not used</span>}</td>
                 <td className="text-right"><span className="inline-flex flex-wrap justify-end gap-2"><button type="button" className="btn glass sm" onClick={() => setSite(x)}>Edit</button><button type="button" className="btn glass sm" onClick={() => setRemoving(x)}>Remove</button></span></td></tr>))}</tbody>
           </table></div>)
           : <div className="empty">No offices yet. Add one so punches can be checked against it.</div>}
@@ -358,7 +375,15 @@ function MissingPunchPolicy() {
 
 function SiteForm({ site, onClose }) {
   const toast = useToast();
-  const [f, setF] = useState({ name: site.name || "", lat: site.lat ?? "", lng: site.lng ?? "", radius: site.radius || 150 }), [err, setErr] = useState({}), [busy, setBusy] = useState(false), [finding, setFinding] = useState(false);
+  const [f, setF] = useState({ name: site.name || "", lat: site.lat ?? "", lng: site.lng ?? "", radius: site.radius || 150, networks: (site.networks || []).join("\n") }), [err, setErr] = useState({}), [busy, setBusy] = useState(false), [finding, setFinding] = useState(false);
+  /** Adds the internet address HR is connected from now (stand in the office, on its Wi-Fi). */
+  const thisNetwork = async () => {
+    const r = await api("GET", "/api/attendance/clock-in/my-network");
+    if (!r.ok || !r.data.network) { setErr({ networks: r.ok ? "Your internet address could not be read. Please type it." : apiMsg(r) }); return; }
+    const list = f.networks.split(/[\s,]+/).filter(Boolean);
+    if (!list.includes(r.data.network)) setF((x) => ({ ...x, networks: [...list, r.data.network].join("\n") }));
+    setErr((x) => ({ ...x, networks: "" }));
+  };
   const here = () => {
     if (!navigator.geolocation) { setErr({ form: "This browser cannot share your location. Please type the position." }); return; }
     setFinding(true);
@@ -389,6 +414,13 @@ function SiteForm({ site, onClose }) {
         <button type="button" className="btn glass self-start" onClick={here} disabled={finding}>{finding ? "Finding you…" : "Use where I am now"}</button>
         {field("radius", "Radius in metres (30 to 5,000)", { inputMode: "numeric" })}
         <p className="m-0 text-[14px] text-ink-dim">Stand in the office and use where you are now, or copy the position from Google Maps (right-click the building). 150 metres suits most buildings; phones are less precise indoors.</p>
+        <div className="field m-0"><label htmlFor="site-networks">Office internet (optional)</label>
+          <textarea id="site-networks" className="input min-h-24 font-mono" rows={3} value={f.networks} aria-invalid={!!err.networks} placeholder="For example 203.0.113.7"
+            onChange={(e) => setF({ ...f, networks: e.target.value })} />
+          {err.networks ? <span className="ferr" role="alert">{err.networks}</span>
+            : <span className="hint">A punch from a phone on this internet counts as in the office, with no location needed. Leave it empty to check by location only. One address per line.</span>}</div>
+        <button type="button" className="btn glass self-start" onClick={thisNetwork}>Use this office's internet</button>
+        <p className="m-0 text-[14px] text-ink-dim">Connect to the office Wi-Fi first. Works when the office has a fixed internet address; ask your internet provider if unsure.</p>
       </div>
       <div className="modal-f"><button type="button" className="btn glass" onClick={() => onClose(false)} disabled={busy}>Cancel</button><button type="button" className="btn primary" onClick={save} disabled={busy}>{busy ? "Saving…" : "Save office"}</button></div>
     </Modal>

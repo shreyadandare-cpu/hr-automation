@@ -372,15 +372,16 @@ export function AttendanceLog({ months, today, canEdit = false, onRemove = () =>
 /** The 24 hour bar and times for one person on one day: used in the everyone-for-a-day table that HR sees. */
 export const DayCell = ({ x, h24 }) => (x.firstIn ? <DayBar firstIn={x.firstIn} lastOut={x.lastOut} open={!x.lastOut} /> : <span className="muted">—</span>);
 
-/* Where a punch from the app was made, when web clock-in asked for the location. */
+/* Where a punch from the app was made (by location, or on an office's internet), and whether the phone's fingerprint or face confirmed it. */
 const far = (m) => (m < 1000 ? `${m} m` : `${(m / 1000).toFixed(1)} km`);
 function PunchPlace({ p }) {
-  if (!p.place) return null;
+  if (!p.place && !p.confirmed) return null;
   return (
     <>
       {p.place && (p.place.outside
         ? <span className="font-bold text-bad"> · outside the offices, {far(p.place.distance)} from {p.place.site}</span>
-        : p.place.site ? <span className="text-ink-dim"> · at {p.place.site}</span> : null)}
+        : p.place.site ? <span className="text-ink-dim"> · at {p.place.site}{p.place.network ? " (office internet)" : ""}</span> : null)}
+      {p.confirmed && <span className="text-ink-dim"> · fingerprint or face confirmed</span>}
     </>
   );
 }

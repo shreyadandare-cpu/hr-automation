@@ -6,7 +6,8 @@ import { can, canAll, need, needAll, scopeOf } from "./access.js";
 import { managerMap } from "./teams.js";
 import { dayMarks, isWeeklyOff, minutesOf, shiftOn, statusFromMinutes } from "./shift-rules.js";
 import { shiftsFor } from "./shifts.js";
-import { checkPunch, farText, readPoint, readPolicy, readSite } from "./clockin-rules.js";
+import { checkPunch, confirmNeeded, farText, networkOf, readPoint, readPolicy, readSite, siteOnNetwork } from "./clockin-rules.js";
+import { confirmPunch, passkeyCount, punchOptions } from "./passkeys.js";
 import { policyOf, readMissingPolicy } from "./missing-punch-rules.js";
 import { NOW_SQL, byOrd, late, ord, ordSql } from "./work-day.js";
 
@@ -32,7 +33,8 @@ const audit = (db, action, email) => db.query("INSERT INTO audit_log (action, wo
 
 // A punch from the app may say where it was made (the nearest office, how far, outside every office).
 const toPunch = (p) => ({ id: p.id, date: p.work_date, time: hhmm(p.punch_time), direction: p.direction, source: p.source, note: p.note,
-  place: p.site_name || p.distance_m !== null && p.distance_m !== undefined ? { site: p.site_name || null, distance: p.distance_m, outside: !!p.outside } : null });
+  place: p.site_name || p.distance_m !== null && p.distance_m !== undefined ? { site: p.site_name || null, distance: p.distance_m, outside: !!p.outside, network: p.checked_by === "network" } : null,
+  confirmed: !!p.confirmed });
 
 /** Minutes worked from a day's punches in time order: each IN pairs with the next OUT. An IN with no OUT counts to `until` (today) or nothing. */
 function worked(punches, until) {
@@ -108,7 +110,7 @@ const monthRange = (month) => {
 async function monthOf(emp, month) {
   const [from, to] = monthRange(month);
   const [p, l, h, now, sh, cr, pen] = await Promise.all([
-    pool.query(`SELECT id, to_char(work_date,'YYYY-MM-DD') AS work_date, punch_time, direction, source, note, site_name, distance_m, outside FROM attendance_punches
+    pool.query(`SELECT id, to_char(work_date,'YYYY-MM-DD') AS work_date, punch_time, direction, source, note, site_name, distance_m, outside, checked_by, confirmed FROM attendance_punches
                 WHERE employee_id=$1 AND work_date BETWEEN $2 AND $3 ORDER BY work_date, punch_time, id`, [emp.id, from, to]),
     pool.query(`SELECT to_char(from_date,'YYYY-MM-DD') AS f, to_char(to_date,'YYYY-MM-DD') AS t, half FROM leave_requests
                 WHERE lower(work_email)=$1 AND status='approved' AND from_date<=$3 AND to_date>=$2`, [emp.work_email.toLowerCase(), from, to]),
@@ -175,10 +177,11 @@ export async function monthsFor(month, emails = null) {
 export const webClockOn = () => String(process.env.WEB_CLOCK_IN || "").toLowerCase() === "true";
 /** HR's clock-in settings (Shifts > Clock-in). Web punching is on when HR switched it on there, or WEB_CLOCK_IN=true. */
 export async function clockPolicy(db = pool) {
-  const { rows: [x] } = await db.query("SELECT enabled, need_location, allow_outside FROM clock_in_policy WHERE id=1");
+  const { rows: [x] } = await db.query("SELECT enabled, need_location, allow_outside, confirm_mode FROM clock_in_policy WHERE id=1");
   return { enabled: webClockOn() || !!(x && x.enabled), needLocation: !!(x && x.need_location), allowOutside: !!(x && x.allow_outside),
-    fromEnv: webClockOn() };
+    confirm: (x && x.confirm_mode) || "off", fromEnv: webClockOn() };
 }
+const SITES_SQL = "SELECT id, name, lat::float8 AS lat, lng::float8 AS lng, radius_m AS radius, networks FROM clock_in_sites WHERE deleted_at IS NULL ORDER BY name LIMIT 200";
 
 export function attendanceRouter(wrap) {
   const r = express.Router();
@@ -190,12 +193,23 @@ export function attendanceRouter(wrap) {
     const emp = await employeeByEmail(pool, me(req));
     if (!emp) return res.status(404).json({ error: "Your employee record was not found. Ask HR to check your work email." });
     const now = await nowIst(pool);
-    const ps = (await pool.query(`SELECT id, to_char(work_date,'YYYY-MM-DD') AS work_date, punch_time, direction, source, note, site_name, distance_m, outside FROM attendance_punches
+    const ps = (await pool.query(`SELECT id, to_char(work_date,'YYYY-MM-DD') AS work_date, punch_time, direction, source, note, site_name, distance_m, outside, checked_by, confirmed FROM attendance_punches
       WHERE employee_id=$1 AND work_date=$2 ORDER BY punch_time, id`, [emp.id, now.day])).rows.map(toPunch).sort(byOrd);
     const w = worked(ps, now.min);
-    const [pol, missingOut] = await Promise.all([clockPolicy(), missingOutsOf(emp, now.day)]);
+    const [pol, missingOut, sites, keys] = await Promise.all([clockPolicy(), missingOutsOf(emp, now.day), pool.query(SITES_SQL), passkeyCount(me(req))]);
+    // On an office's listed internet the location is not asked for. `confirm`: "no", "yes" (fingerprint or face before the punch)
+    // or "setup" (HR requires it and this person has not set it up yet). `canConfirm`: they may set it up (HR did not switch it off).
+    const office = pol.enabled ? siteOnNetwork(sites.rows, req.ip) : null;
     res.json({ date: now.day, time: hhmm(now.time), punches: ps, state: ps.length && ps[ps.length - 1].direction === "IN" ? "in" : "out", minutes: w.minutes,
-      canPunch: pol.enabled, needLocation: pol.enabled && pol.needLocation, missingOut });
+      canPunch: pol.enabled, needLocation: pol.enabled && pol.needLocation && !office, officeNetwork: office ? office.name : null,
+      confirm: pol.enabled ? confirmNeeded(pol.confirm, keys > 0) : "no", canConfirm: pol.enabled && pol.confirm !== "off", passkeys: keys, missingOut });
+  }));
+
+  // Before a punch that needs the fingerprint or face check: a one-time challenge and the person's passkeys.
+  r.post("/api/attendance/punch/challenge", wrap(async (req, res) => {
+    const opts = await punchOptions(req);
+    if (!opts.allow.length) return res.status(400).json({ error: "Please set up your fingerprint or face unlock first." });
+    res.json(opts);
   }));
 
   // Who is in right now, for the directory and the dashboard (everyone signed in may read it). People who work away from the
@@ -223,12 +237,20 @@ export function attendanceRouter(wrap) {
     // Location: checked against HR's offices only when web clock-in is on (HR's own fix-up punches skip it). No selfie is ever asked for.
     const { point, error: pointError } = readPoint(req.body || {});
     if (pointError) return res.status(400).json({ error: pointError });
-    let where = { siteId: null, distance: null, outside: false };
+    let where = { siteId: null, distance: null, outside: false, via: null }, confirmed = false;
     if (pol.enabled) {
-      const sites = (await pool.query("SELECT id, name, lat::float8 AS lat, lng::float8 AS lng, radius_m AS radius FROM clock_in_sites WHERE deleted_at IS NULL LIMIT 200")).rows;
-      const check = checkPunch(pol, sites, point);
+      const sites = (await pool.query(SITES_SQL)).rows;
+      const check = checkPunch(pol, sites, point, req.ip);
       if (!check.ok) return res.status(400).json({ error: check.error });
       where = { ...check, siteName: check.siteId ? sites.find((x) => x.id === check.siteId).name : null };
+      // Fingerprint or face unlock, when HR asks for it (never for HR's own fix-up punches with web clock-in off).
+      const need = confirmNeeded(pol.confirm, (await passkeyCount(me(req))) > 0);
+      if (need === "setup") return res.status(400).json({ error: "Please set up your fingerprint or face unlock first. It takes a few seconds.", code: "passkey_setup" });
+      if (need === "yes") {
+        const c = await confirmPunch(req, (req.body || {}).confirm);
+        if (!c.ok) return res.status(400).json({ error: c.error, code: "passkey_failed" });
+        confirmed = true;
+      }
     }
     const client = await pool.connect();
     try {
@@ -242,10 +264,10 @@ export function attendanceRouter(wrap) {
       if (last && now.min - ord(last.punch_time) < 1) { await client.query("ROLLBACK"); return res.status(429).json({ error: "You just punched. Wait a minute before punching again." }); }
       const direction = last && last.direction === "IN" ? "OUT" : "IN";
       await client.query(
-        `INSERT INTO attendance_punches (employee_id, work_date, punch_time, direction, source, created_by, lat, lng, accuracy_m, site_name, distance_m, outside)
-         VALUES ($1,$2,$3,$4,'web',$5,$6,$7,$8,$9,$10,$11)`,
+        `INSERT INTO attendance_punches (employee_id, work_date, punch_time, direction, source, created_by, lat, lng, accuracy_m, site_name, distance_m, outside, checked_by, confirmed)
+         VALUES ($1,$2,$3,$4,'web',$5,$6,$7,$8,$9,$10,$11,$12,$13)`,
         [emp.id, now.day, now.time, direction, me(req), point ? point.lat : null, point ? point.lng : null, point ? point.accuracy : null,
-          where.siteName || null, where.distance, !!where.outside]);
+          where.siteName || null, where.distance, !!where.outside, where.via || null, confirmed]);
       await client.query("COMMIT");
       res.json({ direction, time: hhmm(now.time), place: where.siteName ? { site: where.siteName, distance: where.distance, outside: !!where.outside } : null,
         note: where.outside ? `Recorded ${farText(where.distance)} from ${where.siteName}. HR can see this.` : "" });
@@ -254,29 +276,30 @@ export function attendanceRouter(wrap) {
 
   /* ---------- HR: clock-in settings and offices (shifts.manage for the whole company) ---------- */
   const settingsOut = async () => {
-    const [pol, sites] = await Promise.all([clockPolicy(), pool.query(
-      "SELECT id, name, lat::float8 AS lat, lng::float8 AS lng, radius_m AS radius FROM clock_in_sites WHERE deleted_at IS NULL ORDER BY name LIMIT 200")]);
+    const [pol, sites] = await Promise.all([clockPolicy(), pool.query(SITES_SQL)]);
     return { ...pol, sites: sites.rows };
   };
   r.get("/api/attendance/clock-in", needAll("shifts.manage"), wrap(async (_req, res) => res.json(await settingsOut())));
+  // "Use this office's internet": the address HR is connected from now (its /64 for IPv6). Shown to HR to add to an office.
+  r.get("/api/attendance/clock-in/my-network", needAll("shifts.manage"), wrap(async (req, res) => res.json({ network: networkOf(req.ip) })));
   r.put("/api/attendance/clock-in", needAll("shifts.manage"), wrap(async (req, res) => {
     const x = readPolicy(req.body);
-    await pool.query(`INSERT INTO clock_in_policy (id, enabled, need_location, allow_outside, updated_by, updated_at) VALUES (1,$1,$2,$3,$4,now())
-      ON CONFLICT (id) DO UPDATE SET enabled=$1, need_location=$2, allow_outside=$3, updated_by=$4, updated_at=now()`,
-      [x.enabled, x.needLocation, x.allowOutside, me(req)]);
-    await audit(pool, `Clock-in settings: ${x.enabled ? "on" : "off"}, location ${x.needLocation ? "needed" : "not needed"}`, me(req));
+    await pool.query(`INSERT INTO clock_in_policy (id, enabled, need_location, allow_outside, confirm_mode, updated_by, updated_at) VALUES (1,$1,$2,$3,$4,$5,now())
+      ON CONFLICT (id) DO UPDATE SET enabled=$1, need_location=$2, allow_outside=$3, confirm_mode=$4, updated_by=$5, updated_at=now()`,
+      [x.enabled, x.needLocation, x.allowOutside, x.confirm, me(req)]);
+    await audit(pool, `Clock-in settings: ${x.enabled ? "on" : "off"}, location ${x.needLocation ? "needed" : "not needed"}, fingerprint or face ${x.confirm}`, me(req));
     res.json(await settingsOut());
   }));
   r.post("/api/attendance/clock-in/sites", needAll("shifts.manage"), wrap(async (req, res) => {
     const { value: v, errors } = readSite(req.body);
     if (Object.keys(errors).length) return res.status(400).json({ errors });
-    const { rows: [x] } = await pool.query("INSERT INTO clock_in_sites (name, lat, lng, radius_m, created_by) VALUES ($1,$2,$3,$4,$5) RETURNING id", [v.name, v.lat, v.lng, v.radius, me(req)]);
+    const { rows: [x] } = await pool.query("INSERT INTO clock_in_sites (name, lat, lng, radius_m, networks, created_by) VALUES ($1,$2,$3,$4,$5,$6) RETURNING id", [v.name, v.lat, v.lng, v.radius, v.networks, me(req)]);
     res.status(201).json({ id: x.id });
   }));
   r.put("/api/attendance/clock-in/sites/:id", needAll("shifts.manage"), wrap(async (req, res) => {
     const { value: v, errors } = readSite(req.body);
     if (Object.keys(errors).length) return res.status(400).json({ errors });
-    const { rowCount } = await pool.query("UPDATE clock_in_sites SET name=$2, lat=$3, lng=$4, radius_m=$5 WHERE id=$1 AND deleted_at IS NULL", [Number(req.params.id) || 0, v.name, v.lat, v.lng, v.radius]);
+    const { rowCount } = await pool.query("UPDATE clock_in_sites SET name=$2, lat=$3, lng=$4, radius_m=$5, networks=$6 WHERE id=$1 AND deleted_at IS NULL", [Number(req.params.id) || 0, v.name, v.lat, v.lng, v.radius, v.networks]);
     if (!rowCount) return res.status(404).json({ error: "This office was not found." });
     res.json({ ok: true });
   }));
@@ -325,7 +348,7 @@ export function attendanceRouter(wrap) {
     if (!L.validDate(date)) return res.status(400).json({ error: "Date must look like 2026-10-21." });
     const [emps, ps, lv, hol, sh] = await Promise.all([
       pool.query("SELECT id, name, work_email, title, start_date, last_day, work_location FROM employees WHERE status <> 'offboarded' ORDER BY name"),
-      pool.query(`SELECT employee_id, to_char(work_date,'YYYY-MM-DD') AS work_date, punch_time, direction, source, note, site_name, distance_m, outside, id FROM attendance_punches WHERE work_date=$1 ORDER BY punch_time, id`, [date]),
+      pool.query(`SELECT employee_id, to_char(work_date,'YYYY-MM-DD') AS work_date, punch_time, direction, source, note, site_name, distance_m, outside, checked_by, confirmed, id FROM attendance_punches WHERE work_date=$1 ORDER BY punch_time, id`, [date]),
       pool.query("SELECT lower(work_email) AS e, half FROM leave_requests WHERE status='approved' AND from_date<=$1 AND to_date>=$1", [date]),
       pool.query("SELECT name FROM holidays WHERE day=$1", [date]),
       shiftsFor(pool, date, date),

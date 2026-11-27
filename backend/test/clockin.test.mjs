@@ -45,3 +45,43 @@ test("nearest office of several", () => {
   const pune = { id: 2, name: "Pune office", lat: 18.5204, lng: 73.8567, radius: 200 };
   assert.equal(nearestSite([office, pune], { lat: 18.521, lng: 73.857 }).site.id, 2);
 });
+
+/* ---------- office internet (optional) and the fingerprint or face check ---------- */
+import { confirmNeeded, networkOf, onNetwork, readNetwork } from "../src/clockin-rules.js";
+test("office internet: addresses and ranges, IPv4 and IPv6, tidied or refused", () => {
+  assert.equal(readNetwork(" 203.0.113.7 "), "203.0.113.7");
+  assert.equal(readNetwork("203.0.113.0/24"), "203.0.113.0/24");
+  assert.equal(readNetwork("2001:DB8:1:2::/64"), "2001:db8:1:2::/64");
+  assert.equal(readNetwork("::ffff:203.0.113.7"), "203.0.113.7");
+  for (const bad of ["", "office wifi", "203.0.113.0/8", "203.0.113.0/33", "1.2.3.4/24/1", "2001:db8::/16"]) assert.equal(readNetwork(bad), null, bad);
+  assert.equal(networkOf("::ffff:203.0.113.7"), "203.0.113.7");
+  assert.equal(networkOf("2001:db8:1:2:aa:bb:cc:dd"), "2001:db8:1:2::/64", "a phone's IPv6 changes inside its /64");
+  assert.equal(onNetwork("203.0.113.99", ["203.0.113.0/24"]), true);
+  assert.equal(onNetwork("::ffff:203.0.113.7", ["203.0.113.7"]), true);
+  assert.equal(onNetwork("2001:db8:1:2::9", ["2001:db8:1:2::/64"]), true);
+  assert.equal(onNetwork("198.51.100.1", ["203.0.113.0/24"]), false);
+  assert.equal(onNetwork("203.0.113.7", []), false);
+});
+test("office: internet addresses are optional; bad ones are named", () => {
+  const base = { name: "HQ", lat: 19, lng: 72, radius: 150 };
+  assert.deepEqual(readSite(base).value.networks, []);
+  assert.deepEqual(readSite({ ...base, networks: "203.0.113.7\n203.0.113.7, 2001:db8::/48" }).value.networks, ["203.0.113.7", "2001:db8::/48"]);
+  assert.ok(readSite({ ...base, networks: "office wifi" }).errors.networks);
+});
+test("punch: from the office internet needs no location and is matched to that office", () => {
+  const wired = { ...office, networks: ["203.0.113.0/24"] };
+  const r = checkPunch(on, [wired], null, "203.0.113.20");
+  assert.equal(r.ok, true); assert.equal(r.siteId, 1); assert.equal(r.via, "network"); assert.equal(r.outside, false);
+  assert.match(checkPunch(on, [wired], null, "198.51.100.1").error, /allow location/, "another network: location as before");
+  assert.equal(checkPunch(on, [office], { lat: 19.0765, lng: 72.8777, accuracy: 20 }, "203.0.113.20").via, "location", "no addresses listed: location only");
+});
+test("fingerprint or face: off, optional (only those who set it up), required (everyone)", () => {
+  assert.equal(readPolicy({}).confirm, "off");
+  assert.equal(readPolicy({ confirm: "required" }).confirm, "required");
+  assert.equal(readPolicy({ confirm: "always" }).confirm, "off");
+  assert.equal(confirmNeeded("off", true), "no");
+  assert.equal(confirmNeeded("optional", false), "no");
+  assert.equal(confirmNeeded("optional", true), "yes");
+  assert.equal(confirmNeeded("required", false), "setup");
+  assert.equal(confirmNeeded("required", true), "yes");
+});

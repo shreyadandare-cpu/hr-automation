@@ -24,6 +24,7 @@ import { celebrationsRouter } from "./celebrations.js";
 import { festivalLookRouter, festivalsRouter } from "./festivals.js";
 import { leaveDigestRouter } from "./leave-digest.js";
 import { attendanceRouter, monthsFor } from "./attendance.js";
+import { passkeysRouter } from "./passkeys.js";
 import { shiftsRouter } from "./shifts.js";
 import { reportBuilderRouter } from "./report-builder.js";
 import { chatRouter } from "./chat.js";
@@ -106,6 +107,7 @@ app.use(toolsRouter(wrap));   // every paid tool (AI and others): seats and mont
 app.use(financeRouter(wrap));   // statutory dues, payroll journal, cost, gratuity, annual tax statements (read only)
 app.use(leaveDigestRouter(wrap));   // HR: preview or test the daily leave digest email
 app.use(attendanceRouter(wrap));
+app.use(passkeysRouter(wrap));   // fingerprint or face unlock to confirm a punch (passkeys.js), when HR asks for it
 app.use(chatRouter(wrap));   // Manage > Slack and Teams (chat.js)
 app.use(reportBuilderRouter(wrap));   // Manage > Report builder (report-builder.js)
 app.use(shiftsRouter(wrap, { monthsFor }));   // shifts, the roster and overtime (shifts.js; attendance reads people's shifts from it)

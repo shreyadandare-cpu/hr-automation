@@ -1431,6 +1431,29 @@ ALTER TABLE attendance_punches ADD COLUMN IF NOT EXISTS site_name TEXT;
 ALTER TABLE attendance_punches ADD COLUMN IF NOT EXISTS distance_m INT;
 ALTER TABLE attendance_punches ADD COLUMN IF NOT EXISTS outside BOOLEAN NOT NULL DEFAULT false;
 
+-- Office internet and fingerprint confirmation (2026-11-27), both optional and off until HR uses them (Shifts > Clock-in).
+-- An office may list its public internet addresses: a punch from one of them needs no location. HR may ask people to confirm a
+-- punch with their phone's fingerprint, face or screen lock (a passkey): "off", "optional" (only people who set it up) or
+-- "required". New columns with defaults and new tables; nothing older changes meaning.
+ALTER TABLE clock_in_sites ADD COLUMN IF NOT EXISTS networks TEXT[] NOT NULL DEFAULT '{}';
+ALTER TABLE clock_in_policy ADD COLUMN IF NOT EXISTS confirm_mode TEXT NOT NULL DEFAULT 'off';
+DO $$ BEGIN
+  ALTER TABLE clock_in_policy ADD CONSTRAINT clock_in_policy_confirm_mode CHECK (confirm_mode IN ('off','optional','required'));
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+-- How a web punch's place was checked ('network' or 'location'; NULL when it was not) and whether it was confirmed with a passkey.
+ALTER TABLE attendance_punches ADD COLUMN IF NOT EXISTS checked_by TEXT;
+ALTER TABLE attendance_punches ADD COLUMN IF NOT EXISTS confirmed BOOLEAN NOT NULL DEFAULT false;
+-- A person's passkeys, one per phone. The public key only (SPKI); the fingerprint never leaves the phone.
+CREATE TABLE IF NOT EXISTS passkeys (
+  id SERIAL PRIMARY KEY, email TEXT NOT NULL, credential_id TEXT NOT NULL UNIQUE, public_key TEXT NOT NULL, alg INT NOT NULL,
+  sign_count BIGINT NOT NULL DEFAULT 0, label TEXT NOT NULL DEFAULT 'My phone', created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  last_used_at TIMESTAMPTZ, deleted_at TIMESTAMPTZ);
+CREATE INDEX IF NOT EXISTS passkeys_email ON passkeys (lower(email)) WHERE deleted_at IS NULL;
+-- One-time challenges for setting up a passkey or confirming a punch, kept five minutes.
+CREATE TABLE IF NOT EXISTS passkey_challenges (
+  challenge TEXT PRIMARY KEY, email TEXT NOT NULL, kind TEXT NOT NULL, expires_at TIMESTAMPTZ NOT NULL);
+CREATE INDEX IF NOT EXISTS passkey_challenges_expires ON passkey_challenges (expires_at);
+
 -- Saved custom reports (2026-11-24): a person's own named report definitions (Manage > Report builder). Running one checks
 -- access again each time; the columns and filters are keys from report-builder-rules.js, never SQL.
 CREATE TABLE IF NOT EXISTS saved_reports (

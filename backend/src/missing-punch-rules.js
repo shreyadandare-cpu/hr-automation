@@ -6,6 +6,8 @@
  *     (casual leave first, loss of pay when none is left; leave.js addPenaltyLeave).
  * Used by attendance.js (the settings), engage.js (corrections) and attendance-reminders.js (reminders and penalties).
  */
+import { byOrd, ord } from "./work-day.js";
+
 export const MISSING_POLICY_DEFAULTS = {
   penaltyOn: false,          // HR switches the penalty on; it changes salaries, so it is never on by itself
   freePerMonth: 2,           // missing punch-outs a month with no penalty
@@ -60,4 +62,25 @@ export function correctionRoute({ date, today, policy, used }) {
   if (back > policy.daysBack) return { refuse: `A correction can be sent up to ${policy.daysBack} day${policy.daysBack === 1 ? "" : "s"} back. For an older day, please ask the HR team to add the punch.` };
   if (used.requests >= policy.requestsPerMonth) return { refuse: `You have sent ${policy.requestsPerMonth} correction${policy.requestsPerMonth === 1 ? "" : "s"} this month, the most allowed. Please ask the HR team to add the punch.` };
   return used.selfFixes < policy.selfFixPerMonth ? { selfFix: true } : { approval: true };
+}
+
+/**
+ * Whether a correction only fills the punch a day is missing (Keka's adjustment), so it may be added without approval.
+ * punches: the day's punches [{ time: "HH:MM", direction, source }]. Office-machine days are read as first in, last out
+ * (attendance.js), so only a day with one punch is missing one; app punches carry their direction.
+ * Returns { fits: true }, { fits: false } when the day is not missing that punch (it may still be sent, for approval; otherwise a
+ * self-fix could stretch a complete day's hours), or { refuse } when the time cannot fix the day at all.
+ */
+export function correctionFits({ punches, time, direction }) {
+  if (direction === "SHIFT" || !punches.length) return { fits: false };
+  const ps = [...punches].sort(byOrd), first = ps[0], last = ps[ps.length - 1], t = ord(time);
+  const device = ps.some((p) => p.source === "device");
+  if (direction === "OUT") {
+    if (!(device ? ps.length === 1 : last.direction === "IN")) return { fits: false };
+    if (t <= ord(last.time)) return { refuse: `The time you left must be after your last punch that day, ${last.time}. Please check it.` };
+    return { fits: true };
+  }
+  if (!(device ? ps.length === 1 : first.direction === "OUT")) return { fits: false };
+  if (t >= ord(first.time)) return { refuse: `The time you arrived must be before your first punch that day, ${first.time}. Please check it.` };
+  return { fits: true };
 }

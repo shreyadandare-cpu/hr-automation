@@ -20,7 +20,6 @@ export const STILL_IN_AFTER_MIN = 30;   // minutes after the shift ends
 export const MISSING_FROM = "10:00";    // the next morning's reminder goes out from this time
 export const LOOK_BACK_DAYS = 3;
 
-const mins = (t) => { const [h, m] = String(t).split(":").map(Number); return h * 60 + m; };
 const addDays = (d, n) => new Date(Date.parse(d + "T00:00:00Z") + n * 86400000).toISOString().slice(0, 10);
 
 /** Whether a finished day's punches end without a punch-out. Office-machine days are read as first in, last out (as attendance.js
@@ -34,22 +33,22 @@ export function missingOutOn(punches) {
 
 /**
  * Which reminders are due now. people: [{ email, punches: [{ date, time, direction, source }] }]; shiftEndOf(email, date) is the
- * shift's end ("18:30"); sent: Set of "email|date|kind"; corrected: Set of "email|date" with a pending or approved correction.
+ * shift's end ("18:30"; a shift ending after midnight, "01:00", ends on the same working day); sent: Set of "email|date|kind"; corrected: Set of "email|date" with a pending or approved correction.
  * Returns [{ email, date, kind, shiftEnd }].
  */
-export function dueReminders({ people, today, nowTime, shiftEndOf, sent, corrected, remindBeforeMin = 10 }) {
+export function dueReminders({ people, today, nowTime, shiftEndOf, sent, corrected, remindBeforeMin = 10, daysBack = LOOK_BACK_DAYS }) {
   const out = [], now = ord(nowTime);   // the working day runs to 5 am (work-day.js), so 01:00 is after the evening
   for (const p of people) {
     const on = (d) => p.punches.filter((x) => x.date === d);
     const todays = on(today).sort(byOrd);
     const end = shiftEndOf(p.email, today);
     const stillIn = todays.length && todays[todays.length - 1].direction === "IN";
-    if (stillIn && remindBeforeMin > 0 && now >= mins(end) - remindBeforeMin && now < mins(end) && !sent.has(`${p.email}|${today}|before-end`))
+    if (stillIn && remindBeforeMin > 0 && now >= ord(end) - remindBeforeMin && now < ord(end) && !sent.has(`${p.email}|${today}|before-end`))
       out.push({ email: p.email, date: today, kind: "before-end", shiftEnd: end });
-    if (todays.length && todays[todays.length - 1].direction === "IN" && now >= mins(end) + STILL_IN_AFTER_MIN && !sent.has(`${p.email}|${today}|still-in`))
+    if (todays.length && todays[todays.length - 1].direction === "IN" && now >= ord(end) + STILL_IN_AFTER_MIN && !sent.has(`${p.email}|${today}|still-in`))
       out.push({ email: p.email, date: today, kind: "still-in", shiftEnd: end });
     if (nowTime < MISSING_FROM || ord(nowTime) >= 1440) continue;   // from 10 am on the new working day
-    for (let i = 1; i <= LOOK_BACK_DAYS; i++) {
+    for (let i = 1; i <= Math.min(LOOK_BACK_DAYS, daysBack); i++) {   // never for a day that can no longer be corrected
       const d = addDays(today, -i);
       if (missingOutOn(on(d)) && !corrected.has(`${p.email}|${d}`) && !sent.has(`${p.email}|${d}|missing-out`))
         out.push({ email: p.email, date: d, kind: "missing-out" });
@@ -82,7 +81,7 @@ export async function runAttendanceReminders(db = pool) {
     people: [...byEmail].map(([email, punches]) => ({ email, punches })), today: now.d, nowTime: now.t,
     shiftEndOf: (email, date) => shiftOn(sh.of(email), sh.fallback, date).end,
     sent: new Set(sentRows.rows.map((x) => `${x.email}|${x.date}|${x.kind}`)), corrected: new Set(reqRows.rows.map((x) => `${x.email}|${x.date}`)),
-    remindBeforeMin: policyOf(pol.rows[0]).remindBeforeMin,
+    remindBeforeMin: policyOf(pol.rows[0]).remindBeforeMin, daysBack: policyOf(pol.rows[0]).daysBack,
   });
   let n = 0;
   for (const r of due) {

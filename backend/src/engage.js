@@ -12,7 +12,7 @@ import { readProof } from "./finance-rules.js";
 import { managerOf, reportsOf } from "./teams.js";
 import { financialYear, readAdvance, readAppLink, readArticle, readAttendanceRequest, readDecision, readGoal, readPoll, readPraise, readLateDecision, readLateRequest, readTaxDeclaration, readTaxDates, readUnlock, tally, windowOpen, joinerUntil, BOTH_REGIMES } from "./engage-rules.js";
 import { form124Pdf } from "./tax-forms.js";
-import { correctionRoute, policyOf as missingPolicyOf } from "./missing-punch-rules.js";
+import { correctionFits, correctionRoute, policyOf as missingPolicyOf } from "./missing-punch-rules.js";
 import { NOW_SQL, ord } from "./work-day.js";
 import { shiftOn } from "./shift-rules.js";
 import { shiftsFor } from "./shifts.js";
@@ -270,8 +270,13 @@ export function engageRouter(wrap) {
       const { rows: [used] } = await client.query(
         `SELECT count(*)::int AS requests, count(*) FILTER (WHERE self_fix)::int AS self_fixes FROM attendance_requests
           WHERE lower(email)=$1 AND kind='missed-punch' AND deleted_at IS NULL AND status <> 'declined' AND date_trunc('month', on_date) = date_trunc('month', $2::date)`, [me(req), date]);
+      // Only a punch the day is really missing is added without approval; anything else (a whole day to the shift, a later
+      // punch-out on a complete day) goes to the manager or HR, and a time that cannot fix the day is refused.
+      const day = (await client.query("SELECT to_char(punch_time,'HH24:MI') AS time, direction, source FROM attendance_punches WHERE employee_id=$1 AND work_date=$2", [emp.id, date])).rows;
+      const fit = correctionFits({ punches: day, time, direction });
+      if (fit.refuse) { await client.query("ROLLBACK"); return res.status(409).json({ error: fit.refuse }); }
       let route = correctionRoute({ date, today: now.d, policy, used: { requests: used.requests, selfFixes: used.self_fixes } });
-      if (route.selfFix && direction === "SHIFT") route = { approval: true };   // regularising a whole day always needs the manager or HR
+      if (route.selfFix && !fit.fits) route = { approval: true };
       if (route.refuse) { await client.query("ROLLBACK"); return res.status(409).json({ error: route.refuse }); }
       const { rows: [row] } = await client.query(
         `INSERT INTO attendance_requests (email, on_date, kind, note, punch_time, direction, self_fix, status, decided_by, decided_at)

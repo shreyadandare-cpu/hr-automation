@@ -47,7 +47,9 @@ test("without the key: refused on the live server, plain only in local developme
 
 test("every salary table and figure is covered", () => {
   assert.deepEqual(Object.values(SEALED).map((x) => x.table).sort(),
-    ["employees", "offboarding_clearances", "offer_letters", "payroll_adjustments", "payroll_audit", "payroll_files", "payroll_items", "payroll_runs", "salary_structures"]);
+    ["advance_recoveries", "advance_requests", "budget_request_events", "budget_requests", "contractor_payments", "employee_advances", "employees", "loan_events", "loans",
+      "offboarding_clearances", "offer_letters", "payroll_adjustments", "payroll_audit", "payroll_files", "payroll_items", "payroll_runs", "reimbursement_documents", "reimbursement_events",
+      "reimbursement_items", "reimbursements", "salary_structures", "tax_declaration_requests", "tax_declarations"]);
   assert.ok(SEALED.clearance_sealed.fields.includes("net_salary") && SEALED.offer_sealed.fields.includes("ctc_annual") && SEALED.offer_sealed.fields.includes("letter_text"));
   assert.ok(SEALED.item_sealed.fields.includes("payable") && SEALED.item_sealed.fields.includes("slip") && SEALED.item_sealed.fields.includes("inputs"));
   assert.ok(SEALED.structure_sealed.fields.includes("earnings") && SEALED.structure_sealed.fields.includes("annual_ctc"));
@@ -71,3 +73,11 @@ test("a monthly gross that can't be decrypted is left empty, so pages about othe
     assert.throws(() => openSealedRow({ item_sealed: v }), "payroll's own tables refuse instead");
   });
 }));
+
+test("old notices and audit lines lose their amounts, and keep their words", async () => {
+  const { redactMoney } = await import("../src/payroll/sealing.js");
+  assert.equal(redactMoney("Payroll for Oct: ₹48,000 net for 3 people"), "Payroll for Oct: [amount removed] net for 3 people");
+  assert.equal(redactMoney("Offer prepared for A: Engineer, CTC 1200000, joining 2026-12-01"), "Offer prepared for A: Engineer, [amount removed], joining 2026-12-01");
+  assert.equal(redactMoney("final salary ₹43,210.50, payout Rs. 500"), "final salary [amount removed], payout [amount removed]");
+  assert.equal(redactMoney("REIM-2026-0001: Approved by HR (3 expenses)"), "REIM-2026-0001: Approved by HR (3 expenses)");
+});

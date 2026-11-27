@@ -1,5 +1,6 @@
 import express from "express";
 import { sealFields } from "./secret-box.js";
+import { recoveriesByAdvance, updateSealed } from "./sealed-rows.js";
 import L from "../../frontend/leave-rules.cjs";
 import { pool } from "./db.js";
 import { can, mayDecide, need, needAll } from "./access.js";
@@ -66,10 +67,13 @@ export function readPlan(b = {}, amount = Infinity) {
  * recalculating a month never deducts twice. Returns Map(lower email → [{ id, reason, amount }]).
  */
 export async function advanceInstalments(db, period) {
-  const { rows } = await db.query(
-    `SELECT a.id, lower(a.work_email) AS email, a.reason, a.amount, a.monthly_recovery, (a.loan_id IS NOT NULL) AS loan,
-            COALESCE((SELECT sum(r.amount) FROM advance_recoveries r WHERE r.advance_id = a.id AND (r.payroll_period IS NULL OR r.payroll_period <> $1)), 0) AS recovered
-       FROM employee_advances a WHERE a.monthly_recovery IS NOT NULL AND a.recover_from <= $1`, [period]);
+  // The amounts are stored sealed (secret-box.js): advances with a plan are picked and recoveries added up here, never in SQL.
+  const { rows: all } = await db.query(
+    `SELECT a.id, lower(a.work_email) AS email, a.reason, a.amount, a.monthly_recovery, a.advance_sealed, (a.loan_id IS NOT NULL) AS loan
+       FROM employee_advances a WHERE a.recover_from IS NOT NULL AND a.recover_from <= $1`, [period]);
+  const rows = all.filter((a) => a.monthly_recovery != null);
+  const recs = rows.length ? (await db.query("SELECT advance_id, payroll_period, amount, recovery_sealed FROM advance_recoveries WHERE advance_id = ANY($1)", [rows.map((a) => a.id)])).rows : [];
+  for (const a of rows) a.recovered = recs.filter((r) => r.advance_id === a.id && r.payroll_period !== period).reduce((n, r) => n + Math.round(Number(r.amount || 0) * 100), 0) / 100;
   const out = new Map();
   for (const a of rows) {
     const left = money(money(a.amount) - money(a.recovered)), amount = Math.min(money(a.monthly_recovery), left);
@@ -82,9 +86,9 @@ export async function advanceInstalments(db, period) {
 
 /** Advances with what has been recovered of each. */
 export async function advancesOf(db, email) {
-  const { rows } = await db.query(
-    `SELECT a.*, COALESCE((SELECT sum(r.amount) FROM advance_recoveries r WHERE r.advance_id = a.id), 0) AS recovered
-     FROM employee_advances a WHERE lower(a.work_email)=$1 ORDER BY a.advance_date, a.id`, [email.toLowerCase()]);
+  const { rows } = await db.query("SELECT a.* FROM employee_advances a WHERE lower(a.work_email)=$1 ORDER BY a.advance_date, a.id", [email.toLowerCase()]);
+  const rec = await recoveriesByAdvance(db, rows.map((a) => a.id));   // added up here: the amounts are sealed
+  for (const a of rows) a.recovered = (rec.get(a.id) || { repaid: 0 }).repaid;
   return rows.map((a) => {
     const amount = money(a.amount), recovered = money(a.recovered), outstanding = money(amount - recovered);
     return { id: a.id, date: a.advance_date, reason: a.reason, amount, recovered, outstanding,
@@ -97,7 +101,7 @@ export async function advancesOf(db, email) {
 /** The person's reimbursement claims, sorted into owed to them, waiting for a decision, and left out. */
 export async function reimbursementsOf(db, email) {
   const { rows } = await db.query(
-    `SELECT id, claim_no, expense_date, description, vendor, category, amount, approved_amount, status
+    `SELECT id, claim_no, expense_date, description, vendor, category, amount, approved_amount, status, reimb_sealed
      FROM reimbursements WHERE lower(work_email)=$1 ORDER BY expense_date NULLS LAST, id`, [email.toLowerCase()]);
   const row = (r, amount, label) => ({ id: r.id, claimNo: r.claim_no, date: r.expense_date, description: r.description || r.vendor || r.category || "Expense claim",
     amount: money(amount), status: r.status, statusLabel: label });
@@ -169,8 +173,9 @@ export async function saveClearance(db, o, hrEmail, c) {
   for (const a of c.advances.outstanding) {
     const take = money(Math.min(a.outstanding, room));
     if (take <= 0) break;
-    await db.query("INSERT INTO advance_recoveries (advance_id, amount, recovered_on, note, recorded_by, offboarding_id) VALUES ($1,$2,$3,$4,$5,$6)",
-      [a.id, take, c.exitDate, "Recovered from the final salary at offboarding", hrEmail, o.id]);
+    const rv = sealFields("recovery_sealed", { amount: take });   // stored sealed (secret-box.js)
+    await db.query("INSERT INTO advance_recoveries (advance_id, amount, recovered_on, note, recorded_by, offboarding_id, recovery_sealed) VALUES ($1,$2,$3,$4,$5,$6,$7)",
+      [a.id, rv.plain.amount, c.exitDate, "Recovered from the final salary at offboarding", hrEmail, o.id, rv.sealed]);
     recovered.push({ advanceId: a.id, reason: a.reason, amount: take });
     room = money(room - take);
   }
@@ -271,9 +276,10 @@ export function clearanceRouter(wrap) {
     if (Object.keys(errors).length) return res.status(400).json({ errors });
     const no = await cannotChange(req, emp.work_email);
     if (no) return res.status(403).json(no);
-    await pool.query("INSERT INTO employee_advances (work_email, advance_date, reason, amount, created_by, monthly_recovery, recover_from) VALUES ($1,$2,$3,$4,$5,$6,$7)",
-      [emp.work_email, day, reason, amount, req.user.email, plan.monthly, plan.fromMonth]);
-    await audit(pool, `Advance recorded: ${inr(amount)} on ${day} (${reason})${plan.monthly ? `, ${inr(plan.monthly)} a month from ${plan.fromMonth}` : ""} by ${req.user.email}`, emp.work_email);
+    const av = sealFields("advance_sealed", { amount, monthly_recovery: plan.monthly });   // stored sealed (secret-box.js)
+    await pool.query("INSERT INTO employee_advances (work_email, advance_date, reason, amount, created_by, monthly_recovery, recover_from, advance_sealed) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)",
+      [emp.work_email, day, reason, av.plain.amount, req.user.email, av.plain.monthly_recovery, plan.fromMonth, av.sealed]);
+    await audit(pool, `Advance recorded on ${day} (${reason})${plan.monthly ? `, with monthly instalments from ${plan.fromMonth}` : ""} by ${req.user.email}`, emp.work_email);   // no amounts in the audit log
     res.status(201).json(await advancesOf(pool, emp.work_email));
   }));
   r.post("/api/advances/:id/recoveries", wrap(async (req, res) => {
@@ -292,9 +298,10 @@ export function clearanceRouter(wrap) {
       if (!day) errors.date = "Enter the date it was recovered.";
       if (String(b.note || "").length > 200) errors.note = "Keep the note under 200 characters.";
       if (Object.keys(errors).length) { await client.query("ROLLBACK"); return res.status(400).json({ errors }); }
-      await client.query("INSERT INTO advance_recoveries (advance_id, amount, recovered_on, note, recorded_by) VALUES ($1,$2,$3,$4,$5)",
-        [a.id, amount, day, String(b.note || "").trim() || null, req.user.email]);
-      await audit(client, `Advance recovery recorded: ${inr(amount)} of "${a.reason}" by ${req.user.email}`, rows[0].work_email);
+      const rv = sealFields("recovery_sealed", { amount });   // stored sealed (secret-box.js)
+      await client.query("INSERT INTO advance_recoveries (advance_id, amount, recovered_on, note, recorded_by, recovery_sealed) VALUES ($1,$2,$3,$4,$5,$6)",
+        [a.id, rv.plain.amount, day, String(b.note || "").trim() || null, req.user.email, rv.sealed]);
+      await audit(client, `Advance recovery recorded against "${a.reason}" by ${req.user.email}`, rows[0].work_email);
       await client.query("COMMIT");
       res.status(201).json(await advancesOf(pool, rows[0].work_email));
     } catch (err) { await client.query("ROLLBACK"); throw err; } finally { client.release(); }
@@ -307,8 +314,8 @@ export function clearanceRouter(wrap) {
     if (no) return res.status(403).json(no);
     const plan = readPlan(req.body || {}, money(rows[0].amount));
     if (Object.keys(plan.errors).length) return res.status(400).json({ errors: plan.errors });
-    await pool.query("UPDATE employee_advances SET monthly_recovery=$2, recover_from=$3 WHERE id=$1", [rows[0].id, plan.monthly, plan.fromMonth]);
-    await audit(pool, plan.monthly ? `Advance instalments set: ${inr(plan.monthly)} a month from ${plan.fromMonth} (${rows[0].reason}) by ${req.user.email}` : `Advance instalments stopped (${rows[0].reason}) by ${req.user.email}`, rows[0].work_email);
+    await updateSealed(pool, "advance_sealed", rows[0].id, { monthly_recovery: plan.monthly }, { recover_from: plan.fromMonth });
+    await audit(pool, plan.monthly ? `Advance instalments set from ${plan.fromMonth} (${rows[0].reason}) by ${req.user.email}` : `Advance instalments stopped (${rows[0].reason}) by ${req.user.email}`, rows[0].work_email);
     res.json(await advancesOf(pool, rows[0].work_email));
   }));
   // A mistaken entry can be removed only while nothing has been recovered against it.
@@ -320,7 +327,7 @@ export function clearanceRouter(wrap) {
     const { rowCount } = await pool.query("SELECT 1 FROM advance_recoveries WHERE advance_id=$1", [rows[0].id]);
     if (rowCount) return res.status(409).json({ error: "Part of this advance has been recovered, so it can't be removed." });
     await pool.query("DELETE FROM employee_advances WHERE id=$1", [rows[0].id]);
-    await audit(pool, `Advance entry removed: ${inr(rows[0].amount)} (${rows[0].reason}) by ${req.user.email}`, rows[0].work_email);
+    await audit(pool, `Advance entry removed (${rows[0].reason}) by ${req.user.email}`, rows[0].work_email);
     res.json(await advancesOf(pool, rows[0].work_email));
   }));
 

@@ -186,3 +186,6 @@ ALTER TABLE payroll_adjustments ALTER COLUMN amount DROP NOT NULL;
 ALTER TABLE payroll_adjustments DROP CONSTRAINT IF EXISTS payroll_adjustments_amount_check;
 ALTER TABLE payroll_adjustments ADD CONSTRAINT payroll_adjustments_amount_check CHECK (amount IS NULL OR amount > 0);
 ALTER TABLE payroll_files ALTER COLUMN totals DROP NOT NULL;
+-- A row number, so the start-up step that encrypts stored figures can address each row (the table is keyed by year and person).
+ALTER TABLE tax_declarations ADD COLUMN IF NOT EXISTS id BIGSERIAL;
+ALTER TABLE tax_declarations ADD COLUMN IF NOT EXISTS decl_sealed TEXT;

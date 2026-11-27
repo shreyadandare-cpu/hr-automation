@@ -104,7 +104,8 @@ kailash@wohlig.com). Decided 2026-11-27.
 - The salary permissions (`SALARY_PERMS` in `access-rules.js`) are held by the owners and nobody else: not super admins, not a
   grant. Never add a way around it (a new role, a new permission that shows salary figures, a report, an export, a notice).
   A new screen or endpoint that shows a salary figure checks one of those permissions.
-- Salary figures are stored encrypted in the database (`secret-box.js`): a new salary column goes into its table's sealed column
+- Salary and every other payment figure (claims, advances, loans, budgets, contractor payments, tax declarations) is stored
+  encrypted in the database (`secret-box.js`): a new salary column goes into its table's sealed column
   (`SEALED`), is written with `sealFields`, and is added up or filtered in the app, never in SQL (the plain columns are empty).
   Never put a salary figure in the audit log, a notification, an email or a server log: those are not encrypted.
 - Personal documents and tax proofs are stored encrypted (`file-crypt.js`). Documents, tax proofs, Form 124 and payslips open

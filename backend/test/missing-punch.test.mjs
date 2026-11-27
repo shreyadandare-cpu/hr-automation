@@ -134,3 +134,34 @@ test("regularising a whole day to the shift needs no time; a time after midnight
   assert.deepEqual(readAttendanceRequest({ date: today, kind: "missed-punch", direction: "OUT", time: "00:30", note: "x" }, today, "01:00").errors, {}, "00:30 is before 01:00 on the same working day");
   assert.ok(readAttendanceRequest({ date: today, kind: "missed-punch", direction: "OUT", time: "02:00", note: "x" }, today, "23:00").errors.time, "02:00 tonight has not come at 23:00");
 });
+
+test("a correction is added without approval only when it fills the punch the day is missing", async () => {
+  const { correctionFits } = await import("../src/missing-punch-rules.js");
+  const W = (time, direction) => ({ time, direction, source: "web" }), D = (time) => ({ time, direction: "IN", source: "device" });
+  // forgot to punch out: a later punch-out fits, one before the last punch cannot fix the day
+  assert.deepEqual(correctionFits({ punches: [W("09:30", "IN")], time: "18:40", direction: "OUT" }), { fits: true });
+  assert.ok(correctionFits({ punches: [W("09:30", "IN"), W("13:00", "OUT"), W("14:00", "IN")], time: "12:00", direction: "OUT" }).refuse);
+  assert.deepEqual(correctionFits({ punches: [W("21:00", "IN")], time: "01:30", direction: "OUT" }), { fits: true }, "after midnight is later");
+  // a complete day: a later punch-out would only stretch the hours, so it needs approval
+  assert.deepEqual(correctionFits({ punches: [D("09:30"), D("18:30")], time: "23:00", direction: "OUT" }), { fits: false });
+  assert.deepEqual(correctionFits({ punches: [W("09:30", "IN"), W("18:30", "OUT")], time: "23:00", direction: "OUT" }), { fits: false });
+  assert.deepEqual(correctionFits({ punches: [D("09:30"), D("18:30")], time: "06:00", direction: "IN" }), { fits: false });
+  // forgot to punch in: an earlier punch-in fits
+  assert.deepEqual(correctionFits({ punches: [D("18:30")], time: "09:30", direction: "IN" }), { fits: true });
+  assert.deepEqual(correctionFits({ punches: [W("18:30", "OUT")], time: "09:30", direction: "IN" }), { fits: true });
+  assert.ok(correctionFits({ punches: [W("18:30", "OUT")], time: "19:00", direction: "IN" }).refuse);
+  // no punches, or the whole day to the shift: always for approval
+  assert.deepEqual(correctionFits({ punches: [], time: "18:30", direction: "OUT" }), { fits: false });
+  assert.deepEqual(correctionFits({ punches: [W("09:30", "IN")], time: null, direction: "SHIFT" }), { fits: false });
+});
+
+test("reminders follow a shift that ends after midnight, and never for a day past the correction window", () => {
+  const people = [{ email: "a@wohlig.com", punches: [P("2026-11-27", "17:00", "IN")] }];
+  const night = { ...base, people, shiftEndOf: () => "01:00" };
+  assert.deepEqual(dueReminders({ ...night, nowTime: "19:00" }), [], "not still in at 7 pm when the shift ends at 1 am");
+  assert.deepEqual(dueReminders({ ...night, nowTime: "00:55", remindBeforeMin: 10 }).map((r) => r.kind), ["before-end"]);
+  assert.deepEqual(dueReminders({ ...night, nowTime: "01:30" }).map((r) => r.kind), ["still-in"]);
+  const old = [{ email: "a@wohlig.com", punches: [P("2026-11-25", "09:30", "IN")] }];
+  assert.deepEqual(dueReminders({ ...base, people: old, nowTime: "10:00" }).map((r) => r.date), ["2026-11-25"]);
+  assert.deepEqual(dueReminders({ ...base, people: old, nowTime: "10:00", daysBack: 1 }), [], "2 days back cannot be corrected any more");
+});

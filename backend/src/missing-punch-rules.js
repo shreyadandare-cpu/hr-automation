@@ -64,6 +64,14 @@ export function correctionRoute({ date, today, policy, used }) {
   return used.selfFixes < policy.selfFixPerMonth ? { selfFix: true } : { approval: true };
 }
 
+/** Whether a finished day's punches end without a punch-out. Office-machine days are read as first in, last out (as attendance.js
+    does), so one punch is missing its out; app punches carry their direction, so a last IN is missing its out. */
+export function missingOutOn(punches) {
+  if (!punches.length) return false;
+  if (punches.some((p) => p.source === "device")) return punches.length < 2;
+  return [...punches].sort(byOrd).pop().direction === "IN";
+}
+
 /**
  * Whether a correction only fills the punch a day is missing (Keka's adjustment), so it may be added without approval.
  * punches: the day's punches [{ time: "HH:MM", direction, source }]. Office-machine days are read as first in, last out

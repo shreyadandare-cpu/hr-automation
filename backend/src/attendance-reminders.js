@@ -10,7 +10,7 @@
 import { pool } from "./db.js";
 import { monthsFor } from "./attendance.js";
 import { addPenaltyLeave } from "./leave.js";
-import { penalisedDays, policyOf } from "./missing-punch-rules.js";
+import { missingOutOn, penalisedDays, policyOf } from "./missing-punch-rules.js";
 import { NOW_SQL, byOrd, ord } from "./work-day.js";
 import { notify } from "./notify.js";
 import { shiftOn } from "./shift-rules.js";
@@ -22,14 +22,7 @@ export const LOOK_BACK_DAYS = 3;
 
 const addDays = (d, n) => new Date(Date.parse(d + "T00:00:00Z") + n * 86400000).toISOString().slice(0, 10);
 
-/** Whether a finished day's punches end without a punch-out. Office-machine days are read as first in, last out (as attendance.js
-    does), so one punch is missing its out; app punches carry their direction, so a last IN is missing its out. */
-export function missingOutOn(punches) {
-  if (!punches.length) return false;
-  if (punches.some((p) => p.source === "device")) return punches.length < 2;
-  const last = [...punches].sort(byOrd).pop();
-  return last.direction === "IN";
-}
+export { missingOutOn };   // the rule lives in missing-punch-rules.js
 
 /**
  * Which reminders are due now. people: [{ email, punches: [{ date, time, direction, source }] }]; shiftEndOf(email, date) is the

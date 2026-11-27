@@ -9,6 +9,8 @@ import { shiftsFor } from "./shifts.js";
 import { checkPunch, farText, readPoint, readPolicy, readSite } from "./clockin-rules.js";
 import { policyOf, readMissingPolicy } from "./missing-punch-rules.js";
 import { NOW_SQL, byOrd, late, ord, ordSql } from "./work-day.js";
+import { removePenaltyIfFixed } from "./leave.js";
+import { notify } from "./notify.js";
 
 /* A reporting manager sees their own team (the people HR set under them); there is no separate manager login role. */
 const teamEmails = async (email) => Object.entries(await managerMap(pool)).filter(([, rm]) => rm === email).map(([e]) => e);
@@ -46,11 +48,13 @@ function worked(punches, until) {
 
 /** The office machine does not say IN or OUT, so the stored direction is only a guess made as punches arrive. For a finished day the people's habit
     is clearer: the first punch is the way in and the last punch is the way out. Hours are first to last. Punches in between (stepping out to eat,
-    for example) are not counted as a break and do not reduce the hours. */
+    for example) are not counted as a break and do not reduce the hours. An odd number of punches (three, five) means one in the middle has no
+    matching return, as Keka's missing swipe: the day is flagged for a look (`missingSwipe`), its hours still run first to last, and it is
+    never penalised. */
 function deriveDay(ps) {
   const n = ps.length;
   const punches = ps.map((p, i) => ({ ...p, direction: i === 0 ? "IN" : i === n - 1 ? "OUT" : i % 2 === 1 ? "OUT" : "IN" }));
-  return { punches, minutes: n < 2 ? 0 : Math.max(0, ord(ps[n - 1].time) - ord(ps[0].time)), missingOut: n < 2, missingSwipe: false };
+  return { punches, minutes: n < 2 ? 0 : Math.max(0, ord(ps[n - 1].time) - ord(ps[0].time)), missingOut: n < 2, missingSwipe: n >= 3 && n % 2 === 1 };
 }
 
 /** One person's days for a month. Past days get a status; days before they joined and in the future get none. `shiftFor(date)` is the
@@ -349,9 +353,10 @@ export function attendanceRouter(wrap) {
       const marks = status ? dayMarks(shift, { firstIn, lastOut: forgot ? null : late(lastOut), minutes: forgot ? 0 : w.minutes, workingDay: !off, finished: date < now.day || now.min >= shiftEnd }) : dayMarks(shift);
       return { no: e.emp_no || "", email: e.work_email, name: e.name, title: e.title, status, firstIn, lastOut, shift: { id: shift.id, name: shift.name, start: shift.start, end: shift.end, isDefault: !!shift.isDefault }, ...marks,
         lastPunch: mine.length ? mine[mine.length - 1].time : null, punchCount: mine.length,
-        minutes: w.minutes, missingOut: w.missingOut && date !== now.day && !forgot, forgotOut: forgot, in: mine.length > 0 && mine[mine.length - 1].direction === "IN" };
+        minutes: w.minutes, missingOut: w.missingOut && date !== now.day && !forgot, forgotOut: forgot, missingSwipe: !!(dd && dd.missingSwipe), in: mine.length > 0 && mine[mine.length - 1].direction === "IN" };
     });
-    res.json({ date, today: now.day, off: L.isWeekend(date) ? "Weekend" : holidayOff, holiday: hol.rows[0] ? hol.rows[0].name : null, people });
+    // The day's heading follows the company's default shift; each person's own weekly off is on their row.
+    res.json({ date, today: now.day, off: isWeeklyOff(sh.fallback, date) ? "Weekend" : holidayOff, holiday: hol.rows[0] ? hol.rows[0].name : null, people });
   }));
 
   // One month for everyone, one row per person (attendance.edit for the whole company). ?format=csv downloads it as a spreadsheet file.
@@ -407,9 +412,18 @@ export function attendanceRouter(wrap) {
     if (!emp) return res.status(404).json({ error: "Employee not found." });
     if (emp.work_email.toLowerCase() === me(req)) return res.status(403).json({ error: "Your own attendance is corrected by someone else. Please send an attendance request." });
     if (!(await can(req, "attendance.edit", emp.work_email))) return res.status(403).json({ error: "You do not have access to change this person's attendance." });
-    await pool.query("INSERT INTO attendance_punches (employee_id, work_date, punch_time, direction, source, note, created_by) VALUES ($1,$2,$3,$4,'hr',$5,$6)",
-      [emp.id, date, time, direction, String(note).trim().slice(0, 300), me(req)]);
-    await audit(pool, `Attendance: ${direction} at ${time} added for ${date} by ${me(req)} (${String(note).trim().slice(0, 100)})`, emp.work_email);
+    // A day that was penalised for a missing punch-out and now has it: the penalty is undone in the same step (leave.js).
+    const client = await pool.connect();
+    let undone = null;
+    try {
+      await client.query("BEGIN");
+      await client.query("INSERT INTO attendance_punches (employee_id, work_date, punch_time, direction, source, note, created_by) VALUES ($1,$2,$3,$4,'hr',$5,$6)",
+        [emp.id, date, time, direction, String(note).trim().slice(0, 300), me(req)]);
+      await audit(client, `Attendance: ${direction} at ${time} added for ${date} by ${me(req)} (${String(note).trim().slice(0, 100)})`, emp.work_email);
+      undone = await removePenaltyIfFixed(client, emp.work_email, date, me(req));
+      await client.query("COMMIT");
+    } catch (err) { await client.query("ROLLBACK"); throw err; } finally { client.release(); }
+    if (undone) notify(emp.work_email, { title: "Penalty removed", body: `The punch-out for ${date} was added, so the penalty for it was removed and the leave given back.`, link: "/app/my-attendance" }).catch(() => {});
     res.status(201).json(await monthOf(emp, date.slice(0, 7)));
   }));
 

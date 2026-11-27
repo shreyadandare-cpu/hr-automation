@@ -1,6 +1,6 @@
 import express from "express";
 import { pool, payPool } from "./db.js";
-import { canAll } from "./access.js";
+import { canAll, mayDecideOwn } from "./access.js";
 import { notify } from "./notify.js";
 import { money, plan, addMonths, progress, MAX_AMOUNT, MAX_MONTHS } from "./loans-rules.js";
 import { structuresFor } from "./payroll/store.js";
@@ -221,7 +221,7 @@ loansRouter.post("/:id/activate", wrap(async (req, res) => {
   const out = await tx(async (c) => {
     const { rows: [l] } = await c.query("SELECT * FROM loans WHERE id = $1 FOR UPDATE", [Number(req.params.id) || 0]);
     if (!l) return { rollback: true, status: 404, error: "Loan not found." };
-    if (l.work_email.toLowerCase() === me(req)) return { rollback: true, status: 403, error: "You cannot decide your own loan request. Another HR user needs to do it." };
+    if (l.work_email.toLowerCase() === me(req) && !mayDecideOwn(req, "advances.approve")) return { rollback: true, status: 403, error: "You cannot decide your own loan request. Another salary owner needs to do it." };
     if (l.status !== "pending") return { rollback: true, status: 409, error: "This request has already been decided." };
     const email = l.work_email.toLowerCase(), amount = money(b.amount), months = Number(b.months), rv = await review(email, amount, months, b.firstMonth);
     if (rv.blocked) return { rollback: true, status: 400, error: rv.blocked, errors: { months: "Choose a longer period or a smaller amount." } };
@@ -251,7 +251,7 @@ loansRouter.post("/:id/reject", wrap(async (req, res) => {
   const out = await tx(async (c) => {
     const { rows: [l] } = await c.query("SELECT * FROM loans WHERE id = $1 FOR UPDATE", [Number(req.params.id) || 0]);
     if (!l) return { rollback: true, status: 404, error: "Loan not found." };
-    if (l.work_email.toLowerCase() === me(req)) return { rollback: true, status: 403, error: "You cannot decide your own loan request. Another HR user needs to do it." };
+    if (l.work_email.toLowerCase() === me(req) && !mayDecideOwn(req, "advances.approve")) return { rollback: true, status: 403, error: "You cannot decide your own loan request. Another salary owner needs to do it." };
     if (l.status !== "pending") return { rollback: true, status: 409, error: "This request has already been decided." };
     await c.query("UPDATE loans SET status = 'rejected', rejection_reason = $2, decided_by = $3, decided_at = now() WHERE id = $1", [l.id, reason, me(req)]);
     await log(c, l.id, me(req), "Loan rejected", { reason });

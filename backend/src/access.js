@@ -13,7 +13,7 @@
  * when a manager changes.
  */
 import { pool } from "./db.js";
-import { FIRST_SUPER_ADMINS, PRESETS, decide, grantsFromRoles, SALARY_PERMS, isSalaryOwner, mayDecideOn, salaryOwners, salaryRule, scopeFor, subtree } from "./access-rules.js";
+import { FIRST_SUPER_ADMINS, PRESETS, decide, decidesOwn, grantsFromRoles, SALARY_PERMS, isSalaryOwner, mayDecideOn, salaryOwners, salaryRule, scopeFor, subtree } from "./access-rules.js";
 import { createGoogleUser } from "./auth.js";
 import { isCompanyEmail } from "./validate.js";
 
@@ -43,6 +43,8 @@ export const isSuper = (req) => !!(req.access && req.access.superAdmin);
 export async function can(req, perm, target) { return decide(req.access, perm, target ?? null, await treeFn()); }
 export async function scopeOf(req, perm) { return scopeFor(req.access, perm, await treeFn()); }
 export async function mayDecide(req, perm, owner) { return mayDecideOn(req.access, perm, owner, await treeFn()); }
+/** Whether the caller may decide a request of their own for `perm` (the sole salary owner only; access-rules.js). */
+export const mayDecideOwn = (req, perm) => decidesOwn(req.access, perm);
 /** Holds `perm` for the whole company (a super admin, or a company grant): for company-level actions inside a team-able permission. */
 export const canAll = (req, perm) => {
   if (!req.access) return false;

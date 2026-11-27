@@ -3,7 +3,7 @@ import { sealFields } from "./secret-box.js";
 import { recoveriesByAdvance, updateSealed } from "./sealed-rows.js";
 import L from "../../frontend/leave-rules.cjs";
 import { pool } from "./db.js";
-import { can, mayDecide, need, needAll } from "./access.js";
+import { can, mayDecide, need, needAll, mayDecideOwn } from "./access.js";
 import { payWindow } from "./payroll-calc.js";
 
 /*
@@ -217,7 +217,7 @@ export function clearanceRouter(wrap) {
   const NO_ACCESS = { error: "You do not have access to this." };
   const OWN = { error: "Someone else has to record advances of your own." };
   /** null when the caller may change this person's advances, else the error to send. */
-  const cannotChange = async (req, email) => (String(email).toLowerCase() === req.user.email.toLowerCase() ? OWN
+  const cannotChange = async (req, email) => (String(email).toLowerCase() === req.user.email.toLowerCase() && !mayDecideOwn(req, "advances.approve") ? OWN
     : (await mayDecide(req, "advances.approve", email)) ? null : NO_ACCESS);
 
   const offboarding = async (req) => (await pool.query("SELECT * FROM offboardings WHERE id=$1", [Number(req.params.id) || 0])).rows[0];

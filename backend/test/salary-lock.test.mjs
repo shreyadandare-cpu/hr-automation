@@ -95,3 +95,23 @@ test("uploaded PDFs and photos leave as PDFs locked with the document password",
   await assert.rejects(lockedPdfOf(plainPdf, "application/pdf", null), "never sent without a password");
   assert.equal(pdfName("Passport scan.JPG"), "Passport scan.pdf");
 });
+
+test("every payment is decided by the salary owner alone, who decides their own when they are the only one", async () => {
+  const { decide, decidesOwn, mayDecideOn, salaryOwners } = await import("../src/access-rules.js");
+  const before = process.env.SALARY_OWNERS;
+  try {
+    delete process.env.SALARY_OWNERS;
+    const treeOf = () => new Set(["raj@wohlig.com"]);
+    const kailash = { email: "kailash@wohlig.com", grants: [] }, manager = { email: "m@wohlig.com", grants: ["expenses.approve", "advances.approve", "budgets.approve"].map((permission) => ({ permission, scope: "tree" })) };
+    for (const p of ["expenses.approve", "advances.approve", "budgets.approve", "finance.contractors"]) {
+      assert.equal(decide(kailash, p, "raj@wohlig.com", treeOf), true, p);
+      assert.equal(decide(manager, p, "raj@wohlig.com", treeOf), false, `a manager no longer decides ${p}`);
+      assert.equal(decide({ email: "s@wohlig.com", superAdmin: true }, p, "raj@wohlig.com", treeOf), false, `nor a super admin ${p}`);
+    }
+    assert.equal(mayDecideOn(kailash, "expenses.approve", "kailash@wohlig.com", treeOf), true, "the only owner decides their own claim");
+    assert.equal(mayDecideOn(kailash, "leave.approve", "kailash@wohlig.com", treeOf), false, "but nothing else of their own");
+    process.env.SALARY_OWNERS = "kailash@wohlig.com,b@wohlig.com";
+    assert.equal(salaryOwners().length, 2);
+    assert.equal(decidesOwn(kailash, "expenses.approve"), false, "with two owners, the other one decides");
+  } finally { if (before === undefined) delete process.env.SALARY_OWNERS; else process.env.SALARY_OWNERS = before; }
+});

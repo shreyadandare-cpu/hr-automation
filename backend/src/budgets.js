@@ -1,6 +1,6 @@
 import express from "express";
 import { pool } from "./db.js";
-import { can, mayDecide, need, scopeOf } from "./access.js";
+import { can, mayDecide, need, scopeOf, mayDecideOwn } from "./access.js";
 import { notify } from "./notify.js";
 import { openJson, sealFields } from "./secret-box.js";
 import { updateSealed } from "./sealed-rows.js";
@@ -73,7 +73,7 @@ const toApi = (b) => {
 /** Your own request, or one of someone you hold budgets.approve for. */
 const canSee = async (req, b) => !!b && (b.work_email.toLowerCase() === me(req) || await can(req, "budgets.approve", b.work_email));
 /** Why the caller may not decide this request, or null when they may. */
-const cannotDecide = async (req, b) => (b.work_email.toLowerCase() === me(req) ? "Someone else has to decide your own budget request."
+const cannotDecide = async (req, b) => (b.work_email.toLowerCase() === me(req) && !mayDecideOwn(req, "budgets.approve") ? "Someone else has to decide your own budget request."
   : !(await mayDecide(req, "budgets.approve", b.work_email)) ? "You do not have access to this." : null);
 
 export const budgetsRouter = express.Router();

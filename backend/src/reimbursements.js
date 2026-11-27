@@ -3,7 +3,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import express from "express";
 import { pool } from "./db.js";
-import { can, canAll, mayDecide, need, needAll, scopeOf } from "./access.js";
+import { can, canAll, mayDecide, need, needAll, scopeOf, mayDecideOwn } from "./access.js";
 import { UPLOAD_DIR } from "./documents.js";
 import { MAX_BYTES, checkFile, readInvoice } from "./extract.js";
 import { notify } from "./notify.js";
@@ -280,8 +280,9 @@ const canSee = async (req, c) => !!c && (c.work_email.toLowerCase() === me(req) 
   || (c.status !== "draft" && await can(req, "expenses.approve", c.work_email)));
 /** Why the caller may not decide this claim, or null when they may: never your own claim, nor one you filed for someone. */
 async function cannotDecide(req, c) {
-  if (c.work_email.toLowerCase() === me(req)) return "Someone else has to decide your own claim.";
-  if (c.created_by === me(req)) return "You filed this claim, so someone else has to decide it.";
+  const own = mayDecideOwn(req, "expenses.approve");   // the sole salary owner decides their own (access-rules.js)
+  if (c.work_email.toLowerCase() === me(req) && !own) return "Someone else has to decide your own claim.";
+  if (c.created_by === me(req) && !own) return "You filed this claim, so someone else has to decide it.";
   return (await mayDecide(req, "expenses.approve", c.work_email)) ? null : "You do not have access to this.";
 }
 

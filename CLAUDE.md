@@ -98,8 +98,9 @@ give access per person on Company > Access, for the whole company or a reporting
 
 ## Salaries: the salary owner only (always)
 
-Salaries, payslips, bank details, tax and finance reports are visible only to the salary owners (`SALARY_OWNERS`,
-kailash@wohlig.com). Decided 2026-11-27.
+Salaries, payslips, bank details, tax and finance reports, and every other payment (expense claims, advances and loans,
+budgets, contractor payments) are decided and seen only by the salary owners (`SALARY_OWNERS`, kailash@wohlig.com); each
+person still sees and files their own. Decided 2026-11-27.
 
 - The salary permissions (`SALARY_PERMS` in `access-rules.js`) are held by the owners and nobody else: not super admins, not a
   grant. Never add a way around it (a new role, a new permission that shows salary figures, a report, an export, a notice).

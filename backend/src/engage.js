@@ -6,7 +6,7 @@ import { UPLOAD_DIR } from "./documents.js";
 import { MAX_BYTES, checkFile } from "./extract.js";
 import { pool } from "./db.js";
 import { requireAuth, unlessHidden } from "./auth.js";
-import { can, canAll, mayDecide, need, scopeOf, treeOf } from "./access.js";
+import { can, canAll, mayDecide, need, scopeOf, treeOf, mayDecideOwn } from "./access.js";
 import { hrEmails, notify } from "./notify.js";
 import { readProof } from "./finance-rules.js";
 import { managerOf, reportsOf } from "./teams.js";
@@ -243,7 +243,8 @@ export function engageRouter(wrap) {
     const { rows } = await pool.query(`SELECT ${t.cols} FROM ${t.table} WHERE deleted_at IS NULL ${!all ? "AND lower(email) = $2" : scope ? "AND lower(email) = ANY($2)" : ""} ORDER BY ${t.order} LIMIT $1`,
       !all ? [100, me(req)] : scope ? [100, [...scope]] : [100]);
     const person = await namesFor(rows.map((x) => x.email));
-    const decides = (e) => holds && String(e).toLowerCase() !== me(req) && (!scope || scope.has(String(e).toLowerCase()));   // never your own
+    const ownOk = mayDecideOwn(req, t.perm);   // the sole salary owner decides their own advance requests (access-rules.js)
+    const decides = (e) => holds && (String(e).toLowerCase() !== me(req) || ownOk) && (!scope || scope.has(String(e).toLowerCase()));   // never your own, but for that
     res.json({ canDecide: holds, requests: rows.map((x) => ({ id: x.id, person: person(x.email), status: x.status, decidedAt: x.decided_at, decisionNote: x.decision_note, createdAt: x.created_at,
       canDecide: decides(x.email), ...t.out(x) })) });
   }));

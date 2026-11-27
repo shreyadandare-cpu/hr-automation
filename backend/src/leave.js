@@ -151,7 +151,7 @@ export function leaveRouter(wrap) {
     const where = scope ? "WHERE lower(work_email) = ANY($1)" : "";
     const args = scope ? [scope] : [];
     const approvers = await approverMap(pool, scope);
-    const payScope = await scopeOf(req, "payroll.view");   // salaries: payroll.view for the people in scope, or your own
+    const payScope = await scopeOf(req, "payroll.view");   // salaries: payroll.view for the people in scope, or your own; never through an access key (access-keys.js)
     // Requests this person may decide show as theirs: everyone below them, the teams they stand in for, and for a super admin everyone.
     const below = await treeOf(self(req)), boss = isSuper(req);
     for (const [who, a] of Object.entries(approvers)) if (who !== self(req) && (boss || below.has(who) || covers.includes(a))) approvers[who] = self(req);
@@ -168,7 +168,7 @@ export function leaveRouter(wrap) {
       compOffs: comps.rows.map(toCompOff),
       holidays: hols.rows,
       pay: pay.rows.map((p) => ({ email: p.work_email, start: p.start_date,
-        monthlyGross: !payScope || payScope.has(p.work_email.toLowerCase()) || p.work_email.toLowerCase() === self(req) ? num(p.monthly_gross) : null, casualOpening: num(p.casual_opening), openings: p.leave_opening || null })),
+        monthlyGross: !req.access.viaKey && (!payScope || payScope.has(p.work_email.toLowerCase()) || p.work_email.toLowerCase() === self(req)) ? num(p.monthly_gross) : null, casualOpening: num(p.casual_opening), openings: p.leave_opening || null })),
       approvers,
       hrLeaveApprovers: hrLeaveApprovers(),
     });

@@ -26,6 +26,11 @@ server {
   # Links in automatic emails (leave, payslips, work email) are /l/<token>; the backend checks the token and redirects to the page.
   location /l/      { proxy_pass ${BACKEND_URL}; }
   location /p/      { proxy_pass ${BACKEND_URL}; }
+  # The Wohlig One connector for Claude: the MCP endpoint and its OAuth sign-in (backend oauth.js, mcp-server.js). No buffering, so
+  # answers stream back to Claude as they come.
+  location = /mcp   { proxy_pass ${BACKEND_URL}; proxy_buffering off; }
+  location /oauth/  { proxy_pass ${BACKEND_URL}; }
+  location /.well-known/oauth- { proxy_pass ${BACKEND_URL}; }
 
   # Signed in? The backend answers 200 or 401; the app pages and /login use it like the backend did on its own.
   location = /_auth {
@@ -47,6 +52,7 @@ server {
     try_files $uri =404;
   }
   location /app/ {
+    add_header X-Frame-Options SAMEORIGIN always;   # no page of the app (the connector's Allow page included) inside another site's frame
     auth_request /_auth;
     error_page 401 = @app_signin;
     try_files /app/index.html =404;

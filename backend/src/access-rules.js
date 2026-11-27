@@ -81,9 +81,11 @@ export function salaryOwners() {
 }
 export const isSalaryOwner = (email) => salaryOwners().includes(lc(email));
 /** For a salary permission: true or false, decided by the owner list alone. For any other permission: null (the usual rules). */
+// A request made with a personal access key (the Wohlig One MCP, access-keys.js) never holds a salary permission, even for a
+// salary owner: what an access key reads goes to an AI assistant, and Claude never reads salaries (CLAUDE.md).
 export function salaryRule(access, perm) {
   if (!SALARY_PERMS.has(perm)) return null;
-  return !!access && isSalaryOwner(access.email);
+  return !!access && !access.viaKey && isSalaryOwner(access.email);
 }
 
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -195,7 +197,7 @@ export function grantsFromRoles(user, { reviewers = [], financeViewers = [] } = 
 /** What /api/me sends: each permission held, as "company" or the list of team roots. Super admins hold everything for the company. */
 export function summary(access) {
   if (!access) return {};
-  const owner = isSalaryOwner(access.email);
+  const owner = !access.viaKey && isSalaryOwner(access.email);
   const salary = owner ? Object.fromEntries([...SALARY_PERMS].map((k) => [k, "company"])) : {};
   if (access.superAdmin) return { ...Object.fromEntries(PERMISSIONS.filter((p) => !SALARY_PERMS.has(p.key)).map((p) => [p.key, "company"])), ...salary };
   const out = { ...salary };

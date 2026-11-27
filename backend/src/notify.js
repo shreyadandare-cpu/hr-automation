@@ -72,8 +72,10 @@ export const notificationsRouter = express.Router();
 const wrap = (fn) => (req, res, next) => fn(req, res, next).catch(next);
 notificationsRouter.get("/", wrap(async (req, res) => {
   const me = req.user.email.toLowerCase();
+  // Through an access key (the Wohlig One MCP) notices about pay are left out: their notes can carry what a salary owner wrote.
+  const payNotices = req.access && req.access.viaKey ? " AND COALESCE(link,'') !~* '^/app/(payroll|payslips|reimbursements|loans|budgets|tax|my-finances|finance-reports|hr-requests)|^(claim|budget):|advance'" : "";
   const { rows } = await pool.query(
-    "SELECT id, title, body, link, created_at, read_at FROM notifications WHERE lower(recipient)=$1 ORDER BY id DESC LIMIT 30", [me]);
+    `SELECT id, title, body, link, created_at, read_at FROM notifications WHERE lower(recipient)=$1${payNotices} ORDER BY id DESC LIMIT 30`, [me]);
   const { rows: n } = await pool.query("SELECT count(*)::int AS n FROM notifications WHERE lower(recipient)=$1 AND read_at IS NULL", [me]);
   res.json({ unread: n[0].n, items: rows.map((r) => ({ id: r.id, title: r.title, body: r.body, link: r.link, at: r.created_at, read: !!r.read_at })) });
 }));

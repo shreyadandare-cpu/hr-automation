@@ -2,6 +2,7 @@ import crypto from "node:crypto";
 import { promisify } from "node:util";
 import { pool } from "./db.js";
 import { isCompanyEmail, COMPANY_EMAIL_MESSAGE } from "./validate.js";
+import { hashKey, keyFromHeader } from "./access-keys-rules.js";
 
 const scrypt = promisify(crypto.scrypt);
 const SESSION_HOURS = 12;
@@ -127,28 +128,38 @@ export async function endSession(req, res) {
 }
 
 /**
- * Puts { email, role, it_admin } on req.user and { email, superAdmin, grants } on req.access when the cookie holds a live
- * session, in one query. A blocked login, or someone who is leaving or has left, gets no session.
+ * Puts { email, role, it_admin } on req.user and { email, superAdmin, grants, viaKey } on req.access when the cookie holds a live
+ * session, or the Authorization header a live personal access key, in one query. A blocked login, or someone who is leaving or has left, gets no session.
  * Super admins count as HR for the checks not yet moved to access.js (role "hr"), so they have every right from the start.
  */
 export async function loadSession(req, _res, next) {
   try {
-    const t = tokenOf(req);
-    if (t) {
+    // The Wohlig One MCP sends a personal access key (access-keys.js). A key, when sent, wins over any cookie, so keyGuard
+    // always applies to a request that carries one.
+    const key = keyFromHeader(req.headers.authorization);
+    const t = key ? null : tokenOf(req);
+    if (t || key) {
+      const from = t
+        ? "FROM sessions s JOIN users u ON lower(u.email)=lower(s.email) WHERE s.token_hash=$1 AND s.expires_at > now()"
+        : "FROM access_keys s JOIN users u ON lower(u.email)=lower(s.email) WHERE s.key_hash=$1 AND s.revoked_at IS NULL AND s.expires_at > now()";
       const { rows } = await pool.query(
-        `SELECT u.email, u.role, u.it_admin, u.is_super_admin, u.hidden_features, s.created_at AS signed_in_at,
+        `SELECT u.email, u.role, u.it_admin, u.is_super_admin, u.hidden_features, s.created_at AS signed_in_at, ${key ? "s.id AS key_id, s.name AS key_name, s.last_used_at" : "NULL AS key_id"},
                 COALESCE((SELECT json_agg(json_build_object('permission', g.permission, 'scope', g.scope, 'scope_root_email', g.scope_root_email))
                             FROM access_grants g WHERE lower(g.email)=lower(u.email) AND g.revoked_at IS NULL
                              AND (g.expires_at IS NULL OR g.expires_at >= (now() AT TIME ZONE 'Asia/Kolkata')::date)), '[]') AS grants
-           FROM sessions s JOIN users u ON lower(u.email)=lower(s.email)
-          WHERE s.token_hash=$1 AND s.expires_at > now() AND NOT u.login_blocked
-            AND NOT EXISTS (SELECT 1 FROM employees e WHERE lower(e.work_email)=lower(u.email) AND e.status IN ('offboarding','offboarded'))`, [sha(t)]);
+           ${from} AND NOT u.login_blocked
+            AND NOT EXISTS (SELECT 1 FROM employees e WHERE lower(e.work_email)=lower(u.email) AND e.status IN ('offboarding','offboarded'))`, [t ? sha(t) : hashKey(key)]);
       // A session only counts for a company address, whatever else is in the table.
       const u = rows[0];
       if (u && isCompanyEmail(u.email)) {
         req.user = { email: u.email, role: u.is_super_admin ? "hr" : u.role, it_admin: u.it_admin || u.is_super_admin, stored_role: u.role, hidden: u.hidden_features || [] };
-        req.access = { email: u.email.toLowerCase(), superAdmin: !!u.is_super_admin, grants: u.grants || [] };
-        req.session = { key: sha(t), signedInAt: u.signed_in_at ? new Date(u.signed_in_at) : null };   // this sign-in (doc-password.js)
+        req.access = { email: u.email.toLowerCase(), superAdmin: !!u.is_super_admin, grants: u.grants || [], viaKey: !!key };
+        if (key) {
+          // No signedInAt: a key is never a fresh sign-in (doc-password.js). The key's last use is noted at most every five minutes.
+          req.accessKey = { id: u.key_id, name: u.key_name };
+          if (!u.last_used_at || Date.now() - new Date(u.last_used_at).getTime() > 5 * 60_000)
+            pool.query("UPDATE access_keys SET last_used_at=now() WHERE id=$1", [u.key_id]).catch(() => {});
+        } else req.session = { key: sha(t), signedInAt: u.signed_in_at ? new Date(u.signed_in_at) : null };   // this sign-in (doc-password.js)
       }
     }
     next();
@@ -159,6 +170,13 @@ export async function loadSession(req, _res, next) {
 export async function endOtherSessions(req, email) {
   const t = tokenOf(req);
   await pool.query("DELETE FROM sessions WHERE lower(email)=lower($1) AND token_hash <> $2", [email, t ? sha(t) : ""]);
+  await revokeKeysOf(email);   // a new password also ends every access key (access-keys.js), so a lost key dies with the old password
+}
+
+/** Revokes every live access key and connected app (oauth.js) of a login: after a password change or reset. */
+export async function revokeKeysOf(email) {
+  await pool.query("UPDATE access_keys SET revoked_at=now() WHERE lower(email)=lower($1) AND revoked_at IS NULL", [email]);
+  await pool.query("UPDATE oauth_grants SET revoked_at=now() WHERE lower(email)=lower($1) AND revoked_at IS NULL", [email]);
 }
 
 /** Refuses a page HR has hidden for this person (Users > Manage). Put it after requireAuth. */

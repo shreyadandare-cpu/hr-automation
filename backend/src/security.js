@@ -20,8 +20,12 @@ function allowedOrigins(req) {
 
 const SAFE = new Set(["GET", "HEAD", "OPTIONS"]);
 
+// The connector's token paths (oauth.js, mcp-server.js) use no cookie, only tokens a website cannot send for someone, and MCP clients
+// may name their own origin; so they skip the same-origin check. The Allow page (/api/oauth) is a cookie path and keeps it.
+const TOKEN_PATHS = new Set(["/mcp", "/oauth/token", "/oauth/register", "/oauth/revoke"]);
+
 export function sameOriginWrites(req, res, next) {
-  if (SAFE.has(req.method)) return next();
+  if (SAFE.has(req.method) || TOKEN_PATHS.has(req.path)) return next();
   let from = req.get("origin");
   if (!from || from === "null") {
     const ref = req.get("referer");

@@ -72,6 +72,71 @@ CREATE INDEX IF NOT EXISTS sessions_email_idx ON sessions (email);
 -- When the sign-in happened (2026-11-27): resetting a forgotten document password needs a sign-in from the last 10 minutes.
 -- Sessions from before have none, so they never count as fresh.
 ALTER TABLE sessions ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ;
+
+-- Personal access keys for the Wohlig One MCP (access-keys.js, 2026-11-27): the MCP acts as the person who made the key. Only the
+-- SHA-256 of a key is stored; the key itself is shown once. A key never holds salary permissions and never reaches the blocked paths.
+CREATE TABLE IF NOT EXISTS access_keys (
+  id           SERIAL PRIMARY KEY,
+  email        TEXT NOT NULL,
+  name         TEXT NOT NULL,
+  key_hash     TEXT NOT NULL UNIQUE,
+  hint         TEXT NOT NULL,
+  created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
+  expires_at   TIMESTAMPTZ NOT NULL,
+  last_used_at TIMESTAMPTZ,
+  revoked_at   TIMESTAMPTZ
+);
+CREATE INDEX IF NOT EXISTS access_keys_email_idx ON access_keys (lower(email));
+-- The Wohlig One connector for Claude (oauth.js, 2026-11-27): Claude signs in through OAuth and gets short-lived access keys
+-- (kind 'oauth', grant_id) instead of a key made by hand (kind 'key').
+ALTER TABLE access_keys ADD COLUMN IF NOT EXISTS kind TEXT NOT NULL DEFAULT 'key';
+ALTER TABLE access_keys ADD COLUMN IF NOT EXISTS grant_id INTEGER;
+CREATE INDEX IF NOT EXISTS access_keys_grant_idx ON access_keys (grant_id) WHERE grant_id IS NOT NULL;
+-- Apps that registered themselves to connect (dynamic client registration): Claude on the web, Desktop and Code.
+CREATE TABLE IF NOT EXISTS oauth_clients (
+  id            SERIAL PRIMARY KEY,
+  client_id     TEXT NOT NULL UNIQUE,
+  name          TEXT NOT NULL,
+  redirect_uris TEXT[] NOT NULL,
+  created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+-- One sign-in in progress: what the app asked for, then (once the person allows it) who allowed it and the one-time code's hash.
+CREATE TABLE IF NOT EXISTS oauth_requests (
+  id             TEXT PRIMARY KEY,
+  client_id      TEXT NOT NULL,
+  redirect_uri   TEXT NOT NULL,
+  state          TEXT,
+  code_challenge TEXT NOT NULL,
+  resource       TEXT,
+  created_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
+  expires_at     TIMESTAMPTZ NOT NULL,
+  email          TEXT,
+  code_hash      TEXT UNIQUE,
+  used_at        TIMESTAMPTZ
+);
+CREATE INDEX IF NOT EXISTS oauth_requests_expires_idx ON oauth_requests (expires_at);
+-- A connection a person allowed: shown on Account as a connected app until they disconnect it. Only the refresh token's hash is kept.
+CREATE TABLE IF NOT EXISTS oauth_grants (
+  id           SERIAL PRIMARY KEY,
+  email        TEXT NOT NULL,
+  client_id    TEXT NOT NULL,
+  client_name  TEXT NOT NULL,
+  refresh_hash TEXT NOT NULL UNIQUE,
+  created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
+  expires_at   TIMESTAMPTZ NOT NULL,
+  last_used_at TIMESTAMPTZ,
+  revoked_at   TIMESTAMPTZ
+);
+CREATE INDEX IF NOT EXISTS oauth_grants_email_idx ON oauth_grants (lower(email));
+-- After the security review (2026-11-27): a connection ends after 90 days at most (absolute_expires_at); the refresh token it replaced
+-- is kept (prev_refresh_hash) so a stolen, reused one ends the connection; a code knows the connection it made (grant_id) so a
+-- replayed code ends it too; and spent tokens are cleared by kind and age.
+ALTER TABLE oauth_grants ADD COLUMN IF NOT EXISTS absolute_expires_at TIMESTAMPTZ;
+ALTER TABLE oauth_grants ADD COLUMN IF NOT EXISTS prev_refresh_hash TEXT;
+CREATE INDEX IF NOT EXISTS oauth_grants_prev_idx ON oauth_grants (prev_refresh_hash) WHERE prev_refresh_hash IS NOT NULL;
+ALTER TABLE oauth_requests ADD COLUMN IF NOT EXISTS grant_id INTEGER;
+CREATE INDEX IF NOT EXISTS oauth_requests_client_idx ON oauth_requests (client_id) WHERE email IS NULL;
+CREATE INDEX IF NOT EXISTS access_keys_kind_expires_idx ON access_keys (kind, expires_at);
 ALTER TABLE sessions ALTER COLUMN created_at SET DEFAULT now();
 
 CREATE TABLE IF NOT EXISTS settings (

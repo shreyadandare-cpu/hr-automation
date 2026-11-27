@@ -175,6 +175,14 @@ export async function runDue() {
 export function offboardingRouter(wrap) {
   const r = express.Router();
   r.use("/api/offboarding", needAll("offboarding.manage"));   // "Run offboarding", company-wide
+  // Through an access key (the Wohlig One MCP) every answer here leaves out the final settlement and clearance figures: they are pay.
+  r.use("/api/offboarding", (req, res, next) => {
+    if (!req.access || !req.access.viaKey) return next();
+    const strip = (x) => (Array.isArray(x) ? x.map(strip) : x && typeof x === "object" && "settlement" in x ? { ...x, settlement: null, clearance: null } : x);
+    const json = res.json.bind(res);
+    res.json = (body) => json(strip(body));
+    next();
+  });
 
   r.get("/api/offboarding", wrap(async (_req, res) => {
     const { rows } = await pool.query("SELECT id FROM offboardings WHERE status<>'cancelled' ORDER BY created_at");

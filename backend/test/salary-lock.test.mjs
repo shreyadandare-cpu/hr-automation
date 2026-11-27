@@ -96,7 +96,7 @@ test("uploaded PDFs and photos leave as PDFs locked with the document password",
   assert.equal(pdfName("Passport scan.JPG"), "Passport scan.pdf");
 });
 
-test("every payment is decided by the salary owner alone, who decides their own when they are the only one", async () => {
+test("every payment is decided by the salary owners alone; another owner decides an owner's own (a single owner decides their own)", async () => {
   const { decide, decidesOwn, mayDecideOn, salaryOwners } = await import("../src/access-rules.js");
   const before = process.env.SALARY_OWNERS;
   try {
@@ -108,10 +108,14 @@ test("every payment is decided by the salary owner alone, who decides their own 
       assert.equal(decide(manager, p, "raj@wohlig.com", treeOf), false, `a manager no longer decides ${p}`);
       assert.equal(decide({ email: "s@wohlig.com", superAdmin: true }, p, "raj@wohlig.com", treeOf), false, `nor a super admin ${p}`);
     }
+    // The default three: an owner's own claim is decided by another owner.
+    assert.equal(salaryOwners().length, 3);
+    assert.equal(mayDecideOn(kailash, "expenses.approve", "kailash@wohlig.com", treeOf), false, "not their own, with three owners");
+    assert.equal(mayDecideOn({ email: "chintan@wohlig.com", grants: [] }, "expenses.approve", "kailash@wohlig.com", treeOf), true, "another owner decides it");
+    // A single owner decides their own, as nobody else may.
+    process.env.SALARY_OWNERS = "kailash@wohlig.com";
     assert.equal(mayDecideOn(kailash, "expenses.approve", "kailash@wohlig.com", treeOf), true, "the only owner decides their own claim");
     assert.equal(mayDecideOn(kailash, "leave.approve", "kailash@wohlig.com", treeOf), false, "but nothing else of their own");
-    process.env.SALARY_OWNERS = "kailash@wohlig.com,b@wohlig.com";
-    assert.equal(salaryOwners().length, 2);
-    assert.equal(decidesOwn(kailash, "expenses.approve"), false, "with two owners, the other one decides");
+    assert.equal(decidesOwn(kailash, "expenses.approve"), true);
   } finally { if (before === undefined) delete process.env.SALARY_OWNERS; else process.env.SALARY_OWNERS = before; }
 });

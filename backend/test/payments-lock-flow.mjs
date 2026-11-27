@@ -1,10 +1,11 @@
 /*
  * Payments are the salary owner's alone, end to end, against a LOCAL server and database (never the shared one). An employee files
  * an expense claim, a loan, a budget and an advance request. A super admin, an HR login, the employee's own manager (holding the
- * old team approval grants) and a colleague then try to see and decide them: none may. The salary owner (kailash@wohlig.com, with
- * no role or grant) sees and decides them all, and the employee still sees their own. Everything it adds is removed at the end.
+ * old team approval grants) and a colleague then try to see and decide them: none may. A salary owner (kailash@wohlig.com, with
+ * no role or grant) sees and decides them all, and the employee still sees their own. An owner's own claim is decided by another
+ * owner (chintan@wohlig.com), never by themselves. Everything it adds is removed at the end.
  *
- *   Start the server with SALARY_OWNERS unset (so the owner is kailash@wohlig.com), then:
+ *   Start the server with SALARY_OWNERS unset (so the owners are chintan, chirag and kailash @wohlig.com), then:
  *   PAYROLL_ENCRYPTION_KEY=<the server's> DATABASE_URL=postgresql://localhost:5432/<db> BASE=http://localhost:3100 node test/payments-lock-flow.mjs
  *
  * Not part of `npm test` (it needs the database and a running server).
@@ -47,7 +48,7 @@ const wipe = async () => {
   await db.query("DELETE FROM notifications WHERE lower(recipient) = ANY($1)", [[...PEOPLE, K]]);
   await db.query("DELETE FROM audit_log WHERE lower(work_email) = ANY($1)", [[...PEOPLE]]);
   await db.query("DELETE FROM access_grants WHERE note='payments-lock-flow'");
-  await db.query("DELETE FROM sessions WHERE lower(email) = ANY($1)", [[...PEOPLE, K]]);
+  await db.query("DELETE FROM sessions WHERE lower(email) = ANY($1)", [[...PEOPLE, K, "chintan@wohlig.com"]]);
 };
 
 try {
@@ -119,17 +120,19 @@ try {
   ok("sees the advance request", (r.d && r.d.requests || []).some((x) => x.id === advId && x.amount === 15000 && x.canDecide), JSON.stringify(r.d && r.d.requests && r.d.requests.slice(0, 1)));
   ok("sees contractor payments", (await call(k, "GET", "/api/finance/contractors?fy=2026-27")).s === 200);
 
-  // ---- Kailash's own claim: the only owner decides it ----
+  // ---- Kailash's own claim: another owner decides it, never Kailash ----
   r = await call(k, "POST", "/api/reimbursements", { items: [{ category: cat, amount: 120, expenseDate: today, description: "Parking", noReceipt: true }] });
   const own = r.d && r.d.id;
   await call(k, "POST", `/api/reimbursements/${own}/submit`, { declaration: true });
-  r = await call(k, "POST", `/api/reimbursements/${own}/approve`, { approvedAmount: 120 });
-  ok("Kailash, the only salary owner, can approve his own claim", r.s === 200, JSON.stringify(r.d));
-  ok("nobody else can", ![200, 201].includes((await call(sa, "POST", `/api/reimbursements/${own}/approve`, { approvedAmount: 120 })).s));
+  ok("Kailash cannot approve his own claim", ![200, 201].includes((await call(k, "POST", `/api/reimbursements/${own}/approve`, { approvedAmount: 120 })).s));
+  ok("nor can a super admin who is not an owner", ![200, 201].includes((await call(sa, "POST", `/api/reimbursements/${own}/approve`, { approvedAmount: 120 })).s));
+  const ch = await login("chintan@wohlig.com");
+  r = await call(ch, "POST", `/api/reimbursements/${own}/approve`, { approvedAmount: 120 });
+  ok("another owner (Chintan) approves it", r.s === 200, JSON.stringify(r.d));
 
   // ---- notices go to Kailash only ----
   const { rows: n } = await db.query("SELECT DISTINCT lower(recipient) AS r FROM notifications WHERE lower(recipient) = ANY($1)", [[SA, HR, MGR, COL, K]]);
-  ok("approval notices reached Kailash and no one else", n.every((x) => x.r === K) && n.some((x) => x.r === K), JSON.stringify(n));
+  ok("approval notices reached the owners and no one else", n.every((x) => x.r === K) && n.some((x) => x.r === K), JSON.stringify(n));
 } catch (err) { fail++; console.log("ERROR  " + err.stack); }
 finally {
   await wipe().catch((err) => console.log("cleanup:", err.message));

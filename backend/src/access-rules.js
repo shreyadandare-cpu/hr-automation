@@ -6,7 +6,7 @@
  *   reporting tree: everyone below a person in the manager chain, to any depth (employees.manager_email).
  * - Built in, with no tick: everyone acts on their own records, and a manager keeps what they have today over their direct reports.
  * - Nobody decides their own request, whatever they hold (mayDecide).
- * - Salaries are locked to the salary owners (SALARY_OWNERS, kailash@wohlig.com by default): the salary permissions below are
+ * - Salaries are locked to the salary owners (SALARY_OWNERS; chintan@wohlig.com, chirag@wohlig.com and kailash@wohlig.com by default): the salary permissions below are
  *   held by them, company-wide, and by nobody else, super admins included. No grant on the Access page changes that; only the
  *   server's settings do.
  * The decisions against the database are in access.js.
@@ -73,8 +73,8 @@ export const PRESETS = {
   teamHead: { label: "Team head (their team)", scope: "tree", perms: ["leave.approve", "attendance.view", "timesheets.approve", "goals.view", "reviews.manage", "overtime.approve"] },
 };
 
-const DEFAULT_SALARY_OWNERS = "kailash@wohlig.com";
-/** The salary owners, from SALARY_OWNERS (comma separated); kailash@wohlig.com when it is not set. Read each time, so tests can set it. */
+const DEFAULT_SALARY_OWNERS = "chintan@wohlig.com,chirag@wohlig.com,kailash@wohlig.com";   // decided 2026-11-27
+/** The salary owners, from SALARY_OWNERS (comma separated); chintan@wohlig.com, chirag@wohlig.com and kailash@wohlig.com when it is not set. Read each time, so tests can set it. */
 export function salaryOwners() {
   const raw = process.env.SALARY_OWNERS === undefined || process.env.SALARY_OWNERS.trim() === "" ? DEFAULT_SALARY_OWNERS : process.env.SALARY_OWNERS;
   return [...new Set(raw.split(",").map((s) => s.trim().toLowerCase()).filter((s) => EMAIL.test(s)))];

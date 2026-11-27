@@ -18,7 +18,7 @@ docker build -t hrhub-frontend frontend
 | `MAIL_SKIP_RECIPIENTS` | leave **unset** (default is Chirag and Chintan) | Directors get no email. Setting it to empty turns the block off. |
 | `PAYSLIP_AUTO` | `off` **until HR has entered the real salaries** | Stops the hourly job that starts and recalculates the monthly payroll draft. With it off, payroll changes only when HR does something. Remove it (or set anything else) to turn the automation back on. |
 | `GEMINI_API_KEY` | a Gemini API key (Google AI Studio) | LinkedIn kit: the headline suggestions. Without it the button says Gemini isn't set up. Model defaults to `gemini-flash-lite-latest` (`GEMINI_MODEL` to change). Keep the key in the server settings only. |
-| `SALARY_OWNERS` | `kailash@wohlig.com` (the default) | The only people who see salaries, payslips, bank details and finance reports. |
+| `SALARY_OWNERS` | `chintan@wohlig.com,chirag@wohlig.com,kailash@wohlig.com` (the default) | The only people who see salaries, payslips, bank details and finance reports. |
 | `PAYROLL_ENCRYPTION_KEY`, `DOCUMENTS_ENCRYPTION_KEY` | each `openssl rand -hex 32`, from the secret store (below) | Every salary figure, bank number, PAN, Aadhaar and document is encrypted with them. Without them no salary or document can be saved or read. |
 | `BACKGROUND_JOBS` | leave on only on the **one** server that should run scheduled jobs | Daily leave digest, reminders, payslip notices. |
 

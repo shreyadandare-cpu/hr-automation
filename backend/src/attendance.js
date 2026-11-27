@@ -128,11 +128,14 @@ async function monthOf(emp, month) {
   return { email: emp.work_email, name: emp.name, month, days, summary: summarize(days), today: now.day };
 }
 
-/** The last 14 days (before today) whose punch-out is missing and has no correction asked for or approved yet, newest first. */
+/** The days (before today, up to 14, never past HR's correction window) whose punch-out is missing and has no correction asked
+    for or approved yet, newest first. A day that can no longer be corrected is not offered. */
 async function missingOutsOf(emp, today) {
-  const from = new Date(Date.parse(today + "T00:00:00Z") - 14 * 86400000).toISOString().slice(0, 10);
-  const months = [...new Set([from.slice(0, 7), today.slice(0, 7)])];
-  const days = (await Promise.all(months.map((m) => monthOf(emp, m)))).flatMap((x) => x.days);
+  const back = (n) => new Date(Date.parse(today + "T00:00:00Z") - n * 86400000).toISOString().slice(0, 10);
+  const months = [...new Set([back(14).slice(0, 7), today.slice(0, 7)])];
+  const [pol, ...ms] = await Promise.all([pool.query("SELECT * FROM attendance_policy WHERE id=1"), ...months.map((m) => monthOf(emp, m))]);
+  const from = back(Math.min(14, policyOf(pol.rows[0]).daysBack));
+  const days = ms.flatMap((x) => x.days);
   return days.filter((d) => d.forgotOut && d.date >= from && d.date < today && !["pending", "approved"].includes(d.correction))
     .sort((a, b) => (a.date < b.date ? 1 : -1)).slice(0, 5).map((d) => ({ date: d.date, firstIn: d.firstIn }));
 }

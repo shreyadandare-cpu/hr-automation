@@ -16,13 +16,12 @@ Onboarding → salary structure + bank account (Payroll › Salary & bank)
 
 | Who | How they get it | Can |
 |---|---|---|
-| Salary owner (Kailash) | Email listed in `SALARY_OWNERS` (default `kailash@wohlig.com`) | Everything in payroll: salaries, bank details, tax rules and declarations, monthly inputs, reports, review and approval, bank file, marking processed, finance reports |
+| Salary owners (Chintan, Chirag, Kailash) | Emails listed in `SALARY_OWNERS` (default `chintan@wohlig.com,chirag@wohlig.com,kailash@wohlig.com`) | Everything in payroll: salaries, bank details, tax rules and declarations, monthly inputs, reports, review and approval, bank file, marking processed, finance reports |
 | Everyone else, super admins and HR included | | Nothing in payroll. The salary permissions can't be given on the Access page |
 | Employee | everyone | Their own payslip only (`/api/payslips`), once the month is approved. The figures and the PDF need their document password first, and the PDF is locked with it |
 
-Since 2026-11-27, `PAYROLL_REVIEWERS` and `FINANCE_VIEWERS` give nothing. With one salary owner, they may approve a payroll they
-prepared themselves (there is nobody else to check it); with two or more, the person who sent a payroll for review can't approve it
-(maker-checker).
+Since 2026-11-27, `PAYROLL_REVIEWERS` and `FINANCE_VIEWERS` give nothing. With two or more salary owners (the default three), the
+person who sent a payroll for review can't approve it: another owner does (maker-checker). Only a single owner may approve their own.
 
 ## Workflow statuses
 

@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /*
  * Salary guard: a PreToolUse hook (committed in .claude/settings.json, so it reaches everyone who runs Claude Code in this repo).
- * Salaries are visible only to the salary owner (SALARY_OWNERS, kailash@wohlig.com; backend/src/access-rules.js). This stops
+ * Salaries are visible only to the salary owner (SALARY_OWNERS: chintan@wohlig.com, chirag@wohlig.com and kailash@wohlig.com; backend/src/access-rules.js). This stops
  * Claude Code from reading them by another road: the server's secrets (.env files, the encryption keys), the uploaded documents,
  * database dumps, and any database command that names a salary table or column.
  *

@@ -84,7 +84,7 @@ test("the catalogue is consistent", () => {
   for (const k of PRESETS.teamHead.perms) assert.ok(PERM[k].team, `${k} must be givable for a team`);
   assert.ok(FIRST_SUPER_ADMINS.includes("pratik.sawant@wohlig.com") && FIRST_SUPER_ADMINS.length === 4);
   assert.equal(summary({ email: "chirag@wohlig.com", superAdmin: true })["assets.manage"], "company");
-  assert.equal(summary({ email: "chirag@wohlig.com", superAdmin: true })["payroll.bank"], undefined);
+  assert.equal(summary({ email: "jagruti@wohlig.com", superAdmin: true })["payroll.bank"], undefined);
   assert.deepEqual(summary({ email: "j@wohlig.com", grants: [{ permission: "leave.approve", scope: "tree" }, { permission: "leave.approve", scope: "tree", scope_root_email: "Raj@wohlig.com" }] }),
     { "leave.approve": ["j@wohlig.com", "raj@wohlig.com"] });
 });
@@ -93,9 +93,9 @@ test("salaries are the salary owners' alone: not super admins, not grants", () =
   const before = process.env.SALARY_OWNERS;
   try {
     delete process.env.SALARY_OWNERS;
-    assert.deepEqual(salaryOwners(), ["kailash@wohlig.com"], "kailash@wohlig.com when nothing is set");
+    assert.deepEqual(salaryOwners(), ["chintan@wohlig.com", "chirag@wohlig.com", "kailash@wohlig.com"], "the three owners when nothing is set");
     const kailash = { email: "Kailash@wohlig.com", grants: [] };
-    const superA = { email: "chirag@wohlig.com", superAdmin: true, grants: [] };
+    const superA = { email: "jagruti@wohlig.com", superAdmin: true, grants: [] };
     const granted = { email: "priyal@wohlig.com", grants: [...SALARY_PERMS].map((permission) => ({ permission, scope: "company" })) };
     for (const perm of SALARY_PERMS) {
       assert.equal(decide(kailash, perm, "raj@wohlig.com", treeOf), true, `owner holds ${perm}`);

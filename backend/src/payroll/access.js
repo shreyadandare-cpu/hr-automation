@@ -6,7 +6,7 @@ import { pool as mainPool } from "../db.js";
 
 /*
  * Who may see payroll, and the encryption used for bank account numbers and bank files. The payroll permissions below are held
- * by the salary owners only (SALARY_OWNERS, kailash@wohlig.com by default; access-rules.js), never by a grant or a super admin.
+ * by the salary owners only (SALARY_OWNERS, chintan@wohlig.com, chirag@wohlig.com and kailash@wohlig.com by default; access-rules.js), never by a grant or a super admin.
  *
  *   payroll.prepare  (company)        prepares payroll: salaries, inputs, recalculation, Excel, adjustments, tax rules, declarations, publishing.
  *   payroll.approve  (company)        sees a run once it is sent for review, approves, rejects or asks for changes. Never sees bank

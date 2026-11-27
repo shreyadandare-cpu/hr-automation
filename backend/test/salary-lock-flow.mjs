@@ -2,9 +2,9 @@
  * Salary lock, end to end, against a LOCAL server and database (never the shared one): tries every way someone other than the
  * salary owner could reach salaries (super admin, HR role, IT admin, salary grants written straight into the database, a super
  * admin who is also HR, the Access page, taking over the owner's login) and fails on any answer that shows them. Then checks the
- * owner (kailash@wohlig.com, with no role or grant) gets in. Everything it changes is undone at the end.
+ * owners (chintan@wohlig.com, chirag@wohlig.com and kailash@wohlig.com, with no grant) get in. Everything it changes is undone at the end.
  *
- *   Start the server with SALARY_OWNERS unset (so the owner is kailash@wohlig.com), then:
+ *   Start the server with SALARY_OWNERS unset (so the owners are the default three), then:
  *   DATABASE_URL=postgresql://localhost:5432/hrhub_local BASE=http://localhost:3100 node test/salary-lock-flow.mjs
  *
  * Not part of `npm test` (it needs the database and a running server), like access-flow.mjs.
@@ -17,9 +17,9 @@ if (!/@?(localhost|127\.0\.0\.1)[:/]/.test(DB)) { console.error("Refusing: DATAB
 if (!/^http:\/\/(localhost|127\.0\.0\.1)/.test(B)) { console.error("Refusing: BASE must be a local server."); process.exit(2); }
 const db = new pg.Pool({ connectionString: DB });
 const sha = (s) => crypto.createHash("sha256").update(s).digest("hex");
-const PE = "salarytest.emp@wohlig.com", K = "kailash@wohlig.com", SA = "chirag@wohlig.com", HR = "salarytest.hr@wohlig.com", EMP = "pratik.sawant@wohlig.com";
+const PE = "salarytest.emp@wohlig.com", K = "kailash@wohlig.com", SA = "salarytest.super@wohlig.com", OWNERS = ["chintan@wohlig.com", "chirag@wohlig.com", K], HR = "salarytest.hr@wohlig.com", EMP = "pratik.sawant@wohlig.com";
 const SAL = ["payroll.view", "payroll.prepare", "payroll.approve", "payroll.bank", "finance.view"];
-const made = { sessions: [], grants: [], users: [] }; const before = (await db.query("SELECT role, is_super_admin FROM users WHERE email=$1", [SA])).rows[0];
+const made = { sessions: [], grants: [], users: [] }; const before = { role: "employee", is_super_admin: true };   // the test's own super admin (not an owner), removed at the end
 const login = async (e) => { const t = crypto.randomBytes(32).toString("hex"); await db.query("INSERT INTO sessions (token_hash,email,expires_at) VALUES ($1,$2,now()+interval '30 minutes')", [sha(t), e]); made.sessions.push(sha(t)); return t; };
 const call = async (t, p, m = "GET", b) => (await fetch(B + p, { method: m, headers: { cookie: "sid=" + t, "content-type": "application/json", origin: B }, body: b ? JSON.stringify(b) : undefined })).status;
 const P = ["/api/payroll/runs", "/api/payroll/master", `/api/payroll/structures/${encodeURIComponent(EMP)}`, `/api/payroll/bank/${encodeURIComponent(EMP)}`,
@@ -32,6 +32,8 @@ const expectNone = async (who, t) => { const r = []; for (const p of P) { const 
 try {
   if (!(await db.query("SELECT 1 FROM users WHERE email=$1", [K])).rowCount) { await db.query("INSERT INTO users (email, role, password_hash) VALUES ($1,'employee','!no-password-login')", [K]); made.users.push(K); }
   await db.query("INSERT INTO users (email, role, password_hash) VALUES ($1,'hr','!no-password-login'), ($2,'employee','!no-password-login')", [HR, PE]); made.users.push(HR, PE);
+  await db.query("INSERT INTO users (email, role, password_hash, is_super_admin) VALUES ($1,'employee','!no-password-login',true)", [SA]); made.users.push(SA);
+  for (const o of OWNERS.slice(0, 2)) if (!(await db.query("SELECT 1 FROM users WHERE email=$1", [o])).rowCount) { await db.query("INSERT INTO users (email, role, password_hash) VALUES ($1,'employee','!no-password-login')", [o]); made.users.push(o); }
   const tK = await login(K), tSA = await login(SA), tHR = await login(HR), tE = await login(PE);
   await expectNone("super admin (as is)", tSA);
   await expectNone("HR role login", tHR);
@@ -51,6 +53,10 @@ try {
   // Kailash is never refused: 200, or 404 where that person simply has no salary or bank details saved yet.
   const kIn = kOk.every((s) => s === 200 || s === 404) && kOk.filter((s) => s === 200).length >= 5;
   console.log(kIn ? "ok  " : "FAIL", " Kailash, plain employee role, no grants ->", kOk.join(",")); if (!kIn) bad++;
+  for (const o of OWNERS.slice(0, 2)) {
+    const t = await login(o), got = []; for (const p of P.slice(0, 2)) got.push(await call(t, p));
+    console.log(got.every((x) => x === 200) ? "ok  " : "FAIL", ` ${o} (an owner) gets in ->`, got.join(",")); if (!got.every((x) => x === 200)) bad++;
+  }
   await db.query("UPDATE users SET role='employee' WHERE email=$1", [K]); finished = true;
 } finally {
   await db.query("DELETE FROM access_grants WHERE id = ANY($1)", [made.grants]);

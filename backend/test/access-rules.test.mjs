@@ -45,9 +45,10 @@ test("scope lists who a permission covers", () => {
 });
 
 test("nobody decides their own request, not even a super admin", () => {
-  assert.equal(mayDecideOn({ email: "chirag@wohlig.com", superAdmin: true }, "expenses.approve", "CHIRAG@wohlig.com", treeOf), false);
-  assert.equal(mayDecideOn({ email: "priyal@wohlig.com", grants: [{ permission: "expenses.approve", scope: "company" }] }, "expenses.approve", "priyal@wohlig.com", treeOf), false);
-  assert.equal(mayDecideOn({ email: "priyal@wohlig.com", grants: [{ permission: "expenses.approve", scope: "company" }] }, "expenses.approve", "raj@wohlig.com", treeOf), true);
+  // (Payments are the salary owner's alone and tested in salary-lock.test.mjs; leave stands for every other permission here.)
+  assert.equal(mayDecideOn({ email: "chirag@wohlig.com", superAdmin: true }, "leave.approve", "CHIRAG@wohlig.com", treeOf), false);
+  assert.equal(mayDecideOn({ email: "priyal@wohlig.com", grants: [{ permission: "leave.approve", scope: "company" }] }, "leave.approve", "priyal@wohlig.com", treeOf), false);
+  assert.equal(mayDecideOn({ email: "priyal@wohlig.com", grants: [{ permission: "leave.approve", scope: "company" }] }, "leave.approve", "raj@wohlig.com", treeOf), true);
 });
 
 test("a grant from the Access page is checked", () => {

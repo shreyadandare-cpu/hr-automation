@@ -2,7 +2,7 @@ import fs from "node:fs";
 import express from "express";
 import { payPool as pool, pool as mainPool, PAYROLL_SEPARATE } from "../db.js";
 import { notify as notifyAll } from "../notify.js";
-import { event } from "../reimbursements.js";
+import { event, markClaimsPaid } from "../reimbursements.js";
 import { V } from "../validate.js";
 import { cleanInputs, INPUT_FIELDS } from "./engine.js";
 import { fyOf, fyMonths as fyMonthsOf, rulesProblems, annualTax, payrollFieldsFrom } from "./tax.js";
@@ -441,8 +441,7 @@ R.post("/runs/:id/actions/:action", wrap(async (req, res) => {
       const ref = String((req.body && req.body.bankReference) || "").trim().slice(0, 100);
       if (ref.length < 3) return fail(400, "Enter the bank's batch or transaction reference for this salary transfer.", { errors: { bankReference: "Required." } });
       await moveTo(client, run, c.to, req.user.email, "Payroll processed (bank transfer confirmed)", { bankReference: ref, note }, { paid_at: new Date(), paid_by: req.user.email, bank_reference: ref });
-      const { rows } = await client.query(
-        "UPDATE reimbursements SET status='paid', paid_at=now(), paid_amount=coalesce(approved_amount, amount), updated_at=now() WHERE payroll_run_id=$1 AND status='in_payroll' RETURNING *", [run.id]);
+      const rows = await markClaimsPaid(client, run.id);   // the amounts are sealed: worked out in the app
       for (const cl of rows) await event(client, cl, { actor: req.user.email, kind: "Paid", status: "paid", note: `${inr(cl.paid_amount)} with ${month} payroll (run #${run.id})` });
       after.paid = rows; after.period = run.period;
       return {};
@@ -454,8 +453,9 @@ R.post("/runs/:id/actions/:action", wrap(async (req, res) => {
   if (after.instalments && after.instalments.length) {
     const [y, m] = after.period.split("-").map(Number), lastDay = `${after.period}-${String(new Date(Date.UTC(y, m, 0)).getUTCDate()).padStart(2, "0")}`;
     for (const x of after.instalments) {
-      await mainPool.query(`INSERT INTO advance_recoveries (advance_id, amount, recovered_on, note, recorded_by, payroll_period) VALUES ($1,$2,$3,$4,$5,$6)
-        ON CONFLICT (advance_id, payroll_period) WHERE payroll_period IS NOT NULL DO NOTHING`, [Number(x.advance_id), x.amount, lastDay, `Deducted in payroll for ${monthName(after.period)}`, after.reviewer, after.period])
+      const rv = sealFields("recovery_sealed", { amount: x.amount == null ? null : Number(x.amount) });   // stored sealed (secret-box.js)
+      await mainPool.query(`INSERT INTO advance_recoveries (advance_id, amount, recovered_on, note, recorded_by, payroll_period, recovery_sealed) VALUES ($1,$2,$3,$4,$5,$6,$7)
+        ON CONFLICT (advance_id, payroll_period) WHERE payroll_period IS NOT NULL DO NOTHING`, [Number(x.advance_id), rv.plain.amount, lastDay, `Deducted in payroll for ${monthName(after.period)}`, after.reviewer, after.period, rv.sealed])
         .catch((err) => console.error("Advance instalment not recorded:", err.message));
     }
     await syncLoans().catch((err) => console.error("Loans not updated:", err.message));   // a loan whose last instalment was just recorded is completed
@@ -640,8 +640,8 @@ R.get("/declarations/:email", hrOnly, wrap(async (req, res) => {
   const email = lc(req.params.email), fy = FY.test(String(req.query.fy || "")) ? String(req.query.fy) : fyOf(istMonth());
   // Payroll's own record, and what the employee submitted on Pay > Tax declaration (main database, read only), side by side.
   const [{ rows: [d] }, { rows: [own] }] = await Promise.all([
-    pool.query("SELECT regime, declaration, updated_by, updated_at FROM tax_declarations WHERE fy=$1 AND lower(work_email)=$2", [fy, email]),
-    mainPool.query("SELECT regime, items, proofs, submitted_at FROM tax_declaration_requests WHERE lower(email)=$1 AND financial_year=$2 AND status='submitted'", [email, Number(fy.slice(0, 4))]),
+    pool.query("SELECT regime, declaration, updated_by, updated_at, decl_sealed FROM tax_declarations WHERE fy=$1 AND lower(work_email)=$2", [fy, email]),
+    mainPool.query("SELECT regime, items, proofs, submitted_at, declreq_sealed FROM tax_declaration_requests WHERE lower(email)=$1 AND financial_year=$2 AND status='submitted'", [email, Number(fy.slice(0, 4))]),
   ]);
   // The employee's submission as payroll's fields, with HR's proof decisions and the HRA exemption worked out from the salary.
   let submitted = null;
@@ -672,11 +672,12 @@ R.put("/declarations/:email", hrOnly, wrap(async (req, res) => {
   const out = await tx(async (client) => {
     const { rows: [emp] } = await client.query("SELECT id FROM employees WHERE lower(work_email)=$1", [email]);
     if (!emp) return fail(404, "Employee not found.");
-    const { rows: [old] } = await client.query("SELECT regime, declaration FROM tax_declarations WHERE fy=$1 AND lower(work_email)=$2", [fy, email]);
+    const { rows: [old] } = await client.query("SELECT regime, declaration, decl_sealed FROM tax_declarations WHERE fy=$1 AND lower(work_email)=$2", [fy, email]);
+    const dv = sealFields("decl_sealed", { declaration });   // stored sealed (secret-box.js)
     await client.query(
-      `INSERT INTO tax_declarations (fy, work_email, regime, declaration, updated_by) VALUES ($1,$2,$3,$4,$5)
-       ON CONFLICT (fy, lower(work_email)) DO UPDATE SET regime=EXCLUDED.regime, declaration=EXCLUDED.declaration, updated_by=EXCLUDED.updated_by, updated_at=now()`,
-      [fy, email, body.regime, JSON.stringify(declaration), req.user.email]);
+      `INSERT INTO tax_declarations (fy, work_email, regime, declaration, updated_by, decl_sealed) VALUES ($1,$2,$3,$4,$5,$6)
+       ON CONFLICT (fy, lower(work_email)) DO UPDATE SET regime=EXCLUDED.regime, declaration=EXCLUDED.declaration, updated_by=EXCLUDED.updated_by, updated_at=now(), decl_sealed=EXCLUDED.decl_sealed`,
+      [fy, email, body.regime, dv.plain.declaration, req.user.email, dv.sealed]);
     await audit(client, req.user.email, "Tax declaration saved", { work_email: email, detail: { fy, before: old || null, after: { regime: body.regime, declaration } } });
     return {};
   });

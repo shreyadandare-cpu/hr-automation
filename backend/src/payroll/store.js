@@ -88,7 +88,7 @@ export function withOpening(paid = { taxable: 0, tds: 0, pt: 0, pf: 0 }, d = {})
 /** The year's submitted declarations by email, and whether the proof due date has passed (then only verified claims count). */
 async function submittedDeclarations(fyStart) {
   const [{ rows }, { rows: [pol] }] = await Promise.all([
-    mainPool.query("SELECT email, regime, items, proofs FROM tax_declaration_requests WHERE financial_year=$1 AND status='submitted'", [fyStart]),
+    mainPool.query("SELECT email, regime, items, proofs, declreq_sealed FROM tax_declaration_requests WHERE financial_year=$1 AND status='submitted'", [fyStart]),
     mainPool.query("SELECT proof_due < (now() AT TIME ZONE 'Asia/Kolkata')::date AS closed FROM tax_regime_policies WHERE financial_year=$1", [fyStart]),
   ]);
   return { requests: new Map(rows.map((r) => [lc(r.email), r])), proofsFinal: !!(pol && pol.closed) };
@@ -133,7 +133,7 @@ export async function buildLines(db, period, runId = null, existing = []) {
     () => db.query("SELECT day FROM holidays"),
     () => structuresFor(db, period),
     () => db.query("SELECT regime, rules FROM tax_rules WHERE fy=$1", [fy]),
-    () => db.query("SELECT work_email, regime, declaration FROM tax_declarations WHERE fy=$1", [fy]),
+    () => db.query("SELECT work_email, regime, declaration, decl_sealed FROM tax_declarations WHERE fy=$1", [fy]),
     () => db.query("SELECT * FROM payroll_adjustments WHERE cancelled_at IS NULL AND (applied_run_id IS NULL OR applied_run_id=$1) ORDER BY id", [runId]),
     () => db.query("SELECT work_email, acct_last4, holder_name, bank_name, ifsc FROM payroll_bank_accounts"),
     () => paidSoFar(db, period),

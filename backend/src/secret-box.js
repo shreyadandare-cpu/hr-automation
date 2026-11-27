@@ -17,13 +17,29 @@ export const SEALED = {
   pay_sealed: { table: "employees", fields: ["monthly_gross"] },
   clearance_sealed: { table: "offboarding_clearances", fields: ["final_salary", "reimbursements_payable", "advance_outstanding", "total_recovery", "net_salary", "final_payout", "details"] },
   offer_sealed: { table: "offer_letters", fields: ["ctc_annual", "letter_text"] },
+  // Every other payment (2026-11-27): expense claims, advances and loans, contractor payments, budgets, tax declarations.
+  reimb_sealed: { table: "reimbursements", fields: ["amount", "paid_amount", "requested_amount", "eligible_amount", "non_eligible_amount", "approved_amount", "unapproved_amount", "validation", "eligibility", "duplicates", "approval_reason"] },
+  reimb_doc_sealed: { table: "reimbursement_documents", fields: ["validation"] },
+  reimb_item_sealed: { table: "reimbursement_items", fields: ["amount", "policy_fare", "extracted"] },
+  advance_sealed: { table: "employee_advances", fields: ["amount", "monthly_recovery"] },
+  recovery_sealed: { table: "advance_recoveries", fields: ["amount"] },
+  advreq_sealed: { table: "advance_requests", fields: ["amount_minor"] },
+  loan_sealed: { table: "loans", fields: ["requested_amount", "approved_amount", "monthly_amount"] },
+  loan_event_sealed: { table: "loan_events", fields: ["detail"] },
+  contractor_sealed: { table: "contractor_payments", fields: ["amount_minor", "tds_minor"] },
+  budget_sealed: { table: "budget_requests", fields: ["requested_budget", "approved_budget"] },
+  declreq_sealed: { table: "tax_declaration_requests", fields: ["items", "proofs"] },
+  decl_sealed: { table: "tax_declarations", fields: ["declaration"] },
+  reimb_event_sealed: { table: "reimbursement_events", fields: ["note"] },
+  budget_event_sealed: { table: "budget_request_events", fields: ["note"] },
 };
 /** What a plain column is left holding once its figures are sealed (NOT NULL columns get their empty value). */
-export const EMPTY = { inputs: "{}", detail: "{}", details: "{}" };
+export const EMPTY = { inputs: "{}", detail: "{}", details: "{}", validation: "{}", eligibility: "{}", items: "[]", proofs: "{}", declaration: "{}", duplicates: "[]" };
 /** Money columns that were NUMERIC(12,2): rounded to paise before sealing, as the database used to round them. */
 const MONEY = new Set(["base_salary", "lop_deduction", "reimbursement_total", "payable", "pf_employee", "professional_tax", "tds_monthly", "annual_ctc",
   "employer_pf", "esic_employee", "pt_february", "amount", "monthly_gross", "final_salary", "reimbursements_payable", "advance_outstanding",
-  "total_recovery", "net_salary", "final_payout", "ctc_annual"]);
+  "total_recovery", "net_salary", "final_payout", "ctc_annual", "paid_amount", "requested_amount", "eligible_amount", "non_eligible_amount",
+  "approved_amount", "unapproved_amount", "policy_fare", "monthly_recovery", "monthly_amount", "requested_budget", "approved_budget"]);
 const paise = (f, v) => (MONEY.has(f) && typeof v === "number" && Number.isFinite(v) ? Math.round(v * 100) / 100 : v);
 
 /*
@@ -88,7 +104,7 @@ export function sealFields(col, values) {
   return { sealed, plain };
 }
 
-const isEmpty = (f, v) => v === null || v === undefined || (f in EMPTY && (v === EMPTY[f] || (typeof v === "object" && !Array.isArray(v) && !Object.keys(v).length)));
+const isEmpty = (f, v) => v === null || v === undefined || (f in EMPTY && (v === EMPTY[f] || (typeof v === "object" && !Object.keys(v).length)));
 let warnedGross = false;
 /**
  * Puts a row's sealed fields back under their own names (in place) and removes the sealed column.

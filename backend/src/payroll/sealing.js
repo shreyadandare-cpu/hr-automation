@@ -107,3 +107,31 @@ export async function setMonthlyGross(db, employeeId, gross) {
   const { sealed, plain } = sealFields("pay_sealed", { monthly_gross: gross === undefined ? null : gross });
   await db.query("UPDATE employees SET monthly_gross=$2, pay_sealed=$3 WHERE id=$1", [employeeId, plain.monthly_gross, gross == null ? null : sealed]);
 }
+
+/*
+ * Notices and audit lines written before 2026-11-27 could name amounts ("₹48,000 net", "CTC 1200000", "final salary ₹…"). Those
+ * tables are not encrypted, so each amount is replaced with "[amount removed]". On demand only, since it rewrites history:
+ * `node scripts/salary-encryption.mjs --redact-old-text` counts, and with `--commit` applies.
+ */
+const MONEY_TEXT = /₹\s?-?\d[\d,]*\d(\.\d+)?|₹\s?\d|\bCTC\s+\d[\d,]*\d(\.\d+)?|\b(INR|Rs\.?)\s?\d[\d,]*\d(\.\d+)?/gi;   // a trailing comma stays in the sentence
+export const redactMoney = (s) => (s == null ? s : String(s).replace(MONEY_TEXT, "[amount removed]"));
+const REDACT = [
+  { table: "audit_log", cols: ["action"] },
+  { table: "notifications", cols: ["title", "body"] },
+];
+export async function redactOldText(db, { commit = false } = {}) {
+  const out = {};
+  for (const { table, cols } of REDACT) {
+    const exists = (await db.query("SELECT 1 FROM information_schema.tables WHERE table_schema=current_schema() AND table_name=$1", [table])).rowCount;
+    if (!exists) continue;
+    const where = cols.map((c) => `${c} ~* $1`).join(" OR ");
+    const { rows } = await db.query(`SELECT id, ${cols.join(", ")} FROM ${table} WHERE ${where} ORDER BY id LIMIT 100000`, ["(₹|\\mCTC\\s+[0-9]|\\m(INR|Rs\\.?)\\s?[0-9])"]);
+    out[table] = rows.length;
+    if (!commit) continue;
+    for (const r of rows) {   // a one-off maintenance step, not a request
+      const sets = cols.map((c, i) => `${c}=$${i + 2}`).join(", ");
+      await db.query(`UPDATE ${table} SET ${sets} WHERE id=$1`, [r.id, ...cols.map((c) => redactMoney(r[c]))]);
+    }
+  }
+  return out;
+}

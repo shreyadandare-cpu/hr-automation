@@ -46,7 +46,7 @@ export async function runTaxReminders({ anyHour = false } = {}) {
     const [{ rows: staff }, { rows: requests }] = await Promise.all([
       pool.query(`SELECT lower(work_email) AS email FROM employees WHERE work_email IS NOT NULL AND coalesce(status,'') <> 'offboarded'
         AND (last_day IS NULL OR last_day >= $1::date) LIMIT 5000`, [day]),
-      pool.query("SELECT id, email, status, items, proofs FROM tax_declaration_requests WHERE financial_year=$1", [fy]),
+      pool.query("SELECT id, email, status, items, proofs, declreq_sealed FROM tax_declaration_requests WHERE financial_year=$1", [fy]),
     ]);
     const { rows: files } = requests.length ? await pool.query("SELECT request_id, line_index FROM tax_proof_files WHERE request_id = ANY($1)", [requests.map((r) => r.id)]) : { rows: [] };
     const to = stillToDo(kind, staff.map((s) => s.email), requests, files);

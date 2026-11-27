@@ -61,7 +61,10 @@ export const PERMISSIONS = [
 export const PERM = Object.fromEntries(PERMISSIONS.map((p) => [p.key, p]));
 export const GROUPS = [...new Set(PERMISSIONS.map((p) => p.group))];
 /** The permissions that show salaries, payslips, bank details, tax and finance figures: the salary owners only. */
-export const SALARY_PERMS = new Set(["payroll.view", "payroll.prepare", "payroll.approve", "payroll.bank", "finance.view"]);
+// Since 2026-11-27 every other payment too (the salary owner's decision): expense claims, advances and loans, budgets and
+// contractor payments. Each person still sees and files their own; deciding and seeing anyone else's is the salary owners' alone.
+export const SALARY_PERMS = new Set(["payroll.view", "payroll.prepare", "payroll.approve", "payroll.bank", "finance.view",
+  "expenses.approve", "advances.approve", "budgets.approve", "finance.contractors"]);
 
 /** Quick-fill sets on the Access page. They only tick boxes; nothing named is stored. */
 export const PRESETS = {
@@ -163,9 +166,17 @@ export function scopeFor(access, perm, treeOf) {
 
 /** decide(), and never on your own request or record. */
 export function mayDecideOn(access, perm, owner, treeOf) {
-  if (!access || lc(owner) === lc(access.email)) return false;
+  if (!access) return false;
+  if (lc(owner) === lc(access.email)) return decidesOwn(access, perm);
   return decide(access, perm, owner, treeOf);
 }
+
+/**
+ * The one exception to "nobody decides their own request": with a single salary owner there is nobody else who may decide a
+ * payment (salary permissions are theirs alone), so they decide their own claims, loans, advances and budgets. With two or more
+ * owners, another owner has to.
+ */
+export const decidesOwn = (access, perm) => !!access && SALARY_PERMS.has(perm) && salaryOwners().length === 1 && isSalaryOwner(access.email);
 
 /**
  * The grants that reproduce what someone could do before access existed, so day one changes nothing:

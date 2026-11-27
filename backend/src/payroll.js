@@ -3,7 +3,7 @@ import { sealFields } from "./secret-box.js";
 import { setMonthlyGross } from "./payroll/sealing.js";
 import express from "express";
 import { payPool as pool, pool as mainPool, PAYROLL_SEPARATE } from "./db.js";   // payroll may use its own database (PAYROLL_DATABASE_URL)
-import { event } from "./reimbursements.js";
+import { event, markClaimsPaid } from "./reimbursements.js";
 import { notify as notifyAll } from "./notify.js";
 const notify = (to, n) => (PAYROLL_SEPARATE ? Promise.resolve(console.log(`Payroll on its own database, notice not sent to ${to}: ${n.title}`)) : notifyAll(to, n));
 import { cleanStructure, grossOf, splitGross, stipendBody, structureFromRow } from "./payroll-calc.js";
@@ -26,8 +26,8 @@ const wrap = (fn) => (req, res, next) => fn(req, res, next).catch(next);
 /** Tells each person their reimbursement is now part of the month's payroll. */
 export async function tellIncluded(included, period) {
   for (const c of included)
-    await notify(c.work_email, { title: `Your approved reimbursement of ${inr(c.approved_amount ?? c.amount)} has been included in your upcoming payroll.`, body: `${c.claim_no} · ${monthName(period)}`, link: `claim:${c.id}`,
-      email: { subject: `Reimbursement included in payroll: ${c.claim_no}`, body: `Your approved reimbursement of ${inr(c.approved_amount ?? c.amount)} (${c.claim_no}) has been included in your ${monthName(period)} payroll.` } });
+    await notify(c.work_email, { title: "Your approved reimbursement has been included in your upcoming payroll.", body: `${c.claim_no} · ${monthName(period)}`, link: `claim:${c.id}`,   // no amounts in notices or emails
+      email: { subject: `Reimbursement included in payroll: ${c.claim_no}`, body: `Your approved reimbursement (${c.claim_no}) has been included in your ${monthName(period)} payroll.` } });
 }
 
 /**
@@ -227,8 +227,7 @@ payrollRouter.post("/runs/:id/pay", hrOnly, wrap(async (req, res) => {
     if (run.workflow) return { rollback: true, status: 409, error: "This payroll uses the review workflow. Mark it processed after the bank transfer." };
     if (run.status === "paid") return { rollback: true, status: 409, error: "This payroll is already marked as paid." };
     await client.query("UPDATE payroll_runs SET status='paid', paid_at=now(), paid_by=$2, status_at=now() WHERE id=$1", [run.id, req.user.email]);
-    const { rows } = await client.query(
-      "UPDATE reimbursements SET status='paid', paid_at=now(), paid_amount=coalesce(approved_amount, amount), updated_at=now() WHERE payroll_run_id=$1 AND status='in_payroll' RETURNING *", [run.id]);
+    const rows = await markClaimsPaid(client, run.id);   // the amounts are sealed: worked out in the app
     for (const c of rows) await event(client, c, { actor: req.user.email, kind: "Paid", status: "paid", note: `${inr(c.paid_amount)} with ${monthName(run.period)} payroll (run #${run.id})` });
     await client.query("INSERT INTO audit_log (action, work_email) VALUES ($1, NULL)",
       [`Payroll for ${monthName(run.period)} marked as paid by ${req.user.email}: ${rows.length} reimbursements paid`]);
@@ -241,6 +240,6 @@ payrollRouter.post("/runs/:id/pay", hrOnly, wrap(async (req, res) => {
 
 export async function tellPaid(claims, period) {
   for (const c of claims)
-    await notify(c.work_email, { title: `Your reimbursement of ${inr(c.paid_amount)} has been paid.`, body: `${c.claim_no} · ${monthName(period)} payroll`, link: `claim:${c.id}`,
-      email: { subject: `Reimbursement paid: ${c.claim_no}`, body: `Your reimbursement of ${inr(c.paid_amount)} (${c.claim_no}) has been paid with the ${monthName(period)} payroll.` } });
+    await notify(c.work_email, { title: "Your reimbursement has been paid.", body: `${c.claim_no} · ${monthName(period)} payroll`, link: `claim:${c.id}`,
+      email: { subject: `Reimbursement paid: ${c.claim_no}`, body: `Your reimbursement (${c.claim_no}) has been paid with the ${monthName(period)} payroll.` } });
 }

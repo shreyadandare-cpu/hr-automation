@@ -44,7 +44,9 @@ server is run does:
 ## What the new backend does to the database when it starts
 **Salary release (2026-11-27):** on its first start it encrypts every salary figure already stored (payroll, salary structures,
 adjustments, totals, payroll history details, monthly gross, exit settlements, offer letters, payroll Excel reports) and empties the
-plain columns. Stop the old release first and then start this one; never run both at once. To go back to an older release, stop
+plain columns, and the same for every other payment (expense claims, advances, loans, budgets, contractor payments, tax declarations).
+After it has started once, run `cd backend && node scripts/salary-encryption.mjs --redact-old-text` to count notices and audit lines from
+before that still name an amount, and add `--commit` to remove those amounts. Stop the old release first and then start this one; never run both at once. To go back to an older release, stop
 the server and run `cd backend && node scripts/salary-encryption.mjs --down` first. `node scripts/salary-encryption.mjs` (no option)
 shows how many rows are encrypted and how many are still plain.
 

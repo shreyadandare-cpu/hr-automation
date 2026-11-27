@@ -18,6 +18,7 @@ import { employeeNoOwner, nextEmployeeNoFrom } from "./employee-no.js";
 import { mailConfigured, sendWorkAccountEmail } from "./mail.js";
 import { notify } from "./notify.js";
 import { registerDetailsSheet } from "./details-sheet.js";
+import { personalEmailTaken, updatePerson, updateProfile } from "./sealed-rows.js";
 import { saveBankAccount } from "./payroll/routes.js";
 
 const DOMAIN = "wohlig.com";
@@ -36,20 +37,12 @@ async function nextWorkEmail(client, first, last) {
 }
 
 /** Returns the name of someone else who already uses this personal email, or null. exceptWorkEmail is the person being saved. */
-async function personalEmailOwner(db, personalEmail, exceptWorkEmail) {
-  const { rows } = await db.query(
-    "SELECT name FROM employees WHERE lower(personal_email)=$1 AND lower(work_email)<>$2 LIMIT 1",
-    [String(personalEmail).trim().toLowerCase(), String(exceptWorkEmail || "").toLowerCase()]);
-  return rows[0]?.name || null;
-}
-/** Puts the two emergency contacts on the person's profile (My profile > Contact details), where the ID card reads the first one. */
+const personalEmailOwner = (db, personalEmail, exceptWorkEmail) => personalEmailTaken(db, personalEmail, exceptWorkEmail);
+/** Puts the two emergency contacts on the person's profile (My profile > Contact details), where the ID card reads the first one. Stored encrypted. */
 const saveEmergency = (db, email, d) => {
   const [a, b] = emergencyOfDetails(d).map((c) => ({ name: String(c.name || "").trim(), relation: String(c.relation || "").trim(), phone: String(c.phone || "").trim() }));
   const c = { emergencyName: a.name, emergencyRelation: a.relation, emergencyPhone: a.phone, emergency2Name: b.name, emergency2Relation: b.relation, emergency2Phone: b.phone };
-  return db.query(
-    `INSERT INTO profiles (email, data) VALUES ($1, jsonb_build_object('contact', $2::jsonb))
-     ON CONFLICT (email) DO UPDATE SET data=jsonb_set(profiles.data, '{contact}', COALESCE(profiles.data->'contact','{}'::jsonb) || $2::jsonb, true), updated_at=now()`,
-    [email.toLowerCase(), JSON.stringify(c)]);
+  return updateProfile(db, email, (cur) => ({ ...cur, contact: { ...((cur && cur.contact) || {}), ...c } }));
 };
 const dupEmailError = (email, owner) => ({ pemail: `${email} already belongs to ${owner}. Use a different personal email.` });
 
@@ -99,9 +92,12 @@ export function onboardingRouter(wrap) {
   // The page merges them into its employee list so HR can pick up where they left off.
   r.get("/api/onboarding", wrap(async (_req, res) => {
     const { rows } = await pool.query(
-      `${RECORD_SQL} WHERE e.onboarded_at IS NOT NULL OR e.google_status IS NOT NULL OR e.dob IS NOT NULL OR e.aadhaar_masked IS NOT NULL OR e.pan_masked IS NOT NULL OR e.acct_masked IS NOT NULL
-        ORDER BY e.created_at`);   // the last four: details filled in from the employee details sheet for people who were never onboarded here
-    res.json(rows.map(toApi));
+      `${RECORD_SQL} WHERE e.onboarded_at IS NOT NULL OR e.google_status IS NOT NULL OR e.person_sealed IS NOT NULL
+        OR e.dob IS NOT NULL OR e.aadhaar_masked IS NOT NULL OR e.pan_masked IS NOT NULL OR e.acct_masked IS NOT NULL
+        ORDER BY e.created_at`);
+    // Also people who were never onboarded here but whose details came from the employee details sheet. Those details are stored
+    // encrypted, so that part is decided here, once they are opened.
+    res.json(rows.filter((x) => x.onboarded_at || x.google_status || x.dob || x.aadhaar_masked || x.pan_masked || x.acct_masked).map(toApi));
   }));
 
   // The employee details sheet: download it, fill it in, upload it, and the details go into each person's profile (details-sheet.js).
@@ -152,7 +148,8 @@ export function onboardingRouter(wrap) {
     if (Object.keys(errors).length) return res.status(400).json({ errors });
 
     const full = `${d.first} ${d.last}`.trim();
-    const fields = [full, d.dept || null, d.title.trim(), d.mgr || null, d.start, d.pemail.trim(), d.phone.trim(), d.address.trim()];
+    const fields = [full, d.dept || null, d.title.trim(), d.mgr || null, d.start];
+    const personal = { personal_email: d.pemail.trim(), phone: d.phone.trim(), address: d.address.trim() };   // stored encrypted
     let email, status;
     const client = await pool.connect();
     try {
@@ -172,8 +169,9 @@ export function onboardingRouter(wrap) {
         const taken = no && no !== r.rows[0].emp_no ? await employeeNoOwner(client, no, email) : null;
         if (taken) { await client.query("ROLLBACK"); return res.status(400).json({ errors: { empNo: `${no} already belongs to ${taken}.` } }); }
         await client.query(
-          `UPDATE employees SET name=$1, dept=$2, title=$3, manager=$4, start_date=$5, personal_email=$6, phone=$7,
-           address=$8, google_status=$9, emp_no=COALESCE($11, emp_no) WHERE lower(work_email)=$10`, [...fields, status, email.toLowerCase(), no]);
+          `UPDATE employees SET name=$1, dept=$2, title=$3, manager=$4, start_date=$5, google_status=$6, emp_no=COALESCE($8, emp_no) WHERE lower(work_email)=$7`,
+          [...fields, status, email.toLowerCase(), no]);
+        await updatePerson(client, email, personal);
       } else {
         await client.query("LOCK TABLE employees IN SHARE ROW EXCLUSIVE MODE");
         email = typed || await nextWorkEmail(client, d.first, d.last);
@@ -186,8 +184,9 @@ export function onboardingRouter(wrap) {
         const taken = no ? await employeeNoOwner(client, no) : null;
         if (taken) { await client.query("ROLLBACK"); return res.status(400).json({ errors: { empNo: `${no} already belongs to ${taken}.` } }); }
         await client.query(
-          `INSERT INTO employees (name, dept, title, manager, start_date, personal_email, phone, address, work_email, status, google_status, emp_no)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'onboarding',$11,$10)`, [...fields, email, no, status]);
+          `INSERT INTO employees (name, dept, title, manager, start_date, work_email, status, google_status, emp_no)
+           VALUES ($1,$2,$3,$4,$5,$6,'onboarding',$8,$7)`, [...fields, email, no, status]);
+        await updatePerson(client, email, personal);
         await client.query("INSERT INTO audit_log (action, work_email) VALUES ($1,$2)", [typed ? "Work email entered by HR" : "Work email reserved", email]);
       }
       await client.query("UPDATE employees SET employment_type=$1 WHERE lower(work_email)=$2", [kindOf(d), email.toLowerCase()]);
@@ -249,9 +248,12 @@ export function onboardingRouter(wrap) {
     if (Object.keys(errors).length) return res.status(400).json({ errors });
 
     const full = `${d.first} ${d.last}`.trim();
-    const fields = [d.dept, d.title.trim(), d.mgr || null, d.start, d.pemail.trim(), d.phone.trim(), d.address.trim(),
-      ids.dob || null, maskAadhaar(ids.aadhaar), maskPan(ids.pan), maskAcct(ids.acct),
-      String(ids.ifsc || "").trim().toUpperCase() || null, JSON.stringify(apps)];
+    const fields = [d.dept, d.title.trim(), d.mgr || null, d.start, JSON.stringify(apps)];
+    // Stored encrypted. An ID left empty keeps the one on file.
+    const keep = (v, f) => (v ? v : (row) => row[f] ?? null);
+    const personal = { personal_email: d.pemail.trim(), phone: d.phone.trim(), address: d.address.trim(),
+      dob: keep(ids.dob || null, "dob"), aadhaar_masked: keep(maskAadhaar(ids.aadhaar), "aadhaar_masked"), pan_masked: keep(maskPan(ids.pan), "pan_masked"),
+      acct_masked: keep(maskAcct(ids.acct), "acct_masked"), ifsc: keep(String(ids.ifsc || "").trim().toUpperCase() || null, "ifsc") };
 
     const client = await pool.connect();
     try {
@@ -269,9 +271,9 @@ export function onboardingRouter(wrap) {
       const stop = await guardExisting(req, { ...row, personal_email: row.personal_email ?? row.personalEmail }, d);
       if (stop) { await client.query("ROLLBACK"); return res.status(stop.status).json(stop.body); }
       await client.query(
-        `UPDATE employees SET name=$1, dept=$2, title=$3, manager=$4, start_date=$5, personal_email=$6, phone=$7,
-         address=$8, dob=COALESCE($9, dob), aadhaar_masked=COALESCE($10, aadhaar_masked), pan_masked=COALESCE($11, pan_masked), acct_masked=COALESCE($12, acct_masked), ifsc=COALESCE($13, ifsc), apps=$14, onboarded_at=now()
-         WHERE lower(work_email)=$15`, [full, ...fields, row.work_email.toLowerCase()]);
+        `UPDATE employees SET name=$1, dept=$2, title=$3, manager=$4, start_date=$5, apps=$6, onboarded_at=now() WHERE lower(work_email)=$7`,
+        [full, ...fields, row.work_email.toLowerCase()]);
+      await updatePerson(client, row.work_email, personal);
       await client.query("UPDATE employees SET employment_type=$1 WHERE lower(work_email)=$2", [kindOf(d), row.work_email.toLowerCase()]);
       await saveEmergency(client, row.work_email, d);
       await client.query("INSERT INTO audit_log (action, work_email) VALUES ($1,$2)", [`Onboarding completed${kindOf(d) === "Intern" ? " (intern)" : ""}`, row.work_email]);

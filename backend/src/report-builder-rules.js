@@ -28,7 +28,7 @@ export const DATASETS = {
       dept: { label: "Department", sql: "e.dept", type: "dept" }, title: { label: "Job title", sql: "e.title" }, manager: { label: "Reporting manager", sql: "m.name" },
       status: { label: "Status", sql: "e.status", type: "label", labels: STATUS_EMP }, type: { label: "Employment type", sql: "e.employment_type" },
       location: { label: "Work location", sql: "e.work_location" }, joined: { label: "Joining date", sql: day("e.start_date"), type: "date" },
-      lastDay: { label: "Last day", sql: day("e.last_day"), type: "date" }, phone: { label: "Phone", sql: "e.phone" },
+      lastDay: { label: "Last day", sql: day("e.last_day"), type: "date" }, phone: { label: "Phone", sql: "COALESCE(NULLIF(e.phone, ''), e.person_sealed)", sealed: "phone" },
     },
     filters: {
       status: { label: "Status", type: "select", sql: "e.status", options: STATUS_EMP },
@@ -182,7 +182,7 @@ export function shapeRows(ds, columns, rows, after, deptOf) {
       // A figure stored sealed (secret-box.js) is read as its sealed column and opened here.
       // (Or the plain value, for a row not sealed yet.)
       const raw = def.sealed && row[c] != null ? (String(row[c]).startsWith("s1:") ? openJson(row[c])[def.sealed] : row[c]) : row[c];
-      const v = def.sealed ? (raw == null ? null : Number(raw)) : raw;
+      const v = def.sealed && def.type === "number" ? (raw == null ? null : Number(raw)) : raw;
       if (def.type === "label") { const hit = def.labels.find(([k]) => String(k) === String(v)); return hit ? hit[1] : v ?? ""; }
       return v ?? "";
     }));

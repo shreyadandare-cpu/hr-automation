@@ -24,12 +24,14 @@ const day = (d) => (d ? new Date(d).toLocaleDateString("en-IN", { day: "numeric"
 
 async function people(where, args) {
   const { rows } = await pool.query(
-    `SELECT e.name, e.emp_no, e.title, e.dept, e.work_email, e.start_date, e.work_location,
-            COALESCE(NULLIF(e.phone,''), pr.data->'contact'->>'phone') AS phone, pr.data->'primary'->>'blood' AS blood, p.stored_name,
-            pr.data->'contact'->>'emergencyName' AS em_name, pr.data->'contact'->>'emergencyRelation' AS em_rel, pr.data->'contact'->>'emergencyPhone' AS em_phone
+    `SELECT e.name, e.emp_no, e.title, e.dept, e.work_email, e.start_date, e.work_location, e.phone, e.person_sealed, p.stored_name, pr.data, pr.profile_sealed
        FROM employees e LEFT JOIN profile_photos p ON lower(p.email)=lower(e.work_email) LEFT JOIN profiles pr ON lower(pr.email)=lower(e.work_email)
       WHERE e.status NOT IN ('offboarding','offboarded') AND e.work_email IS NOT NULL ${where} ORDER BY e.emp_no, e.name LIMIT 500`, args);
-  return rows;
+  // The phone and the profile are stored encrypted, so the card's lines are picked out here once they are opened.
+  return rows.map(({ data, ...r }) => {
+    const c = (data && data.contact) || {}, pr = (data && data.primary) || {};
+    return { ...r, phone: r.phone || c.phone || null, blood: pr.blood || null, em_name: c.emergencyName || null, em_rel: c.emergencyRelation || null, em_phone: c.emergencyPhone || null };
+  });
 }
 
 /** The back of the card: the person's first emergency contact, as { phone, who } ("Name (relation)"). Empty until they add it on My profile. */

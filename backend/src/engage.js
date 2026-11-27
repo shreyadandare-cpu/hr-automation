@@ -568,7 +568,7 @@ export function engageRouter(wrap) {
     const fy = financialYear(await today());
     const [{ rows: [x] }, { rows: [e] }] = await Promise.all([
       pool.query("SELECT regime, items, status, submitted_at, proofs, declreq_sealed FROM tax_declaration_requests WHERE lower(email)=$1 AND financial_year=$2", [asked, fy]),
-      pool.query("SELECT name, address, phone, pan_masked FROM employees WHERE lower(work_email)=$1", [asked]),
+      pool.query("SELECT name, address, phone, pan_masked, person_sealed FROM employees WHERE lower(work_email)=$1", [asked]),
     ]);
     if (!x) return res.status(404).json({ error: "Please save your declaration first, then download the form." });
     const pdf = await lockedPdfOf(await form124Pdf({ fy, email: asked, person: e || { name: asked.split("@")[0] }, declaration: x }), "application/pdf", unlockedPassword(req));

@@ -1,6 +1,7 @@
 import express from "express";
 import ExcelJS from "exceljs";
 import { payPool } from "../db.js";
+import { updatePerson } from "../sealed-rows.js";
 const pool = payPool;   // everything here is on the payroll database (the same one as the rest of the app unless PAYROLL_DATABASE_URL gives payroll its own, which then holds its own employee copy)
 import { invalidateTree } from "../access.js";
 import { V, maskAadhaar, maskAcct, maskPan } from "../validate.js";
@@ -51,7 +52,7 @@ export function cleanPatch(body, problems = {}) {
 export function registerMaster(R, { wrap, bankOnly, saveBankAccount, audit }) {
   R.use("/master", bankOnly);
   const lc = (s) => String(s || "").toLowerCase();
-  const EMP_COLS = "e.work_email, e.name, e.emp_no, e.dept, e.title, e.status, e.onboarded_at, e.pan_masked, e.aadhaar_masked, e.acct_masked, e.ifsc";
+  const EMP_COLS = "e.work_email, e.name, e.emp_no, e.dept, e.title, e.status, e.onboarded_at, e.pan_masked, e.aadhaar_masked, e.acct_masked, e.ifsc, e.person_sealed";
 
   /** One person as the screens show them: masked numbers only. `e` is an employees row; `m` the payroll_master row; `b` the bank account row; `gross` the monthly salary. */
   const view = (e, m, b, gross) => ({
@@ -82,7 +83,7 @@ export function registerMaster(R, { wrap, bankOnly, saveBankAccount, audit }) {
    */
   async function saveMaster(client, email, v, actor) {
     seal("x");   // 503 when PAYROLL_ENCRYPTION_KEY is missing
-    const { rows: [e] } = await pool.query("SELECT ifsc FROM employees WHERE lower(work_email)=$1", [email]);
+    const { rows: [e] } = await pool.query("SELECT ifsc, person_sealed FROM employees WHERE lower(work_email)=$1", [email]);
     if (!e) return { rollback: true, status: 404, error: "Employee not found." };
     await client.query("INSERT INTO payroll_master (work_email, updated_by) VALUES ($1,$2) ON CONFLICT DO NOTHING", [email, actor]);
     const { rows: [m] } = await client.query("SELECT * FROM payroll_master WHERE lower(work_email)=$1 FOR UPDATE", [email]);
@@ -116,12 +117,12 @@ export function registerMaster(R, { wrap, bankOnly, saveBankAccount, audit }) {
 
   /** Keeps the profile in step: masked Aadhaar, PAN and account number, and the IFSC. */
   async function syncProfile(email, v, actor, changed) {
-    const set = [], args = [email], put = (col, val) => { args.push(val); set.push(`${col}=$${args.length}`); };
-    if (v.aadhaar) put("aadhaar_masked", maskAadhaar(v.aadhaar));
-    if (v.pan) put("pan_masked", maskPan(v.pan));
-    if (v.account) put("acct_masked", maskAcct(v.account));
-    if (v.ifsc) put("ifsc", v.ifsc);
-    if (set.length) await pool.query(`UPDATE employees SET ${set.join(", ")} WHERE lower(work_email)=$1`, args);
+    const person = {};   // stored encrypted (secret-box.js)
+    if (v.aadhaar) person.aadhaar_masked = maskAadhaar(v.aadhaar);
+    if (v.pan) person.pan_masked = maskPan(v.pan);
+    if (v.account) person.acct_masked = maskAcct(v.account);
+    if (v.ifsc) person.ifsc = v.ifsc;
+    if (Object.keys(person).length) await updatePerson(pool, email, person);
     if (changed.length) await pool.query("INSERT INTO audit_log (action, work_email) VALUES ($1,$2)", [`Payroll master updated by ${actor}: ${changed.map((k) => LABEL[k].toLowerCase()).join(", ")}`, email]);
     invalidateTree(); payrollChanged();
   }

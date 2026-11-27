@@ -1,5 +1,6 @@
 import express from "express";
 import { pool, payPool } from "./db.js";
+import { updateSealed } from "./sealed-rows.js";
 import { canAll, invalidateTree } from "./access.js";
 import { encryptionReady } from "./payroll/access.js";
 import { payrollChanged } from "./payroll/preview-cache.js";
@@ -14,22 +15,25 @@ import { COLUMNS, FIELD_LABEL, describe, parseProfiles, templateXlsx } from "./o
  * back to the page. `saveBankAccount` is passed in by the caller (it lives in payroll/routes.js, which would otherwise import this file in a circle).
  */
 const MODES = {
-  full: { allowed: null, file: "employee-details", people: "(dob IS NULL OR aadhaar_masked IS NULL OR pan_masked IS NULL OR acct_masked IS NULL OR ifsc IS NULL)" },
+  full: { allowed: null, file: "employee-details" },
 };
 const BANK_KEYS = ["holder", "bankName", "account", "ifsc"];
 
 export function registerDetailsSheet(r, { wrap, base, mode = "full", saveBankAccount }) {
   const M = MODES[mode], allowed = M.allowed ? new Set(M.allowed) : null;
   const SHEET_LIMIT = 2 * 1024 * 1024;
-  const DETAIL_COLUMNS = "id, work_email, name, emp_no, status, dob, aadhaar_masked, pan_masked, acct_masked, ifsc, pf_number, phone, address";
+  const DETAIL_COLUMNS = "id, work_email, name, emp_no, status, dob, aadhaar_masked, pan_masked, acct_masked, ifsc, pf_number, phone, address, person_sealed, pay_sealed";
   const bankComplete = (f) => !!(f.holder && f.bankName && f.ifsc && f.account);
   // Payroll needs the encryption key; the full sheet also needs the person to hold the bank permission (the bank sheet's guard already makes sure of it).
   const bankAllowed = (req) => encryptionReady() && (mode === "bank" || canAll(req, "payroll.bank"));
 
   // The template always lists everyone who is still here (so a new joiner appears as soon as their profile exists), people still lacking details first. Blank cells change nothing.
   r.get(`${base}/template`, wrap(async (_req, res) => {
-    const { rows } = await pool.query(
-      `SELECT work_email, name, emp_no FROM employees WHERE status <> 'offboarded' ORDER BY ${M.people} DESC, name LIMIT 500`);
+    // People still lacking a detail first. The details are stored encrypted, so the order is worked out here once they are opened.
+    const { rows: all } = await pool.query(
+      "SELECT work_email, name, emp_no, dob, aadhaar_masked, pan_masked, acct_masked, ifsc, person_sealed FROM employees WHERE status <> 'offboarded' ORDER BY name LIMIT 5000");
+    const lacking = (p) => !(p.dob && p.aadhaar_masked && p.pan_masked && p.acct_masked && p.ifsc);
+    const rows = [...all.filter(lacking), ...all.filter((p) => !lacking(p))].slice(0, 500);
     res.set({ "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "Content-Disposition": `attachment; filename="${M.file}-sheet.xlsx"` });
     res.send(await templateXlsx(rows.map((p) => ({ email: p.work_email, empNo: p.emp_no, name: p.name })), M.allowed));
   }));
@@ -62,17 +66,17 @@ export function registerDetailsSheet(r, { wrap, base, mode = "full", saveBankAcc
     try {
       await client.query("BEGIN");
       for (const x of ready) {
-        const f = x.fields, set = [], args = [x.emp.id];
-        const put = (col, val) => { args.push(val); set.push(`${col}=$${args.length}`); };
-        if (f.dob) put("dob", f.dob);
-        if (f.aadhaar) put("aadhaar_masked", maskAadhaar(f.aadhaar));
-        if (f.pan) put("pan_masked", maskPan(f.pan));
-        if (f.account) put("acct_masked", maskAcct(f.account));
-        if (f.ifsc) put("ifsc", f.ifsc);
-        if (f.pfNumber) put("pf_number", f.pfNumber);
-        if (f.phone) put("phone", f.phone);
-        if (f.address) put("address", f.address);
-        if (set.length) await client.query(`UPDATE employees SET ${set.join(", ")} WHERE id=$1`, args);
+        // Stored encrypted (secret-box.js): the personal details together, the PF number beside the monthly gross.
+        const f = x.fields, person = {};
+        if (f.dob) person.dob = f.dob;
+        if (f.aadhaar) person.aadhaar_masked = maskAadhaar(f.aadhaar);
+        if (f.pan) person.pan_masked = maskPan(f.pan);
+        if (f.account) person.acct_masked = maskAcct(f.account);
+        if (f.ifsc) person.ifsc = f.ifsc;
+        if (f.phone) person.phone = f.phone;
+        if (f.address) person.address = f.address;
+        if (Object.keys(person).length) await updateSealed(client, "person_sealed", x.emp.id, person);
+        if (f.pfNumber) await updateSealed(client, "pay_sealed", x.emp.id, { pf_number: f.pfNumber });
         const what = x.adds.map((a) => (a.key === "account" ? `bank account (${a.value})` : a.label.toLowerCase())).join(", ");
         await client.query("INSERT INTO audit_log (action, work_email) VALUES ($1,$2)", [`${mode === "bank" ? "Bank and payroll details" : "Profile details"} added from the uploaded sheet by ${actor}: ${what}`, x.emp.work_email]);
       }

@@ -1,5 +1,6 @@
 import express from "express";
 import { setMonthlyGross } from "./payroll/sealing.js";
+import { dobOf } from "./sealed-rows.js";
 import L from "../../frontend/leave-rules.cjs";
 import { pool } from "./db.js";
 import { requireAuth } from "./auth.js";
@@ -170,10 +171,11 @@ export function leaveRouter(wrap) {
          WHERE r.status = 'approved' AND r.from_date > $1 AND r.from_date <= $2 AND e.status <> 'offboarded'
          ORDER BY r.from_date, e.name`, [today, soonUntil]),
       // The date of birth from the person's own profile wins over the one HR entered at onboarding.
+      // Both are stored encrypted, so the choice is made here once they are opened (dobOf).
       pool.query(
-        `SELECT e.work_email, e.name, e.title, COALESCE(NULLIF(p.data->'primary'->>'dob', ''), e.dob::text) AS dob
+        `SELECT e.work_email, e.name, e.title, e.dob, e.person_sealed, p.data, p.profile_sealed
          FROM employees e LEFT JOIN profiles p ON lower(p.email) = lower(e.work_email)
-         WHERE e.status <> 'offboarded'`),
+         WHERE e.status <> 'offboarded'`).then((r) => ({ ...r, rows: r.rows.map(dobOf) })),
     ]);
     // The next time each birthday falls, today included. 29 Feb is kept on 28 Feb in other years.
     const y = Number(today.slice(0, 4));

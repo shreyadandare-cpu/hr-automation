@@ -1,6 +1,6 @@
 import { payrollChanged } from "./payroll/preview-cache.js";
 import { sealFields } from "./secret-box.js";
-import { setMonthlyGross } from "./payroll/sealing.js";
+import { setMonthlyGross, setPfNumber } from "./payroll/sealing.js";
 import express from "express";
 import { payPool as pool, pool as mainPool, PAYROLL_SEPARATE } from "./db.js";   // payroll may use its own database (PAYROLL_DATABASE_URL)
 import { event, markClaimsPaid } from "./reimbursements.js";
@@ -62,7 +62,7 @@ async function saveStructure(client, emp, email, v, actor) {
       f.annual_ctc, v.pfApplicable, f.employer_pf, v.ptApplicable, f.pt_february, v.tdsApplicable, v.tdsMode, v.reason, f.esic_employee, sealed]);
   // The monthly gross (used for loss-of-pay cuts and exit settlements) follows the breakdown now in force.
   const [current] = await structuresFor(client, new Date(Date.now() + 5.5 * 3600e3).toISOString().slice(0, 7), email);
-  await client.query("UPDATE employees SET pf_number=CASE WHEN $2 THEN $3 ELSE pf_number END WHERE id=$1", [emp.id, v.pfNumber !== undefined, v.pfNumber ?? null]);
+  if (v.pfNumber !== undefined) await setPfNumber(client, emp.id, v.pfNumber);   // stored encrypted, beside the monthly gross
   if (current) await setMonthlyGross(client, emp.id, grossOf(current.earnings));
   await client.query("INSERT INTO audit_log (action, work_email) VALUES ($1,$2)", [`Salary breakdown from ${monthName(v.effectiveFrom)} saved by ${actor}`, email]);
   const { rows: [prev] } = old ? { rows: [] } : await client.query(

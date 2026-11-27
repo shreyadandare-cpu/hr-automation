@@ -19,7 +19,7 @@ docker build -t hrhub-frontend frontend
 | `PAYSLIP_AUTO` | `off` **until HR has entered the real salaries** | Stops the hourly job that starts and recalculates the monthly payroll draft. With it off, payroll changes only when HR does something. Remove it (or set anything else) to turn the automation back on. |
 | `GEMINI_API_KEY` | a Gemini API key (Google AI Studio) | LinkedIn kit: the headline suggestions. Without it the button says Gemini isn't set up. Model defaults to `gemini-flash-lite-latest` (`GEMINI_MODEL` to change). Keep the key in the server settings only. |
 | `SALARY_OWNERS` | `chintan@wohlig.com,chirag@wohlig.com,kailash@wohlig.com` (the default) | The only people who see salaries, payslips, bank details and finance reports. |
-| `PAYROLL_ENCRYPTION_KEY`, `DOCUMENTS_ENCRYPTION_KEY` | each `openssl rand -hex 32`, from the secret store (below) | Every salary figure, bank number, PAN, Aadhaar and document is encrypted with them. Without them no salary or document can be saved or read. |
+| `PAYROLL_ENCRYPTION_KEY`, `DOCUMENTS_ENCRYPTION_KEY` | each `openssl rand -hex 32`, from the secret store (below) | Every salary figure, bank number, PAN, Aadhaar, document and personal detail (phone, address, date of birth, personal email, My profile) is encrypted with them. Without them no salary, document or personal detail can be saved or read. |
 | `BACKGROUND_JOBS` | leave on only on the **one** server that should run scheduled jobs | Daily leave digest, reminders, payslip notices. |
 
 Do not copy `backend/.env` into an image. It is excluded by `.dockerignore`.
@@ -44,7 +44,9 @@ server is run does:
 ## What the new backend does to the database when it starts
 **Salary release (2026-11-27):** on its first start it encrypts every salary figure already stored (payroll, salary structures,
 adjustments, totals, payroll history details, monthly gross, exit settlements, offer letters, payroll Excel reports) and empties the
-plain columns, and the same for every other payment (expense claims, advances, loans, budgets, contractor payments, tax declarations).
+plain columns, and the same for every other payment (expense claims, advances, loans, budgets, contractor payments, tax declarations)
+and for employees' personal details (personal email, phone, address, date of birth, masked Aadhaar, PAN and account, IFSC, PF
+number and the whole My profile record). The same `--down` puts the personal details back in their plain columns too.
 After it has started once, run `cd backend && node scripts/salary-encryption.mjs --redact-old-text` to count notices and audit lines from
 before that still name an amount, and add `--commit` to remove those amounts. Stop the old release first and then start this one; never run both at once. To go back to an older release, stop
 the server and run `cd backend && node scripts/salary-encryption.mjs --down` first. `node scripts/salary-encryption.mjs` (no option)

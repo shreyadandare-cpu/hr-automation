@@ -6,6 +6,7 @@ import { pool } from "./db.js";
 import { V, emergencyCheck } from "./validate.js";
 import { requireAuth } from "./auth.js";
 import { UPLOAD_DIR } from "./documents.js";
+import { personalEmailTaken, updatePerson, updateProfile } from "./sealed-rows.js";
 
 /* "My profile": the personal sections a person fills in about themselves. Everyone edits only their own. */
 const ENUMS = {
@@ -96,13 +97,13 @@ const wrap = (fn) => (req, res, next) => fn(req, res, next).catch(next);
 
 /** The date of birth on the employee record (entered at onboarding or imported), as YYYY-MM-DD, or "". It is used when the profile has none of its own. */
 const ownDob = async (email) => {
-  const { rows } = await pool.query("SELECT to_char(dob, 'YYYY-MM-DD') AS dob FROM employees WHERE lower(work_email)=$1", [email.toLowerCase()]);
-  return rows[0] && rows[0].dob ? rows[0].dob : "";
+  const { rows } = await pool.query("SELECT dob, person_sealed FROM employees WHERE lower(work_email)=$1", [email.toLowerCase()]);
+  return rows[0] && rows[0].dob ? String(rows[0].dob).slice(0, 10) : "";
 };
 
 /** The masked PAN and Aadhaar on the employee record. Shown on the person's own profile, read only: the app never keeps the full numbers, and HR corrects them. */
 const ownIds = async (email) => {
-  const { rows } = await pool.query("SELECT pan_masked, aadhaar_masked FROM employees WHERE lower(work_email)=$1", [email.toLowerCase()]);
+  const { rows } = await pool.query("SELECT pan_masked, aadhaar_masked, person_sealed FROM employees WHERE lower(work_email)=$1", [email.toLowerCase()]);
   return { pan: (rows[0] && rows[0].pan_masked) || "", aadhaar: (rows[0] && rows[0].aadhaar_masked) || "" };
 };
 
@@ -112,7 +113,7 @@ const photoVersion = async (email) => {
 };
 
 profileRouter.get("/", wrap(async (req, res) => {
-  const { rows } = await pool.query("SELECT data FROM profiles WHERE lower(email)=$1", [req.user.email.toLowerCase()]);
+  const { rows } = await pool.query("SELECT data, profile_sealed FROM profiles WHERE lower(email)=$1", [req.user.email.toLowerCase()]);
   res.json({ ...(rows[0]?.data || {}), photoV: await photoVersion(req.user.email), employeeDob: await ownDob(req.user.email), ids: await ownIds(req.user.email) });
 }));
 
@@ -121,25 +122,20 @@ profileRouter.put("/", wrap(async (req, res) => {
   // A personal email belongs to one person: not a colleague's from onboarding, and not one saved on another profile.
   const mine = req.user.email.toLowerCase(), pe = data.contact.personalEmail.toLowerCase();
   if (pe && /@wohlig\.com$/.test(pe)) errors["contact.personalEmail"] = "Use a personal email, not a @wohlig.com address.";
-  else if (pe) {
-    const a = await pool.query("SELECT name FROM employees WHERE lower(personal_email)=$1 AND lower(work_email)<>$2 LIMIT 1", [pe, mine]);
-    const b = await pool.query("SELECT email FROM profiles WHERE lower(data->'contact'->>'personalEmail')=$1 AND lower(email)<>$2 LIMIT 1", [pe, mine]);
-    if (a.rows[0] || b.rows[0]) errors["contact.personalEmail"] = "That email already belongs to someone else. Use a different one.";
-  }
+  else if (pe && await personalEmailTaken(pool, pe, mine, { profiles: true })) errors["contact.personalEmail"] = "That email already belongs to someone else. Use a different one.";
   if (data.contact.emergencyPhone || data.contact.emergency2Phone) {
-    const own = (await pool.query("SELECT phone FROM employees WHERE lower(work_email)=$1", [mine])).rows[0]?.phone;
+    const own = (await pool.query("SELECT phone, person_sealed FROM employees WHERE lower(work_email)=$1", [mine])).rows[0]?.phone;
     const again = {};
     emergencyErrors(data.contact, again, false, own);
     for (const [k, v] of Object.entries(again)) if (!errors[k] && /own number/.test(v)) errors[k] = v;
   }
   if (Object.keys(errors).length) return res.status(400).json({ errors });
-  await pool.query(
-    `INSERT INTO profiles (email, data) VALUES ($1,$2)
-     ON CONFLICT (email) DO UPDATE SET data=$2, updated_at=now()`, [req.user.email.toLowerCase(), data]);
+  // Both are stored encrypted (secret-box.js).
+  await updateProfile(pool, mine, () => data);
   // The same details go onto the employee record, so the rest of Wohlig One shows what was just entered (see employeeFieldsFrom).
   const shared = employeeFieldsFrom(data), cols = Object.keys(shared);
   if (cols.length) {
-    await pool.query(`UPDATE employees SET ${cols.map((k, i) => `${k}=$${i + 2}`).join(", ")} WHERE lower(work_email)=$1`, [mine, ...cols.map((k) => shared[k])]);
+    await updatePerson(pool, mine, shared);
     await pool.query("INSERT INTO audit_log (action, work_email) VALUES ($1,$2)", [`Profile saved: ${cols.map((k) => k.replace("_", " ")).join(", ")} updated on the employee record`, mine]);
   }
   res.json({ ...data, photoV: await photoVersion(req.user.email), employeeDob: await ownDob(req.user.email), ids: await ownIds(req.user.email) });

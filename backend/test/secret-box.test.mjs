@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import crypto from "node:crypto";
-import { SEALED, openJson, openSealedResult, openSealedRow, sealFields, sealJson } from "../src/secret-box.js";
+import { SEALED, emailIndex, indexesOf, openJson, openSealedResult, openSealedRow, sealFields, sealJson } from "../src/secret-box.js";
 
 const withEnv = async (env, fn) => {
   const before = Object.fromEntries(Object.keys(env).map((k) => [k, process.env[k]]));
@@ -47,8 +47,8 @@ test("without the key: refused on the live server, plain only in local developme
 
 test("every salary table and figure is covered", () => {
   assert.deepEqual(Object.values(SEALED).map((x) => x.table).sort(),
-    ["advance_recoveries", "advance_requests", "budget_request_events", "budget_requests", "contractor_payments", "employee_advances", "employees", "loan_events", "loans",
-      "offboarding_clearances", "offer_letters", "payroll_adjustments", "payroll_audit", "payroll_files", "payroll_items", "payroll_runs", "reimbursement_documents", "reimbursement_events",
+    ["advance_recoveries", "advance_requests", "budget_request_events", "budget_requests", "contractor_payments", "employee_advances", "employees", "employees", "loan_events", "loans",
+      "offboarding_clearances", "offer_letters", "payroll_adjustments", "payroll_audit", "payroll_files", "payroll_items", "payroll_runs", "profiles", "reimbursement_documents", "reimbursement_events",
       "reimbursement_items", "reimbursements", "salary_structures", "tax_declaration_requests", "tax_declarations"]);
   assert.ok(SEALED.clearance_sealed.fields.includes("net_salary") && SEALED.offer_sealed.fields.includes("ctc_annual") && SEALED.offer_sealed.fields.includes("letter_text"));
   assert.ok(SEALED.item_sealed.fields.includes("payable") && SEALED.item_sealed.fields.includes("slip") && SEALED.item_sealed.fields.includes("inputs"));
@@ -81,3 +81,60 @@ test("old notices and audit lines lose their amounts, and keep their words", asy
   assert.equal(redactMoney("final salary ₹43,210.50, payout Rs. 500"), "final salary [amount removed], payout [amount removed]");
   assert.equal(redactMoney("REIM-2026-0001: Approved by HR (3 expenses)"), "REIM-2026-0001: Approved by HR (3 expenses)");
 });
+
+test("personal details are sealed: contact details, date of birth, masked IDs and bank, the PF number and the whole profile", () => {
+  for (const f of ["personal_email", "phone", "address", "dob", "aadhaar_masked", "pan_masked", "acct_masked", "ifsc"]) assert.ok(SEALED.person_sealed.fields.includes(f), f);
+  assert.ok(SEALED.pay_sealed.fields.includes("pf_number"));
+  assert.deepEqual(SEALED.profile_sealed, { table: "profiles", fields: ["data"], key: "email" });
+});
+
+test("personal details are opened field by field, and only the fields the query asked for", () => withEnv(KEY, () => {
+  const { sealed, plain } = sealFields("person_sealed", { personal_email: "a@gmail.com", phone: "9876543210", address: "12 MG Road, Pune", dob: "1998-03-14", pan_masked: "XXXXXX234F" });
+  assert.ok(!/gmail|9876543210|MG Road|1998|234F/.test(sealed), "nothing readable in the stored value");
+  assert.deepEqual(plain, { personal_email: null, phone: null, address: null, dob: null, pan_masked: null });
+  // A roster reading only the phone never also carries the address or the date of birth.
+  assert.deepEqual(openSealedRow({ name: "A", phone: null, person_sealed: sealed }), { name: "A", phone: "9876543210" });
+  // A phone an older release wrote after sealing wins; the other fields still come from the sealed copy.
+  assert.deepEqual(openSealedRow({ phone: "9000000000", address: null, dob: null, person_sealed: sealed }), { phone: "9000000000", address: "12 MG Road, Pune", dob: "1998-03-14" });
+  // The profile record, with its empty JSON default.
+  const p = sealFields("profile_sealed", { data: { contact: { phone: "9876543210" } } });
+  assert.deepEqual(p.plain, { data: "{}" });
+  assert.deepEqual(openSealedRow({ data: {}, profile_sealed: p.sealed }), { data: { contact: { phone: "9876543210" } } });
+}));
+
+test("personal details that can't be decrypted are left empty, so the portal keeps working", () => withEnv(KEY, async () => {
+  const v = sealJson({ phone: "9876543210" });
+  await withEnv({ PAYROLL_ENCRYPTION_KEY: crypto.randomBytes(32).toString("hex") }, () => {
+    assert.deepEqual(openSealedRow({ name: "A", phone: null, person_sealed: v }), { name: "A", phone: null });
+  });
+}));
+
+test("a personal email is found by a keyed hash: the same address gives the same hash, another key another one, none without the key", () => withEnv(KEY, async () => {
+  const h = emailIndex("Asha@Gmail.com ");
+  assert.match(h, /^[0-9a-f]{64}$/);
+  assert.equal(emailIndex("asha@gmail.com"), h, "case and spaces do not matter");
+  assert.notEqual(emailIndex("other@gmail.com"), h);
+  assert.deepEqual(indexesOf("person_sealed", { personal_email: "asha@gmail.com" }), { personal_email_hash: h });
+  assert.deepEqual(indexesOf("profile_sealed", { data: { contact: { personalEmail: "ASHA@gmail.com" } } }), { personal_email_hash: h });
+  assert.deepEqual(indexesOf("person_sealed", { phone: "1" }), {}, "a change that leaves the email alone leaves its hash alone");
+  await withEnv({ PAYROLL_ENCRYPTION_KEY: crypto.randomBytes(32).toString("hex") }, () => assert.notEqual(emailIndex("asha@gmail.com"), h));
+  await withEnv({ PAYROLL_ENCRYPTION_KEY: undefined }, () => assert.equal(emailIndex("asha@gmail.com"), null));
+}));
+
+test("the date of birth on the person's own profile wins over HR's, and the profile is not passed on", async () => {
+  const { dobOf } = await import("../src/sealed-rows.js");
+  assert.deepEqual(dobOf({ name: "A", dob: "1990-01-02", data: { primary: { dob: "1991-05-06" }, contact: { phone: "1" } } }), { name: "A", dob: "1991-05-06" });
+  assert.deepEqual(dobOf({ name: "A", dob: "1990-01-02", data: { primary: { dob: "" } } }), { name: "A", dob: "1990-01-02" });
+  assert.deepEqual(dobOf({ name: "A", dob: null, data: null }), { name: "A", dob: null });
+});
+
+test("a save never seals over personal details it could not read (wrong key): it stops instead", () => withEnv(KEY, async () => {
+  const { updateSealed } = await import("../src/sealed-rows.js");
+  const stored = sealJson({ phone: "9876543210", address: "12 MG Road" });
+  const written = [];
+  const fakeDb = { query: async (sql, args) => { if (/^SELECT/.test(sql)) return { rows: [openSealedRow({ id: 1, phone: null, address: null, person_sealed: stored, sealed_now: stored })] }; written.push(args); return { rows: [{}] }; } };
+  await withEnv({ PAYROLL_ENCRYPTION_KEY: crypto.randomBytes(32).toString("hex") }, async () => {
+    await assert.rejects(updateSealed(fakeDb, "person_sealed", 1, { pan_masked: "XXXXXX111A" }));
+  });
+  assert.equal(written.length, 0, "nothing was written");
+}));

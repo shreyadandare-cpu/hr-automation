@@ -110,12 +110,14 @@ const isMac = typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigat
 
 /* The sections across the top bar, as on wohlig.com: a section with one page is a link; the others open their pages in a
    panel when pointed at, clicked or reached with the keyboard (Radix UI Navigation Menu). Each page shows its icon on a
-   small beige square, like wohlig.com's menus. The section you are in is marked. HR's long list opens in two columns. */
-const TOP_ITEM = `inline-flex h-10 cursor-pointer items-center gap-1.5 rounded-full border-0 bg-transparent px-3.5 font-body text-[15px] leading-none font-normal whitespace-nowrap no-underline transition-colors duration-150 max-2xl:px-2.5 ${FOCUS}`;
+   small beige square, like wohlig.com's menus. The section you are in is marked. HR's long list opens in two columns.
+   Between 1024px and 1080px (`max-xl:`) the sections, the gaps and the bar's left padding are tighter, so a super admin's
+   full set of sections still fits beside search, notifications and the account button without a sideways scroll. */
+const TOP_ITEM = `inline-flex h-10 cursor-pointer items-center gap-1.5 rounded-full border-0 bg-transparent px-3.5 font-body text-[15px] leading-none font-normal whitespace-nowrap no-underline transition-colors duration-150 max-2xl:px-2.5 max-xl:gap-1 max-xl:px-2 ${FOCUS}`;
 function TopNav({ groups, section, here }) {
   return (
     <NavigationMenu.Root className="relative ml-auto hidden rail:block" delayDuration={60} aria-label="Sections">
-      <NavigationMenu.List className="m-0 flex list-none items-center gap-0.5 p-0">
+      <NavigationMenu.List className="m-0 flex list-none items-center gap-0.5 p-0 max-xl:gap-0">
         {groups.map((g, gi) => {
           const on = section === g;
           const tone = on ? "bg-tint font-bold! text-accent" : "text-ink-dim hover:bg-tint hover:text-ink data-[state=open]:bg-tint data-[state=open]:text-ink";
@@ -281,7 +283,7 @@ export default function Shell() {
       <div className="flex min-w-0 flex-col">
         {/* The top bar floats over the page as a rounded glass capsule, as on wohlig.com. */}
         <header className="print:hidden! sticky top-0 z-30 px-(--page-pad) pt-3.5 pb-1 max-md:px-3 max-md:pt-2.5">
-          <div className="mx-auto flex h-[66px] max-w-[1296px] items-center gap-2 rounded-full border border-white/95 bg-paper/72 pr-2.5 pl-6 shadow-navcap backdrop-blur-[12px] backdrop-saturate-[1.4] dark:border-ivory/10 dark:bg-surface/80 dark:shadow-pop max-md:h-14 max-md:pr-1.5 max-md:pl-2">
+          <div className="mx-auto flex h-[66px] max-w-[1296px] items-center gap-2 rounded-full border border-white/95 bg-paper/72 pr-2.5 pl-6 shadow-navcap rail:max-xl:gap-1.5 rail:max-xl:pl-4 backdrop-blur-[12px] backdrop-saturate-[1.4] dark:border-ivory/10 dark:bg-surface/80 dark:shadow-pop max-md:h-14 max-md:pr-1.5 max-md:pl-2">
             <button className={`hidden max-rail:inline-grid ${ICON_BTN}`} type="button" aria-label="Open menu" aria-expanded={menuOpen} onClick={() => setMenuOpen(true)}><Icon name="menu" /></button>
             <a className={`inline-flex flex-none items-center gap-2.5 rounded-md no-underline ${FOCUS}`} href="/app/dashboard" aria-label={`${PRODUCT}, dashboard`}>
               <img className="block h-[28px] w-auto max-md:h-6 dark:hidden" src={BRAND.logos.light} alt="" /><img className="hidden h-[28px] w-auto max-md:h-6 dark:block" src={BRAND.logos.dark} alt="" /><span className="border-l border-line-2 pl-2.5 font-display text-[18px] leading-none font-normal text-ink-dim max-sm:hidden">One</span>

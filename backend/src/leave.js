@@ -223,9 +223,12 @@ export function leaveRouter(wrap) {
 
   r.post("/api/leave/requests", wrap(async (req, res) => {
     const { type, from, reason } = req.body || {};
-    // Employees apply for themselves; leave.approve may apply for a person in scope.
+    // Employees apply for themselves; leave.approve may apply for a person in scope. Anyone else named is refused: it used to be
+    // filed for the caller instead, which a script or the Claude connector would report as leave for the person named.
     const asked = req.body && req.body.email ? String(req.body.email).toLowerCase() : self(req);
-    const email = asked === self(req) || (await can(req, "leave.approve", asked)) ? asked : self(req);
+    if (asked !== self(req) && !(await can(req, "leave.approve", asked)))
+      return res.status(403).json({ error: "You can apply for leave for yourself, or for people whose leave you may approve." });
+    const email = asked;
     const half = req.body && req.body.half ? req.body.half : null;
     const to = half ? from : req.body && req.body.to;   // a half day is always a single date
     await tx(res, async (client) => {

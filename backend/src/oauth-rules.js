@@ -9,6 +9,7 @@ export const REQUEST_MINUTES = 10;             // time to sign in and allow
 export const CODE_SECONDS = 60;                // a one-time code, once allowed, must be swapped within a minute
 export const MAX_GRANT_DAYS = 90;              // every connection ends after 90 days at most; the person then allows it again
 export const MAX_PENDING_PER_CLIENT = 50;      // sign-ins in progress per app
+export const REFRESH_GRACE_SECONDS = 60;       // two refreshes at once with the same token both succeed (a benign race)
 export const SCOPE = "wohlig";
 
 /**
@@ -41,8 +42,8 @@ export function readRegistration(body) {
   if (uris.length > 10) return { error: "At most 10 redirect_uris." };
   if (!uris.every(okRedirect)) return { error: `Each redirect_uri must be https on ${redirectHosts().join(", ")}, or http on localhost.` };
   if (uris.some((u) => u.length > 500)) return { error: "A redirect_uri is too long." };
-  const auth = b.token_endpoint_auth_method;
-  if (auth && auth !== "none") return { error: "Only public clients (token_endpoint_auth_method none) are supported." };
+  // Whatever method the client asks for (claude.ai may ask for client_secret_post), it is registered as a public client with PKCE:
+  // the answer says token_endpoint_auth_method "none" and gives no secret (RFC 7591 3.2.1 lets the server choose).
   const name = cleanName(b.client_name);
   return { value: { name, redirectUris: uris } };
 }
@@ -78,7 +79,8 @@ export function readAuthorize(q, client, base) {
   if (q.response_type !== "code") return { error: "unsupported_response_type" };
   if (q.code_challenge_method !== "S256" || !/^[A-Za-z0-9_-]{43}$/.test(String(q.code_challenge || ""))) return { error: "invalid_request" };
   if (!okResource(q.resource, base)) return { error: "invalid_target" };
-  const state = q.state === undefined ? null : String(q.state).slice(0, 500);
+  if (q.state !== undefined && String(q.state).length > 1000) return { error: "invalid_request" };
+  const state = q.state === undefined ? null : String(q.state);
   return { value: { redirect, state, challenge: String(q.code_challenge), resource: q.resource ? String(q.resource) : null } };
 }
 

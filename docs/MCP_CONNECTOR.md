@@ -2,7 +2,7 @@
 title: Wohlig One connector for Claude (MCP)
 aliases: [Wohlig One MCP, Claude connector]
 tags: [mcp, oauth, claude, wohlig]
-updated: 2026-11-27
+updated: 2026-11-28
 ---
 
 # Wohlig One connector for Claude
@@ -32,7 +32,8 @@ Whatever the connector reads is handed to an AI assistant, so the server refuses
 (`backend/src/access-keys-rules.js`, and `salaryRule` in `access-rules.js`):
 
 - salaries, payslips, payroll, finance reports, tax, expense claims, loans, budgets, advances, offer letters, final settlements
-- staff documents, the document password, full PAN and Aadhaar numbers
+- staff documents, the document password, PAN and Aadhaar numbers (full or masked), bank accounts, IFSC and PF numbers: these
+  fields are removed from every answer the connector gets, whatever the page, so a new page cannot leak them by accident
 - access rights, logins and passwords (it can read the Users list, not change it), passkeys, access keys and connections
 - punching in or out for yourself
 

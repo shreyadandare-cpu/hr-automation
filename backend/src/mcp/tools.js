@@ -24,13 +24,13 @@ export const specs = ({ get, send }) => [
     description: "The person this access key belongs to: name, email, super admin or not, and every permission they hold (company-wide or for named teams). Call this first to know what the other tools will allow.",
     run: () => get("/api/me") },
   { name: "wohlig_dashboard", title: "Dashboard today",
-    description: `What the ${PRODUCT} dashboard shows today, in one call: who is on leave today and soon, upcoming birthdays, who works from home today, today's attendance (who is in, late or absent, for the people you may see) and your unread notifications.`,
-    input: z.strictObject({ date: day.optional().describe("Day to show; today (India time) when left out") }),
-    run: async ({ date }) => {
+    description: `What the ${PRODUCT} dashboard shows today (India time), in one call: who is on leave today and soon, upcoming birthdays, who works from home today, today's attendance (who is in, late or absent, for the people you may see) and your notifications. For another day's attendance use wohlig_attendance_day.`,
+    run: async () => {
+      const date = todayIst();
       const [leave, remote, attendance, notifications] = await Promise.allSettled([
-        get("/api/leave/today"), get("/api/remote-today"), get("/api/attendance/day", { date: date || todayIst() }), get("/api/notifications")]);
+        get("/api/leave/today"), get("/api/remote-today"), get("/api/attendance/day", { date }), get("/api/notifications")]);
       const v = (r) => (r.status === "fulfilled" ? r.value : { unavailable: r.reason instanceof Error ? r.reason.message : String(r.reason) });
-      return { date: date || todayIst(), leave: v(leave), workFromHome: v(remote), attendance: v(attendance), notifications: v(notifications) };
+      return { date, leave: v(leave), workFromHome: v(remote), attendance: v(attendance), notifications: v(notifications) };
     } },
   { name: "wohlig_notifications", title: "Notifications",
     description: `Your bell notifications in ${PRODUCT} (newest first), with what is still unread.`,
@@ -41,26 +41,38 @@ export const specs = ({ get, send }) => [
 
   /* ---------- To do: what waits for a decision ---------- */
   { name: "wohlig_todo", title: "To do",
-    description: "Everything waiting for your decision, as the To do page gathers it: leave requests, attendance corrections, timesheets to approve, interview verdicts and helpdesk tickets you answer. Each part lists items with their ids for the decide tools.",
+    description: "Everything waiting for your decision, as the To do page counts it: leave requests and comp offs you approve, attendance requests you decide, timesheets to approve, interviews still needing your verdict, and open helpdesk tickets waiting on the HR team. Each part lists items with their ids for the decide tools.",
     run: async () => {
-      const parts = { leave: get("/api/leave"), attendanceRequests: get("/api/requests/attendance", { scope: "all" }),
+      const parts = { me: get("/api/me"), leave: get("/api/leave"), attendanceRequests: get("/api/requests/attendance", { scope: "all" }),
         timesheets: get("/api/timesheets/to-approve"), interviews: get("/api/interviews"), helpdesk: get("/api/tickets", { scope: "all" }) };
       const done = await Promise.allSettled(Object.values(parts));
       const keys = Object.keys(parts);
+      const got = {};
+      done.forEach((r, i) => { got[keys[i]] = r.status === "fulfilled" ? r.value : { unavailable: r.reason instanceof Error ? r.reason.message : String(r.reason) }; });
+      const me = String(got.me && got.me.email || "").toLowerCase();
       const out = {};
-      done.forEach((r, i) => { out[keys[i]] = r.status === "fulfilled" ? r.value : { unavailable: r.reason instanceof Error ? r.reason.message : String(r.reason) }; });
-      const leave = out.leave;
-      if (leave && Array.isArray(leave.requests)) out.leave = { pending: leave.requests.filter((x) => x.status === "pending") };
-      const tickets = out.helpdesk;
-      if (tickets && !Array.isArray(tickets) && Array.isArray(tickets.tickets)) out.helpdesk = { open: tickets.tickets.filter((x) => x.status !== "closed") };
+      // Leave: pending, and decided by you by the server's approvers map (never your own), as the To do page does.
+      const lv = got.leave;
+      if (lv && Array.isArray(lv.requests)) {
+        const mine = (x) => x.status === "pending" && String((lv.approvers || {})[String(x.email || "").toLowerCase()] || "").toLowerCase() === me
+          && String(x.email || "").toLowerCase() !== me;
+        out.leave = { requests: lv.requests.filter(mine), compOffs: (lv.compOffs || []).filter(mine) };
+      } else out.leave = lv;
+      const ar = got.attendanceRequests;
+      out.attendanceRequests = ar && Array.isArray(ar.requests) ? { requests: ar.requests.filter((x) => x.status === "pending" && x.canDecide) } : ar;
+      out.timesheets = got.timesheets;
+      const iv = got.interviews;
+      out.interviews = iv && Array.isArray(iv.interviews) ? { interviews: iv.interviews.filter((x) => !x.mine && !x.cancelled) } : iv;
+      const tk = got.helpdesk;
+      out.helpdesk = tk && Array.isArray(tk.tickets) ? (tk.canAnswer ? { open: tk.tickets.filter((x) => x.status === "open") } : { open: [] }) : tk;
       return out;
     } },
 
   /* ---------- Company: people ---------- */
   { name: "wohlig_list_employees", title: "Employees",
-    description: "The staff list (Company > Employees): name, email, title, department, manager, status, employee ID. Filter by text (name, email, title or department), by status, or by manager. Use wohlig_get_employee for one person's full record.",
+    description: "The staff list (Company > Employees): name, email, employee ID, title, location, manager, start date, status and projects. Filter by text (name, email, employee ID or title), by status, or by manager. Use wohlig_get_employee for one person's record.",
     input: z.strictObject({
-      search: z.string().max(100).optional().describe("Text to match in name, email, title or department"),
+      search: z.string().max(100).optional().describe("Text to match in name, email, employee ID or title"),
       status: z.string().max(30).optional().describe("Status to keep, for example active, onboarding, offboarding, offboarded"),
       manager: email.optional().describe("Only the people whose reporting manager is this email"),
       limit: z.number().int().min(1).max(200).default(50), offset: z.number().int().min(0).default(0) }),
@@ -69,7 +81,7 @@ export const specs = ({ get, send }) => [
       const rows = Array.isArray(data) ? data : [];
       const s = (search || "").toLowerCase();
       const pick = rows.filter((r) => {
-        const text = JSON.stringify([r.name, r.email, r.workEmail, r.work_email, r.title, r.dept, r.department]).toLowerCase();
+        const text = JSON.stringify([r.name, r.email, r.no, r.title, r.subTitle]).toLowerCase();
         const st = String(r.status ?? "").toLowerCase();
         const mgr = String(r.managerEmail ?? r.manager_email ?? "").toLowerCase();
         return (!s || text.includes(s)) && (!status || st === status.toLowerCase()) && (!manager || mgr === manager.toLowerCase());
@@ -79,7 +91,7 @@ export const specs = ({ get, send }) => [
         ...(offset + page.length < pick.length ? { next_offset: offset + page.length } : {}), employees: page };
     } },
   { name: "wohlig_get_employee", title: "Employee",
-    description: "One person's record from the staff list (title, department, manager, dates, status, contact), and the people who report to them. Salary and documents are never shown here.",
+    description: "One person's record from the staff list (employee ID, title, location, manager, start date, status, projects), and the people who report to them. Salary, ID numbers, bank details and documents are never shown here.",
     input: z.strictObject({ email }),
     run: async ({ email: e }) => {
       const data = await get("/api/roster");
@@ -92,7 +104,7 @@ export const specs = ({ get, send }) => [
       return { person, directReports: reports };
     } },
   { name: "wohlig_managers", title: "Managers",
-    description: "Everyone who can be chosen as a reporting manager.",
+    description: "Who reports to whom: each person with their current reporting manager. To choose a new manager, pick anyone from wohlig_list_employees.",
     run: () => get("/api/managers") },
   { name: "wohlig_set_manager", title: "Change reporting manager",
     description: "Sets a person's reporting manager (Employees > change manager). Leave approval and the org chart follow it. Needs people.edit for that person.",
@@ -136,7 +148,7 @@ export const specs = ({ get, send }) => [
     description: "One person's attendance for a month, day by day; yourself when email is left out.",
     input: z.strictObject({ email: email.optional(), month: month.optional() }), run: (a) => get("/api/attendance/month", a) },
   { name: "wohlig_attendance_report", title: "Attendance report",
-    description: "The month's attendance report for everyone you may see: days present, absent, late, missing punch-outs.",
+    description: "The month's attendance report for the whole company: days present, absent, late, missing punch-outs. Needs company-wide attendance editing; others get a refusal and can use wohlig_attendance_month per person.",
     input: z.strictObject({ month: month.optional() }), run: (a) => get("/api/attendance/report", a) },
   { name: "wohlig_add_punch", title: "Add a punch",
     description: "Adds a missed punch for someone else (attendance.edit), as HR does on the attendance page. A reason is required. Your own attendance is corrected by someone else.",
@@ -181,13 +193,15 @@ export const specs = ({ get, send }) => [
   { name: "wohlig_probations", title: "Probation", description: "People on probation and when it ends (Manage > Probation).",
     run: () => get("/api/hr/probations") },
   { name: "wohlig_decide_probation", title: "Confirm or extend probation",
-    description: "Confirms a person after probation, or extends it to a new end date.", write: "change",
-    input: z.strictObject({ email, action: z.enum(["confirm", "extend"]), endsOn: day.optional().describe("New end date, when extending"), note: note("A note for the record").optional() }),
+    description: "Confirms a person after probation, or extends it. Extending needs both a new end date in the future and a note saying why.", write: "change",
+    input: z.strictObject({ email, action: z.enum(["confirm", "extend"]), endsOn: day.optional().describe("New end date; required when extending"), note: note("Why; required when extending").optional() }),
     run: (a) => send("POST", "/api/hr/probations", a) },
   { name: "wohlig_review_cycles", title: "Review cycles", description: "Performance review cycles (Manage > Reviews).",
     run: () => get("/api/review-cycles") },
-  { name: "wohlig_reviews", title: "Reviews", description: "Performance reviews you can see, with their stage.",
-    run: () => get("/api/reviews") },
+  { name: "wohlig_reviews", title: "Reviews",
+    description: "Performance reviews with their stage. scope: own (yours), team (people who report to you), all (everyone you manage reviews for, as HR or a team head).",
+    input: z.strictObject({ scope: z.enum(["own", "team", "all"]).default("all") }),
+    run: ({ scope }) => get("/api/reviews", scope === "own" ? {} : { scope }) },
   { name: "wohlig_exit_interviews", title: "Exit interviews", description: "Exit interviews recorded for leavers.",
     run: () => get("/api/hr/exit-interviews") },
 

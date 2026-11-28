@@ -6,7 +6,7 @@
 import express from "express";
 import { pool } from "./db.js";
 import { requireAuth } from "./auth.js";
-import { BLOCKED_MESSAGE, MAX_LIVE_KEYS, keyMayReach, newKey, readKeyForm } from "./access-keys-rules.js";
+import { BLOCKED_MESSAGE, MAX_LIVE_KEYS, keyMayReach, newKey, readKeyForm, scrubForKey } from "./access-keys-rules.js";
 
 const wrap = (fn) => (req, res, next) => fn(req, res).catch(next);
 const me = (req) => req.user.email.toLowerCase();
@@ -18,6 +18,11 @@ export function keyGuard(req, res, next) {
     pool.query("INSERT INTO audit_log (action, work_email) VALUES ($1,$2)",
       [`Refused ${req.method} ${req.path.slice(0, 200)} through the access key "${req.accessKey.name}"`, req.user.email]).catch(() => {});
     return res.status(403).json({ error: BLOCKED_MESSAGE });
+  }
+  // Every JSON answer to a key leaves out ID numbers, bank details, the PF number and pay figures (KEY_HIDDEN_FIELDS).
+  if (req.path.toLowerCase().startsWith("/api/")) {
+    const json = res.json.bind(res);
+    res.json = (body) => json(scrubForKey(body));
   }
   // A change made through the connector is recorded by its call into /api; /mcp itself and the sign-in paths are not.
   if (req.method !== "GET" && req.method !== "HEAD" && req.path.startsWith("/api/")) {

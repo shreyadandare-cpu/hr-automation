@@ -176,6 +176,7 @@ export function offboardingRouter(wrap) {
   const r = express.Router();
   r.use("/api/offboarding", needAll("offboarding.manage"));   // "Run offboarding", company-wide
   // Through an access key (the Wohlig One MCP) every answer here leaves out the final settlement and clearance figures: they are pay.
+  // (keyGuard also removes these fields from every answer to a key; this keeps them as null so the shape stays the same.)
   r.use("/api/offboarding", (req, res, next) => {
     if (!req.access || !req.access.viaKey) return next();
     const strip = (x) => (Array.isArray(x) ? x.map(strip) : x && typeof x === "object" && "settlement" in x ? { ...x, settlement: null, clearance: null } : x);

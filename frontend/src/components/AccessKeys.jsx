@@ -19,10 +19,11 @@ export function AccessKeysCard({ toast }) {
   const [ending, setEnding] = useState(null);
   const load = () => Promise.all([
     api("GET", "/api/access-keys").then((r) => setKeys(r.ok ? r.data.keys : [])),
-    api("GET", "/api/oauth/grants").then((r) => setApps(r.ok ? r.data.grants : [])),
+    api("GET", "/api/oauth/grants").then((r) => { setApps(r.ok ? r.data.grants : []); if (r.ok && r.data.connectorUrl) setAddress(r.data.connectorUrl); }),
   ]);
   useEffect(() => { load(); }, []);
-  const address = `${location.origin}/mcp`;
+  // The server's own address (PUBLIC_URL), which Claude checks the sign-in against; this page's address until it arrives.
+  const [address, setAddress] = useState(`${location.origin}/mcp`);
   const copyAddress = async () => {
     try { await navigator.clipboard.writeText(address); toast("The connector address is copied."); }
     catch { toast("Please select the address and copy it."); }

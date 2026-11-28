@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { KEY_PATTERN, hashKey, keyFromHeader, keyMayReach, newKey, readKeyForm } from "../src/access-keys-rules.js";
+import { KEY_PATTERN, hashKey, keyFromHeader, keyMayReach, newKey, readKeyForm, scrubForKey } from "../src/access-keys-rules.js";
 import { decide, salaryOwners, scopeFor, summary } from "../src/access-rules.js";
 
 test("a new key has the wo1_ form, a stable hash and a short hint, and is different every time", () => {
@@ -82,4 +82,21 @@ test("through a key, even a salary owner holds no salary permission", () => {
   assert.equal(decide(key, "leave.approve", null, tree), true, "other permissions are unchanged");
   assert.ok(!("payroll.view" in summary(key)));
   assert.ok("payroll.view" in summary(browser));
+});
+
+test("every answer to a key loses ID numbers, bank details, the PF number and pay, at any depth", () => {
+  const onboarding = [{ email: "a@wohlig.com", name: "Asha", ids: { dob: "1990-01-01", aadhaar: "XXXX XXXX 1234", pan: "XXXXX1234X", acct: "XXXX5678", ifsc: "HDFC0001" } }];
+  assert.deepEqual(scrubForKey(onboarding), [{ email: "a@wohlig.com", name: "Asha", ids: { dob: "1990-01-01" } }]);
+  assert.deepEqual(scrubForKey({ ids: { pan: "x", aadhaar: "y" }, primary: { name: "A" } }), { ids: {}, primary: { name: "A" } });
+  assert.deepEqual(scrubForKey({ pay: [{ email: "a", monthlyGross: 5, casualOpening: 2 }] }), { pay: [{ email: "a", casualOpening: 2 }] });
+  assert.deepEqual(scrubForKey({ pfNumber: "MH/1", uan: "1", account: "kept", panel: "kept" }), { account: "kept", panel: "kept" });
+  assert.equal(scrubForKey(null), null);
+  assert.equal(scrubForKey("text"), "text");
+  assert.deepEqual(scrubForKey([1, "a", [{ ifsc: "x" }]]), [1, "a", [{}]]);
+});
+
+test("the employee details sheet is out of reach for a key", () => {
+  for (const [m, p] of [["GET", "/api/onboarding/import/template"], ["POST", "/api/onboarding/import/preview"], ["POST", "/api/onboarding/import/apply"]])
+    assert.equal(keyMayReach(p, m), false, `${m} ${p}`);
+  assert.equal(keyMayReach("/api/onboarding", "GET"), true, "the joiners list itself stays (its IDs are removed)");
 });

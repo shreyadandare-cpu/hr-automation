@@ -78,7 +78,10 @@ a Claude Code Stop hook. When you add or change a page or an endpoint, in the sa
    list it in the table above.
 3. **Otherwise** list the endpoint in `mcp/coverage.js` `GENERAL`, in the group it belongs to, with the reason it has no tool.
 4. Name a new page in `mcp/coverage.js` `PAGES` (its tools, `general` or `out`, with the reason).
-5. Keep the tool count in ARCHITECTURE.md right. Then run `cd backend && npm run check:docs`.
+5. A router mounted under a new prefix needs a line in `PREFIX` in `mcp/catalog.js`; a new sealed pay field (`SEALED` in
+   `secret-box.js`) goes into `KEY_HIDDEN_FIELDS`, under its column name and in camelCase. Write routes as `r.get("/api/…")` (or
+   with a path variable set by the file that imports them), never `.route()` or `.all()`: the check fails on what it cannot read.
+6. Keep the tool count in ARCHITECTURE.md right. Then run `cd backend && npm run check:docs`.
 
 ## How it works (developers)
 

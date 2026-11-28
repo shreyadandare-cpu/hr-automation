@@ -274,3 +274,24 @@ export const GENERAL = {
     ],
   },
 };
+
+/*
+ * Sealed pay fields (secret-box.js SEALED, apart from personal details) that are NOT removed from answers to a key, with why. Every
+ * other sealed pay field must be in KEY_HIDDEN_FIELDS (access-keys-rules.js), under its column name and in camelCase; the check
+ * fails on a new one until it is added there or here. These names are kept because other pages use them for things that are not
+ * pay, and the tables that seal them are read only by endpoints a key may not reach.
+ */
+export const SEALED_SHOWN = {
+  totals: "Poll totals (Engage > Polls); payroll run totals are read only under /api/payroll.",
+  inputs: "A generic name; payroll item inputs are read only under /api/payroll.",
+  detail: "Audit and loan event details are read only under /api/payroll and /api/loans.",
+  details: "Clearance details are removed from offboarding answers and read only under the blocked clearance paths.",
+  note: "Notes on leave, attendance and tickets; claim and budget event notes are read only under their blocked paths.",
+  items: "A generic list name; tax declaration items are read only under the blocked tax paths.",
+  proofs: "Tax proofs are read only under the blocked tax paths.",
+  declaration: "Tax declarations are read only under the blocked tax paths.",
+  validation: "Claim validation is read only under /api/reimbursements.",
+  eligibility: "Claim eligibility is read only under /api/reimbursements.",
+  duplicates: "Possible duplicate claims are read only under /api/reimbursements.",
+  extracted: "Text read from claim receipts is read only under /api/reimbursements.",
+};

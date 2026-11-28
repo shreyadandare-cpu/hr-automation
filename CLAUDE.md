@@ -41,6 +41,9 @@ change what the connector does with it:
   it has no tool (it is reached through `wohlig_api_get` and `wohlig_api_call`, or stays in the browser).
 - **A new page:** an entry in `coverage.js` `PAGES`: the tools that do its job, `general`, or `out` with the reason.
 - **A router mounted under a new prefix** in `index.js` needs a line in `PREFIX` in [backend/src/mcp/catalog.js](backend/src/mcp/catalog.js).
+- **A new sealed pay field** (a new column in `SEALED` in `secret-box.js`): add its name, and its camelCase form, to `KEY_HIDDEN_FIELDS`.
+- **Write routes so the check can read them:** `r.get("/api/…")`, or a path variable whose value is set in the file that imports
+  it (as `registerDetailsSheet(r, { base: "/api/…" })`). Not `.route()` or `.all()`.
 - Keep the tool count in ARCHITECTURE.md right.
 
 Three things enforce it, as for ARCHITECTURE.md: `cd backend && npm run check:docs` (also alone: `npm run check:connector`) runs
@@ -48,7 +51,8 @@ Three things enforce it, as for ARCHITECTURE.md: `cd backend && npm run check:do
 ([backend/test/connector-coverage.test.mjs](backend/test/connector-coverage.test.mjs)); and a Stop hook in `.claude/settings.json` runs
 it when Claude finishes a turn and sends it back once to fix it. The check fails when a page or a reachable endpoint has no entry,
 when an entry or a tool points at something that is gone or blocked, when a reachable endpoint's path names pay, tax, a bank, a
-loan, an advance, an offer or a document, or when docs/MCP_CONNECTOR.md misses a tool. After a change to access-keys-rules.js, run
+loan, an advance, an offer or a document, when a router's prefix or a route's path cannot be worked out, when a sealed pay field is
+not hidden from keys, or when docs/MCP_CONNECTOR.md misses a tool. After a change to access-keys-rules.js, run
 `node --test test/access-keys.test.mjs`.
 
 ## Skills: always pick the right one first

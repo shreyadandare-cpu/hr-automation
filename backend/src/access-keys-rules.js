@@ -107,9 +107,17 @@ export const KEY_HIDDEN_FIELDS = new Set([
   "pan", "aadhaar", "acct", "ifsc", "panMasked", "aadhaarMasked", "acctMasked", "pan_masked", "aadhaar_masked", "acct_masked",
   "pan_enc", "aadhaar_enc", "hasPan", "has_pan", "pfNumber", "pf_number", "uan", "bankAccount", "bankName", "accountNumber",
   "account_number", "monthlyGross", "monthly_gross", "annualCtc", "annual_ctc", "ctc", "grossPay", "netPay", "settlement", "clearance",
-  // The same figures as their columns are named, should a query ever hand a row over as it is.
-  "ctc_annual", "ctcAnnual", "letter_text", "final_salary", "net_salary", "base_salary", "final_payout", "approved_amount", "requested_amount",
-  "amount_minor", "payable",
+  // Every pay figure sealed in the database (secret-box.js SEALED), as its column is named and in camelCase, should a query ever
+  // hand a row over as it is. The coverage check (scripts/check-connector.mjs) fails when a new sealed pay field is missing here.
+  "ctc_annual", "ctcAnnual", "letter_text", "letterText", "final_salary", "finalSalary", "net_salary", "netSalary", "base_salary", "baseSalary",
+  "final_payout", "finalPayout", "approved_amount", "approvedAmount", "requested_amount", "requestedAmount", "amount_minor", "amountMinor",
+  "payable", "amount", "slip", "earnings", "lop_deduction", "lopDeduction", "reimbursement_total", "reimbursementTotal", "other_deductions",
+  "otherDeductions", "pf_employee", "pfEmployee", "professional_tax", "professionalTax", "tds_monthly", "tdsMonthly", "employer_pf", "employerPf",
+  "esic_employee", "esicEmployee", "pt_february", "ptFebruary", "reimbursements_payable", "reimbursementsPayable", "advance_outstanding",
+  "advanceOutstanding", "total_recovery", "totalRecovery", "paid_amount", "paidAmount", "eligible_amount", "eligibleAmount", "non_eligible_amount",
+  "nonEligibleAmount", "unapproved_amount", "unapprovedAmount", "approval_reason", "approvalReason", "policy_fare", "policyFare",
+  "monthly_recovery", "monthlyRecovery", "monthly_amount", "monthlyAmount", "tds_minor", "tdsMinor", "requested_budget", "requestedBudget",
+  "approved_budget", "approvedBudget",
 ]);
 /** A copy of a JSON answer without KEY_HIDDEN_FIELDS, at any depth. Other values are kept exactly. */
 export function scrubForKey(value, depth = 0) {

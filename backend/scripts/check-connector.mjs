@@ -12,11 +12,15 @@
 //   4. Every page of the interface is in coverage.js PAGES, with real tool names or the reason it is left out.
 //   5. Every router mounted under a prefix in index.js is known to mcp/catalog.js (PREFIX), so no endpoint is invisible.
 //   6. docs/MCP_CONNECTOR.md names every tool and no tool that is gone; ARCHITECTURE.md gives the right number of tools.
+//   7. No route is written in a way the reader cannot follow (a path from a variable it cannot find, .route() or .all()).
+//   8. Every sealed pay field (secret-box.js SEALED) is removed from answers to a key (KEY_HIDDEN_FIELDS), or is in
+//      coverage.js SEALED_SHOWN with the reason it is kept.
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { scanRoutes, PREFIX } from "../src/mcp/catalog.js";
-import { PAGES as COVERAGE_PAGES, GENERAL as COVERAGE_GENERAL } from "../src/mcp/coverage.js";
+import { PAGES as COVERAGE_PAGES, GENERAL as COVERAGE_GENERAL, SEALED_SHOWN } from "../src/mcp/coverage.js";
+import { KEY_HIDDEN_FIELDS } from "../src/access-keys-rules.js";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 const read = (p) => fs.readFileSync(path.join(root, p), "utf8");
@@ -60,18 +64,20 @@ export function readPages() {
   return [...pages].sort();
 }
 
-/** Routers that index.js mounts under a prefix the catalog does not know. */
+/** Routers that index.js mounts under a prefix the catalog does not know: any imported router whose file writes paths without /api. */
 function unknownMounts() {
   const index = read("backend/src/index.js");
   const from = {};
   for (const m of index.matchAll(/^import\s*\{([^}]*)\}\s*from\s*"\.\/([^"]+)"/gm)) {
-    for (const id of m[1].split(",").map((s) => s.trim()).filter(Boolean)) from[id] = m[2];
+    for (const id of m[1].split(",").map((s) => s.trim().split(/\s+as\s+/).pop()).filter(Boolean)) from[id] = m[2];
   }
+  for (const m of index.matchAll(/^import\s+(\w+)\s*(?:,\s*\{[^}]*\})?\s*from\s*"\.\/([^"]+)"/gm)) from[m[1]] = m[2];
+  const relative = (file) => /\b\w+\.(get|post|put|patch|delete)\(\s*["'`]\/(?!api)/.test(read(`backend/src/${file}`));
   const out = [];
   for (const m of index.matchAll(/app\.use\(\s*"(\/api[^"]*)"\s*,([^;]*?)\);/g)) {
-    for (const id of m[2].split(",").map((s) => s.trim()).filter((s) => /^\w+Router$/.test(s))) {
+    for (const id of m[2].split(",").map((s) => s.trim().replace(/\(.*$/s, "")).filter((s) => /^\w+$/.test(s))) {
       const file = from[id];
-      if (!file) continue;
+      if (!file || !relative(file)) continue;
       const known = PREFIX[`${file}:${id}`] ?? PREFIX[file];
       if (known !== m[1]) out.push(`${id} from ${file} is mounted at ${m[1]}, but mcp/catalog.js PREFIX ${known ? `says ${known}` : "does not list it"}`);
     }
@@ -80,6 +86,16 @@ function unknownMounts() {
 }
 
 /** Runs the checks. opts can replace the routes, pages or coverage lists read from the code (for the tests). */
+/** The fields of every sealed column in secret-box.js except personal details: the pay figures. */
+export function readSealedPayFields(text = read("backend/src/secret-box.js")) {
+  const personal = new Set((/const PERSONAL = new Set\(\[([^\]]*)\]/.exec(text) || ["", ""])[1].match(/\w+/g) || []);
+  const fields = new Set();
+  for (const m of text.matchAll(/(\w+_sealed):\s*\{\s*table:\s*"\w+",\s*fields:\s*\[([^\]]*)\]/g)) {
+    if (!personal.has(m[1])) for (const f of m[2].match(/"(\w+)"/g) || []) fields.add(f.slice(1, -1));
+  }
+  return [...fields];
+}
+
 export function checkConnector(opts = {}) {
   const problems = [];
   const routes = opts.routes ?? scanRoutes();
@@ -135,6 +151,18 @@ export function checkConnector(opts = {}) {
 
   // 5. Mounts.
   problems.push(...unknownMounts());
+
+  // 7. Routes the reader cannot follow.
+  for (const u of routes.unresolved || []) problems.push(`A route the connector check cannot read: ${u}. Write its path as a "/api/…" string, or a variable whose value is set in the file that imports it.`);
+
+  // 8. Sealed pay fields never reach a key.
+  const sealed = opts.sealed ?? readSealedPayFields();
+  const camel = (f) => f.replace(/_([a-z])/g, (_, c) => c.toUpperCase());
+  for (const f of sealed) {
+    if (SEALED_SHOWN[f]) continue;
+    for (const n of new Set([f, camel(f)])) if (!KEY_HIDDEN_FIELDS.has(n)) problems.push(`The sealed pay field ${f} is not removed from answers to a key: add "${n}" to KEY_HIDDEN_FIELDS in access-keys-rules.js (or to coverage.js SEALED_SHOWN, with the reason, if the name is used for something else).`);
+  }
+  for (const f of Object.keys(SEALED_SHOWN)) if (!sealed.includes(f)) problems.push(`coverage.js SEALED_SHOWN has ${f}, which is no longer a sealed pay field: remove it.`);
 
   // 6. The docs name every tool, and the right number of them.
   const doc = read("docs/MCP_CONNECTOR.md");

@@ -3,7 +3,7 @@
 // or documents is reachable, and docs/MCP_CONNECTOR.md lists every tool (scripts/check-connector.mjs).
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { checkConnector, readTools, readPages } from "../scripts/check-connector.mjs";
+import { checkConnector, readTools, readPages, readSealedPayFields } from "../scripts/check-connector.mjs";
 import { scanRoutes } from "../src/mcp/catalog.js";
 import { GENERAL } from "../src/mcp/coverage.js";
 
@@ -47,4 +47,23 @@ test("the tool reader finds each tool and the endpoints it calls", () => {
   assert.deepEqual(tools.get("wohlig_decide_leave"), [{ method: "POST", path: "/api/leave/requests/:p/decision" }]);
   assert.deepEqual(tools.get("wohlig_attendance_day"), [{ method: "GET", path: "/api/attendance/day" }]);
   assert.deepEqual(tools.get("wohlig_api_get"), []);
+});
+
+test("a route whose path cannot be read fails the check", () => {
+  const routes = Object.assign([...scanRoutes()], { unresolved: ["x.js: r.get(where, (the path is a variable whose value could not be found)"] });
+  const { problems } = checkConnector({ routes });
+  assert.ok(problems.some((p) => p.startsWith("A route the connector check cannot read: x.js")), problems.join("\n"));
+});
+
+test("routes whose path comes from the file that imports them are read (the employee details sheet)", () => {
+  const sheet = scanRoutes().filter((r) => r.file === "details-sheet.js").map((r) => `${r.method} ${r.path} ${r.reachable}`).sort();
+  assert.deepEqual(sheet, ["GET /api/onboarding/import/template false", "POST /api/onboarding/import false", "POST /api/onboarding/import/apply false"]);
+});
+
+test("a new sealed pay field must be hidden from keys", () => {
+  assert.ok(readSealedPayFields().includes("ctc_annual"));
+  assert.ok(!readSealedPayFields().includes("phone"), "personal details are not pay fields");
+  const { problems } = checkConnector({ sealed: [...readSealedPayFields(), "bonus_amount"] });
+  assert.ok(problems.some((p) => p.includes('add "bonus_amount" to KEY_HIDDEN_FIELDS')), problems.join("\n"));
+  assert.ok(problems.some((p) => p.includes('add "bonusAmount" to KEY_HIDDEN_FIELDS')), problems.join("\n"));
 });

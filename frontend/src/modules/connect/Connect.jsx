@@ -10,7 +10,8 @@ const CAN = ["See and do what you can do here: your leave, attendance, requests 
   "The HR work you are allowed to do, such as deciding leave, following onboarding or answering the helpdesk",
   "Every change it makes is recorded in the audit log under your name"];
 const NEVER = ["Salaries, payslips, payroll and every other payment", "Tax, bank details, PAN and Aadhaar", "Your documents and document password",
-  "Access rights, logins and passwords"];
+  "Access rights, logins and passwords",
+  "Other people's phone numbers, addresses, dates of birth and family details (only the salary owners see these)"];
 
 const List = ({ items, mark }) => (
   <ul className="m-0 flex list-none flex-col gap-2 p-0">

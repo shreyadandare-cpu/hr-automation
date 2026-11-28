@@ -6,7 +6,8 @@
 import express from "express";
 import { pool } from "./db.js";
 import { requireAuth } from "./auth.js";
-import { BLOCKED_MESSAGE, MAX_LIVE_KEYS, keyMayReach, newKey, readKeyForm, scrubForKey } from "./access-keys-rules.js";
+import { BLOCKED_MESSAGE, MAX_LIVE_KEYS, idCardAllowed, keyMayReach, newKey, readKeyForm, scrubForKey } from "./access-keys-rules.js";
+import { isSalaryOwner } from "./access-rules.js";
 
 const wrap = (fn) => (req, res, next) => fn(req, res).catch(next);
 const me = (req) => req.user.email.toLowerCase();
@@ -19,10 +20,15 @@ export function keyGuard(req, res, next) {
       [`Refused ${req.method} ${req.path.slice(0, 200)} through the access key "${req.accessKey.name}"`, req.user.email]).catch(() => {});
     return res.status(403).json({ error: BLOCKED_MESSAGE });
   }
-  // Every JSON answer to a key leaves out ID numbers, bank details, the PF number and pay figures (KEY_HIDDEN_FIELDS).
+  // Every JSON answer to a key leaves out ID numbers, bank details, the PF number and pay figures (KEY_HIDDEN_FIELDS), and other
+  // people's personal details (PERSONAL_FIELDS) unless the caller is a salary owner. Your own personal details stay.
+  const who = { self: req.user.email.toLowerCase(), owner: isSalaryOwner(req.user.email), path: req.path };
+  if (!idCardAllowed(req.path, req.query, who.self, who.owner)) {
+    return res.status(403).json({ error: "Through Claude you can see your own ID card. Other people's cards stay in the browser." });
+  }
   if (req.path.toLowerCase().startsWith("/api/")) {
     const json = res.json.bind(res);
-    res.json = (body) => json(scrubForKey(body));
+    res.json = (body) => json(scrubForKey(body, who));
   }
   // A change made through the connector is recorded by its call into /api; /mcp itself and the sign-in paths are not.
   if (req.method !== "GET" && req.method !== "HEAD" && req.path.startsWith("/api/")) {

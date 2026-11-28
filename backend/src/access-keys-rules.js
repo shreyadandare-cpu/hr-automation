@@ -107,13 +107,48 @@ export const KEY_HIDDEN_FIELDS = new Set([
   "pan_enc", "aadhaar_enc", "hasPan", "has_pan", "pfNumber", "pf_number", "uan", "bankAccount", "bankName", "accountNumber",
   "account_number", "monthlyGross", "monthly_gross", "annualCtc", "annual_ctc", "ctc", "grossPay", "netPay", "settlement", "clearance",
 ]);
-/** A copy of a JSON answer without KEY_HIDDEN_FIELDS, at any depth. Other values are kept exactly. */
-export function scrubForKey(value, depth = 0) {
+/*
+ * A person's own details (decided 2026-11-28): through a key, everyone may read their own, but someone else's only the salary owners
+ * (Kailash, Chintan and Chirag) may, and only where their access already shows them in the browser. Whose details an object holds is
+ * read from its own email (email, workEmail, work_email) or the nearest one above it; with none, they count as someone else's,
+ * except on the pages that only ever answer about the caller (OWN_ONLY_PATHS).
+ */
+export const PERSONAL_FIELDS = new Set([
+  "phone", "mobile", "personalEmail", "personal_email", "address", "addresses", "currentAddress", "permanentAddress", "dob", "employeeDob",
+  "dateOfBirth", "date_of_birth", "family", "emergency", "emergencyName", "emergencyRelation", "emergencyPhone", "emergency2Name",
+  "emergency2Relation", "emergency2Phone", "emergencyContacts", "blood", "bloodGroup", "blood_group", "marital", "gender",
+]);
+const OWN_ONLY_PATHS = ["/api/profile", "/api/me"];
+const EMAIL_KEYS = ["email", "workEmail", "work_email"];
+const emailOf = (o) => { for (const k of EMAIL_KEYS) if (typeof o[k] === "string" && o[k].includes("@")) return o[k].trim().toLowerCase(); return null; };
+
+/**
+ * A copy of a JSON answer for a key: without KEY_HIDDEN_FIELDS at any depth, and without other people's PERSONAL_FIELDS unless the
+ * caller is a salary owner. `who` is { self, owner, path }; with no `who` (unit use) everything personal counts as someone else's.
+ */
+export function scrubForKey(value, who = {}, depth = 0, holder) {
   if (depth > 40 || value === null || typeof value !== "object") return value;
-  if (Array.isArray(value)) return value.map((v) => scrubForKey(v, depth + 1));
+  const self = String(who.self || "").toLowerCase();
+  if (holder === undefined) holder = OWN_ONLY_PATHS.includes(String(who.path || "").toLowerCase().replace(/\/+$/, "")) ? self : null;
+  if (Array.isArray(value)) return value.map((v) => scrubForKey(v, who, depth + 1, holder));
+  const mine = emailOf(value) ?? holder;
+  const keepPersonal = !!who.owner || (!!self && mine === self);
   const out = {};
-  for (const [k, v] of Object.entries(value)) if (!KEY_HIDDEN_FIELDS.has(k)) out[k] = scrubForKey(v, depth + 1);
+  for (const [k, v] of Object.entries(value)) {
+    if (KEY_HIDDEN_FIELDS.has(k)) continue;
+    if (!keepPersonal && PERSONAL_FIELDS.has(k)) continue;
+    out[k] = scrubForKey(v, who, depth + 1, mine);
+  }
   return out;
+}
+
+/** ID cards carry the phone, blood group and emergency contact: through a key, your own card, or anyone's for a salary owner. */
+export function idCardAllowed(path, query, self, owner) {
+  const p = String(path || "").toLowerCase().replace(/\/+$/, "");
+  if (!["/api/id-card.json", "/api/id-card.pdf", "/api/id-cards.pdf"].includes(p) || owner) return true;
+  if (p === "/api/id-cards.pdf") return false;
+  const asked = String((query && query.email) || self || "").trim().toLowerCase();
+  return asked === String(self || "").toLowerCase();
 }
 
 /** The words the MCP shows when a path is out of reach. */

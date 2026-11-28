@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { KEY_PATTERN, hashKey, keyFromHeader, keyMayReach, newKey, readKeyForm, scrubForKey } from "../src/access-keys-rules.js";
+import { KEY_PATTERN, hashKey, keyFromHeader, keyMayReach, newKey, readKeyForm, scrubForKey, idCardAllowed } from "../src/access-keys-rules.js";
 import { decide, salaryOwners, scopeFor, summary } from "../src/access-rules.js";
 
 test("a new key has the wo1_ form, a stable hash and a short hint, and is different every time", () => {
@@ -86,7 +86,7 @@ test("through a key, even a salary owner holds no salary permission", () => {
 
 test("every answer to a key loses ID numbers, bank details, the PF number and pay, at any depth", () => {
   const onboarding = [{ email: "a@wohlig.com", name: "Asha", ids: { dob: "1990-01-01", aadhaar: "XXXX XXXX 1234", pan: "XXXXX1234X", acct: "XXXX5678", ifsc: "HDFC0001" } }];
-  assert.deepEqual(scrubForKey(onboarding), [{ email: "a@wohlig.com", name: "Asha", ids: { dob: "1990-01-01" } }]);
+  assert.deepEqual(scrubForKey(onboarding, { self: "a@wohlig.com" }), [{ email: "a@wohlig.com", name: "Asha", ids: { dob: "1990-01-01" } }]);
   assert.deepEqual(scrubForKey({ ids: { pan: "x", aadhaar: "y" }, primary: { name: "A" } }), { ids: {}, primary: { name: "A" } });
   assert.deepEqual(scrubForKey({ pay: [{ email: "a", monthlyGross: 5, casualOpening: 2 }] }), { pay: [{ email: "a", casualOpening: 2 }] });
   assert.deepEqual(scrubForKey({ pfNumber: "MH/1", uan: "1", account: "kept", panel: "kept" }), { account: "kept", panel: "kept" });
@@ -99,4 +99,33 @@ test("the employee details sheet is out of reach for a key", () => {
   for (const [m, p] of [["GET", "/api/onboarding/import/template"], ["POST", "/api/onboarding/import/preview"], ["POST", "/api/onboarding/import/apply"]])
     assert.equal(keyMayReach(p, m), false, `${m} ${p}`);
   assert.equal(keyMayReach("/api/onboarding", "GET"), true, "the joiners list itself stays (its IDs are removed)");
+});
+
+test("personal details: your own always, someone else's only for a salary owner", () => {
+  const roster = [{ email: "me@wohlig.com", name: "Me", phone: "98", title: "Dev" }, { email: "asha@wohlig.com", name: "Asha", phone: "97", title: "HR",
+    contact: { personalEmail: "asha@gmail.com", emergencyPhone: "96" } }];
+  assert.deepEqual(scrubForKey(roster, { self: "me@wohlig.com", path: "/api/roster" }),
+    [{ email: "me@wohlig.com", name: "Me", phone: "98", title: "Dev" }, { email: "asha@wohlig.com", name: "Asha", title: "HR", contact: {} }]);
+  assert.deepEqual(scrubForKey(roster, { self: "chintan@wohlig.com", owner: true, path: "/api/roster" }), roster, "a salary owner keeps everyone's");
+  // A page that only ever answers about you keeps your own details though it names no email.
+  const profile = { primary: { dob: "1990-01-01", gender: "F", first: "Me" }, contact: { phone: "98", personalEmail: "me@gmail.com" }, ids: { pan: "X" } };
+  assert.deepEqual(scrubForKey(profile, { self: "me@wohlig.com", path: "/api/profile" }),
+    { primary: { dob: "1990-01-01", gender: "F", first: "Me" }, contact: { phone: "98", personalEmail: "me@gmail.com" }, ids: {} });
+  // With no email to say whose they are, elsewhere, details count as someone else's.
+  assert.deepEqual(scrubForKey({ phone: "1", name: "x" }, { self: "me@wohlig.com", path: "/api/whatever" }), { name: "x" });
+  // A nested record takes the email of the nearest object above it.
+  assert.deepEqual(scrubForKey({ email: "me@wohlig.com", ids: { dob: "d" } }, { self: "me@wohlig.com", path: "/api/x" }), { email: "me@wohlig.com", ids: { dob: "d" } });
+  assert.deepEqual(scrubForKey({ email: "asha@wohlig.com", ids: { dob: "d" } }, { self: "me@wohlig.com", path: "/api/x" }), { email: "asha@wohlig.com", ids: {} });
+  // ID numbers, bank details and pay stay out even for a salary owner.
+  assert.deepEqual(scrubForKey({ email: "a@wohlig.com", pan: "X", monthlyGross: 5, phone: "9" }, { self: "c@wohlig.com", owner: true }), { email: "a@wohlig.com", phone: "9" });
+});
+
+test("ID cards through a key: your own, or anyone's for a salary owner", () => {
+  assert.equal(idCardAllowed("/api/id-card.json", {}, "me@wohlig.com", false), true);
+  assert.equal(idCardAllowed("/api/id-card.json", { email: "ME@wohlig.com" }, "me@wohlig.com", false), true);
+  assert.equal(idCardAllowed("/api/id-card.json", { email: "asha@wohlig.com" }, "me@wohlig.com", false), false);
+  assert.equal(idCardAllowed("/api/id-card.pdf", { email: "asha@wohlig.com" }, "me@wohlig.com", false), false);
+  assert.equal(idCardAllowed("/api/id-cards.pdf", {}, "me@wohlig.com", false), false);
+  assert.equal(idCardAllowed("/api/id-cards.pdf", {}, "chintan@wohlig.com", true), true);
+  assert.equal(idCardAllowed("/api/leave", {}, "me@wohlig.com", false), true);
 });

@@ -35,6 +35,9 @@ Whatever the connector reads is handed to an AI assistant, so the server refuses
 - staff documents, the document password, PAN and Aadhaar numbers (full or masked), bank accounts, IFSC and PF numbers: these
   fields are removed from every answer the connector gets, whatever the page, so a new page cannot leak them by accident
 - access rights, logins and passwords (it can read the Users list, not change it), passkeys, access keys and connections
+- other people's personal details (phone, personal email, address, date of birth, blood group, family and emergency contacts) and
+  ID cards: everyone gets their own; someone else's only the salary owners (Kailash, Chintan and Chirag) get, and only where the
+  browser already shows them those details. Birthdays (day and month) on the dashboard are not affected
 - punching in or out for yourself
 
 Every change made through the connector is in the audit log as `… through the access key "<app> (connector)"`, and refused

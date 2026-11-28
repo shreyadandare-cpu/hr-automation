@@ -44,8 +44,8 @@ const BLOCKED_PREFIXES = [
   "/api/tax-declaration", "/api/tax-declarations", "/api/requests/advance", "/api/leave/salary-cuts", "/api/tools",
   // The employee details sheet: a workbook of everyone's masked IDs and bank details, and uploads that write them.
   "/api/onboarding/import",
-  // Offer letters carry the offered pay.
-  "/api/hr/offers",
+  // Offer letters carry the offered pay, also through the candidate's signing link.
+  "/api/hr/offers", "/api/sign",
   // Staff documents, the document password, full PAN and Aadhaar numbers, and the employee workbook that holds them.
   "/api/documents", "/api/document-password", "/api/employees/ids", "/api/employees/export",
   // Who may do what, signing in, passkeys and the keys themselves stay with a person in the browser.
@@ -59,6 +59,7 @@ const BLOCKED_PATTERNS = [
   /^\/api\/offboarding\/[^/]+\/clearance(\/|$)/,  // final settlement figures
   /^\/api\/offboarding\/clearance(\/|$)/,
   /^\/api\/hr\/candidates\/[^/]+\/offers(\/|$)/,  // offer letters for a candidate
+  /^\/api\/hr\/candidates\/[^/]+\/resume(\/|$)/,  // a candidate's CV: a personal document that often states their pay
   /^\/api\/requests\/advance(\/|$)/,
 ];
 // Changes a key may not make, though it may read the same place: logins and passwords (Manage > Users: resets, roles, the default
@@ -106,6 +107,9 @@ export const KEY_HIDDEN_FIELDS = new Set([
   "pan", "aadhaar", "acct", "ifsc", "panMasked", "aadhaarMasked", "acctMasked", "pan_masked", "aadhaar_masked", "acct_masked",
   "pan_enc", "aadhaar_enc", "hasPan", "has_pan", "pfNumber", "pf_number", "uan", "bankAccount", "bankName", "accountNumber",
   "account_number", "monthlyGross", "monthly_gross", "annualCtc", "annual_ctc", "ctc", "grossPay", "netPay", "settlement", "clearance",
+  // The same figures as their columns are named, should a query ever hand a row over as it is.
+  "ctc_annual", "ctcAnnual", "letter_text", "final_salary", "net_salary", "base_salary", "final_payout", "approved_amount", "requested_amount",
+  "amount_minor", "payable",
 ]);
 /** A copy of a JSON answer without KEY_HIDDEN_FIELDS, at any depth. Other values are kept exactly. */
 export function scrubForKey(value, depth = 0) {

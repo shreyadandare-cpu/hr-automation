@@ -41,7 +41,7 @@ export const specs = ({ get, send }) => [
 
   /* ---------- To do: what waits for a decision ---------- */
   { name: "wohlig_todo", title: "To do",
-    description: "Everything waiting for your decision, as the To do page counts it: leave requests and comp offs you approve, attendance requests you decide, timesheets to approve, interviews still needing your verdict, and open helpdesk tickets waiting on the HR team. Each part lists items with their ids for the decide tools.",
+    description: "Everything waiting for your decision, as the To do page counts it: leave requests and comp offs you approve, attendance requests you decide, timesheets to approve, interviews still needing your verdict, and open helpdesk tickets waiting on the HR team. Each part lists items with their ids for the decide tools (wohlig_decide_leave, wohlig_decide_comp_off, wohlig_decide_attendance_request, wohlig_decide_timesheet).",
     run: async () => {
       const parts = { me: get("/api/me"), leave: get("/api/leave"), attendanceRequests: get("/api/requests/attendance", { scope: "all" }),
         timesheets: get("/api/timesheets/to-approve"), interviews: get("/api/interviews"), helpdesk: get("/api/tickets", { scope: "all" }) };
@@ -134,6 +134,10 @@ export const specs = ({ get, send }) => [
     description: "Approves or declines a pending leave request (Leave > Review). A decline needs a note saying why. You cannot decide your own request.",
     write: "change", input: z.strictObject({ requestId: id, decision: z.enum(["approved", "declined"]), note: note("A comment; required when declining").optional() }),
     run: ({ requestId, decision, note: n }) => send("POST", `/api/leave/requests/${requestId}/decision`, { decision, note: n }) },
+  { name: "wohlig_decide_comp_off", title: "Approve or decline a comp off",
+    description: "Approves or declines a pending comp off (a day off earned for working on a holiday or weekend), as Leave > Review does. Take the id from wohlig_todo or wohlig_leave. You cannot decide your own.",
+    write: "change", input: z.strictObject({ compOffId: id, decision: z.enum(["approved", "declined"]) }),
+    run: ({ compOffId, decision }) => send("POST", `/api/leave/comp-offs/${compOffId}/decision`, { decision }) },
   { name: "wohlig_cancel_leave", title: "Cancel leave",
     description: "Cancels a leave request.", write: "remove", input: z.strictObject({ requestId: id }),
     run: ({ requestId }) => send("POST", `/api/leave/requests/${requestId}/cancel`) },
@@ -242,6 +246,47 @@ export const specs = ({ get, send }) => [
   { name: "wohlig_users", title: "Users", description: `Logins in ${PRODUCT} and their roles (Manage > Users). Read only: logins, passwords and roles are changed in the browser.`, run: () => get("/api/users") },
   { name: "wohlig_audit_log", title: "Audit log", description: "The audit log (Manage > Audit log), newest first; filter by person.",
     input: z.strictObject({ email: email.optional(), limit: z.number().int().min(1).max(1000).default(200) }), run: (a) => get("/api/audit", a) },
+
+  /* ---------- Performance: OKRs, goals, 1:1 meetings ---------- */
+  { name: "wohlig_okrs", title: "OKRs", description: "Company and team objectives with their key results and the goals linked to them, for one quarter (Performance > OKRs); this quarter when left out.",
+    input: z.strictObject({ quarter: z.string().regex(/^\d{4}-Q[1-4]$/).optional().describe("A quarter as YYYY-Qn, for example 2026-Q4") }),
+    run: (a) => get("/api/okrs", a) },
+  { name: "wohlig_goals", title: "Goals", description: "A person's goals with their progress and due dates (Engage > Goals); yourself when email is left out. Someone else's need goals.view for them or that they report to you.",
+    input: z.strictObject({ email: email.optional() }), run: (a) => get("/api/goals", a) },
+  { name: "wohlig_one_on_ones", title: "1:1 meetings", description: "Your 1:1 meetings as a manager or a report, newest first, with open action items (Performance > 1:1s). Use wohlig_api_get on /api/one-on-ones/:id for one meeting's notes.",
+    run: () => get("/api/one-on-ones") },
+
+  /* ---------- Engage: praise, polls, articles ---------- */
+  { name: "wohlig_praise", title: "Praise", description: "Praise people have given each other (Engage > Praise). scope: all (the company wall), mine (given to you) or given (given by you).",
+    input: z.strictObject({ scope: z.enum(["all", "mine", "given"]).default("all") }), run: (a) => get("/api/praise", a) },
+  { name: "wohlig_polls", title: "Polls", description: "Company polls with their options and your vote; the totals show once you have voted or the poll has closed, as on Engage > Polls.",
+    run: () => get("/api/polls") },
+  { name: "wohlig_articles", title: "Articles", description: "Policy and news articles from the HR team, newest first, and whether each one asks to be read and acknowledged (Engage > Articles). Use wohlig_api_get on /api/articles/:id for one article and whether you have acknowledged it.",
+    run: () => get("/api/articles") },
+
+  /* ---------- Workforce: timesheets, surveys, training, stand-ins ---------- */
+  { name: "wohlig_timesheet", title: "Timesheet for a week",
+    description: "One person's weekly timesheet: hours per project and day, and its status (Timesheet). Yourself when email is left out; someone else's only when you approve their timesheets.",
+    input: z.strictObject({ email: email.optional(), week: day.optional().describe("Any day in the week; this week when left out") }),
+    run: (a) => get("/api/timesheet", a) },
+  { name: "wohlig_surveys", title: "Surveys", description: "Surveys from the HR team and whether you have answered each (Engage > Surveys). Answers are anonymous unless the survey says otherwise.",
+    run: () => get("/api/surveys") },
+  { name: "wohlig_training", title: "Your training", description: "The training assigned to you, with due dates and what is done (Training).",
+    run: () => get("/api/training") },
+  { name: "wohlig_stand_ins", title: "Approval stand-ins",
+    description: "Who decides leave and requests for whom while someone is away (Stand-ins). scope=all lists everyone's (needs leave.approve for the whole company); mine lists yours.",
+    input: z.strictObject({ scope: z.enum(["all", "mine"]).default("mine") }),
+    run: ({ scope }) => get("/api/stand-ins", scope === "all" ? { scope: "all" } : {}) },
+
+  /* ---------- Jobs and project reports ---------- */
+  { name: "wohlig_jobs", title: "Open jobs and referrals", description: "Open roles anyone can refer a friend to (Jobs), and the referrals you have made with their stage.",
+    run: async () => {
+      const [jobs, referrals] = await Promise.allSettled([get("/api/jobs"), get("/api/jobs/my-referrals")]);
+      const v = (r) => (r.status === "fulfilled" ? r.value : { unavailable: r.reason instanceof Error ? r.reason.message : String(r.reason) });
+      return { jobs: v(jobs), myReferrals: v(referrals) };
+    } },
+  { name: "wohlig_project_reports", title: "Project reports", description: "The projects you may see weekly reports for (Project reports), built from the project emails. Use wohlig_api_get on /api/project-reports/:id with week=YYYY-MM-DD for one report.",
+    run: () => get("/api/project-reports") },
 
   /* ---------- Everything else the dashboard does ---------- */
   { name: "wohlig_list_endpoints", title: `${PRODUCT} endpoints`,

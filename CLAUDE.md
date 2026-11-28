@@ -26,6 +26,31 @@ When you update it: change the right section (routes, endpoints, pages, data mod
 `updated:` in the front matter to today, and keep the Obsidian front matter, the `> [!info]` callout and the links.
 The check only sees names; you still describe what changed in plain words.
 
+## Claude connector: keep it in step (always, checked automatically)
+
+Wohlig One has a connector for Claude ([docs/MCP_CONNECTOR.md](docs/MCP_CONNECTOR.md)): staff use the portal from Claude, as
+themselves, through `/mcp`. Anyone who adds or changes a page or an endpoint, a person or an AI assistant, decides in the same
+change what the connector does with it:
+
+- **Salary, payment, tax, bank, ID, offer or document data:** block it for access keys in
+  [backend/src/access-keys-rules.js](backend/src/access-keys-rules.js) (`BLOCKED_PREFIXES` or `BLOCKED_PATTERNS`), and add any new
+  field name that carries such a figure to `KEY_HIDDEN_FIELDS`. Never give it a tool or a line in `coverage.js`.
+- **A job people do often:** a tool in [backend/src/mcp/tools.js](backend/src/mcp/tools.js) that calls the endpoint the page calls,
+  with the same fields and values, listed in the tools table of docs/MCP_CONNECTOR.md.
+- **Anything else:** a line in [backend/src/mcp/coverage.js](backend/src/mcp/coverage.js) `GENERAL`, in its group, with the reason
+  it has no tool (it is reached through `wohlig_api_get` and `wohlig_api_call`, or stays in the browser).
+- **A new page:** an entry in `coverage.js` `PAGES`: the tools that do its job, `general`, or `out` with the reason.
+- **A router mounted under a new prefix** in `index.js` needs a line in `PREFIX` in [backend/src/mcp/catalog.js](backend/src/mcp/catalog.js).
+- Keep the tool count in ARCHITECTURE.md right.
+
+Three things enforce it, as for ARCHITECTURE.md: `cd backend && npm run check:docs` (also alone: `npm run check:connector`) runs
+[backend/scripts/check-connector.mjs](backend/scripts/check-connector.mjs); `npm test` runs the same check
+([backend/test/connector-coverage.test.mjs](backend/test/connector-coverage.test.mjs)); and a Stop hook in `.claude/settings.json` runs
+it when Claude finishes a turn and sends it back once to fix it. The check fails when a page or a reachable endpoint has no entry,
+when an entry or a tool points at something that is gone or blocked, when a reachable endpoint's path names pay, tax, a bank, a
+loan, an advance, an offer or a document, or when docs/MCP_CONNECTOR.md misses a tool. After a change to access-keys-rules.js, run
+`node --test test/access-keys.test.mjs`.
+
 ## Skills: always pick the right one first
 
 Before a task, check the skills list and use the one that fits. If none fits, say so and propose one.

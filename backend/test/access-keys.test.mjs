@@ -66,6 +66,12 @@ test("a key reads logins but never changes them, makes no Google account and add
   assert.equal(keyMayReach("/api/onboarding", "POST"), true);
 });
 
+test("offer letters stay out, also through the signing link, and so do candidates' CVs", () => {
+  for (const p of ["/api/sign/abc", "/api/sign/abc/pdf", "/api/hr/candidates/7/resume", "/api/hr/offers/3"]) assert.equal(keyMayReach(p, "GET"), false, p);
+  assert.equal(keyMayReach("/api/sign/abc", "POST"), false);
+  assert.equal(keyMayReach("/api/hr/candidates/7/interviews", "GET"), true, "a candidate's interviews can be read");
+});
+
 test("an encoded slash, backslash or NUL is refused outright", () => {
   for (const p of ["/api/employees/a%2fb/pay", "/api/leave%2F..%2Fpayroll", "/api/x%5cpayroll", "/api/leave%00"]) assert.equal(keyMayReach(p), false, p);
 });
@@ -88,6 +94,7 @@ test("every answer to a key loses ID numbers, bank details, the PF number and pa
   const onboarding = [{ email: "a@wohlig.com", name: "Asha", ids: { dob: "1990-01-01", aadhaar: "XXXX XXXX 1234", pan: "XXXXX1234X", acct: "XXXX5678", ifsc: "HDFC0001" } }];
   assert.deepEqual(scrubForKey(onboarding), [{ email: "a@wohlig.com", name: "Asha", ids: { dob: "1990-01-01" } }]);
   assert.deepEqual(scrubForKey({ ids: { pan: "x", aadhaar: "y" }, primary: { name: "A" } }), { ids: {}, primary: { name: "A" } });
+  assert.deepEqual(scrubForKey({ id: 1, ctc_annual: 9, letter_text: "CTC", net_salary: 1, amount_minor: 5, stage: "offer" }), { id: 1, stage: "offer" });
   assert.deepEqual(scrubForKey({ pay: [{ email: "a", monthlyGross: 5, casualOpening: 2 }] }), { pay: [{ email: "a", casualOpening: 2 }] });
   assert.deepEqual(scrubForKey({ pfNumber: "MH/1", uan: "1", account: "kept", panel: "kept" }), { account: "kept", panel: "kept" });
   assert.equal(scrubForKey(null), null);

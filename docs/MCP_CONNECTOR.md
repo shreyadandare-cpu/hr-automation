@@ -31,7 +31,9 @@ Claude Code can also connect from a terminal: `claude mcp add --transport http w
 Whatever the connector reads is handed to an AI assistant, so the server refuses these to every connection, even a salary owner's
 (`backend/src/access-keys-rules.js`, and `salaryRule` in `access-rules.js`):
 
-- salaries, payslips, payroll, finance reports, tax, expense claims, loans, budgets, advances, offer letters, final settlements
+- salaries, payslips, payroll, finance reports, tax, expense claims, loans, budgets, advances, offer letters (also through the
+  candidate's signing link), final settlements, and notices about any of them
+- candidates' CVs
 - staff documents, the document password, PAN and Aadhaar numbers (full or masked), bank accounts, IFSC and PF numbers: these
   fields are removed from every answer the connector gets, whatever the page, so a new page cannot leak them by accident
 - access rights, logins and passwords (it can read the Users list, not change it), passkeys, access keys and connections
@@ -47,16 +49,36 @@ attempts are logged too.
 | Home | `wohlig_whoami`, `wohlig_dashboard`, `wohlig_notifications`, `wohlig_mark_notifications_read` (change) |
 | To do | `wohlig_todo`: pending leave, attendance requests, timesheets, interviews and open tickets |
 | People | `wohlig_list_employees`, `wohlig_get_employee`, `wohlig_managers`, `wohlig_set_manager` (change), `wohlig_allocations` |
-| Leave | `wohlig_leave`, `wohlig_leave_today`, `wohlig_leave_policy`, `wohlig_apply_leave`, `wohlig_decide_leave`, `wohlig_cancel_leave` (changes) |
+| Leave | `wohlig_leave`, `wohlig_leave_today`, `wohlig_leave_policy`, `wohlig_apply_leave`, `wohlig_decide_leave`, `wohlig_decide_comp_off`, `wohlig_cancel_leave` (changes) |
 | Attendance | `wohlig_attendance_day`, `wohlig_attendance_month`, `wohlig_attendance_report`, `wohlig_add_punch` (change, for someone else, with a reason), `wohlig_attendance_requests`, `wohlig_decide_attendance_request` (change) |
-| Timesheets | `wohlig_timesheets_to_approve`, `wohlig_decide_timesheet` (change) |
+| Timesheets and stand-ins | `wohlig_timesheet`, `wohlig_timesheets_to_approve`, `wohlig_decide_timesheet` (change), `wohlig_stand_ins` |
 | Joiners and leavers | `wohlig_onboarding`, `wohlig_offboarding`, `wohlig_notice_periods` |
-| Hiring | `wohlig_openings`, `wohlig_candidates`, `wohlig_interviews` |
+| Hiring | `wohlig_openings`, `wohlig_candidates`, `wohlig_interviews`, `wohlig_jobs` (open roles and your referrals) |
 | Probation and reviews | `wohlig_probations`, `wohlig_decide_probation` (change), `wohlig_review_cycles`, `wohlig_reviews`, `wohlig_exit_interviews` |
+| Performance | `wohlig_okrs`, `wohlig_goals`, `wohlig_one_on_ones` |
+| Engage and training | `wohlig_praise`, `wohlig_polls`, `wohlig_articles`, `wohlig_surveys`, `wohlig_training` |
 | Helpdesk | `wohlig_tickets`, `wohlig_ticket`, `wohlig_reply_ticket`, `wohlig_close_ticket` (changes) |
 | Community | `wohlig_announcements`, `wohlig_post_announcement` (change) |
-| Manage | `wohlig_assets`, `wohlig_shifts`, `wohlig_overtime`, `wohlig_report_builder`, `wohlig_run_report`, `wohlig_users`, `wohlig_audit_log` |
+| Manage | `wohlig_assets`, `wohlig_shifts`, `wohlig_overtime`, `wohlig_report_builder`, `wohlig_run_report`, `wohlig_users`, `wohlig_audit_log`, `wohlig_project_reports` |
 | Everything else | `wohlig_list_endpoints`, `wohlig_api_get`, `wohlig_api_call` (change) |
+
+Which tool does each page's job, and which endpoints are reached only through the last three (or stay in the browser), is
+written down in `backend/src/mcp/coverage.js`. A page or endpoint missing from it fails the check below.
+
+## Keep it in step (everyone who changes the portal)
+
+The connector must follow the portal: a new page or endpoint without a decision for the connector fails
+`backend/scripts/check-connector.mjs`, which runs in `npm run check:docs`, in `npm test` (`test/connector-coverage.test.mjs`) and as
+a Claude Code Stop hook. When you add or change a page or an endpoint, in the same change:
+
+1. **Salary, payment, tax, bank, ID, offer or document data?** Block it for keys in `access-keys-rules.js` (`BLOCKED_PREFIXES` or
+   `BLOCKED_PATTERNS`) and add any new field name to `KEY_HIDDEN_FIELDS`. The check refuses a reachable endpoint whose path names
+   pay, tax, a bank, a loan, an advance, an offer or a document.
+2. **A job people do often?** Add a tool to `mcp/tools.js` that calls the same endpoint the page calls, with the same fields, and
+   list it in the table above.
+3. **Otherwise** list the endpoint in `mcp/coverage.js` `GENERAL`, in the group it belongs to, with the reason it has no tool.
+4. Name a new page in `mcp/coverage.js` `PAGES` (its tools, `general` or `out`, with the reason).
+5. Keep the tool count in ARCHITECTURE.md right. Then run `cd backend && npm run check:docs`.
 
 ## How it works (developers)
 
@@ -87,8 +109,8 @@ sequenceDiagram
 - **Short codes, rotating refresh tokens.** A code lasts 60 seconds and works once; a second use ends the connection it made. Each
   refresh swaps the refresh token; presenting an old one again ends the connection. Every connection ends after 90 days.
 - **Files:** `backend/src/oauth.js` and `oauth-rules.js` (sign-in), `mcp-server.js` (the `/mcp` endpoint, MCP TypeScript SDK v2
-  with `createMcpHandler`, no sessions), `mcp/tools.js` (the tools), `mcp/catalog.js` (endpoint list read from the route files),
+  with `createMcpHandler`, no sessions), `mcp/tools.js` (the tools), `mcp/catalog.js` (endpoint list read from the route files), `mcp/coverage.js` (what the connector does for every page and endpoint),
   `frontend/src/modules/connect/` (the Allow page), `components/AccessKeys.jsx` (Account card). nginx sends `/mcp`, `/oauth/` and
   `/.well-known/oauth-*` to the backend.
-- **Tests:** `node --test test/oauth.test.mjs test/access-keys.test.mjs` (in `npm test`), and against a local server
+- **Tests:** `node --test test/oauth.test.mjs test/access-keys.test.mjs test/connector-coverage.test.mjs` (in `npm test`), and against a local server
   `test/oauth-flow.mjs` and `test/access-keys-flow.mjs` (see their headers).

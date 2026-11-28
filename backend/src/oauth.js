@@ -17,7 +17,7 @@ import { PRODUCT } from "./brand.js";
 import { freshSignIn, FRESH_MINUTES } from "./access-keys.js";
 import { newKey } from "./access-keys-rules.js";
 import {
-  ACCESS_TOKEN_MINUTES, CODE_SECONDS, MAX_GRANT_DAYS, MAX_PENDING_PER_CLIENT, REFRESH_DAYS, REQUEST_MINUTES, SCOPE, okResource, pkceMatches, randomId, readAuthorize, readRegistration,
+  ACCESS_TOKEN_MINUTES, CODE_SECONDS, MAX_GRANT_DAYS, MAX_PENDING_PER_CLIENT, REFRESH_DAYS, REFRESH_GRACE_SECONDS, REQUEST_MINUTES, SCOPE, okResource, pkceMatches, randomId, readAuthorize, readRegistration,
   resourceMetadata, serverMetadata, sha, withParams,
 } from "./oauth-rules.js";
 
@@ -84,7 +84,8 @@ oauthPublicRouter.get(["/.well-known/oauth-protected-resource", "/.well-known/oa
   (_req, res) => res.json(resourceMetadata(publicUrl())));
 
 oauthPublicRouter.post("/oauth/register", wrap(async (req, res) => {
-  if (await tooMany(`oauth-register:${req.ip}`, 30, 60 * 60 * 1000)) return tokenError(res, "slow_down", "Too many registrations. Please try again later.", 429);
+  // Every claude.ai user registers from Anthropic's servers, so the limit per address is generous.
+  if (await tooMany(`oauth-register:${req.ip}`, 300, 60 * 60 * 1000)) return tokenError(res, "too_many_requests", "Too many registrations. Please try again later.", 429);
   const { value, error } = readRegistration(req.body);
   if (error) return tokenError(res, "invalid_client_metadata", error);
   const clientId = randomId(24);
@@ -115,7 +116,7 @@ oauthPublicRouter.get("/oauth/authorize", wrap(async (req, res) => {
 
 oauthPublicRouter.post("/oauth/token", form, wrap(async (req, res) => {
   const b = req.body || {};
-  if (await tooMany(`oauth-token:${req.ip}`, 120, 60 * 1000)) return tokenError(res, "slow_down", "Too many requests.", 429);
+  if (await tooMany(`oauth-token:${req.ip}`, 600, 60 * 1000)) return tokenError(res, "too_many_requests", "Too many requests.", 429);
   if (b.grant_type === "authorization_code") {
     const used = await pool.query(
       `UPDATE oauth_requests SET used_at=now() WHERE code_hash=$1 AND used_at IS NULL AND expires_at > now() AND email IS NOT NULL
@@ -153,13 +154,26 @@ oauthPublicRouter.post("/oauth/token", form, wrap(async (req, res) => {
           WHERE refresh_hash=$1 AND client_id=$4 AND revoked_at IS NULL AND expires_at > now()
             AND EXISTS (SELECT 1 FROM users u WHERE lower(u.email)=lower(g.email) AND NOT u.login_blocked)
           RETURNING id, email, client_name`, [old, sha(next), REFRESH_DAYS, String(b.client_id || "")]);
-      if (!grant) {
-        const reused = (await client.query("SELECT id FROM oauth_grants WHERE prev_refresh_hash=$1 AND revoked_at IS NULL", [old])).rows[0];
-        if (reused) await endGrant(client, reused.id);
-        await client.query("COMMIT");
-        return tokenError(res, "invalid_grant", "Please connect again.");
+      let used = grant;
+      if (!used) {
+        const prev = (await client.query(
+          `SELECT id, last_used_at > now() - $2 * interval '1 second' AS fresh FROM oauth_grants
+            WHERE prev_refresh_hash=$1 AND client_id=$3 AND revoked_at IS NULL AND expires_at > now() FOR UPDATE`,
+          [old, REFRESH_GRACE_SECONDS, String(b.client_id || "")])).rows[0];
+        if (prev && prev.fresh) {
+          // Two refreshes sent at once with the same token: the one that waited still gets a working pair.
+          used = (await client.query(
+            `UPDATE oauth_grants SET prev_refresh_hash=refresh_hash, refresh_hash=$2, last_used_at=now() WHERE id=$1 RETURNING id, email, client_name`,
+            [prev.id, sha(next)])).rows[0];
+        } else {
+          // An old refresh token shown again later may be a stolen copy: the whole connection ends.
+          const reused = (await client.query("SELECT id FROM oauth_grants WHERE prev_refresh_hash=$1 AND revoked_at IS NULL", [old])).rows[0];
+          if (reused) await endGrant(client, reused.id);
+          await client.query("COMMIT");
+          return tokenError(res, "invalid_grant", "Please connect again.");
+        }
       }
-      const access = await accessTokenFor(client, grant);
+      const access = await accessTokenFor(client, used);
       await client.query("COMMIT");
       return res.set("Cache-Control", "no-store").json(tokenAnswer(access, next));
     } catch (err) { await client.query("ROLLBACK"); throw err; } finally { client.release(); }
@@ -218,7 +232,7 @@ oauthAccountRouter.get("/grants", wrap(async (req, res) => {
   const { rows } = await pool.query(
     `SELECT id, client_name, created_at, last_used_at FROM oauth_grants
       WHERE lower(email)=$1 AND revoked_at IS NULL AND expires_at > now() ORDER BY created_at DESC LIMIT 20`, [me(req)]);
-  res.json({ grants: rows.map((g) => ({ id: g.id, name: g.client_name, createdAt: g.created_at, lastUsedAt: g.last_used_at })) });
+  res.json({ connectorUrl: `${publicUrl()}/mcp`, grants: rows.map((g) => ({ id: g.id, name: g.client_name, createdAt: g.created_at, lastUsedAt: g.last_used_at })) });
 }));
 
 oauthAccountRouter.delete("/grants/:id", wrap(async (req, res) => {

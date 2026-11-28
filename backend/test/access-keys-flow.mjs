@@ -68,9 +68,28 @@ try {
 
   // Pay never travels through a key, even where the page shows it in the browser.
   const leave = await req("GET", "/api/leave", bearer(secret));
-  check(Array.isArray(leave.data?.pay) && leave.data.pay.every((p) => p.monthlyGross === null), "leave data carries no salary, not even your own");
+  check(Array.isArray(leave.data?.pay) && leave.data.pay.every((p) => p.monthlyGross == null), "leave data carries no salary, not even your own");
   const off = await req("GET", "/api/offboarding", bearer(secret));
   check(off.status === 200 && (off.data || []).every((o) => o.settlement === null && o.clearance === null), "offboarding carries no settlement or clearance figures");
+  // Leave for someone else is refused unless you may approve their leave; it is never filed for you instead.
+  const other = (await one("SELECT lower(work_email) AS e FROM employees WHERE status='active' AND lower(work_email)<>$1 LIMIT 1", [person]))?.e;
+  const empKeyOwner = (await one(`SELECT lower(u.email) AS e FROM users u JOIN employees e ON lower(e.work_email)=lower(u.email) WHERE e.status='active' AND NOT u.is_super_admin
+    AND NOT u.login_blocked AND NOT EXISTS (SELECT 1 FROM access_grants g WHERE lower(g.email)=lower(u.email) AND g.revoked_at IS NULL) LIMIT 1`))?.e;
+  if (empKeyOwner && other) {
+    const k2 = crypto.randomBytes(32).toString("base64url"), s2 = "wo1_" + k2.slice(0, 43);
+    await db.query("INSERT INTO access_keys (email, name, key_hash, hint, expires_at) VALUES ($1,'Flow test key',$2,$3, now() + interval '1 hour')", [empKeyOwner, sha(s2), s2.slice(0, 10)]);
+    const before = (await one("SELECT count(*)::int AS n FROM leave_requests WHERE lower(work_email)=$1", [empKeyOwner])).n;
+    const forOther = await req("POST", "/api/leave/requests", bearer(s2), { type: "casual", from: "2027-02-01", to: "2027-02-01", reason: "Flow test", email: other === empKeyOwner ? person : other });
+    const after = (await one("SELECT count(*)::int AS n FROM leave_requests WHERE lower(work_email)=$1", [empKeyOwner])).n;
+    check(forOther.status === 403 && after === before, "leave asked for someone else, without approving their leave, is refused and not filed for you");
+  }
+
+  // ID numbers and bank details never travel through a key either, on any page.
+  const onb = await req("GET", "/api/onboarding", bearer(secret));
+  check(onb.status === 200 && !/"(pan|aadhaar|acct|ifsc)"\s*:/.test(JSON.stringify(onb.data)), "the joiners list carries no PAN, Aadhaar, bank account or IFSC");
+  const prof = await req("GET", "/api/profile", bearer(secret));
+  check(prof.status === 200 && !/"(pan|aadhaar|acct|ifsc|pfNumber|uan)"\s*:/.test(JSON.stringify(prof.data)), "your own profile carries no PAN, Aadhaar or bank details");
+  check((await req("GET", "/api/onboarding/import/template", bearer(secret))).status === 403, "the employee details sheet is refused");
   const users = await req("GET", "/api/users", bearer(secret));
   check(users.status === 200 && !users.data?.defaultPassword, "the logins list shows no default password");
 
@@ -103,7 +122,7 @@ try {
   check((await req("GET", "/api/me", bearer(secret))).status === 401, "a revoked key no longer works");
   check((await req("DELETE", `/api/access-keys/${keyId}`, cookie)).status === 404, "revoking twice says it is already gone");
 } finally {
-  await db.query("DELETE FROM access_keys WHERE lower(email)=$1 AND name='Flow test key'", [person]);
+  await db.query("DELETE FROM access_keys WHERE name='Flow test key'");
   await db.query("DELETE FROM sessions WHERE token_hash=$1", [sha(token)]);
   await db.query("DELETE FROM audit_log WHERE work_email=$1 AND ts >= $2 AND (action LIKE '%Flow test key%')", [person, started]);
   await db.end();

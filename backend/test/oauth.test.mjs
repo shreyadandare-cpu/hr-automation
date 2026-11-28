@@ -15,7 +15,8 @@ test("registration needs return addresses, takes public clients only, and names 
   assert.equal(readRegistration({ redirect_uris: ["https://claude.ai/cb"] }).value.name, "An app");
   assert.ok(readRegistration({}).error);
   assert.ok(readRegistration({ redirect_uris: ["http://evil.example/cb"] }).error);
-  assert.ok(readRegistration({ redirect_uris: ["https://claude.ai/cb"], token_endpoint_auth_method: "client_secret_basic" }).error);
+  assert.ok(!readRegistration({ redirect_uris: ["https://claude.ai/cb"], token_endpoint_auth_method: "client_secret_post", scope: "claudeai" }).error,
+    "a client that asks for a secret method is still registered (as a public client)");
 });
 
 test("app names lose control, direction and quote characters", () => {
@@ -50,6 +51,8 @@ test("authorize: an unknown app or address stops there; other mistakes go back t
   assert.equal(readAuthorize({ ...ok, resource: "https://other.example/mcp" }, client, base).error, "invalid_target");
   assert.deepEqual(readAuthorize({ ...ok, resource: "https://one.wohlig.com/mcp/" }, client, base).value.state, "s");
   assert.equal(okResource(undefined, base), true);
+  assert.equal(readAuthorize({ ...ok, state: "s".repeat(1001) }, client, base).error, "invalid_request", "a state too long is refused, never cut");
+  assert.equal(readAuthorize({ ...ok, state: "s".repeat(1000) }, client, base).value.state.length, 1000);
 });
 
 test("discovery documents point at this portal, and return addresses keep their own query", () => {

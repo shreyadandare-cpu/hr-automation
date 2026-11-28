@@ -42,6 +42,8 @@ const BLOCKED_PREFIXES = [
   // Salaries and every other payment (decided 2026-11-27): payroll, payslips, finance reports, claims, loans, budgets, advances, tax.
   "/api/payroll", "/api/payslips", "/api/finance", "/api/reimbursements", "/api/loans", "/api/budget-requests", "/api/advances",
   "/api/tax-declaration", "/api/tax-declarations", "/api/requests/advance", "/api/leave/salary-cuts", "/api/tools",
+  // The employee details sheet: a workbook of everyone's masked IDs and bank details, and uploads that write them.
+  "/api/onboarding/import",
   // Offer letters carry the offered pay.
   "/api/hr/offers",
   // Staff documents, the document password, full PAN and Aadhaar numbers, and the employee workbook that holds them.
@@ -93,6 +95,25 @@ export function keyMayReach(path, method = "GET") {
   const reads = ["GET", "HEAD", "OPTIONS"].includes(String(method || "GET").toUpperCase());
   if (!reads && BLOCKED_WRITES.some((re) => re.test(p))) return false;
   return true;
+}
+
+/*
+ * Fields no answer to a key ever carries, wherever they appear (any depth, any endpoint): ID numbers, bank details, the PF number
+ * and pay figures, masked or not. keyGuard removes them from every JSON answer to a key, so an endpoint that starts returning one
+ * of them later cannot hand it to an AI assistant. A second wall behind the blocked paths and the salary rule.
+ */
+export const KEY_HIDDEN_FIELDS = new Set([
+  "pan", "aadhaar", "acct", "ifsc", "panMasked", "aadhaarMasked", "acctMasked", "pan_masked", "aadhaar_masked", "acct_masked",
+  "pan_enc", "aadhaar_enc", "hasPan", "has_pan", "pfNumber", "pf_number", "uan", "bankAccount", "bankName", "accountNumber",
+  "account_number", "monthlyGross", "monthly_gross", "annualCtc", "annual_ctc", "ctc", "grossPay", "netPay", "settlement", "clearance",
+]);
+/** A copy of a JSON answer without KEY_HIDDEN_FIELDS, at any depth. Other values are kept exactly. */
+export function scrubForKey(value, depth = 0) {
+  if (depth > 40 || value === null || typeof value !== "object") return value;
+  if (Array.isArray(value)) return value.map((v) => scrubForKey(v, depth + 1));
+  const out = {};
+  for (const [k, v] of Object.entries(value)) if (!KEY_HIDDEN_FIELDS.has(k)) out[k] = scrubForKey(v, depth + 1);
+  return out;
 }
 
 /** The words the MCP shows when a path is out of reach. */

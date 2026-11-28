@@ -49,30 +49,35 @@ function caller(token) {
   return { get: (path, query) => call("GET", path, { query }), send: (method, path, body) => call(method, path, { body: body ?? {} }) };
 }
 
-/** Keeps an answer under CHARACTER_LIMIT by showing fewer items of its longest list, never by cutting text, and says what was left out. */
+/**
+ * Keeps an answer under CHARACTER_LIMIT by showing fewer items of its longest lists (halving the longest each round, so two big lists
+ * both shrink), never by cutting text, and says what was left out. Only an answer with no list left to shrink is cut, and says so.
+ */
 export function fit(data) {
   let text = JSON.stringify(data, null, 1);
+  if (text === undefined) return "null";
   if (text.length <= CHARACTER_LIMIT) return text;
-  const clone = JSON.parse(text);
-  let best = null;
-  const visit = (x, at, holder, key) => {
-    if (Array.isArray(x)) {
-      if (!best || JSON.stringify(x).length > JSON.stringify(best.arr).length) best = { arr: x, at, holder, key };
-      x.forEach((y, i) => visit(y, `${at}[${i}]`, null, ""));
-    } else if (x && typeof x === "object") for (const [k, y] of Object.entries(x)) visit(y, at ? `${at}.${k}` : k, x, k);
-  };
-  visit(clone, "", null, "");
-  if (!best) return text.slice(0, CHARACTER_LIMIT) + "\n…(answer shortened)";
-  const total = best.arr.length;
-  let shown = total, out = clone;
-  while (shown > 1) {
-    shown = Math.ceil(shown / 2);
-    const part = best.arr.slice(0, shown);
+  let out = JSON.parse(text);
+  const cut = new Map();   // where -> [shown, total]
+  for (let round = 0; round < 60 && text.length + 300 > CHARACTER_LIMIT; round++) {
+    let best = null;
+    const visit = (x, at, holder, key) => {
+      if (Array.isArray(x)) {
+        if (x.length > 1 && (!best || JSON.stringify(x).length > best.size)) best = { arr: x, at, holder, key, size: JSON.stringify(x).length };
+        x.forEach((y, i) => visit(y, `${at}[${i}]`, x, i));
+      } else if (x && typeof x === "object") for (const [k, y] of Object.entries(x)) visit(y, at ? `${at}.${k}` : k, x, k);
+    };
+    visit(out, "", null, "");
+    if (!best) break;
+    const part = best.arr.slice(0, Math.ceil(best.arr.length / 2));
+    const label = best.at || "the list";
+    cut.set(label, [part.length, (cut.get(label) || [0, best.arr.length])[1]]);
     if (best.holder) best.holder[best.key] = part; else out = part;
     text = JSON.stringify(out, null, 1);
-    if (text.length + 200 <= CHARACTER_LIMIT) break;
   }
-  return `${text}\n\nShowing ${shown} of ${total} items in "${best.at || "the list"}". Narrow the request (a filter, a date, a person) to see the rest.`;
+  const notes = [...cut].map(([at, [shown, total]]) => `${shown} of ${total} items in "${at}"`).join("; ");
+  if (text.length > CHARACTER_LIMIT) text = text.slice(0, CHARACTER_LIMIT - 200) + "\n…(the rest of this answer was cut to fit)";
+  return notes ? `${text}\n\nShowing ${notes}. Narrow the request (a filter, a date, a person) to see the rest.` : text;
 }
 
 function createServer(token) {

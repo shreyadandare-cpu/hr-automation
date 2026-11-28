@@ -51,6 +51,9 @@ try {
   // Registration: https or localhost only.
   check((await http("POST", "/oauth/register", { json: { redirect_uris: ["http://evil.example/cb"] } })).status === 400, "an http redirect to another host is refused");
   check((await http("POST", "/oauth/register", { json: { client_name: "Claude", redirect_uris: ["https://claude-ai.evil.example/cb"] } })).status === 400, "a look-alike https host cannot register");
+  const asClaude = await http("POST", "/oauth/register", { json: { client_name: "Flow test app", redirect_uris: [REDIRECT], token_endpoint_auth_method: "client_secret_post", scope: "claudeai", grant_types: ["authorization_code", "refresh_token"] } });
+  check(asClaude.status === 201 && asClaude.data.token_endpoint_auth_method === "none" && !asClaude.data.client_secret, "a registration asking for a secret is accepted as a public client");
+  if (asClaude.data?.client_id) await db.query("DELETE FROM oauth_clients WHERE client_id=$1", [asClaude.data.client_id]);
   const reg = await http("POST", "/oauth/register", { json: { client_name: "Flow test app", redirect_uris: [REDIRECT] } });
   check(reg.status === 201 && reg.data.client_id, "an app registers itself");
   clientId = reg.data.client_id;
@@ -120,15 +123,26 @@ try {
   const pay = await mcp.callTool({ name: "wohlig_api_get", arguments: { path: "/api/payroll" } });
   check(pay.isError && /cannot be used/.test(text(pay)), "payroll is refused through the connector");
   const leave = JSON.parse(text(await mcp.callTool({ name: "wohlig_leave", arguments: {} })).split("\n\nShowing")[0]);
-  check((leave.pay || []).every((p) => p.monthlyGross === null), "leave data through the connector carries no salary");
+  check((leave.pay || []).every((p) => p.monthlyGross == null), "leave data through the connector carries no salary");
   await mcp.close();
   check((await http("GET", "/api/oauth/grants", { headers: { Authorization: `Bearer ${access}` } })).status === 403, "a connector token cannot see or end connections");
 
-  // Refresh rotates.
-  const ref = await http("POST", "/oauth/token", { form: { grant_type: "refresh_token", refresh_token: refresh, client_id: clientId } });
+  // Refresh rotates. Within a minute the token it replaced still works (two requests sent at once); shown again later, it
+  // may be a stolen copy, so the whole connection ends.
+  const refreshWith = (rt) => http("POST", "/oauth/token", { form: { grant_type: "refresh_token", refresh_token: rt, client_id: clientId } });
+  const ref = await refreshWith(refresh);
   check(ref.status === 200 && ref.data.refresh_token !== refresh && /^wo1_/.test(ref.data.access_token), "a refresh gives new tokens");
-  check((await http("POST", "/oauth/token", { form: { grant_type: "refresh_token", refresh_token: refresh, client_id: clientId } })).data?.error === "invalid_grant", "the old refresh token no longer works");
-  check((await http("POST", "/oauth/token", { form: { grant_type: "refresh_token", refresh_token: ref.data.refresh_token, client_id: clientId } })).data?.error === "invalid_grant", "and showing the old one again ends the connection, so even the new one stops");
+  await db.query("UPDATE oauth_grants SET last_used_at = now() - interval '5 minutes' WHERE client_id=$1 AND revoked_at IS NULL", [clientId]);
+  check((await refreshWith(refresh)).data?.error === "invalid_grant", "the old refresh token, shown again after the grace minute, is refused");
+  check((await refreshWith(ref.data.refresh_token)).data?.error === "invalid_grant", "and the whole connection ends, so even the new one stops");
+
+  // Two refreshes at once with the same token both work, and the connection stays.
+  const t5 = await connect();
+  const [ra, rb] = await Promise.all([refreshWith(t5.refresh_token), refreshWith(t5.refresh_token)]);
+  check(ra.status === 200 && rb.status === 200, "two refreshes at once with the same token both succeed");
+  const alive = await http("POST", "/mcp", { headers: { Authorization: `Bearer ${rb.data.access_token}`, Accept: "application/json, text/event-stream" }, json: { jsonrpc: "2.0", id: 1, method: "ping" } });
+  check(alive.status !== 401, "and the connection stays");
+  check((await refreshWith(rb.data.refresh_token)).status === 200, "and it keeps refreshing afterwards");
 
   // A stale token sent along to the token endpoint is not refused; and a fresh connection for Account.
   const t4 = await connect();

@@ -1,6 +1,6 @@
 ---
 title: Access hierarchy design
-updated: 2026-11-19
+updated: 2026-11-28
 ---
 
 > [!info] Status
@@ -143,9 +143,10 @@ The env lists are read only by that block, then removed from `.env.example` and 
 ## Verification
 - `cd backend && npm test`: the new `access-rules` tests cover the catalogue, company-only permissions, tree membership at
   any depth, expiry, revoked grants, the "never your own request" rule, and the role mapping producing today's access.
-- `access-flow.mjs` against the local DB (`wohlig-one-local`): signs in as five profiles (super admin, HR team, payroll for one
-  tree, a team head with leave and attendance for their tree, a plain employee). It calls every endpoint in the matrix and
-  fails on any unexpected 200 or 403, including another team's member and the caller's own request.
+- `access-flow.mjs` against the local DB (`wohlig-one-local`): signs in as a salary owner, a super admin, the HR team, a team
+  head with leave and attendance (and inert salary grants) for their tree, an accountant with an inert finance grant, and a
+  plain employee; only the "owner" is ever a salary owner. It calls every endpoint in the matrix and fails on any unexpected
+  answer, including another team's member, the caller's own request, and any salary or payment path reached by a non-owner.
 - `npm run check:docs`; a `code-review`, then `security-review`, before the pull request (auth change).
 - In the browser at the CLAUDE.md sizes, light and dark: the Access page (give, scope, end date, remove, history), the menu
   for each profile, and the org chart badges. Send no emails while testing.

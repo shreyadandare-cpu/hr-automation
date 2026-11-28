@@ -116,4 +116,4 @@ sequenceDiagram
   `frontend/src/modules/connect/` (the Allow page), `components/AccessKeys.jsx` (Account card). nginx sends `/mcp`, `/oauth/` and
   `/.well-known/oauth-*` to the backend.
 - **Tests:** `node --test test/oauth.test.mjs test/access-keys.test.mjs test/connector-coverage.test.mjs` (in `npm test`), and against a local server
-  `test/oauth-flow.mjs` and `test/access-keys-flow.mjs` (see their headers).
+  `test/oauth-flow.mjs`, `test/access-keys-flow.mjs` and `test/connector-flow.mjs` (every tool called through `/mcp` as Claude does, the blocked paths refused, no hidden field in any answer; see their headers).
